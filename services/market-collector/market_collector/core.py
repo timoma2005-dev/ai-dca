@@ -5,6 +5,7 @@ import json
 import math
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, time as day_time, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from .sources import fetch_eastmoney_references, fetch_tencent_quotes, isoformat
 from .storage import MarketStore, build_store
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+TENCENT_QUOTE_COALESCE_SEC = 0.75
 
 SYMBOLS = [
     "513870", "513390", "513300", "513110", "513100", "159941", "159696", "159660",
@@ -134,6 +136,13 @@ def compute_premium(price: float | None, iopv: float | None) -> float | None:
     return round(((price - iopv) / iopv) * 100, 4)
 
 
+def first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
 def symbol_category(symbol: str) -> str:
     return "lof" if symbol in {"161128", "161130"} else "cross_border_etf"
 
@@ -147,9 +156,12 @@ def build_symbol_record(
     ttl_sec: int,
     mismatch_tolerance_pp: float,
 ) -> dict[str, Any]:
-    price = price_row.get("price") if price_row else None
-    iopv = iopv_row.get("iopv") if iopv_row else None
-    vendor_premium = iopv_row.get("vendor_premium_percent") if iopv_row else None
+    market_row = price_row or {}
+    reference_row = iopv_row or {}
+    price = first_present(market_row.get("price"), reference_row.get("price"))
+    price_source_row = market_row if market_row.get("price") is not None else reference_row
+    iopv = reference_row.get("iopv")
+    vendor_premium = reference_row.get("vendor_premium_percent")
     computed_premium = compute_premium(price, iopv)
     # LOF 无盘中 IOPV，computed_premium 为 null；fallback 到基金公司公布的场内折溢价率（f402）。
     if computed_premium is None and vendor_premium is not None:
@@ -168,42 +180,44 @@ def build_symbol_record(
     expires_at = isoformat_z(datetime.fromisoformat(collected_at.replace("Z", "+00:00")) + timedelta_seconds(ttl_sec))
     return {
         "symbol": symbol,
-        "name": (price_row or iopv_row or {}).get("name") or symbol,
+        "name": first_present(market_row.get("name"), reference_row.get("name")) or symbol,
         "category": symbol_category(symbol),
         "session": session,
         "collected_at": collected_at,
-        "price_timestamp": (price_row or {}).get("source_as_of") or (price_row or {}).get("received_at"),
-        "iopv_timestamp": (iopv_row or {}).get("source_as_of") or (iopv_row or {}).get("received_at"),
-        "price_received_at": (price_row or {}).get("received_at"),
-        "iopv_received_at": (iopv_row or {}).get("received_at"),
+        "price_timestamp": price_source_row.get("source_as_of") or price_source_row.get("received_at"),
+        "iopv_timestamp": reference_row.get("source_as_of") or reference_row.get("received_at"),
+        "price_received_at": price_source_row.get("received_at"),
+        "iopv_received_at": reference_row.get("received_at"),
         "price": price,
-        "previous_close": (price_row or {}).get("previous_close"),
-        "change": (price_row or {}).get("change"),
-        "change_percent": (price_row or {}).get("change_percent"),
-        "open": (price_row or {}).get("open"),
-        "high": (price_row or {}).get("high"),
-        "low": (price_row or {}).get("low"),
-        "volume": (price_row or {}).get("volume"),
-        "turnover": (price_row or {}).get("turnover"),
-        "turnover_rate": (price_row or {}).get("turnover_rate"),
-        "suspended": bool((price_row or {}).get("suspended")),
+        "previous_close": first_present(market_row.get("previous_close"), reference_row.get("previous_close")),
+        "change": first_present(market_row.get("change"), reference_row.get("change")),
+        "change_percent": first_present(market_row.get("change_percent"), reference_row.get("change_percent")),
+        "open": first_present(market_row.get("open"), reference_row.get("open")),
+        "high": first_present(market_row.get("high"), reference_row.get("high")),
+        "low": first_present(market_row.get("low"), reference_row.get("low")),
+        "volume": first_present(market_row.get("volume"), reference_row.get("volume")),
+        "turnover": first_present(market_row.get("turnover"), reference_row.get("turnover")),
+        "turnover_rate": first_present(market_row.get("turnover_rate"), reference_row.get("turnover_rate")),
+        "market_capital": first_present(market_row.get("market_capital"), reference_row.get("market_capital")),
+        "suspended": bool(market_row.get("suspended")),
         "iopv": iopv,
+        "total_shares": first_present(reference_row.get("total_shares"), market_row.get("total_shares")),
         "computed_premium_percent": computed_premium,
         "vendor_premium_percent": vendor_premium,
-        "vendor_discount_percent_raw": (iopv_row or {}).get("vendor_discount_percent_raw"),
+        "vendor_discount_percent_raw": reference_row.get("vendor_discount_percent_raw"),
         "mismatch_pp": mismatch_pp,
         "expires_at": expires_at,
         "ttl_sec": ttl_sec,
         "sources": {
-            "price": (price_row or {}).get("source"),
-            "iopv": (iopv_row or {}).get("source"),
+            "price": price_source_row.get("source"),
+            "iopv": reference_row.get("source"),
         },
         "quality": {
             "status": quality_status,
             "issues": quality_issues,
         },
         "debug": {
-            "eastmoney_page": (iopv_row or {}).get("page"),
+            "eastmoney_page": reference_row.get("page"),
         },
     }
 
@@ -226,6 +240,10 @@ class MarketCollector:
         # iopv 缓存由低频线程写入，高频线程读取后计算 premium_percent 写 fund_quote。
         self._iopv_cache: dict[str, dict[str, Any]] = {}
         self._iopv_lock = threading.Lock()
+        self._tencent_quote_lock = threading.Lock()
+        self._tencent_quote_key: tuple[str, ...] = ()
+        self._tencent_quote_expires_at = 0.0
+        self._tencent_quote_cache: dict[str, dict[str, Any]] = {}
         self._high_freq_stop = threading.Event()
         # 高频写入用持久 autocommit 连接（executemany 在多行 + ON DUPLICATE KEY UPDATE
         # 场景下 TiDB 不生效，改 execute 逐行提交；复用连接避免每秒建连开销）。
@@ -236,6 +254,23 @@ class MarketCollector:
         if self.fund_store is not None:
             self.fund_store.initialize()
         self.store.initialize()
+
+    def _fetch_tencent_price_map(
+        self,
+        symbols: list[str],
+        timeout_sec: float,
+    ) -> dict[str, dict[str, Any]]:
+        """Keep one Tencent batch in flight and share its result with nearby callers."""
+        key = tuple(symbols)
+        with self._tencent_quote_lock:
+            now = time.monotonic()
+            if key == self._tencent_quote_key and self._tencent_quote_expires_at > now:
+                return self._tencent_quote_cache
+            price_map = fetch_tencent_quotes(symbols, timeout_sec)
+            self._tencent_quote_key = key
+            self._tencent_quote_expires_at = time.monotonic() + TENCENT_QUOTE_COALESCE_SEC
+            self._tencent_quote_cache = price_map
+            return price_map
 
     def collect_otc_once(self, slot: str) -> dict[str, Any]:
         otc_config = self.config.get("otc") or {}
@@ -317,8 +352,18 @@ class MarketCollector:
         symbols = list(self.config["symbols"])
         timeout_sec = float(self.config["request_timeout_sec"])
         source_errors: dict[str, str] = {}
+        previous_total_shares: dict[str, Any] = {}
         try:
-            price_map = fetch_tencent_quotes(symbols, timeout_sec)
+            previous_payload = json.loads((Path(str(self.config["output_dir"])) / "latest.json").read_text(encoding="utf-8"))
+            previous_total_shares = {
+                str(item.get("symbol") or ""): item.get("total_shares")
+                for item in previous_payload.get("symbols") or []
+                if item.get("symbol") and item.get("total_shares") is not None
+            }
+        except (FileNotFoundError, OSError, ValueError, TypeError):
+            pass
+        try:
+            price_map = self._fetch_tencent_price_map(symbols, timeout_sec)
         except Exception as exc:
             price_map = {}
             source_errors["tencent_batch"] = str(exc)
@@ -327,6 +372,14 @@ class MarketCollector:
         except Exception as exc:
             iopv_map, eastmoney_meta = {}, {"page_size": 100, "pages_visited": 0, "missing_symbols": symbols}
             source_errors["eastmoney_push2delay"] = str(exc)
+            # 东财传输层整体失败（出口代理坏分钟）时回退高频线程的 iopv 缓存：
+            # 用最近一次成功抓取的行拼本轮快照，避免整轮丢溢价；缓存行保留原始
+            # source_as_of，数据陈旧度在 iopv_timestamp 里如实可见。
+            with self._iopv_lock:
+                cached_iopv = dict(self._iopv_cache)
+            if cached_iopv:
+                iopv_map = cached_iopv
+                source_errors["eastmoney_push2delay_cache_fallback"] = f"{len(cached_iopv)} symbols served from iopv cache"
         records = [
             build_symbol_record(
                 symbol=symbol,
@@ -339,6 +392,11 @@ class MarketCollector:
             )
             for symbol in symbols
         ]
+        for record in records:
+            if record.get("total_shares") is None:
+                previous = previous_total_shares.get(str(record.get("symbol") or ""))
+                if previous is not None:
+                    record["total_shares"] = previous
         self.store.write_cycle(
             records,
             raw_retention_hours=int(self.config["raw_retention_hours"]),
@@ -392,6 +450,7 @@ class MarketCollector:
                     "changePercent": fm.get("changePercent"),
                     "premiumPercent": fm.get("premiumPercent"),
                     "iopv": fm.get("iopv"),
+                    "totalShares": fm.get("totalShares") or fm.get("total_shares"),
                     "volume": fm.get("volume"),
                     "turnover": fm.get("turnover"),
                     "marketState": fm.get("marketState"),
@@ -399,11 +458,17 @@ class MarketCollector:
                     "asOf": fm.get("asOf"),
                     "session": "exchange",
                 })
-        # 场外 OTC（净值作为最新价）—— 字段集与场内对齐，缺失填 None，
-        # 避免 upsert_quotes 批量 SQL 因参数数量不一致而错位。
+        # 场外 OTC（净值作为最新价）—— 字段集与场内对齐，缺失填 None。
+        # 同一个 LOF 代码可能同时有场内和场外份额，而 fund_quote 以 code 为主键。
+        # 场内代码必须保留成交价快照，场外持仓会在 fund_metrics() 中按标签读取 NAV。
+        exchange_codes = {
+            str(symbol or "").strip()
+            for symbol in (self.config.get("symbols") or [])
+            if str(symbol or "").strip()
+        }
         for item in (data_service.otc_latest().get("items") or []):
             code = str(item.get("code") or item.get("symbol") or "")
-            if not code:
+            if not code or code in exchange_codes:
                 continue
             rows.append({
                 "code": code,
@@ -621,14 +686,13 @@ class MarketCollector:
     def _fetch_nav_history_rows(self, codes: list[str]) -> list[dict[str, Any]]:
         """Read NAV history through the local collector data service and direct public sources."""
         data_service = self._ensure_data_service()
-        today = datetime.now(SHANGHAI).date()
         out: list[dict[str, Any]] = []
-        for code in codes:
-            try:
-                payload = data_service.nav_history(code, 1000)
-            except Exception as exc:
-                print(f"[fund-store] local nav-history fail {code}: {exc}", flush=True)
+        for item in data_service.nav_histories(codes, 1000):
+            code = item["code"]
+            if not item.get("ok"):
+                print(f"[fund-store] local nav-history fail {code}: {item.get('error')}", flush=True)
                 continue
+            payload = item.get("data") or {}
             for row in payload.get("items") or []:
                 try:
                     nav = float(row.get("nav"))
@@ -666,12 +730,25 @@ class MarketCollector:
         if self.fund_store is None:
             return 0
         etf_symbols = list(self.config.get("symbols") or SYMBOLS)
+        if not etf_symbols:
+            return 0
+        fetched: dict[str, list[dict[str, Any]]] = {}
+        with ThreadPoolExecutor(max_workers=min(2, len(etf_symbols))) as executor:
+            futures = {
+                executor.submit(self._fetch_history_close_rows, symbol, limit): symbol
+                for symbol in etf_symbols
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    fetched[symbol] = future.result()
+                except Exception as exc:
+                    print(f"[fund-store] daily_price_klines {symbol} fail: {exc}", flush=True)
+
         total = 0
         for symbol in etf_symbols:
-            try:
-                rows = self._fetch_history_close_rows(symbol, limit)
-            except Exception as exc:
-                print(f"[fund-store] daily_price_klines {symbol} fail: {exc}", flush=True)
+            rows = fetched.get(symbol)
+            if rows is None:
                 continue
             n = self.fund_store.upsert_history_close(rows)
             if n == 0 and rows:
@@ -792,7 +869,11 @@ class MarketCollector:
                 row = iopv_map.get(symbol) or {}
                 # LOF 无盘中 IOPV，但东方财富会公布场内折溢价率（vendor_premium_percent）。
                 # 有 iopv 或 vendor_premium 都要缓存，高频线程才能算出 LOF 溢价。
-                if row.get("iopv") is not None or row.get("vendor_premium_percent") is not None:
+                if (
+                    row.get("price") is not None
+                    or row.get("iopv") is not None
+                    or row.get("vendor_premium_percent") is not None
+                ):
                     self._iopv_cache[symbol] = row
         return len(iopv_map)
 
@@ -804,20 +885,22 @@ class MarketCollector:
         timeout = float(self.config.get("request_timeout_sec") or 10)
         collected_at = isoformat_z(datetime.now(timezone.utc))
         try:
-            price_map = fetch_tencent_quotes(symbols, timeout)
+            price_map = self._fetch_tencent_price_map(symbols, timeout)
         except Exception as exc:
-            print(f"[high-freq] tencent fetch failed: {exc}", flush=True)
-            return 0
+            # 腾讯批量行情缺失或暂时不可用时，继续使用东方财富缓存中的
+            # 场内价格和 LOF 公布溢价，避免整批场内快照被丢弃。
+            print(f"[high-freq] tencent fetch failed, use eastmoney fallback: {exc}", flush=True)
+            price_map = {}
         iopv_snapshot: dict[str, dict[str, Any]] = {}
         with self._iopv_lock:
             iopv_snapshot = dict(self._iopv_cache)
         rows: list[dict[str, Any]] = []
         for symbol in symbols:
             pr = price_map.get(symbol) or {}
-            if not pr.get("price"):
-                continue
             ir = iopv_snapshot.get(symbol) or {}
-            price = pr.get("price")
+            price = first_present(pr.get("price"), ir.get("price"))
+            if price is None:
+                continue
             iopv = ir.get("iopv")
             premium_percent = None
             if iopv and math.isfinite(iopv) and iopv > 0 and math.isfinite(price) and price > 0:
@@ -826,17 +909,18 @@ class MarketCollector:
                 premium_percent = ir.get("vendor_premium_percent")
             rows.append({
                 "code": symbol,
-                "name": pr.get("name") or symbol,
+                "name": first_present(pr.get("name"), ir.get("name")) or symbol,
                 "price": price,
                 "latestNav": None,
                 "latestNavDate": None,
-                "previousClose": pr.get("previous_close"),
-                "change": pr.get("change"),
-                "changePercent": pr.get("change_percent"),
+                "previousClose": first_present(pr.get("previous_close"), ir.get("previous_close")),
+                "change": first_present(pr.get("change"), ir.get("change")),
+                "changePercent": first_present(pr.get("change_percent"), ir.get("change_percent")),
                 "premiumPercent": premium_percent,
                 "iopv": iopv,
-                "volume": pr.get("volume"),
-                "turnover": pr.get("turnover"),
+                "totalShares": first_present(ir.get("total_shares"), ir.get("totalShares")),
+                "volume": first_present(pr.get("volume"), ir.get("volume")),
+                "turnover": first_present(pr.get("turnover"), ir.get("turnover")),
                 "marketState": "OPEN",
                 "asOf": collected_at,
                 "session": "exchange",
@@ -861,8 +945,8 @@ class MarketCollector:
         if not raw_targets:
             return 0
         target = raw_targets[0]
-        sql = """INSERT INTO fund_quote (code,name,price,latest_nav,latest_nav_date,previous_close,change_amount,change_percent,premium_percent,iopv,volume,turnover,market_state,as_of,session,suspended,updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-ON DUPLICATE KEY UPDATE name=VALUES(name),price=VALUES(price),latest_nav=VALUES(latest_nav),latest_nav_date=VALUES(latest_nav_date),previous_close=VALUES(previous_close),change_amount=VALUES(change_amount),change_percent=VALUES(change_percent),premium_percent=VALUES(premium_percent),iopv=VALUES(iopv),volume=VALUES(volume),turnover=VALUES(turnover),market_state=VALUES(market_state),as_of=VALUES(as_of),session=VALUES(session),suspended=VALUES(suspended),updated_at=VALUES(updated_at)"""
+        sql = """INSERT INTO fund_quote (code,name,price,latest_nav,latest_nav_date,previous_close,change_amount,change_percent,premium_percent,iopv,total_shares,volume,turnover,market_state,as_of,session,suspended,updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+ON DUPLICATE KEY UPDATE name=VALUES(name),price=VALUES(price),latest_nav=VALUES(latest_nav),latest_nav_date=VALUES(latest_nav_date),previous_close=VALUES(previous_close),change_amount=VALUES(change_amount),change_percent=VALUES(change_percent),premium_percent=VALUES(premium_percent),iopv=VALUES(iopv),total_shares=VALUES(total_shares),volume=VALUES(volume),turnover=VALUES(turnover),market_state=VALUES(market_state),as_of=VALUES(as_of),session=VALUES(session),suspended=VALUES(suspended),updated_at=VALUES(updated_at)"""
         import pymysql
         import os
         from .fund_store import _shanghai_iso, _num, _date_str
@@ -881,6 +965,7 @@ ON DUPLICATE KEY UPDATE name=VALUES(name),price=VALUES(price),latest_nav=VALUES(
                 _num(r.get("changePercent") or r.get("change_percent")),
                 _num(r.get("premiumPercent") or r.get("premium_percent")),
                 _num(r.get("iopv")),
+                _num(r.get("totalShares") or r.get("total_shares")),
                 _num(r.get("volume")),
                 _num(r.get("turnover")),
                 str(r.get("marketState") or "").strip() or None,
@@ -927,15 +1012,19 @@ ON DUPLICATE KEY UPDATE name=VALUES(name),price=VALUES(price),latest_nav=VALUES(
                     pass
 
     def _iopv_loop(self) -> None:
-        """低频线程主循环：交易时段每 5s 刷新 iopv 缓存。"""
+        """低频线程主循环：交易时段每 5s 刷新 iopv 缓存；抓取失败退避到 15s。"""
         while not self._high_freq_stop.is_set():
             now = datetime.now(timezone.utc)
             if classify_session(now) == "trading":
+                refreshed = 0
                 try:
-                    self._refresh_iopv_cache()
+                    refreshed = self._refresh_iopv_cache()
                 except Exception as exc:
                     print(f"[high-freq] iopv loop error: {exc}", flush=True)
-            self._high_freq_stop.wait(5.0)
+                # 出口代理坏分钟里拉长重试间隔，降低对轮换出口 IP 池的打点压力。
+                self._high_freq_stop.wait(5.0 if refreshed else 15.0)
+            else:
+                self._high_freq_stop.wait(5.0)
 
     def _quote_loop(self) -> None:
         """高频线程主循环：交易时段每 1s 刷新 fund_quote。"""

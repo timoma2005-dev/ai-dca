@@ -11,11 +11,16 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 TENCENT_QUOTE_URL = "https://qt.gtimg.cn/"
-EASTMONEY_LIST_URL = "https://push2delay.eastmoney.com/api/qt/clist/get"
-EASTMONEY_ULIST_URL = "https://push2delay.eastmoney.com/api/qt/ulist.np/get"
+# 2026-09-22：push2delay（延迟镜像）对所有客户端不可达（urllib/curl、多网络实测），
+# 改用同一套 API 的实时端点 push2。传输层由 netutil 的出口代理重试保证。
+EASTMONEY_LIST_URL = "https://push2.eastmoney.com/api/qt/clist/get"
+EASTMONEY_ULIST_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
 EASTMONEY_PUSH_TOKEN = "bd1d9ddb04089700cf9c27f6f7426281"
 EASTMONEY_FS = "b:MK0021,b:MK0022,b:MK0023,b:MK0024,b:MK0827"
-EASTMONEY_FIELDS = "f12,f14,f2,f3,f124,f402,f441"
+# f38/f39 are the exchange fund share counts exposed by Eastmoney's list API.
+# Both are usually identical for ETFs and LOFs. Keep both in the request so
+# the parser can use f38 first and fall back to f39 when one is unavailable.
+EASTMONEY_FIELDS = "f12,f14,f2,f3,f4,f5,f6,f8,f15,f16,f17,f18,f20,f21,f38,f39,f124,f402,f441"
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 QuoteFetcher = Callable[[str, float], bytes]
@@ -147,7 +152,18 @@ def parse_eastmoney_list_payload(payload: dict[str, Any], captured_at: str, page
             "symbol": code,
             "name": str(item.get("f14") or code),
             "price": round4(price),
+            "previous_close": round4(to_positive_float(item.get("f18"))),
+            "change": round4(to_float(item.get("f4"))),
+            "change_percent": round4(to_float(item.get("f3"))),
+            "open": round4(to_positive_float(item.get("f17"))),
+            "high": round4(to_positive_float(item.get("f15"))),
+            "low": round4(to_positive_float(item.get("f16"))),
+            "volume": to_float(item.get("f5")),
+            "turnover": to_float(item.get("f6")),
+            "turnover_rate": round4(to_float(item.get("f8"))),
+            "market_capital": to_positive_float(item.get("f20")),
             "iopv": round4(iopv),
+            "total_shares": to_positive_float(item.get("f38")) or to_positive_float(item.get("f39")),
             "vendor_discount_percent_raw": round4(vendor_discount),
             "vendor_premium_percent": round4(vendor_premium),
             "source": "eastmoney_push2delay",
@@ -192,9 +208,38 @@ def fetch_eastmoney_references(
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     wanted = {normalize_symbol(symbol) for symbol in symbols if normalize_symbol(symbol)}
     found: dict[str, dict[str, Any]] = {}
-    page = 1
+    page = 0
     total = None
+    clist_error: str | None = None
+    ulist_errors: list[str] = []
+    # ulist.np 按 secid 一次查全是最稳路径（单请求、按需查询、无翻页），先走它；
+    # 东财 WAF 下 clist 板块列表对部分出口 IP 被拦，只作为 ulist 未覆盖时的补漏。
+    if wanted:
+        secids = [eastmoney_secid(symbol) for symbol in wanted if normalize_symbol(symbol)]
+        ulist_missing = [normalize_symbol(symbol) for symbol in wanted if normalize_symbol(symbol)]
+        for start in range(0, len(secids), 100):
+            batch = secids[start:start + 100]
+            params = urllib.parse.urlencode({
+                "secids": ",".join(batch),
+                "fields": EASTMONEY_FIELDS,
+                "fltt": 2,
+                "invt": 2,
+            })
+            captured_at = isoformat_z(utc_now())
+            try:
+                payload = json.loads(fetch_bytes(EASTMONEY_ULIST_URL + "?" + params, timeout_sec).decode("utf-8", "replace"))
+            except Exception as exc:
+                ulist_errors.append(str(exc))
+                continue
+            page_rows = parse_eastmoney_list_payload(payload, captured_at, 0)
+            for symbol in list(ulist_missing):
+                row = page_rows.get(symbol)
+                if row:
+                    found[symbol] = row
+                    wanted.discard(symbol)
+    # clist 按板块翻页补漏（历史上用于不在基金板块里的标的，如深市 LOF 161128/161130）。
     while wanted:
+        page += 1
         params = urllib.parse.urlencode(
             {
                 "pn": page,
@@ -210,7 +255,12 @@ def fetch_eastmoney_references(
             }
         )
         captured_at = isoformat_z(utc_now())
-        payload = json.loads(fetch_bytes(EASTMONEY_LIST_URL + "?" + params, timeout_sec).decode("utf-8", "replace"))
+        try:
+            payload = json.loads(fetch_bytes(EASTMONEY_LIST_URL + "?" + params, timeout_sec).decode("utf-8", "replace"))
+        except Exception as exc:
+            # clist 被东财 WAF 拦截时跳出翻页循环，ulist 已覆盖的部分不受影响。
+            clist_error = str(exc)
+            break
         page_rows = parse_eastmoney_list_payload(payload, captured_at, page)
         for symbol in list(wanted):
             row = page_rows.get(symbol)
@@ -222,29 +272,13 @@ def fetch_eastmoney_references(
             break
         if not page_rows:
             break
-        page += 1
-    # clist 按板块翻页可能漏掉不在基金板块里的标的（如深市 LOF 161128/161130），
-    # 用 ulist.np 按 secid 列表补查，f402（基金公司公布的场内折溢价率）对 LOF 有值。
-    if wanted:
-        secids = [eastmoney_secid(symbol) for symbol in wanted if normalize_symbol(symbol)]
-        ulist_missing = [normalize_symbol(symbol) for symbol in wanted if normalize_symbol(symbol)]
-        for start in range(0, len(secids), 100):
-            batch = secids[start:start + 100]
-            params = urllib.parse.urlencode({
-                "secids": ",".join(batch),
-                "fields": EASTMONEY_FIELDS,
-                "fltt": 2,
-                "invt": 2,
-            })
-            captured_at = isoformat_z(utc_now())
-            try:
-                payload = json.loads(fetch_bytes(EASTMONEY_ULIST_URL + "?" + params, timeout_sec).decode("utf-8", "replace"))
-            except Exception:
-                continue
-            page_rows = parse_eastmoney_list_payload(payload, captured_at, 0)
-            for symbol in list(ulist_missing):
-                row = page_rows.get(symbol)
-                if row:
-                    found[symbol] = row
-                    wanted.discard(symbol)
+    if not found and (ulist_errors or clist_error):
+        # ulist 与 clist 全部失败：抛错而不是静默返回空，让 collect_once 的
+        # source_errors 与高频线程的失败日志能看到传输层故障。
+        parts = []
+        if ulist_errors:
+            parts.append("ulist: " + ulist_errors[0])
+        if clist_error:
+            parts.append("clist: " + clist_error)
+        raise OSError("eastmoney references unavailable: " + "; ".join(parts))
     return found, {"page_size": page_size, "pages_visited": page, "missing_symbols": sorted(wanted)}
