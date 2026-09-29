@@ -394,6 +394,48 @@ function isDanjuanUpdatedToday(updatedAtMs) {
   return shanghai === today;
 }
 
+// fundmobapi 兜底：当雪球没有 IOPV/NAV 时，用天天基金移动端接口的 ZJL（折价率）和 NAV
+// ZJL 为负表示溢价，premium = -ZJL
+const FUNDMOB_API_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
+const FUNDMOB_UA = 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+
+async function fetchFundMobPremium(code) {
+  try {
+    const params = new URLSearchParams({
+      pageIndex: '1',
+      pageSize: '10',
+      plat: 'Android',
+      appType: 'ttjj',
+      product: 'EFund',
+      Version: '1',
+      deviceid: 'ai-dca-markets-worker',
+      Fcodes: code,
+    });
+    const resp = await fetch(`${FUNDMOB_API_URL}?${params}`, {
+      headers: {
+        'user-agent': FUNDMOB_UA,
+        'referer': 'https://fund.eastmoney.com/',
+        'accept': 'application/json, text/plain, */*',
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    const payload = await resp.json().catch(() => null);
+    if (!payload || payload.Success === false || !Array.isArray(payload.Datas)) return null;
+    const item = payload.Datas.find((d) => String(d?.FCODE || '').trim() === String(code).trim());
+    if (!item) return null;
+    const zjl = Number(item.ZJL);
+    const nav = Number(item.NAV);
+    return {
+      vendorPremiumPercent: Number.isFinite(zjl) ? Math.round(-zjl * 100) / 100 : null,
+      latestNav: Number.isFinite(nav) && nav > 0 ? Math.round(nav * 10000) / 10000 : null,
+      navDate: String(item.HQDATE || '').trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchFreshFundMetric(env, code, cachePolicy, fundKind = '', exchangeOverride = null) {
   const cacheKey = 'fund-metrics:' + code;
   const exchange = typeof exchangeOverride === 'boolean' ? exchangeOverride : isExchangeTradedFund(code);
@@ -401,6 +443,18 @@ async function fetchFreshFundMetric(env, code, cachePolicy, fundKind = '', excha
     let quote = exchange
       ? await fetchXueqiuQuote(code, { cookie: env.XUEQIU_COOKIE })
       : await fetchDanjuanFundNav(code);
+    // fundmobapi fallback: fill missing IOPV/NAV with ZJL premium data
+    if (exchange && (!quote?.iopv || !quote?.unit_nav)) {
+      const fundmob = await fetchFundMobPremium(code).catch(() => null);
+      if (fundmob) {
+        quote = {
+          ...quote,
+          unit_nav: quote?.unit_nav || fundmob.latestNav,
+          premium_rate: quote?.premium_rate ?? fundmob.vendorPremiumPercent,
+          _fundmobNavDate: fundmob.navDate,
+        };
+      }
+    }
     if (!exchange) {
       const meta = await fetchDanjuanFundMetaWithCache(env, code).catch(() => null);
       if (meta) quote = { ...quote, ...meta };
