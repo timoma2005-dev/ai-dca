@@ -3,6 +3,7 @@ from __future__ import annotations
 import bisect
 import json
 import math
+import random
 import re
 import statistics
 import threading
@@ -10,18 +11,31 @@ import time
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
+from .calendar_cn import quote_snapshot_cache_ttl
 from .core import SYMBOLS, classify_session
+from .sources import tencent_symbol
 from .storage import MarketStore, bucket_start_iso, parse_iso
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+SINA_KLINE_URL = "https://quotes.sina.cn/cn/api/jsonp_v2.php"
 DANJUAN_NAV_HISTORY_URL = "https://danjuanfunds.com/djapi/fund/nav/history/{code}"
+DANJUAN_MAX_CONCURRENCY = 6
+EASTMONEY_MAX_CONCURRENCY = 2
+TENCENT_KLINE_MAX_CONCURRENCY = 6
+SINA_KLINE_MAX_CONCURRENCY = 6
+SINA_KLINE_MAX_ROWS = 1970
+SUPPORTED_KLINE_INTERVALS = {"5m": 5, "15m": 15, "30m": 30, "60m": 60, "1d": 240}
+UPSTREAM_FAILURE_CACHE_SEC = 30
+UNAMBIGUOUS_OTC_QDII_CODES = {"539001", "539002", "539003"}
+UNAMBIGUOUS_EXCHANGE_PREFIXES = {"15", "50", "51", "52", "54", "56", "58"}
 
 GROUPS = [
     {"key": "all", "label": "全部", "order": 0, "codes": list(SYMBOLS)},
@@ -41,6 +55,7 @@ HOME_BREADTH_SYMBOLS = {
 }
 
 FetchJson = Callable[[str, float], dict[str, Any]]
+FetchText = Callable[[str, float], str]
 PostJson = Callable[[str, dict[str, Any], float], dict[str, Any]]
 
 
@@ -57,21 +72,137 @@ def _round4(value: Any) -> float | None:
     return round(number, 4) if number is not None else None
 
 
+def _normalize_fund_kind_hints(fund_kinds: dict[str, Any] | None) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for raw_code, raw_kind in (fund_kinds or {}).items():
+        code = str(raw_code or "").strip()
+        kind = str(raw_kind or "").strip().lower()
+        if re.fullmatch(r"\d{6}", code) and kind in {"exchange", "otc", "qdii"}:
+            if kind == "exchange" and code in UNAMBIGUOUS_OTC_QDII_CODES:
+                kind = "qdii"
+            result[code] = kind
+    return result
+
+
+def _infer_fund_kind_hint(code: str, metric: dict[str, Any] | None = None, explicit_kind: str = "") -> str:
+    normalized_code = str(code or "").strip()
+    normalized_explicit = str(explicit_kind or "").strip().lower()
+    if normalized_explicit == "exchange":
+        # 16xxxx LOF 可能同时存在场内/场外份额，明确传入场内时必须保留场内口径。
+        # 539001 等明确的场外 QDII 仍然纠正旧数据中的错误场内标签。
+        if normalized_code in UNAMBIGUOUS_OTC_QDII_CODES:
+            return "qdii"
+        return "exchange"
+    if normalized_explicit in {"otc", "qdii"}:
+        return normalized_explicit
+    if normalized_code in UNAMBIGUOUS_OTC_QDII_CODES:
+        return "qdii"
+    if normalized_code[:2] in UNAMBIGUOUS_EXCHANGE_PREFIXES:
+        return "exchange"
+
+    row = metric if isinstance(metric, dict) else {}
+    venue = str(row.get("fundVenue") or row.get("venue") or "").strip().lower()
+    kind = str(row.get("fundKind") or row.get("kind") or "").strip().lower()
+    fund_type = str(row.get("fundType") or row.get("typeDesc") or "").strip().lower()
+    session = str(row.get("session") or "").strip().lower()
+    if session in {"exchange", "场内"} or venue in {"exchange", "场内"}:
+        return "exchange"
+    if session in {"otc", "off_exchange", "场外"}:
+        return "qdii" if kind == "qdii" or "qdii" in fund_type else "otc"
+    if venue in {"otc", "场外"}:
+        return "qdii" if kind == "qdii" or "qdii" in fund_type else "otc"
+    if kind in {"otc", "qdii"}:
+        return kind
+    if "qdii" in fund_type:
+        return "qdii"
+    return ""
+
+
+def _apply_non_exchange_fund_kind(metric: dict[str, Any], kind: str) -> dict[str, Any]:
+    normalized = dict(metric)
+    normalized["fundKind"] = kind
+    normalized["fundType"] = "QDII" if kind == "qdii" else "OTC"
+    normalized["fundVenue"] = "otc"
+    # 场外持仓只消费单位净值，清掉可能来自旧场内快照的行情/溢价字段。
+    for key in (
+        "price", "currentPrice", "close", "previousClose", "iopv",
+        "premiumPercent", "vendorPremiumPercent", "volume", "turnover",
+        "turnoverRate", "marketCapital", "totalShares",
+    ):
+        if key in normalized:
+            normalized[key] = None
+
+    latest_nav = _number(normalized.get("latestNav"))
+    previous_nav = _number(normalized.get("previousNav"))
+    if latest_nav is not None and latest_nav > 0:
+        normalized["ok"] = True
+        normalized["error"] = ""
+        normalized["primaryError"] = ""
+        normalized["fallback"] = ""
+        normalized["source"] = (
+            str(normalized.get("source") or "").strip()
+            if "danjuan" in str(normalized.get("source") or "").lower()
+            else "cached-otc-nav"
+        )
+        normalized["navBase"] = None
+        if previous_nav is not None and previous_nav > 0:
+            normalized["change"] = _round4(latest_nav - previous_nav)
+            normalized["changePercent"] = _round4((latest_nav - previous_nav) / previous_nav * 100)
+        else:
+            normalized["change"] = None
+            normalized["changePercent"] = None
+
+        quality = normalized.get("quality")
+        issues = []
+        if isinstance(quality, dict):
+            issues = [str(issue) for issue in (quality.get("issues") or []) if str(issue).strip()]
+        normalized["quality"] = {
+            "status": "ok" if not issues else "degraded",
+            "issues": issues,
+        }
+    return normalized
+
+
 def _fetch_json(url: str, timeout_sec: float) -> dict[str, Any]:
+    if "danjuanfunds.com" in url:
+        referer = "https://danjuanfunds.com/"
+    elif "gtimg.cn" in url:
+        referer = "https://gu.qq.com/"
+    else:
+        referer = "https://quote.eastmoney.com/"
     request = urllib.request.Request(url, headers={
         "accept": "application/json",
         "user-agent": "Mozilla/5.0 market-collector/1",
-        "referer": "https://quote.eastmoney.com/",
+        "referer": referer,
     })
     last_error: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             with urllib.request.urlopen(request, timeout=timeout_sec) as response:
                 return json.loads(response.read().decode("utf-8", "replace"))
         except Exception as exc:
             last_error = exc
-            if attempt < 2:
-                time.sleep(0.2 * (attempt + 1))
+            if attempt == 0:
+                time.sleep(0.15 + random.uniform(0.05, 0.15))
+    assert last_error is not None
+    raise last_error
+
+
+def _fetch_text(url: str, timeout_sec: float) -> str:
+    request = urllib.request.Request(url, headers={
+        "accept": "application/json,text/plain,*/*",
+        "user-agent": "Mozilla/5.0 market-collector/1",
+        "referer": "https://finance.sina.com.cn/",
+    })
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_sec) as response:
+                return response.read().decode("utf-8", "replace")
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(0.15 + random.uniform(0.05, 0.15))
     assert last_error is not None
     raise last_error
 
@@ -130,6 +261,102 @@ def _previous_date(value: str) -> str:
     return (date.fromisoformat(value) - timedelta(days=1)).isoformat()
 
 
+def _market_time_epoch(value: str) -> int:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=SHANGHAI)
+    return int(parsed.timestamp())
+
+
+def _parse_sina_kline_text(text: str) -> list[dict[str, Any]]:
+    left = text.find("[")
+    right = text.rfind("]")
+    if left < 0 or right <= left:
+        return []
+    rows = json.loads(text[left:right + 1])
+    candles: list[dict[str, Any]] = []
+    previous_close: float | None = None
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        market_time = str(row.get("day") or row.get("date") or row.get("time") or "").strip()
+        if not market_time:
+            continue
+        open_price = _number(row.get("open", row.get("o")))
+        close = _number(row.get("close", row.get("c")))
+        high = _number(row.get("high", row.get("h")))
+        low = _number(row.get("low", row.get("l")))
+        if any(value is None or value <= 0 for value in (open_price, close, high, low)):
+            continue
+        try:
+            timestamp = _market_time_epoch(market_time)
+        except ValueError:
+            continue
+        change = close - previous_close if previous_close is not None else None
+        change_percent = change / previous_close * 100 if change is not None and previous_close else None
+        amplitude = (high - low) / previous_close * 100 if previous_close else None
+        candles.append({
+            "date": market_time[:10],
+            "time": market_time,
+            "t": timestamp,
+            "o": _round4(open_price),
+            "c": _round4(close),
+            "h": _round4(high),
+            "l": _round4(low),
+            "v": _number(row.get("volume", row.get("v"))),
+            "amount": _number(row.get("amount")),
+            "amplitudePercent": _round4(amplitude),
+            "changePercent": _round4(change_percent),
+            "change": _round4(change),
+            "turnoverRate": _round4(row.get("turnover")),
+        })
+        previous_close = close
+    dedup = {item["t"]: item for item in candles}
+    return [dedup[key] for key in sorted(dedup)]
+
+
+def _parse_tencent_daily_klines(payload: dict[str, Any], symbol: str) -> list[dict[str, Any]]:
+    market_symbol = tencent_symbol(symbol)
+    data = (payload.get("data") or {}).get(market_symbol) or {}
+    rows = data.get("qfqday") or data.get("day") or []
+    candles: list[dict[str, Any]] = []
+    previous_close: float | None = None
+    for row in rows:
+        fields = list(row) if isinstance(row, (list, tuple)) else str(row).split(",")
+        if len(fields) < 6:
+            continue
+        day = str(fields[0])[:10]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+            continue
+        open_price = _number(fields[1])
+        close = _number(fields[2])
+        high = _number(fields[3])
+        low = _number(fields[4])
+        if any(value is None or value <= 0 for value in (open_price, close, high, low)):
+            continue
+        volume = _number(fields[5])
+        amount = _number(fields[6]) if len(fields) > 6 else None
+        change = close - previous_close if previous_close is not None else None
+        change_percent = change / previous_close * 100 if change is not None and previous_close else None
+        amplitude = (high - low) / previous_close * 100 if previous_close else None
+        candles.append({
+            "date": day,
+            "t": _date_epoch(day),
+            "o": _round4(open_price),
+            "c": _round4(close),
+            "h": _round4(high),
+            "l": _round4(low),
+            "v": volume,
+            "amount": amount,
+            "amplitudePercent": _round4(amplitude),
+            "changePercent": _round4(change_percent),
+            "change": _round4(change),
+            "turnoverRate": None,
+        })
+        previous_close = close
+    return candles
+
+
 def _market_state() -> tuple[str, str]:
     session = classify_session(datetime.now(timezone.utc))
     current = datetime.now(SHANGHAI)
@@ -147,17 +374,87 @@ def _market_state() -> tuple[str, str]:
 class TimedCache:
     def __init__(self) -> None:
         self._items: dict[str, tuple[float, Any]] = {}
+        self._failures: dict[str, tuple[float, Exception]] = {}
+        self._loading: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
 
-    def get_or_load(self, key: str, ttl_sec: int, loader: Callable[[], Any]) -> Any:
-        now = time.monotonic()
+    def get_or_load(
+        self,
+        key: str,
+        ttl_sec: int,
+        loader: Callable[[], Any],
+        *,
+        stale_if_error: bool = False,
+        failure_ttl_sec: int = 0,
+    ) -> Any:
+        """Return a cached value and coalesce concurrent loads for the same key."""
+        while True:
+            now = time.monotonic()
+            with self._lock:
+                cached = self._items.get(key)
+                if cached and cached[0] > now:
+                    return cached[1]
+                failure = self._failures.get(key)
+                if failure and failure[0] > now:
+                    if stale_if_error and cached:
+                        return cached[1]
+                    raise failure[1]
+                event = self._loading.get(key)
+                if event is None:
+                    event = threading.Event()
+                    self._loading[key] = event
+                    break
+            event.wait()
+
+        try:
+            value = loader()
+        except Exception as exc:
+            with self._lock:
+                cached = self._items.get(key)
+                if failure_ttl_sec > 0:
+                    self._failures[key] = (time.monotonic() + failure_ttl_sec, exc)
+                self._loading.pop(key, None)
+                event.set()
+                if stale_if_error and cached:
+                    return cached[1]
+            raise
+
         with self._lock:
-            cached = self._items.get(key)
-            if cached and cached[0] > now:
-                return cached[1]
-        value = loader()
+            self._items[key] = (time.monotonic() + ttl_sec, value)
+            self._failures.pop(key, None)
+            self._loading.pop(key, None)
+            event.set()
+        return value
+
+
+class UpstreamCircuitOpen(RuntimeError):
+    pass
+
+
+class CircuitBreaker:
+    def __init__(self, name: str, failure_threshold: int, recovery_sec: int) -> None:
+        self.name = name
+        self.failure_threshold = max(1, failure_threshold)
+        self.recovery_sec = max(1, recovery_sec)
+        self._failures = 0
+        self._opened_until = 0.0
+        self._lock = threading.Lock()
+
+    def call(self, loader: Callable[[], Any]) -> Any:
         with self._lock:
-            self._items[key] = (now + ttl_sec, value)
+            if self._opened_until > time.monotonic():
+                raise UpstreamCircuitOpen(f"{self.name} circuit open")
+        try:
+            value = loader()
+        except Exception:
+            with self._lock:
+                self._failures += 1
+                if self._failures >= self.failure_threshold:
+                    self._opened_until = time.monotonic() + self.recovery_sec
+            raise
+        with self._lock:
+            self._failures = 0
+            self._opened_until = 0.0
         return value
 
 
@@ -169,34 +466,74 @@ class MarketDataService:
         fetch_json: FetchJson = _fetch_json,
         post_json: PostJson = _post_json,
         timeout_sec: float = 12.0,
+        danjuan_concurrency: int = DANJUAN_MAX_CONCURRENCY,
+        eastmoney_concurrency: int = EASTMONEY_MAX_CONCURRENCY,
+        fetch_text: FetchText = _fetch_text,
+        sina_concurrency: int = SINA_KLINE_MAX_CONCURRENCY,
     ) -> None:
         self.store = store
         self.data_dir = Path(data_dir)
         self.fetch_json = fetch_json
+        self.fetch_text = fetch_text
         self.post_json = post_json
         self.timeout_sec = timeout_sec
         self.cache = TimedCache()
+        self.danjuan_concurrency = max(1, danjuan_concurrency)
+        self.eastmoney_concurrency = max(1, eastmoney_concurrency)
+        self.sina_concurrency = max(1, sina_concurrency)
+        self._danjuan_slots = threading.BoundedSemaphore(self.danjuan_concurrency)
+        self._eastmoney_slots = threading.BoundedSemaphore(self.eastmoney_concurrency)
+        self._tencent_kline_slots = threading.BoundedSemaphore(TENCENT_KLINE_MAX_CONCURRENCY)
+        self._sina_kline_slots = threading.BoundedSemaphore(self.sina_concurrency)
+        self._eastmoney_circuit = CircuitBreaker("eastmoney-kline", failure_threshold=3, recovery_sec=30)
+        self._tencent_kline_circuit = CircuitBreaker("tencent-kline", failure_threshold=3, recovery_sec=30)
+        self._sina_kline_circuit = CircuitBreaker("sina-kline", failure_threshold=3, recovery_sec=30)
 
     def _latest(self) -> dict[str, Any]:
         return json.loads((self.data_dir / "latest.json").read_text(encoding="utf-8"))
 
-    def _latest_by_symbol(self) -> dict[str, dict[str, Any]]:
-        records = {str(item.get("symbol")): item for item in self._latest().get("symbols", [])}
+    def _load_exchange_quote_map(self) -> dict[str, dict[str, Any]]:
+        # ProductSnapshotService overrides _latest() with the TiDB product view.
+        # Read the collector's exchange snapshot explicitly here so a stale OTC
+        # product row cannot hide the latest exchange quote.
+        latest = MarketDataService._latest(self)
+        return {
+            str(item.get("symbol")): {**item, "fundVenue": "exchange"}
+            for item in latest.get("symbols", [])
+            if item.get("symbol")
+        }
+
+    def _load_otc_quote_map(self) -> dict[str, dict[str, Any]]:
         try:
             otc_payload = json.loads((self.data_dir / "otc-latest.json").read_text(encoding="utf-8"))
         except (FileNotFoundError, OSError, json.JSONDecodeError):
             otc_payload = {}
+        records: dict[str, dict[str, Any]] = {}
         for item in otc_payload.get("items") or []:
             code = str(item.get("code") or item.get("symbol") or "")
             if code:
                 records[code] = item
         return records
 
+    def _latest_by_symbol(self) -> dict[str, dict[str, Any]]:
+        exchange = self.cache.get_or_load(
+            "local-exchange-quote-map",
+            quote_snapshot_cache_ttl(),
+            self._load_exchange_quote_map,
+        )
+        otc = self.cache.get_or_load(
+            "local-otc-quote-map",
+            2,
+            self._load_otc_quote_map,
+        )
+        # 同一代码可能同时存在场内/场外份额。默认行情快照优先保留
+        # 场内成交价，场外口径会在 fund_metrics() 按明确标签重新读取净值。
+        return {**otc, **exchange}
+
     def otc_latest(self) -> dict[str, Any]:
         return json.loads((self.data_dir / "otc-latest.json").read_text(encoding="utf-8"))
 
-    def quote(self, symbol: str) -> dict[str, Any] | None:
-        item = self._latest_by_symbol().get(symbol)
+    def _quote_from_item(self, symbol: str, item: dict[str, Any] | None) -> dict[str, Any] | None:
         if not item:
             return None
         return {
@@ -213,6 +550,8 @@ class MarketDataService:
             "volume": item.get("volume"),
             "turnover": item.get("turnover"),
             "turnoverRate": item.get("turnover_rate"),
+            "marketCapital": item.get("market_capital"),
+            "totalShares": item.get("total_shares") if item.get("total_shares") is not None else item.get("totalShares"),
             "marketState": "OPEN" if item.get("session") == "trading" else "CLOSED",
             "asOf": item.get("price_timestamp") or item.get("collected_at"),
             "quoteDate": str(item.get("collected_at") or "")[:10],
@@ -222,6 +561,18 @@ class MarketDataService:
             "premiumPercent": item.get("computed_premium_percent", item.get("premiumPercent")),
             "vendorPremiumPercent": item.get("vendor_premium_percent"),
         }
+
+    def quote(self, symbol: str) -> dict[str, Any] | None:
+        return self._quote_from_item(symbol, self._latest_by_symbol().get(symbol))
+
+    def quotes(self, symbols: list[str]) -> dict[str, dict[str, Any]]:
+        records = self._latest_by_symbol()
+        output: dict[str, dict[str, Any]] = {}
+        for symbol in dict.fromkeys(symbols):
+            quote = self._quote_from_item(symbol, records.get(symbol))
+            if quote is not None:
+                output[symbol] = quote
+        return output
 
     def fund_metric(self, symbol: str) -> dict[str, Any] | None:
         item = self._latest_by_symbol().get(symbol)
@@ -245,6 +596,8 @@ class MarketDataService:
             "volume": item.get("volume"),
             "turnover": item.get("turnover"),
             "turnoverRate": item.get("turnover_rate"),
+            "marketCapital": item.get("market_capital"),
+            "totalShares": item.get("total_shares") if item.get("total_shares") is not None else item.get("totalShares"),
             "suspended": bool(item.get("suspended")),
             "marketState": "OPEN" if item.get("session") == "trading" else "CLOSED",
             "asOf": item.get("collected_at"),
@@ -252,40 +605,56 @@ class MarketDataService:
             "quality": item.get("quality"),
         }
 
-    def fund_metrics(self, symbols: list[str]) -> list[dict[str, Any]]:
+    def fund_metrics(self, symbols: list[str], fund_kinds: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         codes = list(dict.fromkeys(code for code in symbols if code.isdigit() and len(code) == 6))
+        explicit_kind_hints = _normalize_fund_kind_hints(fund_kinds)
         metrics = {code: self.fund_metric(code) for code in codes}
         if not codes:
             return []
-        today = datetime.now(SHANGHAI).date()
-        start = today - timedelta(days=45)
+        kind_hints = {
+            code: _infer_fund_kind_hint(code, metrics.get(code), explicit_kind_hints.get(code, ""))
+            for code in codes
+        }
 
         def load_navs() -> dict[str, list[dict[str, Any]]]:
             result: dict[str, list[dict[str, Any]]] = {}
-            missing = [code for code in codes if not (metrics.get(code) or {}).get("latestNav")]
+            missing = [
+                code for code in codes
+                if explicit_kind_hints.get(code) in {"otc", "qdii"}
+                or not (metrics.get(code) or {}).get("latestNav")
+            ]
             if not missing:
                 return result
-            with ThreadPoolExecutor(max_workers=min(6, len(missing))) as executor:
-                futures = {
-                    executor.submit(_fetch_danjuan_nav_history, code, start.isoformat(), today.isoformat(), self.timeout_sec, self.fetch_json): code
-                    for code in missing
-                }
-                for future, code in ((future, futures[future]) for future in futures):
-                    try:
-                        result[code] = future.result()
-                    except Exception:
-                        result[code] = []
+            for item in self.nav_histories(missing, 45):
+                payload = item.get("data") if item.get("ok") else None
+                result[item["code"]] = list((payload or {}).get("items") or [])
             return result
 
-        cache_key = "latest-navs:" + ",".join(sorted(codes))
-        missing_nav_codes = [code for code in codes if not (metrics.get(code) or {}).get("latestNav")]
-        navs = self.cache.get_or_load(cache_key, 1800, load_navs) if missing_nav_codes else {}
-        output = []
+        missing_nav_codes = [
+            code for code in codes
+            if explicit_kind_hints.get(code) in {"otc", "qdii"}
+            or not (metrics.get(code) or {}).get("latestNav")
+        ]
+        navs = load_navs() if missing_nav_codes else {}
+        output: list[dict[str, Any]] = []
         for code in codes:
             metric = metrics.get(code)
+            rows = navs.get(code) or []
+            hint = kind_hints.get(code, "")
+            if not metric and rows and hint in {"otc", "qdii"}:
+                latest = rows[-1]
+                metric = {
+                    "ok": True,
+                    "code": code,
+                    "symbol": code,
+                    "name": code,
+                    "latestNav": latest.get("nav"),
+                    "latestNavDate": latest.get("date"),
+                    "source": "danjuan-nav-history",
+                }
             if not metric:
                 continue
-            rows = navs.get(code) or []
+            metric = dict(metric)
             if rows:
                 latest = rows[-1]
                 metric["latestNav"] = latest["nav"]
@@ -293,6 +662,8 @@ class MarketDataService:
                 if len(rows) > 1:
                     metric["previousNav"] = rows[-2]["nav"]
                     metric["previousNavDate"] = rows[-2]["date"]
+            if hint in {"otc", "qdii"}:
+                metric = _apply_non_exchange_fund_kind(metric, hint)
             output.append(metric)
         return output
 
@@ -307,10 +678,58 @@ class MarketDataService:
                 continue
         return sorted(samples, key=lambda item: item["_epoch"])
 
-    def intraday_klines(self, symbol: str, limit: int = 240) -> dict[str, Any]:
+    def sina_price_klines(self, symbol: str, interval: str, limit: int = 500) -> dict[str, Any]:
+        normalized_interval = str(interval or "").lower()
+        scale = SUPPORTED_KLINE_INTERVALS.get(normalized_interval)
+        if scale is None:
+            raise ValueError(f"unsupported kline interval: {interval}")
+        requested = max(1, min(int(limit), SINA_KLINE_MAX_ROWS))
+        market_symbol = tencent_symbol(symbol)
+        callback = urllib.parse.quote(
+            f"var _{market_symbol}_{scale}_{requested}=",
+            safe="_=",
+        )
+        params = urllib.parse.urlencode({
+            "symbol": market_symbol,
+            "scale": scale,
+            "ma": "no",
+            "datalen": requested,
+        })
+        url = f"{SINA_KLINE_URL}/{callback}/CN_MarketDataService.getKLineData?{params}"
+
+        def load() -> dict[str, Any]:
+            with self._sina_kline_slots:
+                text = self._sina_kline_circuit.call(
+                    lambda: self.fetch_text(url, self.timeout_sec)
+                )
+            candles = _parse_sina_kline_text(text)
+            if not candles:
+                raise ValueError("sina kline payload has no candles")
+            return {
+                "market": "cn",
+                "symbol": symbol,
+                "name": symbol,
+                "interval": normalized_interval,
+                "generatedAt": _shanghai_iso(datetime.now(timezone.utc)),
+                "source": "sina-cn-kline",
+                "maxSourceRows": SINA_KLINE_MAX_ROWS,
+                "candles": candles[-requested:],
+            }
+
+        return self.cache.get_or_load(
+            f"sina-kline:{symbol}:{normalized_interval}:{requested}",
+            300 if normalized_interval == "1d" else 60,
+            load,
+            stale_if_error=True,
+            failure_ttl_sec=UPSTREAM_FAILURE_CACHE_SEC,
+        )
+
+    def intraday_klines(self, symbol: str, limit: int = 240, interval: str = "5m") -> dict[str, Any]:
+        normalized_interval = interval if interval in SUPPORTED_KLINE_INTERVALS and interval != "1d" else "5m"
+        bucket_seconds = SUPPORTED_KLINE_INTERVALS[normalized_interval] * 60
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for sample in self._raw_samples(symbol):
-            grouped[bucket_start_iso(str(sample["collected_at"]))].append(sample)
+            grouped[bucket_start_iso(str(sample["collected_at"]), bucket_seconds)].append(sample)
         candles = []
         for bucket, samples in sorted(grouped.items(), key=lambda item: parse_iso(item[0]).timestamp()):
             prices = [_number(item.get("price")) for item in samples]
@@ -340,7 +759,7 @@ class MarketDataService:
             candles.append(candle)
         candles = candles[-max(1, min(limit, 3000)):]
         return {
-            "market": "cn", "symbol": symbol, "interval": "5m",
+            "market": "cn", "symbol": symbol, "interval": normalized_interval,
             "generatedAt": _shanghai_iso(datetime.now(timezone.utc)),
             "source": f"market-collector-{self.store.backend_name}", "candles": candles,
         }
@@ -355,38 +774,86 @@ class MarketDataService:
         })
 
         def load() -> dict[str, Any]:
-            raw = self.fetch_json(EASTMONEY_KLINE_URL + "?" + params, self.timeout_sec)
-            source = "eastmoney-push2his"
-            data = raw.get("data") or {}
-            candles = []
-            for line in data.get("klines") or []:
-                fields = str(line).split(",")
-                if len(fields) < 11:
-                    continue
-                candle = {
-                    "date": fields[0], "t": _date_epoch(fields[0]),
-                    "o": _round4(fields[1]), "c": _round4(fields[2]),
-                    "h": _round4(fields[3]), "l": _round4(fields[4]),
-                    "v": _number(fields[5]), "amount": _number(fields[6]),
-                    "amplitudePercent": _round4(fields[7]),
-                    "changePercent": _round4(fields[8]), "change": _round4(fields[9]),
-                    "turnoverRate": _round4(fields[10]),
-                }
-                candles.append(candle)
-            return {
-                "market": "cn", "symbol": symbol, "name": data.get("name") or symbol,
-                "interval": "1d", "generatedAt": _shanghai_iso(datetime.now(timezone.utc)),
-                "source": source, "candles": candles,
-            }
+            source_errors: dict[str, str] = {}
+            try:
+                return self.sina_price_klines(symbol, "1d", limit)
+            except Exception as exc:
+                source_errors["sina"] = str(exc)
 
-        return self.cache.get_or_load(f"daily:{symbol}:{limit}", 300, load)
+            try:
+                with self._eastmoney_slots:
+                    raw = self._eastmoney_circuit.call(
+                        lambda: self.fetch_json(EASTMONEY_KLINE_URL + "?" + params, self.timeout_sec)
+                    )
+                data = raw.get("data") or {}
+                candles = []
+                for line in data.get("klines") or []:
+                    fields = str(line).split(",")
+                    if len(fields) < 11:
+                        continue
+                    candle = {
+                        "date": fields[0], "t": _date_epoch(fields[0]),
+                        "o": _round4(fields[1]), "c": _round4(fields[2]),
+                        "h": _round4(fields[3]), "l": _round4(fields[4]),
+                        "v": _number(fields[5]), "amount": _number(fields[6]),
+                        "amplitudePercent": _round4(fields[7]),
+                        "changePercent": _round4(fields[8]), "change": _round4(fields[9]),
+                        "turnoverRate": _round4(fields[10]),
+                    }
+                    candles.append(candle)
+                if not candles:
+                    raise ValueError("eastmoney kline payload has no candles")
+                return {
+                    "market": "cn", "symbol": symbol, "name": data.get("name") or symbol,
+                    "interval": "1d", "generatedAt": _shanghai_iso(datetime.now(timezone.utc)),
+                    "source": "eastmoney-push2his", "candles": candles,
+                }
+            except Exception as exc:
+                source_errors["eastmoney"] = str(exc)
+
+            tencent_limit = min(limit, 2000)
+            tencent_params = urllib.parse.urlencode({
+                "param": f"{tencent_symbol(symbol)},day,,,{tencent_limit},qfq",
+            })
+            try:
+                with self._tencent_kline_slots:
+                    raw = self._tencent_kline_circuit.call(
+                        lambda: self.fetch_json(TENCENT_KLINE_URL + "?" + tencent_params, self.timeout_sec)
+                    )
+                candles = _parse_tencent_daily_klines(raw, symbol)
+                if not candles:
+                    raise ValueError("tencent kline payload has no candles")
+                return {
+                    "market": "cn", "symbol": symbol, "name": symbol,
+                    "interval": "1d", "generatedAt": _shanghai_iso(datetime.now(timezone.utc)),
+                    "source": "tencent-ifzq", "candles": candles,
+                }
+            except Exception as exc:
+                source_errors["tencent"] = str(exc)
+                details = "; ".join(f"{name}={error}" for name, error in source_errors.items())
+                raise RuntimeError(f"daily kline unavailable: {details}") from exc
+
+        return self.cache.get_or_load(
+            f"daily:{symbol}:{limit}",
+            300,
+            load,
+            stale_if_error=True,
+            failure_ttl_sec=UPSTREAM_FAILURE_CACHE_SEC,
+        )
 
     def nav_history(self, symbol: str, days: int = 365) -> dict[str, Any]:
         days = max(1, min(days, 3650))
         to_date = datetime.now(SHANGHAI).date()
         from_date = to_date - timedelta(days=days)
         def load() -> dict[str, Any]:
-            rows = _fetch_danjuan_nav_history(symbol, from_date.isoformat(), to_date.isoformat(), self.timeout_sec, self.fetch_json)
+            with self._danjuan_slots:
+                rows = _fetch_danjuan_nav_history(
+                    symbol,
+                    from_date.isoformat(),
+                    to_date.isoformat(),
+                    self.timeout_sec,
+                    self.fetch_json,
+                )
             items = [{"date": item["date"], "t": _date_epoch(item["date"]), "nav": item["nav"]} for item in rows]
             return {
                 "symbol": symbol, "from": from_date.isoformat(), "to": to_date.isoformat(),
@@ -394,15 +861,56 @@ class MarketDataService:
                 "source": "danjuan-nav-history", "items": items,
             }
 
-        return self.cache.get_or_load(f"nav:{symbol}:{days}", 1800, load)
+        return self.cache.get_or_load(
+            f"nav:{symbol}:{days}",
+            1800,
+            load,
+            stale_if_error=True,
+            failure_ttl_sec=UPSTREAM_FAILURE_CACHE_SEC,
+        )
+
+    def nav_histories(self, symbols: list[str], days: int = 365) -> list[dict[str, Any]]:
+        codes = list(dict.fromkeys(
+            normalized
+            for code in symbols
+            if re.fullmatch(r"\d{6}", normalized := str(code or "").strip())
+        ))
+        if not codes:
+            return []
+        results: dict[str, dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=min(self.danjuan_concurrency, len(codes))) as executor:
+            futures = {executor.submit(self.nav_history, code, days): code for code in codes}
+            for future in as_completed(futures):
+                code = futures[future]
+                try:
+                    results[code] = {"code": code, "ok": True, "data": future.result()}
+                except Exception as exc:
+                    results[code] = {"code": code, "ok": False, "error": str(exc)}
+        return [results[code] for code in codes]
 
     def daily_combined(self, symbol: str, limit: int = 500) -> dict[str, Any]:
+        source_errors: dict[str, str] = {}
         with ThreadPoolExecutor(max_workers=2) as executor:
             price_future = executor.submit(self.daily_price_klines, symbol, limit)
             nav_future = executor.submit(self.nav_history, symbol, max(365, int(limit * 1.7)))
-            price_payload = price_future.result()
-            nav_payload = nav_future.result()
-        nav_items = nav_payload["items"]
+            try:
+                price_payload = price_future.result()
+            except Exception as exc:
+                source_errors["price"] = str(exc)
+                price_payload = {
+                    "market": "cn", "symbol": symbol, "name": symbol,
+                    "interval": "1d", "generatedAt": _shanghai_iso(datetime.now(timezone.utc)),
+                    "source": "price-sources-unavailable", "candles": [],
+                }
+            try:
+                nav_payload = nav_future.result()
+            except Exception as exc:
+                source_errors["nav"] = str(exc)
+                nav_payload = {
+                    "symbol": symbol, "generatedAt": _shanghai_iso(datetime.now(timezone.utc)),
+                    "source": "danjuan-unavailable", "items": [],
+                }
+        nav_items = nav_payload.get("items") or []
         nav_dates = [item["date"] for item in nav_items]
         candles = []
         for raw in price_payload["candles"]:
@@ -420,15 +928,30 @@ class MarketDataService:
                 "navDate": nav_item.get("date") if nav_item else "",
                 "premiumPercent": _round4(premium),
             })
-        return {
+        result = {
             **price_payload,
             "candles": candles,
             "navCandles": [{"date": item["date"], "t": item["t"], "nav": item["nav"], "o": item["nav"], "h": item["nav"], "l": item["nav"], "c": item["nav"]} for item in nav_items],
             "navAlignment": "cross-border T-1",
         }
+        if source_errors:
+            result["quality"] = {"status": "degraded", "issues": sorted(source_errors)}
+            result["sourceErrors"] = source_errors
+        return result
 
     def kline(self, symbol: str, interval: str, limit: int) -> dict[str, Any]:
-        return self.intraday_klines(symbol, limit) if interval == "5m" else self.daily_combined(symbol, limit)
+        normalized_interval = str(interval or "").lower()
+        if normalized_interval not in SUPPORTED_KLINE_INTERVALS:
+            raise ValueError(f"unsupported kline interval: {interval}")
+        if normalized_interval == "1d":
+            return self.daily_combined(symbol, limit)
+        try:
+            return self.sina_price_klines(symbol, normalized_interval, limit)
+        except Exception as exc:
+            payload = self.intraday_klines(symbol, limit, normalized_interval)
+            payload["quality"] = {"status": "degraded", "issues": ["sina"]}
+            payload["sourceErrors"] = {"sina": str(exc)}
+            return payload
 
     def premium_series(self, symbol: str, interval: str, limit: int) -> dict[str, Any]:
         payload = self.kline(symbol, interval, limit)

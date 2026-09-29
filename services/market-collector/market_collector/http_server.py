@@ -16,6 +16,10 @@ from urllib.parse import parse_qs, unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from .aggregates import MarketDataService
+from .backtest import BacktestInputError, run_collector_backtest
+from .fund_reference import fetch_fund_fee
+from .fund_venue import classify_fund_venues
+from .xueqiu import XueqiuCookieMissing, XueqiuUpstreamError, fetch_xueqiu_fund_data
 
 SYMBOL_PATH = re.compile(r"^/symbols/(?P<symbol>\d{6})$")
 KLINE_PATH = re.compile(r"^/klines/(?P<symbol>\d{6})$")
@@ -25,14 +29,17 @@ DATASET_PATH = re.compile(r"^/datasets/(?P<dataset>[a-z0-9-]+)/(?P<key>[^/]+)$")
 WEB_QUOTE_PATH = re.compile(r"^/quote/(?P<symbol>[^/]+)$")
 WEB_KLINE_PATH = re.compile(r"^/kline/(?P<symbol>[^/]+)$")
 WEB_FINANCIALS_PATH = re.compile(r"^/financials/(?P<symbol>[^/]+)$")
+WEB_XUEQIU_FUND_DATA_PATH = re.compile(r"^/xueqiu-fund-data/(?P<symbol>[^/]+)$")
 WEB_DETAIL_PATH = re.compile(r"^/(?:financials|xueqiu-fund-data|profile)/[^/]+$")
 WEB_EXACT_PATHS = {
     "/indices", "/sectors", "/quotes", "/search", "/summary", "/news",
-    "/earnings", "/fund-metrics", "/fund-fee", "/fund-limit", "/fund-limit/overview", "/market-summary", "/taco", "/movers",
-    "/list-rows", "/exchange-fund-list", "/nav-history",
+    "/earnings", "/fund-metrics", "/fund-venue", "/fund-fee", "/fund-limit", "/fund-limit/overview", "/market-summary", "/taco", "/movers",
+    "/list-rows", "/exchange-fund-list", "/nav-history", "/backtest",
 }
 MAX_REQUEST_BODY_BYTES = 256 * 1024
 UPSTREAM_REQUEST_SLOTS = threading.BoundedSemaphore(6)
+PAPER_TRADE_UPSTREAM = "http://127.0.0.1:18081"
+PAPER_TRADE_TIMEOUT_SEC = 10.0
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 SEC_HEADERS = {
@@ -80,6 +87,16 @@ _SEC_CACHE_LOCK = threading.Lock()
 
 ProxyRequest = Callable[[str, str, dict[str, Any] | None], tuple[int, dict[str, Any]]]
 FinancialsRequest = Callable[[str, bool], dict[str, Any]]
+XueqiuRequest = Callable[[str, bool, bool], dict[str, Any]]
+MarketQuotesRequest = Callable[[list[str]], dict[str, Any]]
+
+
+def default_xueqiu_request(symbol: str, force_refresh: bool = False, include_raw: bool = False) -> dict[str, Any]:
+    return fetch_xueqiu_fund_data(
+        symbol,
+        force_refresh=force_refresh,
+        include_raw=include_raw,
+    )
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -108,6 +125,7 @@ def _is_web_api_route(route: str) -> bool:
     return route in WEB_EXACT_PATHS or bool(
         WEB_QUOTE_PATH.fullmatch(route)
         or WEB_KLINE_PATH.fullmatch(route)
+        or WEB_XUEQIU_FUND_DATA_PATH.fullmatch(route)
         or WEB_DETAIL_PATH.fullmatch(route)
     )
 
@@ -121,6 +139,25 @@ def proxy_market_request(
         "path": route,
         "detail": "Market routes must be implemented by the CN market collector.",
     }
+
+
+def proxy_paper_trade_request(path: str) -> tuple[int, Any]:
+    """Forward /api/paper-trade/* to the local paper-trading engine (127.0.0.1:18081)."""
+    parsed = urlparse(path)
+    route = parsed.path
+    upstream = PAPER_TRADE_UPSTREAM + route
+    if parsed.query:
+        upstream += "?" + parsed.query
+    try:
+        request = Request(upstream, method="GET", headers={"user-agent": "ai-dca-market-collector/1.0"})
+        with UPSTREAM_REQUEST_SLOTS:
+            with urlopen(request, timeout=PAPER_TRADE_TIMEOUT_SEC) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        return HTTPStatus.OK, payload
+    except HTTPError as exc:
+        return HTTPStatus(exc.code), {"error": "paper_trade_upstream_error", "detail": str(exc)}
+    except Exception as exc:
+        return HTTPStatus.BAD_GATEWAY, {"error": "paper_trade_unavailable", "detail": str(exc)}
 
 def _fetch_sec_json(url: str, timeout_sec: float = 20.0) -> dict[str, Any]:
     request = Request(url, method="GET", headers=SEC_HEADERS)
@@ -245,6 +282,37 @@ def _local_symbol(raw_symbol: str) -> str:
     return match.group(1) if match else ""
 
 
+def _market_worker_symbol(raw_symbol: str) -> str:
+    symbol = unquote(str(raw_symbol or "")).strip().upper()
+    return symbol if re.fullmatch(r"\^?[A-Z][A-Z0-9._-]{0,14}", symbol) else ""
+
+
+def _market_worker_quote_map(
+    symbols: list[str],
+    request: MarketQuotesRequest | None,
+    *,
+    offline: bool = False,
+) -> dict[str, dict[str, Any]]:
+    if offline or not symbols or not callable(request):
+        return {}
+    try:
+        response = request(symbols)
+    except Exception:
+        return {}
+    if not isinstance(response, dict):
+        return {}
+    quote_map = response.get("quotes", response)
+    if not isinstance(quote_map, dict):
+        return {}
+    requested = set(symbols)
+    normalized: dict[str, dict[str, Any]] = {}
+    for raw_symbol, quote in quote_map.items():
+        symbol = _market_worker_symbol(raw_symbol)
+        if symbol in requested and isinstance(quote, dict):
+            normalized[symbol] = quote
+    return normalized
+
+
 def _merge_present(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     return {**base, **{key: value for key, value in override.items() if value is not None}}
 
@@ -285,6 +353,68 @@ def _local_quote(data_service: MarketDataService, raw_symbol: str) -> dict[str, 
     }
 
 
+def _exchange_fee_needs_refresh(code: str, payload: dict[str, Any] | None) -> bool:
+    if not code.startswith(("5", "15", "16")):
+        return False
+    try:
+        annual = float((payload or {}).get("annualFeeRate"))
+    except (TypeError, ValueError):
+        return True
+    return annual != annual or annual in (float("inf"), float("-inf"))
+
+
+def _refresh_missing_exchange_fees(
+    data_service: MarketDataService,
+    codes: list[str],
+    timeout_sec: float = 12.0,
+) -> dict[str, dict[str, Any]]:
+    missing = list(dict.fromkeys(code for code in codes if re.fullmatch(r"\d{6}", code)))
+    if not missing:
+        return {}
+    refreshed: dict[str, dict[str, Any]] = {}
+
+    def load(code: str) -> tuple[str, dict[str, Any] | None]:
+        try:
+            payload = fetch_fund_fee(code, timeout_sec=timeout_sec)
+            return code, payload if isinstance(payload, dict) and not _exchange_fee_needs_refresh(code, payload) else None
+        except Exception:
+            return code, None
+
+    with ThreadPoolExecutor(max_workers=min(4, len(missing))) as executor:
+        for future in executor.map(load, missing):
+            code, payload = future
+            if payload:
+                refreshed[code] = payload
+
+    if not refreshed:
+        return refreshed
+    store = getattr(data_service, "store", None)
+    writer = getattr(store, "write_fund_reference_snapshots", None)
+    if callable(writer):
+        records = []
+        for code, payload in refreshed.items():
+            fetched_at = str(payload.get("fetchedAt") or datetime.now(timezone.utc).isoformat())
+            try:
+                snapshot_date = datetime.fromisoformat(fetched_at.replace("Z", "+00:00")).date().isoformat()
+            except ValueError:
+                snapshot_date = datetime.now(timezone.utc).date().isoformat()
+            records.append({
+                "data_kind": "fund_fee",
+                "symbol": code,
+                "snapshot_date": snapshot_date,
+                "fetched_at": fetched_at,
+                "source": "worker:fund-fee",
+                "payload": payload,
+            })
+        try:
+            writer(records, retention_days=400)
+        except Exception:
+            # The API can still return fresh data when a replica write is
+            # temporarily unavailable. The next request will retry if needed.
+            pass
+    return refreshed
+
+
 def resolve_request(
     path: str,
     data_dir: Path,
@@ -294,11 +424,17 @@ def resolve_request(
     body: dict[str, Any] | None = None,
     proxy_request: ProxyRequest = proxy_market_request,
     financials_request: FinancialsRequest = fetch_sec_financials,
+    xueqiu_request: XueqiuRequest = default_xueqiu_request,
+    market_quotes_request: MarketQuotesRequest | None = None,
     offline: bool = False,
 ) -> tuple[int, dict[str, Any]]:
     parsed = urlparse(path)
     route = _normalize_web_route(parsed.path.rstrip("/") or "/")
     query = parse_qs(parsed.query)
+
+    if route.startswith("/api/paper-trade/"):
+        return proxy_paper_trade_request(path)
+
     if route == "/":
         return HTTPStatus.OK, {
             "service": "market-collector-shadow-api",
@@ -306,16 +442,17 @@ def resolve_request(
             "utc_offset": "+08:00",
             "endpoints": [
                 "/health", "/latest", "/symbols/{code}",
-                "/klines/{code}?interval=5m|1d&limit=500",
-                "/nav/{code}?days=365", "/premium/{code}?interval=5m|1d&limit=500",
+                "/klines/{code}?interval=5m|15m|30m|60m|1d&limit=500",
+                "/nav/{code}?days=365", "/premium/{code}?interval=5m|15m|30m|60m|1d&limit=500",
                 "/fund-metrics?codes=513100,513500",
                 "/otc/latest",
                 "/aggregates/home-market-overview", "/aggregates/home-market-series",
                 "/aggregates/fund-limit-overview", "/aggregates/home-market-collect",
                 "/datasets/{dataset}/{key}",
                 "/quotes?symbols=513100,QQQ", "/quote/{symbol}",
-                "/kline/{symbol}?tf=5m|1d&limit=500", "POST /fund-metrics",
-                "web compatibility routes are collector-local; no Cloudflare market fallback",
+                "/kline/{symbol}?tf=5m|15m|30m|60m|1d&limit=500", "POST /fund-metrics", "POST /fund-venue",
+                "/xueqiu-fund-data/{code}", "POST /backtest",
+                "quote routes are collector-local; Xueqiu detail has a dedicated fallback only when its local cookie is absent",
                 "offline mode (--offline) serves /quotes, /quote, /fund-metrics purely from local cache",
             ],
         }
@@ -363,8 +500,8 @@ def resolve_request(
     match = KLINE_PATH.fullmatch(route)
     if match and data_service:
         interval = str((query.get("interval") or query.get("tf") or ["5m"])[0]).lower()
-        if interval not in {"5m", "1d"}:
-            return HTTPStatus.BAD_REQUEST, {"error": "unsupported_interval", "supported": ["5m", "1d"]}
+        if interval not in {"5m", "15m", "30m", "60m", "1d"}:
+            return HTTPStatus.BAD_REQUEST, {"error": "unsupported_interval", "supported": ["5m", "15m", "30m", "60m", "1d"]}
         try:
             return HTTPStatus.OK, data_service.kline(match.group("symbol"), interval, _int_param(query, "limit", 500))
         except Exception as exc:
@@ -380,8 +517,8 @@ def resolve_request(
     match = PREMIUM_PATH.fullmatch(route)
     if match and data_service:
         interval = str((query.get("interval") or ["1d"])[0]).lower()
-        if interval not in {"5m", "1d"}:
-            return HTTPStatus.BAD_REQUEST, {"error": "unsupported_interval", "supported": ["5m", "1d"]}
+        if interval not in {"5m", "15m", "30m", "60m", "1d"}:
+            return HTTPStatus.BAD_REQUEST, {"error": "unsupported_interval", "supported": ["5m", "15m", "30m", "60m", "1d"]}
         try:
             return HTTPStatus.OK, data_service.premium_series(match.group("symbol"), interval, _int_param(query, "limit", 500))
         except Exception as exc:
@@ -389,32 +526,76 @@ def resolve_request(
 
     match = WEB_QUOTE_PATH.fullmatch(route)
     if match and data_service and method == "GET":
-        local = _local_quote(data_service, match.group("symbol"))
+        raw_symbol = match.group("symbol")
+        local = _local_quote(data_service, raw_symbol)
         if local is not None:
             return HTTPStatus.OK, local
-        return HTTPStatus.NOT_FOUND, {"error": "symbol_not_found", "symbol": match.group("symbol")}
+        symbol = _market_worker_symbol(raw_symbol)
+        worker_quotes = _market_worker_quote_map([symbol] if symbol else [], market_quotes_request, offline=offline)
+        if symbol in worker_quotes:
+            return HTTPStatus.OK, worker_quotes[symbol]
+        return HTTPStatus.NOT_FOUND, {"error": "symbol_not_found", "symbol": raw_symbol}
 
     if route == "/quotes" and data_service and method == "GET":
         requested = list(dict.fromkeys(
             code for raw in query.get("symbols", [])
             for code in re.split(r"[,\s]+", str(raw)) if code
         ))[:100]
-        local_quotes = {}
-        for symbol in requested:
-            local = _local_quote(data_service, symbol)
-            if local is not None:
-                local_quotes[symbol] = local
+        normalized_requested = [
+            symbol for raw in requested if (symbol := _local_symbol(raw))
+        ]
+        local_quotes = {
+            symbol: {
+                **quote,
+                "symbol": symbol,
+                "code": symbol,
+                "market": "cn",
+                "source": "market-collector",
+            }
+            for symbol, quote in data_service.quotes(normalized_requested).items()
+        }
+        worker_symbols = list(dict.fromkeys(
+            symbol for raw in requested
+            if not _local_symbol(raw) and (symbol := _market_worker_symbol(raw))
+        ))[:60]
+        worker_quotes = _market_worker_quote_map(worker_symbols, market_quotes_request, offline=offline)
+        quotes = {**local_quotes, **worker_quotes}
+        # fundmobapi fallback: fill missing premiumPercent for CN ETF symbols
+        try:
+            _missing_premium = [
+                sym for sym, q in quotes.items()
+                if isinstance(q, dict) and not q.get("premiumPercent")
+            ]
+            if _missing_premium:
+                from .product_http_server import _fetch_fundmob_premiums as _ffp
+                _premiums = _ffp(_missing_premium)
+                for sym in _missing_premium:
+                    digits = sym[-6:] if len(sym) >= 6 else sym
+                    pm = _premiums.get(digits) or _premiums.get(sym)
+                    if pm and pm.get("premiumPercent") is not None:
+                        q = quotes[sym]
+                        q["premiumPercent"] = pm["premiumPercent"]
+                        q["vendorPremiumPercent"] = pm["premiumPercent"]
+                        if pm.get("latestNav") and not q.get("latestNav"):
+                            q["latestNav"] = pm["latestNav"]
+                        quality = q.get("quality")
+                        if isinstance(quality, dict):
+                            issues = quality.get("issues")
+                            if isinstance(issues, list):
+                                quality["issues"] = [i for i in issues if i not in ("missing_iopv", "missing_vendor_premium")]
+        except Exception:
+            pass
         return HTTPStatus.OK, {
-            "quotes": local_quotes,
-            "generatedAt": max((str(item.get("asOf") or "") for item in local_quotes.values()), default=""),
-            "source": "market-collector",
+            "quotes": quotes,
+            "generatedAt": max((str(item.get("asOf") or "") for item in quotes.values()), default=""),
+            "source": "market-collector+markets-worker" if worker_quotes else "market-collector",
         }
 
     match = WEB_KLINE_PATH.fullmatch(route)
     if match and data_service and method == "GET":
         symbol = _local_symbol(match.group("symbol"))
         interval = str((query.get("tf") or query.get("interval") or ["1d"])[0]).lower()
-        if symbol and interval in {"5m", "1d"} and data_service.fund_metric(symbol):
+        if symbol and interval in {"5m", "15m", "30m", "60m", "1d"} and data_service.fund_metric(symbol):
             try:
                 return HTTPStatus.OK, data_service.kline(
                     symbol,
@@ -424,6 +605,39 @@ def resolve_request(
             except Exception:
                 pass
         return HTTPStatus.NOT_FOUND, {"error": "symbol_not_found", "symbol": match.group("symbol")}
+
+    match = WEB_XUEQIU_FUND_DATA_PATH.fullmatch(route)
+    if match and method == "GET":
+        symbol = _local_symbol(match.group("symbol"))
+        if not symbol:
+            return HTTPStatus.BAD_REQUEST, {"error": "invalid_cn_symbol", "symbol": match.group("symbol")}
+        force_refresh = str((query.get("refresh") or [""])[0]).lower() in {"1", "true", "yes"}
+        # Raw upstream payloads are intentionally not exposed by the public CN
+        # compatibility route. The collector returns the same sanitized shape
+        # as the Worker, while trusted callers can still use the source module.
+        include_raw = False
+        try:
+            return HTTPStatus.OK, xueqiu_request(symbol, force_refresh, include_raw)
+        except XueqiuCookieMissing as exc:
+            return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "xueqiu_cookie_missing", "detail": str(exc)}
+        except (HTTPError, OSError, TimeoutError, ValueError, json.JSONDecodeError, XueqiuUpstreamError) as exc:
+            return HTTPStatus.BAD_GATEWAY, {"error": "xueqiu_source_failed", "detail": str(exc)}
+
+    if route == "/backtest" and data_service:
+        if method != "POST":
+            return HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"}
+        try:
+            return HTTPStatus.OK, run_collector_backtest(data_service, body or {})
+        except BacktestInputError as exc:
+            return HTTPStatus.UNPROCESSABLE_ENTITY, {
+                "error": "backtest_data_unavailable",
+                "detail": str(exc),
+            }
+        except Exception as exc:
+            return HTTPStatus.BAD_GATEWAY, {
+                "error": "backtest_failed",
+                "detail": str(exc),
+            }
 
     if route == "/nav-history" and data_service:
         if method == "GET":
@@ -438,21 +652,32 @@ def resolve_request(
             codes = list(dict.fromkeys(str(code or "").strip() for code in (body or {}).get("codes") or [] if re.fullmatch(r"\d{6}", str(code or "").strip())))[:60]
             if not codes:
                 return HTTPStatus.BAD_REQUEST, {"error": "codes_required"}
-            items = []
-            for code in codes:
-                try:
-                    items.append({"code": code, "ok": True, "data": data_service.nav_history(code, 1000)})
-                except Exception as exc:
-                    items.append({"code": code, "ok": False, "error": str(exc)})
+            items = data_service.nav_histories(codes, 1000)
             return HTTPStatus.OK, {"ok": True, "count": len(items), "items": items, "source": "market-collector"}
         return HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"}
+
+    if route == "/fund-venue":
+        if method != "POST":
+            return HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"}
+        payload = classify_fund_venues((body or {}).get("codes") or [])
+        if not payload.get("items"):
+            return HTTPStatus.BAD_REQUEST, {"error": "codes_required"}
+        return HTTPStatus.OK, payload
 
     if route == "/fund-metrics" and data_service and method == "POST":
         codes = list(dict.fromkeys(str(code or "").strip() for code in (body or {}).get("codes") or [] if re.fullmatch(r"\d{6}", str(code or "").strip())))[:100]
         if not codes:
             return HTTPStatus.BAD_REQUEST, {"error": "codes_required"}
         try:
-            items = [item for item in data_service.fund_metrics(codes) if isinstance(item, dict)]
+            raw_fund_kinds = (body or {}).get("fundKinds")
+            fund_kinds = raw_fund_kinds if isinstance(raw_fund_kinds, dict) else {}
+            if fund_kinds:
+                items = [
+                    item for item in data_service.fund_metrics(codes, fund_kinds=fund_kinds)
+                    if isinstance(item, dict)
+                ]
+            else:
+                items = [item for item in data_service.fund_metrics(codes) if isinstance(item, dict)]
         except Exception as exc:
             return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "local_fund_metrics_failed", "detail": str(exc)}
         return HTTPStatus.OK, {"items": items, "successCount": len(items), "failureCount": len(codes) - len(items), "source": "market-collector"}
@@ -481,18 +706,29 @@ def resolve_request(
             record = data_service.dataset_record("fund-fee", code)
             if record is None:
                 return HTTPStatus.NOT_FOUND, {"error": "fund_fee_not_found", "code": code}
-            return HTTPStatus.OK, record.get("payload") or record
+            payload = record.get("payload") or record
+            if _exchange_fee_needs_refresh(code, payload):
+                payload = _refresh_missing_exchange_fees(data_service, [code]).get(code) or payload
+            return HTTPStatus.OK, payload
         if method == "POST":
             codes = list(dict.fromkeys(str(code or "").strip() for code in (body or {}).get("codes") or [] if re.fullmatch(r"\d{6}", str(code or "").strip())))[:100]
             if not codes:
                 return HTTPStatus.BAD_REQUEST, {"error": "codes_required"}
+            cached_payloads = {
+                code: ((data_service.dataset_record("fund-fee", code) or {}).get("payload") or {})
+                for code in codes
+            }
+            refreshed = _refresh_missing_exchange_fees(
+                data_service,
+                [code for code in codes if _exchange_fee_needs_refresh(code, cached_payloads.get(code))],
+            )
             items = []
             for code in codes:
-                record = data_service.dataset_record("fund-fee", code)
-                if record is None:
+                payload = refreshed.get(code) or cached_payloads.get(code)
+                if not payload:
                     items.append({"code": code, "ok": False, "error": "fund_fee_not_found"})
                 else:
-                    items.append({"code": code, "ok": True, "data": record.get("payload") or record})
+                    items.append({"code": code, "ok": True, "data": payload})
             return HTTPStatus.OK, {"items": items, "successCount": sum(1 for item in items if item["ok"]), "failureCount": sum(1 for item in items if not item["ok"]), "source": "market-collector"}
         return HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"}
 
@@ -576,6 +812,8 @@ def build_handler(
     data_dir: Path,
     data_service: MarketDataService | None = None,
     *,
+    xueqiu_request: XueqiuRequest = default_xueqiu_request,
+    market_quotes_request: MarketQuotesRequest | None = None,
     offline: bool = False,
 ) -> type[BaseHTTPRequestHandler]:
     class MarketCollectorHandler(BaseHTTPRequestHandler):
@@ -628,6 +866,8 @@ def build_handler(
                 data_service,
                 method=method,
                 body=body,
+                xueqiu_request=xueqiu_request,
+                market_quotes_request=market_quotes_request,
                 offline=offline,
             )
             self._send_payload(status, payload, include_body)

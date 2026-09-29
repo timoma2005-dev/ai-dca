@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from market_collector.aggregates import MarketDataService
+from market_collector.aggregates import MarketDataService, TimedCache, UpstreamCircuitOpen
+from market_collector.core import MarketCollector
+from market_collector.calendar_cn import quote_snapshot_cache_ttl
 from market_collector.http_server import resolve_request
 from market_collector.storage import SQLiteStore
 
@@ -66,7 +71,7 @@ class AggregateServiceTest(unittest.TestCase):
         ], 168, 14)
         (self.data_dir / "latest.json").write_text(json.dumps({
             "generated_at": recent("09:35:10"),
-            "symbols": [record(recent("09:35:10"), 2.12, 2.02, 4.9505)],
+            "symbols": [{**record(recent("09:35:10"), 2.12, 2.02, 4.9505), "total_shares": 9477110528}],
         }), encoding="utf-8")
         (self.data_dir / "otc-latest.json").write_text(json.dumps({
             "generated_at": "2026-08-11T19:30:00+08:00",
@@ -89,18 +94,48 @@ class AggregateServiceTest(unittest.TestCase):
                 {"date": "2026-08-10", "nav": 2.02},
             ], "generatedAt": "2026-08-11T09:40:00+08:00"}
 
+        def fetch_text(_url: str, _timeout: float) -> str:
+            rows = [
+                {"day": "2026-08-10", "open": "2.00", "close": "2.10", "high": "2.12", "low": "1.98", "volume": "1000"},
+                {"day": "2026-08-11", "open": "2.10", "close": "2.12", "high": "2.15", "low": "2.08", "volume": "1100"},
+            ]
+            return "var _fixture=(" + json.dumps(rows) + ");"
+
         def post_json(_url: str, _payload: dict, _timeout: float) -> dict:
             return {"items": [{"code": "513100", "data": {"items": [
                 {"date": "2026-08-07", "nav": 2.0},
                 {"date": "2026-08-10", "nav": 2.02},
             ]}}]}
 
+        self.recent_nav_items = [
+            {
+                "date": (datetime.now(ZoneInfo("Asia/Shanghai")).date() - timedelta(days=2)).isoformat(),
+                "nav": 2.0,
+            },
+            {
+                "date": (datetime.now(ZoneInfo("Asia/Shanghai")).date() - timedelta(days=1)).isoformat(),
+                "nav": 2.02,
+            },
+        ]
         self.service = MarketDataService(
-            self.store, self.data_dir, fetch_json=fetch_json, post_json=post_json,
+            self.store, self.data_dir, fetch_json=fetch_json, fetch_text=fetch_text, post_json=post_json,
         )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def use_recent_nav_history(self) -> None:
+        def nav_histories(codes: list[str], _days: int = 45) -> list[dict]:
+            return [
+                {
+                    "code": code,
+                    "ok": True,
+                    "data": {"items": [dict(item) for item in self.recent_nav_items]},
+                }
+                for code in codes
+            ]
+
+        self.service.nav_histories = nav_histories
 
     def test_intraday_ohlc_and_premium(self) -> None:
         payload = self.service.intraday_klines("513100")
@@ -112,6 +147,37 @@ class AggregateServiceTest(unittest.TestCase):
         self.assertEqual(first["premiumClose"], 6.4677)
         self.assertTrue(first["time"].endswith("+08:00"))
         self.assertEqual(payload["source"], "market-collector-sqlite")
+
+    def test_quotes_load_local_snapshot_once_for_a_batch(self) -> None:
+        exchange_calls = 0
+        otc_calls = 0
+        original_exchange = self.service._load_exchange_quote_map
+        original_otc = self.service._load_otc_quote_map
+
+        def counted_exchange_load():
+            nonlocal exchange_calls
+            exchange_calls += 1
+            return original_exchange()
+
+        def counted_otc_load():
+            nonlocal otc_calls
+            otc_calls += 1
+            return original_otc()
+
+        self.service._load_exchange_quote_map = counted_exchange_load
+        self.service._load_otc_quote_map = counted_otc_load
+        quotes = self.service.quotes(["513100", "000834", "513100"])
+
+        self.assertEqual(set(quotes), {"513100", "000834"})
+        self.assertEqual(exchange_calls, 1)
+        self.assertEqual(otc_calls, 1)
+        self.assertEqual(quotes["513100"]["totalShares"], 9477110528)
+
+    def test_quote_snapshot_cache_ttl_tracks_a_share_sessions(self) -> None:
+        tz = ZoneInfo("Asia/Shanghai")
+        self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 14, 10, 0, tzinfo=tz)), 2)
+        self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 14, 12, 0, tzinfo=tz)), 59 * 60)
+        self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 18, 15, 1, tzinfo=tz)), 66 * 3600 + 28 * 60)
 
     def test_intraday_reads_through_storage_contract(self) -> None:
         store = RecordingStore([
@@ -153,10 +219,352 @@ class AggregateServiceTest(unittest.TestCase):
         self.assertEqual(payload["candles"][1]["premiumPercent"], 4.9505)
         self.assertEqual(len(payload["navCandles"]), 2)
 
+    def test_timed_cache_coalesces_concurrent_loads(self) -> None:
+        cache = TimedCache()
+        calls = 0
+        calls_lock = threading.Lock()
+
+        def loader():
+            nonlocal calls
+            with calls_lock:
+                calls += 1
+            time.sleep(0.05)
+            return {"value": 1}
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            values = list(executor.map(lambda _index: cache.get_or_load("same", 60, loader), range(8)))
+
+        self.assertEqual(calls, 1)
+        self.assertTrue(all(value == {"value": 1} for value in values))
+
+    def test_timed_cache_uses_stale_value_during_source_failure(self) -> None:
+        cache = TimedCache()
+        self.assertEqual(cache.get_or_load("daily", 60, lambda: {"candles": [1]}), {"candles": [1]})
+        cache._items["daily"] = (0.0, {"candles": [1]})
+        calls = 0
+
+        def fail():
+            nonlocal calls
+            calls += 1
+            raise OSError("source unavailable")
+
+        first = cache.get_or_load(
+            "daily", 60, fail, stale_if_error=True, failure_ttl_sec=30,
+        )
+        second = cache.get_or_load(
+            "daily", 60, fail, stale_if_error=True, failure_ttl_sec=30,
+        )
+
+        self.assertEqual(first, {"candles": [1]})
+        self.assertEqual(second, {"candles": [1]})
+        self.assertEqual(calls, 1)
+
+    def test_nav_histories_limit_concurrency_and_isolate_failures(self) -> None:
+        active = 0
+        peak = 0
+        lock = threading.Lock()
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+
+        def fetch_json(url: str, _timeout: float) -> dict:
+            nonlocal active, peak
+            code = url.split("/history/", 1)[1].split("?", 1)[0]
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                time.sleep(0.03)
+                if code == "000003":
+                    raise OSError("danjuan unavailable")
+                return {"data": {"items": [{"date": today, "nav": 1.2}], "total_items": 1}}
+            finally:
+                with lock:
+                    active -= 1
+
+        service = MarketDataService(
+            self.store,
+            self.data_dir,
+            fetch_json=fetch_json,
+            danjuan_concurrency=2,
+        )
+        result = service.nav_histories(["000001", "000002", "000003", "000004"], 30)
+
+        self.assertEqual([item["code"] for item in result], ["000001", "000002", "000003", "000004"])
+        self.assertEqual([item["ok"] for item in result], [True, True, False, True])
+        self.assertEqual(peak, 2)
+
+    def test_sina_history_supports_all_intervals_and_caps_limit(self) -> None:
+        requested_urls: list[str] = []
+
+        def fetch_text(url: str, _timeout: float) -> str:
+            requested_urls.append(url)
+            rows = [
+                {"day": "2026-09-11 10:00:00", "open": "2.00", "close": "2.10", "high": "2.12", "low": "1.98", "volume": "1000"},
+                {"day": "2026-09-11 10:05:00", "open": "2.10", "close": "2.12", "high": "2.15", "low": "2.08", "volume": "1100"},
+            ]
+            return "var _fixture=(" + json.dumps(rows) + ");"
+
+        service = MarketDataService(self.store, self.data_dir, fetch_text=fetch_text)
+        for interval in ("5m", "15m", "30m", "60m", "1d"):
+            payload = service.sina_price_klines("513100", interval, 3000)
+            self.assertEqual(payload["source"], "sina-cn-kline")
+            self.assertEqual(payload["interval"], interval)
+            self.assertEqual(len(payload["candles"]), 2)
+            self.assertEqual(payload["maxSourceRows"], 1970)
+
+        self.assertTrue(all("datalen=1970" in url for url in requested_urls))
+        self.assertTrue(any("_240_1970=" in url for url in requested_urls))
+
+    def test_daily_price_falls_back_to_tencent_kline(self) -> None:
+        requested_urls: list[str] = []
+
+        def fetch_json(url: str, _timeout: float) -> dict:
+            requested_urls.append(url)
+            if "push2his" in url:
+                raise OSError("eastmoney unavailable")
+            if "ifzq.gtimg.cn" in url:
+                return {"data": {"sh513100": {"qfqday": [
+                    ["2026-09-11", "2.00", "2.10", "2.12", "1.98", "1000"],
+                    ["2026-09-12", "2.10", "2.12", "2.15", "2.08", "1100"],
+                ]}}}
+            raise AssertionError(url)
+
+        service = MarketDataService(
+            self.store,
+            self.data_dir,
+            fetch_json=fetch_json,
+            fetch_text=lambda _url, _timeout: (_ for _ in ()).throw(OSError("sina unavailable")),
+        )
+        payload = service.daily_price_klines("513100", 30)
+
+        self.assertEqual(payload["source"], "tencent-ifzq")
+        self.assertEqual(len(payload["candles"]), 2)
+        self.assertEqual(payload["candles"][1]["c"], 2.12)
+        self.assertEqual(payload["candles"][1]["changePercent"], 0.9524)
+        self.assertTrue(any("push2his" in url for url in requested_urls))
+        self.assertTrue(any("param=sh513100%2Cday%2C%2C%2C30%2Cqfq" in url for url in requested_urls))
+
+    def test_eastmoney_kline_limit_and_circuit_breaker(self) -> None:
+        active = 0
+        peak = 0
+        lock = threading.Lock()
+
+        def successful_fetch(_url: str, _timeout: float) -> dict:
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                time.sleep(0.03)
+                return {"data": {"klines": [
+                    "2026-09-11,2.00,2.10,2.12,1.98,1000,2100,7.00,5.00,0.10,2.00",
+                ]}}
+            finally:
+                with lock:
+                    active -= 1
+
+        service = MarketDataService(
+            self.store,
+            self.data_dir,
+            fetch_json=successful_fetch,
+            fetch_text=lambda _url, _timeout: (_ for _ in ()).throw(OSError("sina unavailable")),
+            eastmoney_concurrency=2,
+        )
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            payloads = list(executor.map(service.daily_price_klines, ["513100", "513500", "159501", "159660", "513390"]))
+
+        self.assertTrue(all(payload["candles"] for payload in payloads))
+        self.assertEqual(peak, 2)
+
+        failures = {"eastmoney": 0, "tencent": 0}
+
+        def failing_fetch(url: str, _timeout: float) -> dict:
+            provider = "tencent" if "ifzq.gtimg.cn" in url else "eastmoney"
+            failures[provider] += 1
+            raise OSError(f"{provider} unavailable")
+
+        failing_service = MarketDataService(
+            self.store,
+            self.data_dir,
+            fetch_json=failing_fetch,
+            fetch_text=lambda _url, _timeout: (_ for _ in ()).throw(OSError("sina unavailable")),
+            eastmoney_concurrency=2,
+        )
+        for symbol in ["513100", "513500", "159501", "159660"]:
+            with self.assertRaisesRegex(RuntimeError, "daily kline unavailable"):
+                failing_service.daily_price_klines(symbol)
+        self.assertEqual(failures, {"eastmoney": 3, "tencent": 3})
+
+    def test_daily_combined_keeps_nav_when_price_source_fails(self) -> None:
+        def fail_price(_symbol: str, _limit: int):
+            raise OSError("price unavailable")
+
+        self.service.daily_price_klines = fail_price
+        payload = self.service.daily_combined("513100", 10)
+
+        self.assertEqual(payload["candles"], [])
+        self.assertEqual(len(payload["navCandles"]), 2)
+        self.assertEqual(payload["quality"], {"status": "degraded", "issues": ["price"]})
+        self.assertIn("price", payload["sourceErrors"])
+
+    def test_fund_metrics_repairs_stale_539001_exchange_hint_to_qdii_nav(self) -> None:
+        original_fund_metric = self.service.fund_metric
+
+        def stale_metric(code: str):
+            if code == "539001":
+                return {
+                    "ok": True,
+                    "code": code,
+                    "fundKind": "exchange",
+                    "price": 9.99,
+                    "premiumPercent": 12.3,
+                }
+            return original_fund_metric(code)
+
+        self.service.fund_metric = stale_metric
+        self.use_recent_nav_history()
+        items = self.service.fund_metrics(["539001"], {"539001": "exchange"})
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["fundKind"], "qdii")
+        self.assertEqual(items[0]["latestNav"], 2.02)
+        self.assertEqual(items[0]["previousNav"], 2.0)
+        self.assertIsNone(items[0]["price"])
+        self.assertIsNone(items[0]["premiumPercent"])
+
+    def test_fund_metrics_clears_stale_exchange_error_from_cached_539001_nav(self) -> None:
+        def stale_metric(code: str):
+            if code == "539001":
+                return {
+                    "ok": False,
+                    "code": code,
+                    "fundKind": "qdii",
+                    "fundType": "QDII",
+                    "fundVenue": "otc",
+                    "latestNav": 3.4325,
+                    "latestNavDate": "2026-09-17",
+                    "previousNav": 3.3805,
+                    "previousNavDate": "2026-09-16",
+                    "error": "exchange fund quote unavailable: tencent price unavailable",
+                    "primaryError": "tencent price unavailable",
+                    "quality": {"status": "degraded", "issues": []},
+                    "source": "",
+                }
+            return None
+
+        self.service.fund_metric = stale_metric
+        self.service.nav_histories = lambda *_args, **_kwargs: self.fail("cached NAV should not require a live refresh")
+
+        items = self.service.fund_metrics(["539001"])
+
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertTrue(item["ok"])
+        self.assertEqual(item["fundKind"], "qdii")
+        self.assertEqual(item["fundType"], "QDII")
+        self.assertEqual(item["fundVenue"], "otc")
+        self.assertEqual(item["latestNav"], 3.4325)
+        self.assertEqual(item["previousNav"], 3.3805)
+        self.assertEqual(item["error"], "")
+        self.assertEqual(item["primaryError"], "")
+        self.assertEqual(item["quality"], {"status": "ok", "issues": []})
+        self.assertEqual(item["source"], "cached-otc-nav")
+
+    def test_ambiguous_lof_exchange_hint_keeps_exchange_quote(self) -> None:
+        def stale_metric(code: str):
+            return {
+                "ok": True,
+                "code": code,
+                "price": 4.5,
+                "latestNav": 4.4,
+                "premiumPercent": 2.2727,
+                "fundVenue": "exchange",
+            }
+
+        self.service.fund_metric = stale_metric
+        items = self.service.fund_metrics(["161130"], {"161130": "exchange"})
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["price"], 4.5)
+        self.assertEqual(items[0]["premiumPercent"], 2.2727)
+
+    def test_collector_does_not_let_otc_snapshot_overwrite_exchange_code(self) -> None:
+        class FakeFundStore:
+            def __init__(self):
+                self.rows = []
+
+            def upsert_quotes(self, rows):
+                self.rows = list(rows)
+                return len(self.rows)
+
+        class FakeDataService:
+            def fund_metric(self, code):
+                return {
+                    "code": code,
+                    "name": "LOF",
+                    "price": 4.5,
+                    "previousClose": 4.4,
+                    "changePercent": 2.2727,
+                    "premiumPercent": 3.1,
+                    "marketState": "CLOSED",
+                    "asOf": "2026-09-22T15:00:00+08:00",
+                }
+
+            def otc_latest(self):
+                return {
+                    "items": [
+                        {"code": "161130", "name": "LOF", "latestNav": 4.4},
+                        {"code": "000834", "name": "OTC", "latestNav": 6.2},
+                    ]
+                }
+
+        collector = MarketCollector.__new__(MarketCollector)
+        collector.config = {"symbols": ["161130"]}
+        collector.fund_store = FakeFundStore()
+        collector._data_service = FakeDataService()
+
+        self.assertEqual(collector._publish_quotes(), 2)
+        exchange_rows = [row for row in collector.fund_store.rows if row["code"] == "161130"]
+        otc_rows = [row for row in collector.fund_store.rows if row["code"] == "000834"]
+        self.assertEqual(len(exchange_rows), 1)
+        self.assertEqual(exchange_rows[0]["session"], "exchange")
+        self.assertEqual(exchange_rows[0]["price"], 4.5)
+        self.assertEqual(len(otc_rows), 1)
+        self.assertEqual(otc_rows[0]["session"], "otc")
+
+    def test_high_frequency_uses_cached_eastmoney_price_when_tencent_fails(self) -> None:
+        captured = []
+        collector = MarketCollector.__new__(MarketCollector)
+        collector.config = {"symbols": ["161130"], "request_timeout_sec": 1}
+        collector.fund_store = object()
+        collector._iopv_cache = {
+            "161130": {
+                "name": "LOF",
+                "price": 4.5,
+                "previous_close": 4.4,
+                "change_percent": 2.2727,
+                "vendor_premium_percent": 3.1,
+            }
+        }
+        collector._iopv_lock = threading.Lock()
+        collector._fetch_tencent_price_map = lambda _symbols, _timeout: (_ for _ in ()).throw(OSError("tencent unavailable"))
+        collector._upsert_quotes_fast = lambda rows: captured.extend(rows) or len(rows)
+
+        self.assertEqual(collector._high_freq_publish_quotes(), 1)
+        self.assertEqual(captured[0]["price"], 4.5)
+        self.assertEqual(captured[0]["premiumPercent"], 3.1)
+        self.assertEqual(captured[0]["changePercent"], 2.2727)
+
     def test_rest_and_cloudbase_dataset_routes(self) -> None:
+        self.use_recent_nav_history()
         status, payload = resolve_request("/klines/513100?interval=5m", self.data_dir, self.service)
         self.assertEqual(status, 200)
         self.assertEqual(payload["interval"], "5m")
+        self.assertEqual(payload["source"], "sina-cn-kline")
+
+        status, payload = resolve_request("/klines/513100?interval=15m", self.data_dir, self.service)
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["interval"], "15m")
+        self.assertEqual(payload["source"], "sina-cn-kline")
 
         status, record_payload = resolve_request("/datasets/kline/513100%3A1d", self.data_dir, self.service)
         self.assertEqual(status, 200)

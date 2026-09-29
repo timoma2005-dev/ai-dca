@@ -3,29 +3,54 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from io import BytesIO
+from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from market_collector.http_server import _is_web_api_route, resolve_request
+from market_collector.product_http_server import _market_quotes_request_from_config
+
+
+class FakeReferenceStore:
+    def __init__(self):
+        self.records = []
+
+    def write_fund_reference_snapshots(self, records, retention_days):
+        self.records.extend(records)
 
 
 class FakeMarketDataService:
     def __init__(self):
+        self.quote_batch_calls = 0
+        self.nav_batch_calls = 0
+        self.fund_kind_hints = []
         self.fees = {
             "513100": {"code": "513100", "annualFeeRate": 0.6, "source": "eastmoney_f10"},
         }
         self.limits = {
             "000834": {"code": "000834", "buyStatus": "limit_large", "maxPurchasePerDay": 1000, "source": "eastmoney_f10+detail"},
         }
+        self.store = FakeReferenceStore()
 
     def quote(self, symbol: str):
         if symbol == "513100":
             return {"symbol": symbol, "price": 2.2, "asOf": "2026-09-10T10:00:00+08:00", "source": "local"}
         return None
 
+    def quotes(self, symbols: list[str]):
+        self.quote_batch_calls += 1
+        return {
+            symbol: quote
+            for symbol in symbols
+            if (quote := self.quote(symbol)) is not None
+        }
+
     def fund_metric(self, symbol: str):
         return {"code": symbol, "price": 2.2, "source": "local"} if symbol == "513100" else None
 
-    def fund_metrics(self, symbols: list[str]):
+    def fund_metrics(self, symbols: list[str], fund_kinds=None):
+        self.fund_kind_hints.append(fund_kinds or {})
         return [self.fund_metric(code) for code in symbols if self.fund_metric(code) is not None]
 
     def nav_history(self, symbol: str, days: int):
@@ -36,6 +61,16 @@ class FakeMarketDataService:
             "items": [{"date": "2026-09-09", "nav": 2.0}],
             "source": "danjuan-nav-history",
         }
+
+    def nav_histories(self, symbols: list[str], days: int):
+        self.nav_batch_calls += 1
+        items = []
+        for symbol in symbols:
+            try:
+                items.append({"code": symbol, "ok": True, "data": self.nav_history(symbol, days)})
+            except Exception as exc:
+                items.append({"code": symbol, "ok": False, "error": str(exc)})
+        return items
 
     def kline(self, symbol: str, interval: str, limit: int):
         return {"symbol": symbol, "interval": interval, "candles": [{"c": 2.2}] * min(limit, 2), "source": "local"}
@@ -87,24 +122,209 @@ class HttpServerTest(unittest.TestCase):
 
     def test_market_web_allowlist_excludes_mutating_routes(self):
         self.assertTrue(_is_web_api_route("/news"))
+        self.assertTrue(_is_web_api_route("/fund-venue"))
         self.assertTrue(_is_web_api_route("/fund-fee"))
         self.assertTrue(_is_web_api_route("/fund-limit"))
+        self.assertTrue(_is_web_api_route("/backtest"))
         self.assertFalse(_is_web_api_route("/refresh"))
         self.assertFalse(_is_web_api_route("/ask"))
 
-    def test_quotes_are_collector_local(self):
-        def no_proxy(*_args):
-            self.fail("market quote must never proxy to Cloudflare")
+    def test_backtest_runs_in_collector_with_local_market_service(self):
+        class FakeBacktestService(FakeMarketDataService):
+            def kline(self, symbol: str, interval: str, limit: int):
+                start = date(2026, 6, 1)
+                premium = 2.0 if symbol == "513100" else 0.2
+                base_price = 2.0 if symbol == "513100" else 1.0
+                candles = []
+                for offset in range(40):
+                    current = start + timedelta(days=offset)
+                    if current.weekday() >= 5:
+                        continue
+                    close = base_price * (1 + offset * 0.001)
+                    nav = close / (1 + premium / 100)
+                    candles.append({
+                        "date": current.isoformat(),
+                        "t": 1780243200 + offset * 86400,
+                        "o": close,
+                        "h": close,
+                        "l": close,
+                        "c": close,
+                        "nav": nav,
+                        "premiumPercent": premium,
+                    })
+                return {"symbol": symbol, "interval": interval, "candles": candles, "source": "local-test"}
+
         status, payload = resolve_request(
-            "/api/markets/quotes?symbols=513100,QQQ",
+            "/api/market-collector/backtest",
+            self.data_dir,
+            FakeBacktestService(),
+            method="POST",
+            body={
+                "symbol": "513100",
+                "highCodes": ["513100"],
+                "lowCodes": ["159501"],
+                "startDate": "2026-06-01",
+                "endDate": "2026-07-15",
+                "initialCash": 10000,
+                "mode": "manual",
+                "lowerPct": -0.5,
+                "upperPct": 0.5,
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["source"], "market-collector-local")
+        self.assertGreaterEqual(payload["data"]["barsByCode"]["513100"], 20)
+        self.assertEqual(len(payload["result"]["holds"]), 2)
+        self.assertIsNotNone(payload["result"]["rotation"])
+        self.assertEqual(payload["result"]["rotation"]["effectiveHighCodes"], ["513100"])
+        self.assertEqual(payload["result"]["rotation"]["effectiveLowCodes"], ["159501"])
+
+    def test_backtest_preserves_intraday_bars_and_aligns_nav(self):
+        class FakeIntradayBacktestService(FakeMarketDataService):
+            def __init__(self):
+                super().__init__()
+                self.intervals = []
+
+            def kline(self, symbol: str, interval: str, limit: int):
+                self.intervals.append(interval)
+                start = date(2026, 6, 1)
+                base_price = 2.0 if symbol == "513100" else 1.0
+                candles = []
+                for offset in range(28):
+                    current = start + timedelta(days=offset)
+                    if current.weekday() >= 5:
+                        continue
+                    close = base_price * (1 + offset * 0.001)
+                    base_ts = 1780277400 + offset * 86400
+                    for minute_offset in (0, 900):
+                        price = close * (1 + minute_offset / 900 * 0.0001)
+                        candles.append({
+                            "date": current.isoformat(),
+                            "time": f"{current.isoformat()} {'09:30:00' if minute_offset == 0 else '09:45:00'}",
+                            "t": base_ts + minute_offset,
+                            "o": price,
+                            "h": price,
+                            "l": price,
+                            "c": price,
+                        })
+                return {"symbol": symbol, "interval": interval, "candles": candles[:limit], "source": "local-test"}
+
+            def nav_history(self, symbol: str, days: int):
+                start = date(2026, 6, 1)
+                premium = 2.0 if symbol == "513100" else 0.2
+                base_price = 2.0 if symbol == "513100" else 1.0
+                items = []
+                for offset in range(28):
+                    current = start + timedelta(days=offset)
+                    if current.weekday() >= 5:
+                        continue
+                    close = base_price * (1 + offset * 0.001)
+                    items.append({
+                        "date": (current - timedelta(days=1)).isoformat(),
+                        "nav": close / (1 + premium / 100),
+                    })
+                return {"symbol": symbol, "items": items, "source": "local-test"}
+
+        service = FakeIntradayBacktestService()
+        status, payload = resolve_request(
+            "/api/market-collector/backtest",
+            self.data_dir,
+            service,
+            method="POST",
+            body={
+                "symbol": "513100",
+                "highCodes": ["513100"],
+                "lowCodes": ["159501"],
+                "startDate": "2026-06-01",
+                "endDate": "2026-06-30",
+                "timeframe": "15m",
+                "initialCash": 10000,
+                "mode": "manual",
+                "lowerPct": -0.5,
+                "upperPct": 0.5,
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["config"]["timeframe"], "15m")
+        self.assertEqual(payload["data"]["timeframe"], "15m")
+        self.assertEqual(payload["data"]["barsByCode"]["513100"], 40)
+        self.assertEqual(service.intervals, ["15m", "15m"])
+        self.assertIsNotNone(payload["result"]["rotation"])
+        self.assertGreaterEqual(payload["result"]["rotation"]["summary"]["sampleCount"], 40)
+
+    def test_quotes_merge_local_funds_and_market_worker_symbols(self):
+        worker_calls = []
+
+        def worker_quotes(symbols):
+            worker_calls.append(symbols)
+            return {
+                symbol: {"symbol": symbol, "changePercent": 1.25, "source": "markets-worker"}
+                for symbol in symbols
+            }
+
+        status, payload = resolve_request(
+            "/api/markets/quotes?symbols=513100%2CQQQ%2CVOO%2C%5EVIX%2CCNN_FNG%2CQQQ%2Fbad",
             self.data_dir,
             self.service,
-            proxy_request=no_proxy,
+            market_quotes_request=worker_quotes,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["quotes"]["513100"]["price"], 2.2)
+        self.assertEqual(payload["quotes"]["QQQ"]["changePercent"], 1.25)
+        self.assertEqual(payload["quotes"]["VOO"]["source"], "markets-worker")
+        self.assertEqual(payload["quotes"]["^VIX"]["symbol"], "^VIX")
+        self.assertEqual(payload["quotes"]["CNN_FNG"]["symbol"], "CNN_FNG")
+        self.assertEqual(worker_calls, [["QQQ", "VOO", "^VIX", "CNN_FNG"]])
+        self.assertEqual(payload["source"], "market-collector+markets-worker")
+        self.assertEqual(self.service.quote_batch_calls, 1)
+
+    def test_worker_quote_failure_does_not_drop_local_fund_quotes(self):
+        def unavailable(_symbols):
+            raise OSError("worker unavailable")
+
+        status, payload = resolve_request(
+            "/api/markets/quotes?symbols=513100%2CQQQ%2CVOO",
+            self.data_dir,
+            self.service,
+            market_quotes_request=unavailable,
         )
         self.assertEqual(status, 200)
         self.assertEqual(payload["quotes"]["513100"]["price"], 2.2)
         self.assertNotIn("QQQ", payload["quotes"])
-        self.assertEqual(payload["source"], "market-collector")
+
+    def test_single_us_quote_uses_market_worker(self):
+        status, payload = resolve_request(
+            "/api/market-collector/quote/VOO",
+            self.data_dir,
+            self.service,
+            market_quotes_request=lambda symbols: {"VOO": {"symbol": "VOO", "changePercent": -0.4}},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["symbol"], "VOO")
+        self.assertEqual(payload["changePercent"], -0.4)
+
+    def test_market_quotes_request_uses_configured_worker(self):
+        config_path = self.data_dir / "config.json"
+        config_path.write_text(json.dumps({
+            "market_api": {
+                "worker_url": "https://market.example/api/markets",
+                "request_timeout_sec": 4,
+            }
+        }), encoding="utf-8")
+        response = BytesIO(json.dumps({"quotes": {
+            "QQQ": {"symbol": "QQQ", "changePercent": 0.5},
+            "VOO": {"symbol": "VOO", "changePercent": 0.2},
+        }}).encode("utf-8"))
+
+        with patch("market_collector.product_http_server.urlopen", return_value=response) as open_worker:
+            quotes = _market_quotes_request_from_config(str(config_path))(["QQQ", "VOO"])
+
+        self.assertEqual(quotes["QQQ"]["changePercent"], 0.5)
+        request = open_worker.call_args.args[0]
+        self.assertEqual(request.full_url, "https://market.example/api/markets/quotes?symbols=QQQ%2CVOO")
+        self.assertEqual(open_worker.call_args.kwargs["timeout"], 4.0)
 
     def test_fund_metrics_are_collector_local(self):
         def no_proxy(*_args):
@@ -121,6 +341,37 @@ class HttpServerTest(unittest.TestCase):
         self.assertEqual(payload["successCount"], 1)
         self.assertEqual(payload["items"][0]["code"], "513100")
 
+    def test_fund_metrics_passes_venue_hints_to_local_service(self):
+        status, payload = resolve_request(
+            "/api/market-collector/fund-metrics",
+            self.data_dir,
+            self.service,
+            method="POST",
+            body={"codes": ["513100"], "fundKinds": {"513100": "exchange"}},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["items"][0]["code"], "513100")
+        self.assertEqual(self.service.fund_kind_hints[-1], {"513100": "exchange"})
+
+    @patch("market_collector.http_server.classify_fund_venues")
+    def test_fund_venue_route_is_served_by_collector(self, classify):
+        classify.return_value = {
+            "items": [{"code": "539001", "fundVenue": "otc", "fundKind": "qdii"}],
+            "successCount": 1,
+            "failureCount": 0,
+            "source": "market-collector+eastmoney-search",
+        }
+        status, payload = resolve_request(
+            "/api/market-collector/fund-venue",
+            self.data_dir,
+            self.service,
+            method="POST",
+            body={"codes": ["539001"]},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["items"][0]["fundVenue"], "otc")
+        classify.assert_called_once_with(["539001"])
+
     def test_nav_history_semantic_alias_is_local(self):
         def no_proxy(*_args):
             self.fail("NAV history is public market data and must stay local")
@@ -133,6 +384,20 @@ class HttpServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["symbol"], "513100")
         self.assertEqual(payload["source"], "danjuan-nav-history")
+
+    def test_nav_history_batch_uses_service_concurrency_boundary(self):
+        status, payload = resolve_request(
+            "/api/market-collector/nav-history",
+            self.data_dir,
+            self.service,
+            method="POST",
+            body={"codes": ["513100", "000834"]},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual([item["ok"] for item in payload["items"]], [True, False])
+        self.assertEqual(self.service.nav_batch_calls, 1)
 
     def test_fund_fee_and_limit_are_local_snapshots(self):
         def no_proxy(*_args):
@@ -162,6 +427,26 @@ class HttpServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(overview["source"], "market-collector")
 
+    def test_exchange_fee_null_snapshot_is_refreshed_from_collector_source(self):
+        self.service.fees["513500"] = {"code": "513500", "annualFeeRate": None}
+        fresh = {
+            "code": "513500",
+            "managementFeeRate": 0.6,
+            "custodyFeeRate": 0.2,
+            "annualFeeRate": 0.8,
+            "fetchedAt": "2026-09-14T17:45:00+08:00",
+        }
+        with patch("market_collector.http_server.fetch_fund_fee", return_value=fresh) as fetch:
+            status, payload = resolve_request(
+                "/api/market-collector/fund-fee?code=513500",
+                self.data_dir,
+                self.service,
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["annualFeeRate"], 0.8)
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(self.service.store.records[0]["symbol"], "513500")
+
     def test_financials_uses_sec_and_never_cloud_market_fallback(self):
         expected = {"symbol": "AAPL", "source": "sec-companyfacts", "statements": {}}
         status, payload = resolve_request(
@@ -173,6 +458,44 @@ class HttpServerTest(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertEqual(payload, expected)
+
+    def test_xueqiu_fund_data_route_uses_collector_capability(self):
+        calls = []
+
+        def fake_xueqiu(symbol, force_refresh, include_raw):
+            calls.append((symbol, force_refresh, include_raw))
+            return {
+                "symbol": "SH" + symbol,
+                "code": symbol,
+                "generatedAt": "2026-09-14T01:00:00+00:00",
+                "results": {
+                    "quote_detail": {
+                        "ok": True,
+                        "data": {"quote": {"symbol": "SH" + symbol, "current": 2.2}},
+                    },
+                },
+            }
+
+        status, payload = resolve_request(
+            "/api/market-collector/xueqiu-fund-data/513100?refresh=1&raw=1",
+            self.data_dir,
+            self.service,
+            proxy_request=lambda *_args: self.fail("xueqiu detail must not use the generic Cloudflare fallback"),
+            xueqiu_request=fake_xueqiu,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["code"], "513100")
+        self.assertEqual(calls, [("513100", True, False)])
+
+    def test_xueqiu_fund_data_route_rejects_non_cn_symbol(self):
+        status, payload = resolve_request(
+            "/xueqiu-fund-data/AAPL",
+            self.data_dir,
+            self.service,
+            xueqiu_request=lambda *_args: self.fail("invalid symbol must not fetch"),
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "invalid_cn_symbol")
 
     def test_unimplemented_market_route_fails_closed_locally(self):
         status, payload = resolve_request(

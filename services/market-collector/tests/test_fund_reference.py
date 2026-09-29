@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import tempfile
+import threading
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 from market_collector.core import DEFAULT_CONFIG, MarketCollector, deep_update, due_daily_slot
-from market_collector.fund_reference import normalize_limit_payload
+from market_collector.fund_reference import fetch_fund_fee, normalize_limit_payload
 
 
 class FakeStore:
@@ -24,6 +27,71 @@ class FakeStore:
 
 
 class FundReferenceTest(unittest.TestCase):
+    def test_eastmoney_fee_parser_handles_unclosed_operation_table(self) -> None:
+        html = """
+        <div class='comm jjfl'>
+          <table>
+            <tr>
+              <td class='th'>管理费率</td><td>0.60%（每年）</td>
+              <td class='th'>托管费率</td><td>0.20%（每年）</td>
+            </tr>
+        """.encode("utf-8")
+
+        def fake_fetch(url, _timeout, *, referer):
+            if "danjuanfunds.com" in url:
+                return b'{"data": {}}'
+            self.assertIn("fundf10.eastmoney.com/jjfl_513100.html", url)
+            self.assertEqual(referer, "https://fundf10.eastmoney.com/")
+            return html
+
+        with patch("market_collector.fund_reference._fetch_bytes", side_effect=fake_fetch):
+            result = fetch_fund_fee("513100", timeout_sec=1)
+
+        self.assertEqual(result["managementFeeRate"], 0.6)
+        self.assertEqual(result["custodyFeeRate"], 0.2)
+        self.assertEqual(result["annualFeeRate"], 0.8)
+        self.assertEqual(result["operationFees"], [
+            ["管理费率", "0.60%（每年）"],
+            ["托管费率", "0.20%（每年）"],
+        ])
+
+    def test_tencent_quote_batch_is_coalesced_across_threads(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = deep_update(DEFAULT_CONFIG, {
+                "output_dir": temp_dir,
+                "publisher": {
+                    "backend": "file",
+                    "outbox_dir": str(Path(temp_dir) / "outbox"),
+                },
+            })
+            collector = MarketCollector(config, store=FakeStore())
+            active = 0
+            peak = 0
+            lock = threading.Lock()
+
+            def fetch(symbols, _timeout):
+                nonlocal active, peak
+                with lock:
+                    active += 1
+                    peak = max(peak, active)
+                try:
+                    time.sleep(0.05)
+                    return {symbol: {"price": 1.0} for symbol in symbols}
+                finally:
+                    with lock:
+                        active -= 1
+
+            with patch("market_collector.core.fetch_tencent_quotes", side_effect=fetch) as request:
+                with ThreadPoolExecutor(max_workers=6) as executor:
+                    values = list(executor.map(
+                        lambda _index: collector._fetch_tencent_price_map(["513100", "513500"], 10),
+                        range(6),
+                    ))
+
+            self.assertEqual(request.call_count, 1)
+            self.assertEqual(peak, 1)
+            self.assertTrue(all(set(value) == {"513100", "513500"} for value in values))
+
     def test_normalizes_direct_and_distributor_limits(self) -> None:
         payload = normalize_limit_payload({
             "code": "040046",

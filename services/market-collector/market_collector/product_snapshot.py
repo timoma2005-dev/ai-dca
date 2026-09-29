@@ -11,14 +11,19 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from .aggregates import MarketDataService
+from .aggregates import (
+    MarketDataService,
+    _apply_non_exchange_fund_kind,
+    _infer_fund_kind_hint,
+    _normalize_fund_kind_hints,
+)
 from .fund_store import FundStore
 
 
 _PRODUCT_COLUMNS = (
     "code", "name", "price", "latest_nav", "latest_nav_date",
     "previous_close", "change_amount", "change_percent", "premium_percent",
-    "iopv", "volume", "turnover", "market_state", "as_of", "session",
+    "iopv", "total_shares", "volume", "turnover", "market_state", "as_of", "session",
     "suspended", "quote_updated_at", "summary_date", "summary_latest_nav",
     "return_1w", "return_1m", "return_3m", "return_6m", "return_1y",
     "return_base", "ytd_return", "historical_percentile",
@@ -66,12 +71,18 @@ def normalize_product_row(row: dict[str, Any]) -> dict[str, Any]:
         "changePercent": row.get("change_percent"),
         "premiumPercent": row.get("premium_percent"),
         "iopv": row.get("iopv"),
+        "totalShares": row.get("total_shares"),
         "volume": row.get("volume"),
         "turnover": row.get("turnover"),
         "marketState": row.get("market_state"),
         "asOf": as_of,
         "quoteDate": str(as_of or "")[:10] or latest_nav_date,
         "session": row.get("session"),
+        "fundVenue": (
+            "exchange" if str(row.get("session") or "").strip().lower() == "exchange"
+            else "otc" if str(row.get("session") or "").strip().lower() == "otc"
+            else None
+        ),
         "suspended": bool(row.get("suspended")),
         "return1w": row.get("return_1w"),
         "return1m": row.get("return_1m"),
@@ -120,7 +131,7 @@ class FundProductStore(FundStore):
         sql = """SELECT
   q.code,q.name,q.price,q.latest_nav,q.latest_nav_date,
   q.previous_close,q.change_amount,q.change_percent,q.premium_percent,
-  q.iopv,q.volume,q.turnover,q.market_state,q.as_of,q.session,q.suspended,
+  q.iopv,q.total_shares,q.volume,q.turnover,q.market_state,q.as_of,q.session,q.suspended,
   q.updated_at AS quote_updated_at,
   s.date AS summary_date,s.latest_nav AS summary_latest_nav,
   s.return_1w,s.return_1m,s.return_3m,s.return_6m,s.return_1y,
@@ -200,7 +211,23 @@ class ProductSnapshotService(MarketDataService):
             fallback = super()._latest_by_symbol()
         except (FileNotFoundError, OSError, ValueError):
             fallback = {}
-        return {**fallback, **self._product_map()}
+        products = self._product_map()
+        merged = {**fallback, **products}
+        # fund_quote 按 code 唯一，但同一 LOF 也可能出现在 otc-latest。
+        # 如果产品表仍是旧的场外覆盖行，保留本地场内行情快照，避免把 NAV 当成交价。
+        for code, product in products.items():
+            product_session = str(product.get("session") or "").strip().lower()
+            fallback_row = fallback.get(code) or {}
+            fallback_session = str(fallback_row.get("session") or "").strip().lower()
+            fallback_venue = str(
+                fallback_row.get("fundVenue") or fallback_row.get("venue") or ""
+            ).strip().lower()
+            if (
+                product_session in {"otc", "off_exchange"}
+                and (fallback_session == "exchange" or fallback_venue == "exchange")
+            ):
+                merged[code] = fallback_row
+        return merged
 
     def _latest(self) -> dict[str, Any]:
         products = self._product_map()
@@ -225,6 +252,12 @@ class ProductSnapshotService(MarketDataService):
             fallback = None
         if product is None:
             return fallback
+        product_session = str(product.get("session") or "").strip().lower()
+        fallback_venue = str(
+            (fallback or {}).get("fundVenue") or (fallback or {}).get("venue") or ""
+        ).strip().lower()
+        if product_session in {"otc", "off_exchange"} and fallback_venue == "exchange" and fallback:
+            return {**_present(product), **fallback}
         return {**(fallback or {}), **_present(product)}
 
     def fund_metric(self, symbol: str) -> dict[str, Any] | None:
@@ -233,10 +266,36 @@ class ProductSnapshotService(MarketDataService):
             return None
         return {**quote, "code": symbol}
 
-    def fund_metrics(self, symbols: list[str]) -> list[dict[str, Any]]:
+    def fund_metrics(self, symbols: list[str], fund_kinds: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         codes = list(dict.fromkeys(
             code for code in symbols if code.isdigit() and len(code) == 6
         ))
+        explicit_kind_hints = _normalize_fund_kind_hints(fund_kinds)
+
+        def apply_hint(code: str, metric: dict[str, Any]) -> dict[str, Any]:
+            kind = _infer_fund_kind_hint(code, metric, explicit_kind_hints.get(code, ""))
+            if kind == "exchange":
+                normalized = dict(metric)
+                normalized["fundKind"] = "exchange"
+                normalized["fundVenue"] = "exchange"
+                return normalized
+            if kind not in {"otc", "qdii"}:
+                return metric
+            rows = []
+            if explicit_kind_hints.get(code) in {"otc", "qdii"} or not metric.get("latestNav"):
+                try:
+                    rows = list((self.nav_history(code, 45) or {}).get("items") or [])
+                except Exception:
+                    rows = []
+            normalized = dict(metric)
+            if rows:
+                normalized["latestNav"] = rows[-1].get("nav")
+                normalized["latestNavDate"] = rows[-1].get("date")
+                if len(rows) > 1:
+                    normalized["previousNav"] = rows[-2].get("nav")
+                    normalized["previousNavDate"] = rows[-2].get("date")
+            return _apply_non_exchange_fund_kind(normalized, kind)
+
         products = self._product_map()
         output: list[dict[str, Any]] = []
         for code in codes:
@@ -246,9 +305,55 @@ class ProductSnapshotService(MarketDataService):
                     fallback = super().fund_metric(code)
                 except (FileNotFoundError, OSError, ValueError):
                     fallback = None
-                output.append({**(fallback or {}), **_present(product), "code": code})
+                kind = _infer_fund_kind_hint(
+                    code,
+                    product or fallback,
+                    explicit_kind_hints.get(code, ""),
+                )
+                product_session = str(product.get("session") or "").strip().lower()
+                if kind == "exchange" and product_session in {"otc", "off_exchange"} and fallback:
+                    # 产品表可能还留有旧的场外覆盖行。保留产品表中的区间收益字段，
+                    # 但用最新场内快照覆盖价格、涨跌和溢价字段。
+                    metric = {**_present(product), **fallback, "code": code}
+                else:
+                    metric = {**(fallback or {}), **_present(product), "code": code}
+                output.append(apply_hint(code, metric))
                 continue
-            fallback = super().fund_metric(code)
+            try:
+                fallback = super().fund_metric(code)
+            except (FileNotFoundError, OSError, ValueError):
+                fallback = None
             if fallback is not None:
-                output.append(fallback)
+                output.append(apply_hint(code, fallback))
+                continue
+
+            # A newly requested OTC/QDII fund may not exist in either the local
+            # product table or the scheduled snapshot yet. Fetch Danjuan NAV
+            # history on demand so the first holdings request is not silently
+            # omitted while waiting for the next collector cycle.
+            try:
+                nav_payload = self.nav_history(code, 45)
+            except Exception:
+                continue
+            rows = nav_payload.get("items") or []
+            if not rows:
+                continue
+            latest = rows[-1]
+            generated_at = nav_payload.get("generatedAt")
+            metric: dict[str, Any] = {
+                "ok": True,
+                "symbol": code,
+                "code": code,
+                "name": code,
+                "latestNav": latest.get("nav"),
+                "latestNavDate": latest.get("date"),
+                "asOf": generated_at,
+                "updatedAt": generated_at,
+                "source": "danjuan-nav-history",
+                "quality": {"status": "ok", "issues": []},
+            }
+            if len(rows) > 1:
+                metric["previousNav"] = rows[-2].get("nav")
+                metric["previousNavDate"] = rows[-2].get("date")
+            output.append(apply_hint(code, metric))
         return output
