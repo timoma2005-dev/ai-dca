@@ -2,16 +2,8 @@
 // 行为与重构前保持一致：test/cloudSyncMerge.test.mjs、test/cloudSyncConflict.test.mjs 仍从 cloudSync.js 导入这些函数。
 // 新增合并策略时，必须同时在 syncRegistry.js 登记。
 
-import { buildBackupEnvelope, isBackupPayloadKey } from './webdavBackup.js';
-import { getMergeStrategy, isDomainMergeKey, BACKUP_ONLY_KEYS } from './syncRegistry.js';
+import { getMergeStrategy, isDomainMergeKey } from './syncRegistry.js';
 import { normalizeWatchlist } from './marketsWatchlistStorage.js';
-
-// 冲突检测时排除仅用于本地备份的 key（如 aiDcaFundHoldingsLedger），
-// 它们不走云端通用资源同步，不应触发冲突弹窗。
-function isSyncConflictKey(key = '') {
-  if (BACKUP_ONLY_KEYS.has(String(key || ''))) return false;
-  return isBackupPayloadKey(key);
-}
 
 function nowIso() {
   return new Date().toISOString();
@@ -38,7 +30,7 @@ export function hashString(input = '') {
   return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}:${text.length}`;
 }
 
-export function createLocalDataSnapshot(envelope = buildBackupEnvelope()) {
+export function createLocalDataSnapshot(envelope = null) {
   const payload = envelope?.payload && typeof envelope.payload === 'object' ? envelope.payload : {};
   const keys = Object.keys(payload).sort();
   return {
@@ -386,12 +378,12 @@ export function mergePayloadValueRemoteWins(key, remoteValue, localValue) {
 export function mergeRemoteAuthoritative(remoteEnvelope = {}, localEnvelope = {}) {
   const remote = normalizeEnvelopePayload(remoteEnvelope);
   const local = normalizeEnvelopePayload(localEnvelope);
-  const allKeys = Array.from(new Set([...remote.keys, ...local.keys])).filter((key) => isBackupPayloadKey(key)).sort();
+  const allKeys = Array.from(new Set([...remote.keys, ...local.keys])).sort();
   const payload = allKeys.reduce((acc, key) => {
     acc[key] = mergePayloadValueRemoteWins(key, remote.payload[key], local.payload[key]);
     return acc;
   }, {});
-  const keys = Object.keys(payload).filter((key) => isBackupPayloadKey(key)).sort();
+  const keys = Object.keys(payload).sort();
   return {
     version: Number(localEnvelope?.version || remoteEnvelope?.version || 1) || 1,
     exportedAt: nowIso(),
@@ -408,12 +400,12 @@ export function mergeRemoteAuthoritative(remoteEnvelope = {}, localEnvelope = {}
 export function mergeBackupEnvelopes(remoteEnvelope = {}, localEnvelope = {}) {
   const remote = normalizeEnvelopePayload(remoteEnvelope);
   const local = normalizeEnvelopePayload(localEnvelope);
-  const allKeys = Array.from(new Set([...remote.keys, ...local.keys])).filter((key) => isBackupPayloadKey(key)).sort();
+  const allKeys = Array.from(new Set([...remote.keys, ...local.keys])).sort();
   const payload = allKeys.reduce((acc, key) => {
     acc[key] = mergePayloadValue(key, remote.payload[key], local.payload[key]);
     return acc;
   }, {});
-  const keys = Object.keys(payload).filter((key) => isBackupPayloadKey(key)).sort();
+  const keys = Object.keys(payload).sort();
   return {
     version: Number(localEnvelope?.version || remoteEnvelope?.version || 1) || 1,
     exportedAt: nowIso(),
@@ -424,47 +416,5 @@ export function mergeBackupEnvelopes(remoteEnvelope = {}, localEnvelope = {}) {
       acc[key] = payload[key];
       return acc;
     }, {})
-  };
-}
-
-export function summarizeBackupConflict({ localEnvelope = null, remoteEnvelope = null, remote = null, localMeta = null } = {}) {
-  const local = normalizeEnvelopePayload(localEnvelope || buildBackupEnvelope());
-  const remoteData = normalizeEnvelopePayload(remoteEnvelope || { payload: {} });
-  // 排除仅用于本地备份的 key，不参与冲突判断
-  const localKeys = local.keys.filter((key) => isSyncConflictKey(key));
-  const remoteKeys = remoteData.keys.filter((key) => isSyncConflictKey(key));
-  const localSet = new Set(localKeys);
-  const remoteSet = new Set(remoteKeys);
-  const remoteOnlyKeys = remoteKeys.filter((key) => !localSet.has(key));
-  const localOnlyKeys = localKeys.filter((key) => !remoteSet.has(key));
-  const changedKeys = remoteKeys.filter((key) => localSet.has(key) && remoteData.payload[key] !== local.payload[key]);
-  const autoMergeChangedKeys = changedKeys.filter((key) => canAutoMergeChangedKey(key));
-  const unresolvedChangedKeys = changedKeys.filter((key) => !canAutoMergeChangedKey(key));
-  const autoMergeKeys = Array.from(new Set([...autoMergeChangedKeys, ...remoteOnlyKeys, ...localOnlyKeys])).sort();
-  const sameKeys = remoteKeys.filter((key) => localSet.has(key) && remoteData.payload[key] === local.payload[key]);
-  const parts = [];
-  if (unresolvedChangedKeys.length) parts.push(`${unresolvedChangedKeys.length} 项需要手动选择：${previewKeys(unresolvedChangedKeys)}`);
-  if (autoMergeKeys.length) parts.push(`${autoMergeKeys.length} 项可自动合并：${previewKeys(autoMergeKeys)}`);
-  if (remoteOnlyKeys.length) parts.push(`${remoteOnlyKeys.length} 项只在云端存在：${previewKeys(remoteOnlyKeys)}`);
-  if (localOnlyKeys.length) parts.push(`${localOnlyKeys.length} 项只在本机存在：${previewKeys(localOnlyKeys)}`);
-  if (!parts.length) parts.push('两端数据内容一致，仅版本元数据不同');
-  return {
-    hasChanges: changedKeys.length > 0 || remoteOnlyKeys.length > 0 || localOnlyKeys.length > 0,
-    hasConflict: unresolvedChangedKeys.length > 0,
-    hasLocalChanges: changedKeys.length > 0 || localOnlyKeys.length > 0,
-    remoteVersion: remote?.version ?? null,
-    remoteUpdatedAt: remote?.updatedAt || remote?.encryptedEnvelope?.meta?.localUpdatedAt || '',
-    remoteKeyCount: remoteData.keys.length,
-    localVersion: localMeta?.version ?? null,
-    localUpdatedAt: localMeta?.localUpdatedAt || '',
-    localKeyCount: local.keys.length,
-    changedKeys,
-    autoMergeChangedKeys,
-    unresolvedChangedKeys,
-    autoMergeKeys,
-    remoteOnlyKeys,
-    localOnlyKeys,
-    sameKeyCount: sameKeys.length,
-    summaryText: parts.join('；')
   };
 }

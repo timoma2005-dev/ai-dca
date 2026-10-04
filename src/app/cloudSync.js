@@ -2,7 +2,6 @@
 // 普通资源走 resourceSync；持仓交易改为 holdings/ledger 下的真实交易行同步。
 // 不再整包加密上传，旧参数保留仅为兼容现有 UI。
 
-import { buildBackupEnvelope } from './webdavBackup.js';
 import { loadCloudSession } from './authSession.js';
 import {
   compareRecordVersions,
@@ -11,7 +10,6 @@ import {
   mergePayloadValue,
   mergePayloadValueRemoteWins,
   mergeRemoteAuthoritative,
-  summarizeBackupConflict
 } from './syncMerge.js';
 import { fetchAccountEnvelopeExport, fetchAccountManifest, fetchLegacyMigrationStatus } from './accountApi.js';
 import {
@@ -40,7 +38,6 @@ export {
   mergePayloadValue,
   mergePayloadValueRemoteWins,
   mergeRemoteAuthoritative,
-  summarizeBackupConflict
 };
 export { getAccountSyncSummary };
 
@@ -172,16 +169,6 @@ export async function refreshRemoteCloudMeta() {
   const updatedAt = populated.map((item) => String(item.updatedAt || '')).filter(Boolean).sort().pop() || '';
   const meta = mergeSummaryIntoMeta({ remoteResourceCount: populated.length, remoteUpdatedAt: updatedAt, migrationStatus: manifest?.migration?.status || migration?.status || '', needsMigration: false });
   return { ...meta, version: populated.length > 0 ? 1 : 0, keyCount: populated.length, needsMigration: false };
-}
-
-export async function prepareCloudSyncConflict() {
-  const session = loadCloudSession();
-  if (!session?.accessToken) throw new Error('请先登录账户');
-  const remoteEnvelope = await fetchAccountEnvelopeExport(session);
-  const localEnvelope = buildBackupEnvelope();
-  const localMeta = loadCloudSyncMeta();
-  const summary = summarizeBackupConflict({ localEnvelope, remoteEnvelope, remote: { version: null, updatedAt: remoteEnvelope?.exportedAt || '' }, localMeta });
-  return { summary, remoteEnvelope, localEnvelope, remote: { updatedAt: remoteEnvelope?.exportedAt || '' } };
 }
 
 export function scheduleCloudAutoUpload({ changed = true } = {}) {

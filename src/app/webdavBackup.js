@@ -1,9 +1,8 @@
-// 本地业务数据 envelope helper，供账号云同步使用。
-// 导出范围只包含业务白名单 key，避免 UI 状态、登录态、缓存和分析日志推高云端版本。
-// 「哪些 key 同步」唯一来源是 syncRegistry.js，本文件只负责 envelope 的收集 / 应用。
+// 备份 envelope helper：导出直接从服务端 API 获取最新数据，不再读 localStorage。
+// 写入本地（applyBackupEnvelope）仍用于 resourceSync 将服务端数据缓存到本地。
 
-import { SYNCABLE_STORAGE_KEYS } from './syncRegistry.js';
 import { BACKUP_APPLIED_EVENT } from './backupEvents.js';
+import { fetchAccountEnvelopeExport } from './accountApi.js';
 
 export { BACKUP_APPLIED_EVENT };
 const HOLDINGS_BACKUP_KEYS = new Set([
@@ -12,7 +11,6 @@ const HOLDINGS_BACKUP_KEYS = new Set([
 ]);
 // 恢复后需主动广播领域事件、让对应消费者重新读取的 key（无 React storage 监听兜底者）。
 const PREMIUM_STATE_KEY = 'aiDcaPremiumState';
-export { SYNCABLE_STORAGE_KEYS };
 const BACKUP_VERSION = 1;
 
 function safeLocalStorage() {
@@ -22,39 +20,21 @@ function safeLocalStorage() {
   return window.localStorage;
 }
 
-export function isBackupPayloadKey(key = '') {
-  return SYNCABLE_STORAGE_KEYS.has(String(key || ''));
-}
-
-export function collectBackupPayload() {
-  const ls = safeLocalStorage();
-  if (!ls) return { entries: {}, keys: [] };
-  const entries = {};
-  const keys = [];
-  for (let i = 0; i < ls.length; i += 1) {
-    const key = ls.key(i);
-    if (!key) continue;
-    if (!isBackupPayloadKey(key)) continue;
-    const value = ls.getItem(key);
-    if (value === null) continue;
-    entries[key] = value; // 保留原始字符串，避免二次 JSON.parse 改变数据
-    keys.push(key);
+// 从服务端 API 获取最新数据组装备份 envelope，不再读 localStorage。
+// API 失败时抛出错误，调用方负责提示用户，不生成空备份。
+export async function buildBackupEnvelope() {
+  const envelope = await fetchAccountEnvelopeExport();
+  if (!envelope || typeof envelope !== 'object' || !envelope.payload) {
+    throw new Error('服务端备份数据格式不合法');
   }
-  keys.sort();
-  return { entries, keys };
-}
-
-export function buildBackupEnvelope() {
-  const { entries, keys } = collectBackupPayload();
-  const envelope = {
-    version: BACKUP_VERSION,
-    exportedAt: new Date().toISOString(),
+  return {
+    version: Number(envelope.version || BACKUP_VERSION) || BACKUP_VERSION,
+    exportedAt: envelope.exportedAt || new Date().toISOString(),
     source: 'ai-dca',
-    keyCount: keys.length,
-    keys,
-    payload: entries
+    keyCount: Array.isArray(envelope.keys) ? envelope.keys.length : Object.keys(envelope.payload).length,
+    keys: Array.isArray(envelope.keys) ? envelope.keys : Object.keys(envelope.payload),
+    payload: envelope.payload,
   };
-  return envelope;
 }
 
 export function applyBackupEnvelope(envelope, { wipePrefix = true } = {}) {
@@ -65,13 +45,12 @@ export function applyBackupEnvelope(envelope, { wipePrefix = true } = {}) {
   if (!payload || typeof payload !== 'object') throw new Error('备份缺少 payload 字段');
 
   if (wipePrefix) {
-    // 清理所有可同步 key（不再依赖 'aiDca' 前缀，使 markets:watchlist:v1 等非前缀 key 也能被覆盖清理）。
-    // 登录态 / 缓存 / UI 临时状态因不在白名单内而被保留。
+    // 清理所有 aiDca 前缀 key（登录态 / 缓存 / UI 临时状态由调用方控制，不在此删除）。
     const toDelete = [];
     for (let i = 0; i < ls.length; i += 1) {
       const key = ls.key(i);
       if (!key) continue;
-      if (!isBackupPayloadKey(key)) continue;
+      if (!key.startsWith('aiDca')) continue;
       toDelete.push(key);
     }
     toDelete.forEach((key) => ls.removeItem(key));
@@ -81,7 +60,6 @@ export function applyBackupEnvelope(envelope, { wipePrefix = true } = {}) {
   const restoredKeys = [];
   Object.entries(payload).forEach(([key, value]) => {
     if (typeof key !== 'string') return;
-    if (!isBackupPayloadKey(key)) return;
     if (value === null || value === undefined) return;
     const str = typeof value === 'string' ? value : JSON.stringify(value);
     ls.setItem(key, str);

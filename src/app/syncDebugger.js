@@ -3,7 +3,6 @@ import { loadCloudSession } from './authClient.js';
 import { loadRememberedKey } from './secureVault.js';
 import { loadCloudSyncMeta } from './cloudSync.js';
 import { getClientEnd } from './syncClient.js';
-import { SYNCABLE_STORAGE_KEYS } from './syncRegistry.js';
 
 export function debugSyncStatus() {
   const session = loadCloudSession();
@@ -13,7 +12,9 @@ export function debugSyncStatus() {
 
   const localKeys = [];
   if (typeof window !== 'undefined' && window.localStorage) {
-    SYNCABLE_STORAGE_KEYS.forEach(key => {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith('aiDca')) continue;
       const value = window.localStorage.getItem(key);
       if (value !== null) {
         localKeys.push({
@@ -22,7 +23,7 @@ export function debugSyncStatus() {
           preview: value.slice(0, 50)
         });
       }
-    });
+    }
   }
 
   const status = {

@@ -3,76 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   compareRecordVersions,
-  mergeBackupEnvelopes,
-  summarizeBackupConflict
+  mergeBackupEnvelopes
 } from '../src/app/cloudSync.js';
-
-test('summarizeBackupConflict reports changed, remote-only, and local-only keys', () => {
-  const localEnvelope = {
-    version: 1,
-    keys: ['aiDcaWorkspacePrefs', 'aiDcaTradeLedger'],
-    payload: {
-      aiDcaWorkspacePrefs: '{"local":true}',
-      aiDcaTradeLedger: '{"only":"local"}'
-    }
-  };
-  const remoteEnvelope = {
-    version: 1,
-    keys: ['aiDcaWorkspacePrefs', 'aiDcaTradeLedgerArchive'],
-    payload: {
-      aiDcaWorkspacePrefs: '{"remote":true}',
-      aiDcaTradeLedgerArchive: '{"only":"remote"}'
-    }
-  };
-
-  const summary = summarizeBackupConflict({
-    localEnvelope,
-    remoteEnvelope,
-    remote: { version: 8, updatedAt: '2026-05-30T12:00:00.000Z' },
-    localMeta: { version: 6, localUpdatedAt: '2026-05-30T12:05:00.000Z' }
-  });
-
-  assert.equal(summary.hasConflict, true);
-  assert.equal(summary.hasChanges, true);
-  assert.equal(summary.hasLocalChanges, true);
-  assert.equal(summary.remoteVersion, 8);
-  assert.deepEqual(summary.changedKeys, ['aiDcaWorkspacePrefs']);
-  assert.deepEqual(summary.unresolvedChangedKeys, ['aiDcaWorkspacePrefs']);
-  assert.deepEqual(summary.remoteOnlyKeys, ['aiDcaTradeLedgerArchive']);
-  assert.deepEqual(summary.localOnlyKeys, ['aiDcaTradeLedger']);
-  assert.match(summary.summaryText, /需要手动选择/);
-  assert.match(summary.summaryText, /只在云端存在/);
-  assert.match(summary.summaryText, /只在本机存在/);
-});
-
-test('summarizeBackupConflict treats domain record differences as auto mergeable', () => {
-  const localEnvelope = {
-    version: 1,
-    keys: ['aiDcaPlanStore', 'aiDcaTradeLedger'],
-    payload: {
-      aiDcaPlanStore: JSON.stringify({ plans: [{ id: 'local-plan' }], activePlanId: 'local-plan' }),
-      aiDcaTradeLedger: JSON.stringify([{ id: 'trade-local', updatedAt: '2026-05-02T10:00:00.000Z' }])
-    }
-  };
-  const remoteEnvelope = {
-    version: 1,
-    keys: ['aiDcaPlanStore', 'aiDcaTradeLedgerArchive'],
-    payload: {
-      aiDcaPlanStore: JSON.stringify({ plans: [{ id: 'remote-plan' }], activePlanId: 'remote-plan' }),
-      aiDcaTradeLedgerArchive: JSON.stringify({ transactions: [], snapshotsByCode: {} })
-    }
-  };
-
-  const summary = summarizeBackupConflict({ localEnvelope, remoteEnvelope });
-
-  assert.equal(summary.hasChanges, true);
-  assert.equal(summary.hasConflict, false);
-  assert.equal(summary.hasLocalChanges, true);
-  assert.deepEqual(summary.autoMergeChangedKeys, ['aiDcaPlanStore']);
-  assert.deepEqual(summary.unresolvedChangedKeys, []);
-  assert.deepEqual(summary.autoMergeKeys, ['aiDcaPlanStore', 'aiDcaTradeLedger', 'aiDcaTradeLedgerArchive']);
-  assert.match(summary.summaryText, /可自动合并/);
-});
 
 test('mergeBackupEnvelopes keeps remote-only keys and lets local win on simple shared keys', () => {
   const remoteEnvelope = {

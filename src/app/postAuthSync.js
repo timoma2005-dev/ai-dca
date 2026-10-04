@@ -99,8 +99,7 @@ async function runInitialAccountSync(cloudSync, { action, identity }) {
     dispatch('cloud-sync:auto-restored', { result: pulled });
     return 'pulled';
   }
-  const { collectBackupPayload } = await import('./webdavBackup.js');
-  if (action === 'register' || collectBackupPayload().keys.length > 0) {
+  if (action === 'register') {
     const uploaded = await cloudSync.uploadEncryptedCloudBackup({ force: true });
     dispatch('cloud-sync:auto-uploaded', { result: uploaded });
     return uploaded?.skipped ? 'skipped-upload' : 'uploaded';

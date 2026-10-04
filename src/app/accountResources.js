@@ -2,7 +2,7 @@
 // holdings/ledger 与 position-snapshot 保留 legacy 映射用于迁移/回滚，但不再走通用整块同步：
 // holdings/ledger 由 holdingTransactionsSync 按交易行同步，position-snapshot 永久只读兼容。
 
-import { SYNCABLE_STORAGE_KEYS, getMergeStrategy } from './syncRegistry.js';
+import { getMergeStrategy } from './syncRegistry.js';
 
 export const ACCOUNT_RESOURCES = Object.freeze([
   { resource: 'holdings/ledger', feature: 'holdings', key: 'aiDcaFundHoldingsLedger', label: '持仓交易行', sync: false, rowSync: true },
@@ -70,10 +70,6 @@ export function mergeStrategyForResource(resource = '') {
   if (item?.rowSync) return 'holdingsTransactions';
   const key = keyForResource(resource);
   return key ? getMergeStrategy(key) : 'lww';
-}
-
-export function unmappedRegistryKeys() {
-  return Array.from(SYNCABLE_STORAGE_KEYS).filter((key) => !BY_KEY.has(key));
 }
 
 function parseMaybeJson(value) {

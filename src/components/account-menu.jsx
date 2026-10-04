@@ -6,7 +6,7 @@ import { CLOUD_SYNC_PREPARING_EVENT } from '../app/postAuthSync.js';
 import { ACCOUNT_AUTH_OPEN_EVENT, consumeAccountAuthIntent } from '../app/accountAuthEvents.js';
 import { clearRememberedKey, loadRememberedKey, SECURE_VAULT_ERROR_CODES } from '../app/secureVault.js';
 import { showToast } from '../app/toast.js';
-import { collectBackupPayload, formatBytes } from '../app/webdavBackup.js';
+import { buildBackupEnvelope, formatBytes } from '../app/webdavBackup.js';
 import { cx, inputClass, primaryButtonClass, secondaryButtonClass, subtleButtonClass } from './experience-ui.jsx';
 import { PrivacyNotice } from './PrivacyNotice.jsx';
 
@@ -86,7 +86,7 @@ export function AccountMenu({ initialOpen = false }) {
   const [meta, setMeta] = useState(() => loadLocalCloudSyncMeta());
   const [backupVersions, setBackupVersions] = useState([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
-  const [preview, setPreview] = useState(() => collectBackupPayload());
+  const [previewKeyCount, setPreviewKeyCount] = useState(0);
   const [syncState, setSyncState] = useState('idle');
   const [lastError, setLastError] = useState('');
   const [errorCode, setErrorCode] = useState('');
@@ -125,7 +125,7 @@ export function AccountMenu({ initialOpen = false }) {
     function refreshLocalState(event) {
       setSession(event?.detail?.session || loadCloudSession());
       setMeta(event?.detail?.meta || loadLocalCloudSyncMeta());
-      setPreview(collectBackupPayload());
+      /* preview removed: data comes from API */
     }
     function syncStorage(event) {
       if (!event.key || event.key.startsWith('aiDca')) refreshLocalState(event);
@@ -221,7 +221,7 @@ export function AccountMenu({ initialOpen = false }) {
         : await loginCloudAccount(form);
       // 有效 session 已保存：立即完成登录 UI、解除认证 busy，不等待云同步。
       setSession(nextSession || loadCloudSession());
-      setPreview(collectBackupPayload());
+      /* preview removed: data comes from API */
       setSyncState('preparing');
       setLastError('');
       setErrorCode('');
@@ -271,7 +271,7 @@ export function AccountMenu({ initialOpen = false }) {
       setConflict(null);
       setConflictPassword('');
       setMeta(loadLocalCloudSyncMeta());
-      setPreview(collectBackupPayload());
+      /* preview removed: data comes from API */
       setSyncState('synced');
       window.dispatchEvent(new CustomEvent(mode === 'pull' ? 'cloud-sync:auto-restored' : 'cloud-sync:auto-uploaded', { detail: { result } }));
       const toastByMode = {
@@ -328,7 +328,7 @@ export function AccountMenu({ initialOpen = false }) {
         });
         syncResult = result?.reuploaded ? 'pulled-merged' : 'pulled';
         window.dispatchEvent(new CustomEvent(result?.reuploaded ? 'cloud-sync:auto-uploaded' : 'cloud-sync:auto-restored', { detail: { result } }));
-      } else if (collectBackupPayload().keys.length > 0) {
+      } else {
         result = await uploadEncryptedCloudBackup({
           securityPassword: secret,
           rememberDevice: form.rememberDevice,
@@ -342,7 +342,7 @@ export function AccountMenu({ initialOpen = false }) {
       setManualSyncPassword('');
       setConflict(null);
       setMeta(loadLocalCloudSyncMeta());
-      setPreview(collectBackupPayload());
+      /* preview removed: data comes from API */
       setSyncState('synced');
       showToast({
         title: '手动同步完成',
@@ -418,7 +418,7 @@ export function AccountMenu({ initialOpen = false }) {
         setManualSyncPassword('');
         setConflict(null);
         setMeta(loadLocalCloudSyncMeta());
-        setPreview(collectBackupPayload());
+        /* preview removed: data comes from API */
         setSyncState('synced');
         window.dispatchEvent(new CustomEvent('cloud-sync:auto-uploaded', { detail: { result } }));
         showToast({ title: '已重传覆盖云端', description: '云端已替换为本机安全密码加密的备份。', tone: 'emerald' });
@@ -469,7 +469,7 @@ export function AccountMenu({ initialOpen = false }) {
   const loggedIn = Boolean(session?.accessToken);
   const hasRememberedSyncKey = loggedIn && Boolean(loadRememberedKey()?.rawKey);
   const initial = loggedIn ? String(session.username || '?').slice(0, 1).toUpperCase() : '';
-  const previewBytes = preview.keys.reduce((sum, key) => sum + (preview.entries[key]?.length || 0), 0);
+  const previewBytes = 0; // 数据来自服务端，不再计算本地大小
   const statusLabel = !loggedIn
     ? '未登录'
     : syncState === 'preparing'
@@ -522,7 +522,7 @@ export function AccountMenu({ initialOpen = false }) {
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-xs">
                 <div className="font-semibold text-slate-500">本机数据</div>
-                <div className="mt-1 text-sm font-bold text-slate-900">{conflict.localKeyCount ?? preview.keys.length} 项</div>
+                <div className="mt-1 text-sm font-bold text-slate-900">{conflict.localKeyCount ?? previewKeyCount} 项</div>
                 <div className="mt-1 text-[11px] leading-5 text-slate-500">{formatSyncTime(conflict.localUpdatedAt)}</div>
               </div>
             </div>
@@ -631,10 +631,10 @@ export function AccountMenu({ initialOpen = false }) {
                     </div>
                     <div className="rounded-xl bg-slate-50 px-2 py-2">
                       <div className="text-[10px] font-semibold text-slate-400">本地</div>
-                      <div className="mt-1 text-xs font-bold text-slate-800">{preview.keys.length} 项</div>
+                      <div className="mt-1 text-xs font-bold text-slate-800">{previewKeyCount} 项</div>
                     </div>
                   </div>
-                  <div className="text-xs text-slate-500">范围 {preview.keys.length} 项 · {formatBytes(previewBytes)}</div>
+                  <div className="text-xs text-slate-500">范围 {previewKeyCount} 项 · {formatBytes(previewBytes)}</div>
                   <div className="space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
                     <div className="flex items-start gap-2 text-xs text-indigo-900">
                       <RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600" aria-hidden="true" />
@@ -679,7 +679,6 @@ export function AccountMenu({ initialOpen = false }) {
                 </div>
         </div>
       ) : null}
-      {conflictModal}
 
       {open && !loggedIn && typeof document !== "undefined" ? createPortal((
         <div
