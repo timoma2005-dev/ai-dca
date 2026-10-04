@@ -4,7 +4,6 @@ import { BACKUP_APPLIED_EVENT } from '../../app/backupEvents.js';
 import { areHoldingTransactionsEqual } from '../../app/holdingTransactionEventState.js';
 import { createHoldingsRemoteSource } from '../../app/holdingsRemoteSource.js';
 import { normalizeLedgerState } from '../../app/holdingsLedger.js';
-import { HOLDINGS_SYNC_KEYS } from '../../app/syncRegistry.js';
 
 // 持仓页同步 hook：React 状态与事件接线。
 // 读取时序保护（代次 / 会话身份 / 取消在途请求 / mutation epoch / 按 id 合并）
@@ -88,7 +87,7 @@ export function useHoldingsStorageSync({
 
     function onStorage(event) {
       if (loadCloudSession()?.accessToken) return;
-      if (!event || event.key === null || HOLDINGS_SYNC_KEYS.has(String(event.key || ''))) refresh(event);
+      if (!event || event.key === null || String(event.key || '').includes('Holding') || String(event.key || '').includes('Trade')) refresh(event);
     }
 
     function onSessionChanged() {

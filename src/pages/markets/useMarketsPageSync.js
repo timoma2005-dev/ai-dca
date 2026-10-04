@@ -3,14 +3,13 @@ import { BACKUP_APPLIED_EVENT } from '../../app/backupEvents.js';
 import { loadWatchlist } from '../../app/marketsWatchlistStorage.js';
 import { readLedgerState } from '../../app/holdingsLedgerStorage.js';
 import { readTradeLedger } from '../../app/tradeLedger.js';
-import { HOLDINGS_SYNC_KEYS } from '../../app/syncRegistry.js';
 
 // Markets 页的环境 / 同步监听副作用：移动端断点 + 账号云同步恢复后重读自选清单。
 // 抽到独立 hook 以控制 MarketsExperience 编排文件体量（见 scripts/check_refactor_guard.mjs 预算）。
 export function shouldRefreshMarketsHoldingsFromSyncEvent(event) {
   const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
   if (!keys.length) return true;
-  return keys.some((key) => HOLDINGS_SYNC_KEYS.has(String(key || '')));
+  return keys.some((key) => String(key || '').includes('Holding') || String(key || '').includes('Trade'));
 }
 
 export function useMarketsPageSync({ setIsMobile, setWatch, setHoldingsLedger, setTradeLedgerEntries }) {

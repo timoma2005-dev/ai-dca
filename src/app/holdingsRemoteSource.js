@@ -19,7 +19,6 @@ import { holdingTransactionMutationEpoch, pullHoldingTransactions } from './hold
 import { normalizeLedgerState, readLedgerState } from './holdingsLedger.js';
 import { setAccountRuntimeStorageRaw } from './accountRuntimeStore.js';
 import { readTradeLedger } from './tradeLedger.js';
-import { HOLDINGS_SYNC_KEYS } from './syncRegistry.js';
 
 const LEDGER_STORAGE_KEY = 'aiDcaFundHoldingsLedger';
 const ACCOUNT_STORAGE_KEY = 'aiDcaAccountAllocationSettings';
@@ -80,8 +79,7 @@ export function createHoldingsRemoteSource({ setLedger, setAccountSettings, setT
   async function refresh(event = null) {
     const session = loadCloudSession();
     if (!session?.accessToken) {
-      const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
-      if (keys.length && !keys.some((key) => HOLDINGS_SYNC_KEYS.has(String(key || '')))) return 'skipped';
+      // 未登录时直接使用本地数据
       setLedger({ ...readLedgerState(), remoteLoading: false });
       setAccountSettings(readAccountAllocationSettings());
       setTradeLedgerEntries(readTradeLedger());
