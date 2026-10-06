@@ -13,6 +13,7 @@
 
 import { fetchSwitchOrderBooks, parseFundMobApiReferences } from './switchMarketCollector.js';
 import { fetchFundMetricsForCodes } from './getNav.js';
+import { isChinaMarketHoliday } from './holdingsNavSupport.js';
 
 const EASTMONEY_FUNDMOB_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
 
@@ -259,6 +260,16 @@ function percentile(sorted, value) {
  */
 export async function computeNasdaqRadar(env, { force = false } = {}) {
   const today = shanghaiDateStr();
+
+  // 法定节假日跳过：不写任何 KV，直接返回现有 latest（节假日无交易，写快照会污染 feature history）
+  if (!force && isChinaMarketHoliday(today)) {
+    console.log(`[nasdaq-radar] ${today} is China market holiday, skip computation`);
+    try {
+      const latest = await env.NOTIFY_STATE.get(KV_LATEST, 'json');
+      if (latest) return latest;
+    } catch {}
+    return null;
+  }
 
   // 读取历史价差（幂等保护与分位数计算共用）
   let history = [];
