@@ -1,0 +1,8 @@
+<!doctype html>
+<html><body><div id="root"></div><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { BacktestSidePanel } from '/src/components/markets/BacktestSidePanel.jsx';
+const layout = new URL(location.href).searchParams.get('layout') || 'workbench';
+createRoot(document.getElementById('root')).render(React.createElement(BacktestSidePanel, { open: true, symbol: '159659', layout }));
+</script></body></html>
