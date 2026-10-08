@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, CloudDownload, CloudUpload, Eye, EyeOff, GitMerge, KeyRound, Loader2, LogOut, RefreshCw, UserRound, X } from 'lucide-react';
 import { clearCloudSession, CLOUD_SYNC_SESSION_EVENT, fetchCloudBackupVersions, loadCloudSession, loginCloudAccount, registerCloudAccount, rollbackCloudBackupVersion } from '../app/authClient.js';
 import { CLOUD_SYNC_PREPARING_EVENT } from '../app/postAuthSync.js';
+import { fetchAccountEnvelopeExport } from '../app/accountApi.js';
 import { ACCOUNT_AUTH_OPEN_EVENT, consumeAccountAuthIntent } from '../app/accountAuthEvents.js';
 import { clearRememberedKey, loadRememberedKey, SECURE_VAULT_ERROR_CODES } from '../app/secureVault.js';
 import { showToast } from '../app/toast.js';
@@ -56,6 +57,15 @@ function formatKeyList(keys = [], limit = 4) {
   return `${list.join('、')}${keys.length > limit ? ` 等 ${keys.length} 项` : ''}`;
 }
 
+// envelope export 项数口径与服务端导出（webdavBackup.buildBackupEnvelope 的 keyCount）一致：
+// 优先取 keys 数组长度，回退到 payload 顶层数据项；空值与异常形态一律按 0 项计，不抛错。
+function countEnvelopeItems(envelope) {
+  if (!envelope || typeof envelope !== 'object') return 0;
+  if (Array.isArray(envelope.keys)) return envelope.keys.length;
+  if (envelope.payload && typeof envelope.payload === 'object') return Object.keys(envelope.payload).length;
+  return 0;
+}
+
 // 认证失败的唯一文案出口：401/409/400/5xx/网络失败/超时/异常 2xx 各有明确提示。
 // 云端同步阶段的错误（迁移 401、D1 session 未就绪等）不经过这里，绝不显示成密码错误。
 function formatAuthError(err, action = 'login') {
@@ -100,6 +110,28 @@ export function AccountMenu({ initialOpen = false }) {
   const [open, setOpen] = useState(initialOpen || Boolean(initialAuthIntent));
   const [authMode, setAuthMode] = useState(initialAuthIntent ? (initialAuthIntent.mode === 'login' ? 'login' : 'register') : 'login');
   const dropdownRef = useRef(null);
+  // envelope 项数刷新的最新请求序号：会话切换或连续刷新时，旧请求的返回不允许覆盖新结果。
+  const envelopeCountRequestRef = useRef(0);
+
+  // envelope 项数统一刷新入口：服务端是唯一真相源，一次 export 请求同时服务预览与计数，
+  // 不为计数单独重复请求。无会话、空 envelope、请求失败都归零，不保留可能属于旧账户的过期计数。
+  const refreshEnvelopeKeyCount = useCallback((session = loadCloudSession()) => {
+    const requestId = envelopeCountRequestRef.current + 1;
+    envelopeCountRequestRef.current = requestId;
+    if (!session?.accessToken) {
+      setPreviewKeyCount(0);
+      return;
+    }
+    fetchAccountEnvelopeExport(session)
+      .then((envelope) => {
+        if (requestId !== envelopeCountRequestRef.current) return;
+        setPreviewKeyCount(countEnvelopeItems(envelope));
+      })
+      .catch(() => {
+        if (requestId !== envelopeCountRequestRef.current) return;
+        setPreviewKeyCount(0);
+      });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,11 +153,24 @@ export function AccountMenu({ initialOpen = false }) {
     return () => { cancelled = true; };
   }, [open, session?.accessToken]);
 
+  // 菜单打开时也走同一 envelope 刷新入口：页面加载后即使尚未触发任何同步事件，也能显示服务端真实项数。
+  useEffect(() => {
+    if (!open || !session?.accessToken) {
+      if (!session?.accessToken) setPreviewKeyCount(0);
+      return undefined;
+    }
+    refreshEnvelopeKeyCount();
+    return undefined;
+  }, [open, session?.accessToken, refreshEnvelopeKeyCount]);
+
   useEffect(() => {
     function refreshLocalState(event) {
-      setSession(event?.detail?.session || loadCloudSession());
+      const nextSession = event?.detail?.session || loadCloudSession();
+      setSession(nextSession);
       setMeta(event?.detail?.meta || loadLocalCloudSyncMeta());
-      /* preview removed: data comes from API */
+      // 服务端是唯一真相源：账户切换、登录状态变化、导入或清除数据后，
+      // 经由这一统一刷新入口重新获取 envelope 项数。
+      refreshEnvelopeKeyCount(nextSession);
     }
     function syncStorage(event) {
       if (!event.key || event.key.startsWith('aiDca')) refreshLocalState(event);
@@ -174,7 +219,7 @@ export function AccountMenu({ initialOpen = false }) {
       window.removeEventListener(CLOUD_SYNC_PREPARING_EVENT, handleSyncPreparing);
       window.removeEventListener('storage', syncStorage);
     };
-  }, []);
+  }, [refreshEnvelopeKeyCount]);
 
   useEffect(() => {
     function handleOpenAuth(event) {
