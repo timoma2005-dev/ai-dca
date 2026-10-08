@@ -197,8 +197,8 @@ async function main() {
     const analysis = analyzeEvents(events);
     const report = generateReport(analysis);
 
-    writeFileSync('DATA_ANALYSIS_REPORT.md', report, 'utf-8');
-    console.log(`\n✅ 报告已生成: DATA_ANALYSIS_REPORT.md\n`);
+    writeFileSync('docs/analytics/DATA_ANALYSIS_REPORT.md', report, 'utf-8');
+    console.log(`\n✅ 报告已生成: docs/analytics/DATA_ANALYSIS_REPORT.md\n`);
 
   } catch (error) {
     console.error('\n❌ 分析失败:', error.message);

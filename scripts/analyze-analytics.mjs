@@ -12,7 +12,7 @@ import { join } from 'path';
 // 配置
 const SYNC_API = process.env.ANALYTICS_API || 'https://api.freebacktrack.tech/api/sync';
 const DAYS = parseInt(process.env.DAYS || '30', 10);
-const OUTPUT_FILE = 'DATA_ANALYSIS_REPORT.md';
+const OUTPUT_FILE = 'docs/analytics/DATA_ANALYSIS_REPORT.md';
 
 console.log(`📊 埋点数据分析
 ====================
