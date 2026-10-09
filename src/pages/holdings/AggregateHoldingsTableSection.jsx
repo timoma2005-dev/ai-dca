@@ -1,3 +1,5 @@
+import { GroupModeToggle, useGroupMode } from '../../components/GroupModeToggle.jsx';
+import { holdingsGroupModeStore } from '../../app/groupModeStore.js';
 import { Plus, Wallet } from 'lucide-react';
 import { DataTable } from '@/components/data-table/data-table';
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar';
@@ -18,6 +20,7 @@ export function AggregateHoldingsTableSection({
   onRowClick,
   onOpenAlertDialog
 }) {
+  const [groupMode, setGroupMode] = useGroupMode(holdingsGroupModeStore);
   if (tableData.length === 0) {
     const emptyHint = aggregates.length === 0
       ? '还没有交易记录。先录入第一笔交易建立持仓底账。'
@@ -174,7 +177,8 @@ export function AggregateHoldingsTableSection({
             : '完整显示全部列。'}
         </div>
       </div>
-      <div className="flex shrink-0 justify-center" style={{ width: lastColumnWidth }}>
+      <div className="flex shrink-0 items-center justify-end gap-2" style={{ minWidth: lastColumnWidth }}>
+        <GroupModeToggle value={groupMode} onChange={setGroupMode} label="持仓分组方式" />
         <DataTableViewOptions table={table} presetActions={columnViewPresets} />
       </div>
     </div>
@@ -190,9 +194,7 @@ export function AggregateHoldingsTableSection({
         tableChrome={tableChrome}
         onRowClick={onRowClick}
         onOpenAlertDialog={onOpenAlertDialog}
-        rowGroupBy={rowGroupBy}
-        rowGroupSort={rowGroupSort}
-        renderRowGroup={renderRowGroup}
+        {...(groupMode === 'company' ? { rowGroupBy, rowGroupSort, renderRowGroup } : {})}
       />
     </div>
   );

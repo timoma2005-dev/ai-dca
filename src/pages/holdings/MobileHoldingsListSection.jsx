@@ -1,3 +1,5 @@
+import { GroupModeToggle, useGroupMode } from '../../components/GroupModeToggle.jsx';
+import { holdingsGroupModeStore } from '../../app/groupModeStore.js';
 import { useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { formatCurrency } from '../../app/accumulation.js';
@@ -218,6 +220,7 @@ export function MobileHoldingsListSection({
   onInstallDemoData,
   onRowClick,
 }) {
+  const [groupMode, setGroupMode] = useGroupMode(holdingsGroupModeStore);
   const [search, setSearch] = useState('');
   const [activeKind, setActiveKind] = useState('all');
   const rows = useMemo(() => displayRows(tableData, search, activeKind), [tableData, search, activeKind]);
@@ -233,12 +236,16 @@ export function MobileHoldingsListSection({
         <div className="min-w-0">
           <div className="text-base font-bold text-slate-900">持仓总览</div>
           <div className="mt-1 text-[11px] text-slate-400">
-            {rows.length} 只基金 · 按基金公司聚合
+            {rows.length} 只基金 · {groupMode === 'company' ? '按基金公司聚合' : '列表'}
           </div>
         </div>
         <div className="shrink-0 text-right text-[11px] tabular-nums text-slate-400">
           市值 {compactCurrency(totalMarketValue)}
         </div>
+      </div>
+
+      <div className="px-1">
+        <GroupModeToggle value={groupMode} onChange={setGroupMode} label="持仓分组方式" />
       </div>
 
       <label className="flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white/85 px-3 shadow-sm">
@@ -288,7 +295,13 @@ export function MobileHoldingsListSection({
         />
       ) : (
         <div className="overflow-hidden rounded-2xl bg-white/65 px-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-          {groups.map((group) => (
+          {groupMode === 'list' ? rows.map((row) => (
+            <MobileHoldingCard
+              key={row.aggregationKey || (String(row.code || '') + ':' + String(row.kind || ''))}
+              row={row}
+              onRowClick={onRowClick}
+            />
+          )) : groups.map((group) => (
             <div key={group.key}>
               <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 py-3">
                 <div className="flex min-w-0 items-center gap-2">

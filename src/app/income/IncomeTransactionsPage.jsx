@@ -6,11 +6,14 @@
 //   ② 清仓分析入口 card → navigate('liquidation')
 //   ③ 跑赢大盘 banner（session 内可关闭）：从已清仓 lots 取 realizedReturnRate 最高一支
 //   ④ 明细筛选：基金下拉 + 类型下拉（全部/买入/卖出）
-//   ⑤ 明细列表：按基金 code 或名称分组卡片，点击行 → onEditTransaction(txId) 调主页 sidePanel 编辑
+//   ⑤ 明细列表：按公司分组或日期倒序列表，点击行 → onEditTransaction(txId) 调主页 sidePanel 编辑
 //
 // 数据：当前 ledger 仅 BUY/SELL；定投/分红/预约展示为 0。
 // 待办：跑赢 banner 当前用清仓盈利率作为占位指标；下个迭代接入 HS300 历史做正式跑赢对比。
 
+import { GroupModeToggle, useGroupMode } from '../../components/GroupModeToggle.jsx';
+import { transactionsGroupModeStore } from '../groupModeStore.js';
+import { groupTransactionsByCompany } from './transactionCompanyGroups.js';
 import { useMemo, useState } from 'react';
 import { X, ChevronRight, Download } from 'lucide-react';
 import { formatCurrency } from '../accumulation.js';
@@ -131,6 +134,7 @@ export function IncomeTransactionsPage({ ledger, onBack, navigate, currentRoute,
 		[ledger, incomeFocus]
 	);
 
+	const [groupMode, setGroupMode] = useGroupMode(transactionsGroupModeStore);
 	const [lensKey, setLensKey] = useState('1y');
 	const [fundFilter, setFundFilter] = useState('');
 	const [typeFilter, setTypeFilter] = useState('');
@@ -206,36 +210,7 @@ export function IncomeTransactionsPage({ ledger, onBack, navigate, currentRoute,
 		});
 	}, [filtered]);
 
-	const groups = useMemo(() => {
-		const map = new Map();
-		for (const tx of sortedDesc) {
-			const key = transactionFundGroupKey(tx);
-			if (!map.has(key)) {
-				map.set(key, {
-					key,
-					code: String(tx?.code || '').trim(),
-					name: normalizeTransactionGroupName(tx?.name),
-					rows: [],
-					buyCount: 0,
-					sellCount: 0,
-					buyAmount: 0,
-					sellAmount: 0,
-				});
-			}
-			const group = map.get(key);
-			if (!group.name) group.name = normalizeTransactionGroupName(tx?.name);
-			group.rows.push(tx);
-			const amount = computeAmount(tx);
-			if (tx?.type === 'BUY') {
-				group.buyCount += 1;
-				if (Number.isFinite(amount)) group.buyAmount += amount;
-			} else if (tx?.type === 'SELL') {
-				group.sellCount += 1;
-				if (Number.isFinite(amount)) group.sellAmount += amount;
-			}
-		}
-		return Array.from(map.values());
-	}, [sortedDesc]);
+	const groups = useMemo(() => groupTransactionsByCompany(sortedDesc), [sortedDesc]);
 
 	const winnerLot = useMemo(() => {
 		const lots = buildSoldLots(transactions);
@@ -310,7 +285,7 @@ export function IncomeTransactionsPage({ ledger, onBack, navigate, currentRoute,
 					role="alert"
 					className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800"
 				>
-					有 {undatedCount} 笔交易缺少日期，已保留在「待补录日期」分组。点击明细行即可编辑补录。
+					有 {undatedCount} 笔交易缺少日期，已保留在明细中并标记为「待补录日期」。点击明细行即可编辑补录。
 				</div>
 			) : null}
 
@@ -361,8 +336,11 @@ export function IncomeTransactionsPage({ ledger, onBack, navigate, currentRoute,
 			) : null}
 
 			{/* ④ 明细筛选 */}
-			<div className="flex items-center justify-between gap-2 px-1">
-				<div className="text-sm font-semibold text-slate-800">明细</div>
+			<div className="flex flex-wrap items-center justify-between gap-2 px-1">
+				<div className="flex items-center gap-2">
+					<div className="text-sm font-semibold text-slate-800">明细</div>
+					<GroupModeToggle value={groupMode} onChange={setGroupMode} label="交易记录分组方式" />
+				</div>
 				<div className="flex items-center gap-1.5">
 					<button
 						type="button"
@@ -402,13 +380,20 @@ export function IncomeTransactionsPage({ ledger, onBack, navigate, currentRoute,
 				</div>
 			) : (
 				<div className="flex flex-col gap-3">
-					{groups.map((group) => (
+					{groupMode === 'list' ? sortedDesc.map((tx, index) => (
+						<Row
+							key={tx.id || 'list-' + index}
+							tx={tx}
+							performance={tx?.type === 'BUY' && tx?.id ? buyPerformanceById[tx.id] : null}
+							onClick={() => onEditTransaction && tx.id && onEditTransaction(tx.id)}
+						/>
+					)) : groups.map((group) => (
 						<section key={group.key} className="flex flex-col gap-1">
 							<div className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2">
 								<div className="min-w-0">
-									<div className="truncate text-[13px] font-semibold text-slate-700">{group.name || group.code || '未命名基金'}</div>
+									<div className="truncate text-[13px] font-semibold text-slate-700">{group.name}</div>
 									<div className="mt-0.5 text-[11px] text-slate-400">
-										{group.code ? group.code + ' · ' : ''}{group.rows.length} 笔
+										{group.rows.length} 笔
 									</div>
 								</div>
 								<div className="shrink-0 text-right text-[11px] tabular-nums">
