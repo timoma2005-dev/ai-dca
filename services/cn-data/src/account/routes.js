@@ -4,11 +4,9 @@
 // the frontend (src/app/accountApi.js, holdingTransactionsApi.js,
 // accountDataMigrationActions.js) depends on them.
 //
-// Auth: cn-data has no users/sessions tables, so Bearer tokens cannot be
-// validated here. user_id is taken from query/body, the same known auth gap
-// marked TODO in routes/data.js.
-// TODO: derive user_id from the auth-service session verified by nginx,
-// instead of trusting query/body identity, before exposing these APIs publicly.
+// Auth: Bearer session tokens are validated against the auth service's SQLite
+// (AUTH_DB_PATH), with worker-identical error codes and messages. Legacy query/
+// body user_id is accepted only when the auth DB is unavailable (dev/test).
 //
 // Outbox policy: every account resource/transaction write enqueues a
 // sync_outbox event targeting 'account' INSIDE the same SQLite transaction.
@@ -18,6 +16,7 @@
 // data-notice choice, discard/purge): the sync worker has no handler for
 // them, and discard explicitly deletes everything by user request.
 
+import { resolveUserId, HttpError as AuthHttpError } from '../authSession.js';
 import { withTransaction } from '../db.js';
 import { enqueueEvent } from '../outbox.js';
 import {
@@ -89,17 +88,9 @@ function ok(body, headers = {}) {
 }
 
 function fail(error) {
-  if (error instanceof HttpError) return { status: error.status, body: { error: error.code, message: error.message }, headers: baseHeaders };
+  if (error instanceof HttpError || error instanceof AuthHttpError) return { status: error.status, body: { error: error.code, message: error.message }, headers: baseHeaders };
   console.error('[cn-data account] 未处理异常', error);
   return { status: 500, body: { error: 'INTERNAL_ERROR', message: '服务异常，请稍后重试' }, headers: baseHeaders };
-}
-
-function requireUserId(url, body) {
-  const queryUser = url.searchParams.get('user_id');
-  if (queryUser && body?.user_id && queryUser !== body.user_id) throw new HttpError(400, 'CONFLICTING_USER_ID', 'Conflicting user_id');
-  const userId = String(body?.user_id ?? queryUser ?? '').trim();
-  if (!userId) throw new HttpError(400, 'USER_ID_REQUIRED', 'user_id is required');
-  return userId;
 }
 
 function readExpectedRevision(headers, body = {}) {
@@ -679,9 +670,9 @@ function handleResourceItemRequest(db, userId, method, headers, body, route) {
   throw new HttpError(405, 'METHOD_NOT_ALLOWED', '不支持的请求方法');
 }
 
-function handleDataNotice(db, method, url, body) {
+function handleDataNotice(db, method, url, body, headers) {
   if (method !== 'GET' && method !== 'PUT') throw new HttpError(405, 'METHOD_NOT_ALLOWED', '仅支持 GET 或 PUT');
-  const userId = requireUserId(url, body);
+  const userId = resolveUserId(url, body, headers).id;
   if (method === 'GET') return ok(readAccountDataNotice(db, userId));
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'INVALID_JSON', '请求体不是合法 JSON');
   try {
@@ -697,8 +688,8 @@ function handleDataNotice(db, method, url, body) {
   }
 }
 
-function handleDiscard(db, url, body) {
-  const userId = requireUserId(url, body);
+function handleDiscard(db, url, body, headers) {
+  const userId = resolveUserId(url, body, headers).id;
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'INVALID_JSON', '请求体不是合法 JSON');
   if (body.confirmation !== ACCOUNT_PURGE_CONFIRMATION) {
     throw new HttpError(400, 'CONFIRMATION_REQUIRED', '请确认永久删除全部同步数据');
@@ -751,14 +742,14 @@ export function handleAccountV1Route(db, method, url, body = {}, headers = {}) {
     }
     if (route.kind === 'discard') {
       if (method !== 'POST') throw new HttpError(405, 'METHOD_NOT_ALLOWED', '仅支持 POST');
-      return handleDiscard(db, url, body);
+      return handleDiscard(db, url, body, headers);
     }
     if (route.kind === 'data-notice') {
-      return handleDataNotice(db, method, url, body);
+      return handleDataNotice(db, method, url, body, headers);
     }
     // migrations/legacy 是账号资源的唯一门禁。迁移查询/导入/跳过之外，
     // manifest、bundle、资源与交易行接口都必须在服务端再次确认已 settled。
-    const userId = requireUserId(url, body);
+    const userId = resolveUserId(url, body, headers).id;
     if (route.kind !== 'migration' && route.kind !== 'migration-skip') {
       assertLegacyMigrationSettled(db, userId);
     }
