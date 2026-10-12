@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb, closeDb } from './db.js';
 import { outboxStats } from './outbox.js';
 import { handleAccountV1Route } from './account/routes.js';
+import { handleSyncRoute } from './sync/routes.js';
 import { handleNotifyRoute } from './notify/routes.js';
 import { badRequest, handleDataRoute } from './routes/data.js';
 
@@ -14,7 +15,7 @@ const cors = {
 };
 function sendJson(res, status, body, headers) {
   res.writeHead(status, { ...cors, 'Content-Type': 'application/json; charset=utf-8', ...headers });
-  res.end(JSON.stringify(body));
+  res.end(headers?.['Content-Type']?.startsWith('text/html') ? body : JSON.stringify(body));
 }
 function readJsonBody(req, maxBytes) {
   return new Promise((resolve, reject) => {
@@ -56,6 +57,7 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
       const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};
       const result = handleNotifyRoute(db, req.method, url, body, req.headers)
         ?? handleAccountV1Route(db, req.method, url, body, req.headers)
+        ?? handleSyncRoute(db, req.method, url, body, req.headers)
         ?? handleDataRoute(db, req.method, url, body);
       sendJson(res, result?.status ?? (result ? 200 : 404), result?.body ?? { message: 'Not found' }, result?.headers);
     } catch (error) {
