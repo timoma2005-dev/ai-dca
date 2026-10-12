@@ -347,3 +347,6 @@ export async function writeSettingsWithFeatureItems(env, settings, options = {})
   await writeRegistrationLinks(env, splitRegistrationLinks(settings, { preNormalized: true }));
   return true;
 }
+
+// Receive endpoints use the same schema without invoking legacy migration.
+export { ensureSchema as ensureNotifyFeatureSchema };
