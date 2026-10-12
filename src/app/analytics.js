@@ -1,6 +1,6 @@
 import { readLocalNetworkTraces, summarizeNetworkTraces } from './networkTrace.js';
 import { trackEvent as trackPostHogEvent, trackPageView as trackPostHogPageView } from './posthog.js';
-import { apiUrl } from './apiBase.js';
+import { apiUrlDirect } from './apiBase.js';
 
 const STORE_KEY = 'aiDcaAnalyticsEvents_v1';
 const PENDING_STORE_KEY = 'aiDcaAnalyticsPendingEvents_v1';
@@ -104,7 +104,7 @@ function getAnalyticsBase() {
   if (typeof window !== 'undefined' && window.__AI_DCA_SYNC_BASE__) {
     return String(window.__AI_DCA_SYNC_BASE__).replace(/\/$/, '');
   }
-  return apiUrl('/api/sync');
+  return apiUrlDirect('/api/sync');
 }
 
 function getAnalyticsEndpoint() {

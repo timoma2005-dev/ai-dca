@@ -6,7 +6,7 @@ import {
   round,
   sanitizeHoldingRows
 } from './holdingsCore.js';
-import { apiUrl } from './apiBase.js';
+import { apiUrlDirect } from './apiBase.js';
 import { getNavSnapshots, getNavHistory } from './navService.js';
 
 const HOLDINGS_STORAGE_KEY = 'aiDcaFundHoldingsState';
@@ -182,7 +182,7 @@ export async function recognizeHoldingsFile(file, onProgress) {
     message: '正在识别当前持仓'
   });
 
-  const response = await fetch(apiUrl(HOLDINGS_OCR_ENDPOINT), {
+  const response = await fetch(apiUrlDirect(HOLDINGS_OCR_ENDPOINT), {
     method: 'POST',
     headers: {
       Accept: 'application/json'

@@ -6,7 +6,7 @@ import { readLedgerState } from './holdingsLedger.js';
 import { aggregateByCode, buildSoldLots, summarizePortfolio, summarizeSoldLots } from './holdingsLedgerCore.js';
 import { readVixSnapshot, resolveVixSignal, VIX_THRESHOLDS } from './vixSignal.js';
 import { trackAnalyticsEvent } from './analytics.js';
-import { apiUrl } from './apiBase.js';
+import { apiUrlDirect } from './apiBase.js';
 import { deleteAccountResourceItem, fetchAccountResource, putAccountResourceItem } from './accountApi.js';
 import { readMarketAlerts, readHoldingAlerts } from './alertRules.js';
 import { loadCloudSession } from './authClient.js';
@@ -300,7 +300,7 @@ function normalizeNotifyStatusDetails(payload = {}) {
 }
 
 function buildNotifyUrl(path, query = {}) {
-  return apiUrl(`${NOTIFY_ENDPOINT}${path}`, query);
+  return apiUrlDirect(`${NOTIFY_ENDPOINT}${path}`, query);
 }
 
 async function requestNotify(path, init = {}) {

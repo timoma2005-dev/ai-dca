@@ -3,7 +3,7 @@
 // 本地 localStorage 仅作为离线预填缓存。
 
 import { loadCloudSession } from './authClient.js';
-import { apiUrl } from './apiBase.js';
+import { apiUrlDirect } from './apiBase.js';
 
 const NOTIFY_ENDPOINT = '/api/notify';
 const LOCAL_CACHE_KEY = 'aiDcaSwitchStrategyWorkerConfig';
@@ -377,7 +377,7 @@ function sanitizeFundCode(value) {
 }
 
 function buildSwitchUrl(path, query = {}) {
-  return apiUrl(`${NOTIFY_ENDPOINT}${path}`, query);
+  return apiUrlDirect(`${NOTIFY_ENDPOINT}${path}`, query);
 }
 
 async function readJsonResponse(response) {

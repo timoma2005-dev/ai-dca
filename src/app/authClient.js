@@ -8,7 +8,7 @@ import {
   saveCloudSession
 } from './authSession.js';
 import { fetchAccountManifest, fetchLegacyMigrationStatus, isLegacyMigrationSettled } from './accountApi.js';
-import { apiUrl } from './apiBase.js';
+import { apiUrlDirect } from './apiBase.js';
 
 export {
   CLOUD_SYNC_SESSION_EVENT,
@@ -33,7 +33,7 @@ function getSyncBase() {
   if (typeof window !== 'undefined' && window.__AI_DCA_SYNC_BASE__) {
     return String(window.__AI_DCA_SYNC_BASE__).replace(/\/$/, '');
   }
-  return apiUrl('/api/sync');
+  return apiUrlDirect('/api/sync');
 }
 
 function rightRotate(value, bits) {

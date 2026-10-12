@@ -29,7 +29,7 @@
 //   - UI 给末端加“截至 YYYY-MM-DD 公布净值”提示，避免跟持仓页实时数字对不上。
 // 详见 docs/nav-source-stratification-plan.md 、 docs/data-consistency-audit-plan.md。
 
-import { apiUrl } from './apiBase.js';
+import { apiUrlDirect } from './apiBase.js';
 
 const NAV_HISTORY_ENDPOINT = '/api/holdings/nav-history';
 const DB_NAME = 'aiDcaNavHistory';
@@ -264,7 +264,7 @@ async function idbClearExpired(maxRecords = 200) {
 async function fetchFromWorker({ code, from, to, forceLive }) {
   const params = new URLSearchParams({ code, from, to });
   if (forceLive) params.set('force', '1');
-  const url = apiUrl(NAV_HISTORY_ENDPOINT, Object.fromEntries(params.entries()));
+  const url = apiUrlDirect(NAV_HISTORY_ENDPOINT, Object.fromEntries(params.entries()));
   const response = await fetch(url, { method: 'GET', headers: { accept: 'application/json' } });
   const rawText = await response.text();
   let payload;
@@ -465,7 +465,7 @@ export async function fetchNavHistoryBatch({ codes, from, to, days, forceLive } 
   let payload = null;
   let httpStatus = 0;
   try {
-    const resp = await fetch(apiUrl(NAV_HISTORY_ENDPOINT), {
+    const resp = await fetch(apiUrlDirect(NAV_HISTORY_ENDPOINT), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ codes: missing, from: fromDate, to: toDate, force: force ? 1 : 0 }),

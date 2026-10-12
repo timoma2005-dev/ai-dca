@@ -18,6 +18,8 @@ import { fetchHoldingTransactionRows } from '../src/app/holdingTransactionsApi.j
 
 const SESSION = { accessToken: 'test-token', username: 'alice' };
 const SETTLED_MIGRATION = { status: 'imported', legacy: { exists: true } };
+// 账号请求现在直连 CF Worker（apiUrlDirect），URL 为绝对地址，不再是相对路径。
+const ACCOUNT_DIRECT_BASE = 'https://api.freebacktrack.tech/api/account/v1';
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -91,7 +93,7 @@ test('列表加载请求会登记 load 加载态，结束后自动清空', async
       await fetchAccountManifest(SESSION);
       assert.deepEqual(
         calls.map((call) => call.url),
-        ['/api/account/v1/migrations/legacy', '/api/account/v1/manifest']
+        [`${ACCOUNT_DIRECT_BASE}/migrations/legacy`, `${ACCOUNT_DIRECT_BASE}/manifest`]
       );
     }
   );
@@ -114,7 +116,7 @@ test('删除请求会登记 delete 加载态与资源名', async () => {
   await withMockFetch(
     migrationAware(async (url, method) => {
       assert.equal(method, 'DELETE');
-      assert.equal(url, '/api/account/v1/trades/ledger');
+      assert.equal(url, `${ACCOUNT_DIRECT_BASE}/trades/ledger`);
       return jsonResponse({ deleted: true, revision: 8 });
     }),
     async () => {
@@ -160,8 +162,8 @@ test('持仓交易行接口复用转发层：GET 瞬时失败会重试一次并�
     }),
     async (calls) => {
       const rows = await fetchHoldingTransactionRows({ limit: 10 }, SESSION);
-      assert.equal(calls[0].url, '/api/account/v1/migrations/legacy');
-      assert.ok(calls[1].url.startsWith('/api/account/v1/holdings/ledger/items?'));
+      assert.equal(calls[0].url, `${ACCOUNT_DIRECT_BASE}/migrations/legacy`);
+      assert.ok(calls[1].url.startsWith(`${ACCOUNT_DIRECT_BASE}/holdings/ledger/items?`));
       return rows;
     }
   );

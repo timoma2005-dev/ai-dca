@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { isAnalyticsAdmin } from '../app/analytics.js';
+import { apiUrlDirect } from '../app/apiBase.js';
 import { cx } from '../components/experience-ui.jsx';
 
 function PercentileBar({ percentile }) {
@@ -38,7 +39,9 @@ export function AdminRadarExperience({ session }) {
 
   const fetchRadar = async () => {
     try {
-      const resp = await fetch('/api/notify/nasdaq-radar', { credentials: 'include' });
+      // 直连 Worker：接口为公开路由（测试阶段直接放行），不能带 credentials，
+      // 否则跨域下 Worker 未返回 allow-credentials 会导致响应被浏览器拦截。
+      const resp = await fetch(apiUrlDirect('/api/notify/nasdaq-radar'));
       const json = await resp.json();
       setData(json?.data || null);
       if (!json?.data) setError('暂无雷达数据（每日21:35净值发布后计算）');
@@ -51,7 +54,7 @@ export function AdminRadarExperience({ session }) {
   const triggerCompute = async () => {
     setComputing(true);
     try {
-      const resp = await fetch('/api/notify/nasdaq-radar/compute', { method: 'POST', credentials: 'include' });
+      const resp = await fetch(apiUrlDirect('/api/notify/nasdaq-radar/compute'), { method: 'POST' });
       const json = await resp.json();
       if (json?.ok && json?.data) {
         setData(json.data);
