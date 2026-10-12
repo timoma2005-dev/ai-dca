@@ -5,7 +5,7 @@
 // 底层统一走 apiTransport 的 fetchWithGetRetry，并统一登记 accountLoadingState 的加载态。
 
 import { loadCloudSession } from './authSession.js';
-import { apiUrlDirect } from './apiBase.js';
+import { apiUrl, apiUrlDirect, fetchWithFallback } from './apiBase.js';
 import { fetchWithGetRetry } from './apiTransport.js';
 import { describeAccountRequest, trackAccountOperation } from './accountLoadingState.js';
 
@@ -19,7 +19,7 @@ export function getAccountApiBase() {
       if (syncBase.endsWith('/api/sync')) return `${syncBase.slice(0, -'/api/sync'.length)}/api/account/v1`;
     }
   }
-  return apiUrlDirect('/api/account/v1');
+  return apiUrl('/api/account/v1');
 }
 
 async function readJson(response) {
@@ -39,7 +39,9 @@ async function performRequest(path, { method = 'GET', token = '', body = null, h
     headers: finalHeaders,
     body: body === null || body === undefined ? undefined : JSON.stringify(body),
     signal
-  });
+  }, { fetchImpl: (primary, init) => fetchWithFallback({
+    primary, fallback: apiUrlDirect(`/api/account/v1${path}`)
+  }, init) });
   const data = await readJson(response);
   if (!response.ok) {
     const error = new Error(data?.message || data?.error || `请求失败：HTTP ${response.status}`);

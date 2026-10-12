@@ -1,10 +1,9 @@
 const API_ORIGIN = String(import.meta.env?.VITE_API_ORIGIN || '').replace(/\/$/, '');
 
-// 用户相关请求直连 CF Worker（cn 主机 → CF 边缘的 TTFB 高达 16-18s）。
-// 详见 docs/plan-frontend-direct-api.md。
+// CF 冗余副本仅用于读取降级；写入始终走 cn 主机。
 const DIRECT_API_ORIGIN = 'https://api.freebacktrack.tech';
 
-// 用户相关路径前缀走直连；/api/ocr 为精确匹配（仅 '/api/ocr' 与 '/api/ocr?...'），
+// 可用于 CF 读取降级的用户相关路径前缀；/api/ocr 为精确匹配（仅 '/api/ocr' 与 '/api/ocr?...'），
 // 避免误伤同前缀的其它路径。
 const DIRECT_API_PREFIXES = ['/api/account/', '/api/sync/', '/api/notify/', '/api/holdings/', '/api/ocr'];
 
@@ -17,7 +16,7 @@ export function isDirectApiPath(path = '') {
 
 export function apiUrl(path = '', query = {}) {
   const normalizedPath = String(path || '').startsWith('/') ? String(path || '') : `/${path || ''}`;
-  const base = API_ORIGIN || (typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
+  const base = API_ORIGIN || (typeof window === 'undefined' ? 'http://localhost' : window.location?.origin || 'http://localhost');
   const url = new URL(normalizedPath, base);
 
   Object.entries(query || {}).forEach(([key, value]) => {
@@ -29,7 +28,7 @@ export function apiUrl(path = '', query = {}) {
   return `${url.pathname}${url.search}`;
 }
 
-// 用户相关请求用这个：始终返回直连 Worker 的绝对 URL，不再经 cn 主机 nginx 中转。
+// 返回 CF 冗余副本的绝对 URL，供读取降级使用。
 export function apiUrlDirect(path = '', query = {}) {
   const normalizedPath = String(path || '').startsWith('/') ? String(path || '') : `/${path || ''}`;
   const url = new URL(normalizedPath, DIRECT_API_ORIGIN);
@@ -42,8 +41,28 @@ export function apiUrlDirect(path = '', query = {}) {
   return url.toString();
 }
 
+export function apiUrlWithFallback(path = '', query = {}) {
+  return { primary: apiUrl(path, query), fallback: apiUrlDirect(path, query) };
+}
+
+// Only GET may read the CF replica. HTTP errors remain Responses for caller handling.
+export async function fetchWithFallback({ primary, fallback }, options = {}) {
+  const canFallback = String(options.method || 'GET').toUpperCase() === 'GET' && Boolean(fallback);
+  let response;
+  try {
+    response = await fetch(primary, options);
+  } catch (error) {
+    if (!canFallback || options.signal?.aborted || error?.name === 'AbortError') throw error;
+    return fetch(fallback, options);
+  }
+  if (canFallback && response.status >= 500 && !options.signal?.aborted) {
+    return fetch(fallback, options);
+  }
+  return response;
+}
+
 export function wsApiUrl(path = '') {
-  const httpUrl = isDirectApiPath(path) ? apiUrlDirect(path) : apiUrl(path);
+  const httpUrl = apiUrl(path);
   if (httpUrl.startsWith('https://')) return `wss://${httpUrl.slice('https://'.length)}`;
   if (httpUrl.startsWith('http://')) return `ws://${httpUrl.slice('http://'.length)}`;
 

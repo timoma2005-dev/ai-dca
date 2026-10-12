@@ -1,0 +1,8 @@
+{
+  "name": "@ai-dca/cn-data-service",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=22.5" },
+  "scripts": { "start": "node src/server.js", "test": "node --test", "sync": "node src/syncDaemon.js" }
+}

@@ -1,6 +1,6 @@
 import { readLocalNetworkTraces, summarizeNetworkTraces } from './networkTrace.js';
 import { trackEvent as trackPostHogEvent, trackPageView as trackPostHogPageView } from './posthog.js';
-import { apiUrlDirect } from './apiBase.js';
+import { apiUrl, apiUrlDirect, fetchWithFallback } from './apiBase.js';
 
 const STORE_KEY = 'aiDcaAnalyticsEvents_v1';
 const PENDING_STORE_KEY = 'aiDcaAnalyticsPendingEvents_v1';
@@ -104,7 +104,7 @@ function getAnalyticsBase() {
   if (typeof window !== 'undefined' && window.__AI_DCA_SYNC_BASE__) {
     return String(window.__AI_DCA_SYNC_BASE__).replace(/\/$/, '');
   }
-  return apiUrlDirect('/api/sync');
+  return apiUrl('/api/sync');
 }
 
 function getAnalyticsEndpoint() {
@@ -1033,12 +1033,13 @@ export function buildAnalyticsSummary({ rangeDays = 30 } = {}) {
 
 export async function fetchRemoteAnalyticsSummary({ rangeDays = 30, sections = [], session = readAnalyticsSession() } = {}) {
   if (!session?.accessToken) throw new Error('请先登录管理员账号');
-  const url = new URL(`${getAnalyticsBase()}/admin/analytics`);
-  url.searchParams.set('rangeDays', String(rangeDays));
-  if (Array.isArray(sections) && sections.length) {
-    url.searchParams.set('sections', sections.join(','));
-  }
-  const response = await fetch(url.toString(), {
+  const query = { rangeDays: String(rangeDays) };
+  if (Array.isArray(sections) && sections.length) query.sections = sections.join(',');
+  const search = new URLSearchParams(query).toString();
+  const response = await fetchWithFallback({
+    primary: `${getAnalyticsBase()}/admin/analytics?${search}`,
+    fallback: apiUrlDirect('/api/sync/admin/analytics', query)
+  }, {
     method: 'GET',
     headers: { authorization: `Bearer ${session.accessToken}` }
   });

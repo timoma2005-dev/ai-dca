@@ -1,5 +1,5 @@
 import { loadCloudSession } from './authClient.js';
-import { apiUrlDirect } from './apiBase.js';
+import { apiUrl } from './apiBase.js';
 import { normalizeSwitchConfigShape } from './switchStrategySync.js';
 
 const TEST_ENDPOINT = '/api/notify/switch/test';
@@ -34,7 +34,7 @@ export async function testSwitchConfig(config) {
       throw error;
     }
     const normalizedConfig = normalizeSwitchConfigShape(config);
-    const response = await fetch(apiUrlDirect(TEST_ENDPOINT), {
+    const response = await fetch(apiUrl(TEST_ENDPOINT), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

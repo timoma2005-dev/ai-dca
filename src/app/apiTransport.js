@@ -21,13 +21,13 @@ function delay(ms, signal) {
 }
 
 /** Retry one idempotent GET only when fetch itself fails before an HTTP response exists. */
-export async function fetchWithGetRetry(input, init = {}, { retryDelayMs = DEFAULT_GET_RETRY_DELAY_MS } = {}) {
+export async function fetchWithGetRetry(input, init = {}, { retryDelayMs = DEFAULT_GET_RETRY_DELAY_MS, fetchImpl = globalThis.fetch } = {}) {
   const method = String(init?.method || 'GET').toUpperCase();
   try {
-    return await fetch(input, init);
+    return await fetchImpl(input, init);
   } catch (error) {
     if (method !== 'GET' || init?.signal?.aborted || !isTransientNetworkError(error)) throw error;
     await delay(retryDelayMs, init?.signal);
-    return fetch(input, init);
+    return fetchImpl(input, init);
   }
 }

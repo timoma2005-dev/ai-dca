@@ -7,7 +7,7 @@
 import { loadNotifyEvents } from './notifySync.js';
 import { showLocalWebNotification, readWebNotifyConfig, persistWebNotifyConfig, getWebNotifyState } from './webNotifyClient.js';
 import { isInTradingSession } from './tradingSession.js';
-import { apiUrlDirect, wsApiUrl } from './apiBase.js';
+import { apiUrl, wsApiUrl } from './apiBase.js';
 import { loadCloudSession } from './authClient.js';
 
 const WS_CONNECT_URL = '/api/notify/ws/register';
@@ -428,7 +428,7 @@ export function startNotifyRealtime({
     try {
       const accessToken = String(loadCloudSession()?.accessToken || '').trim();
       if (!accessToken) throw new Error('请先登录账户后配置通知。');
-      const res = await fetch(apiUrlDirect(WS_CONNECT_URL), {
+      const res = await fetch(apiUrl(WS_CONNECT_URL), {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -480,7 +480,7 @@ export function startNotifyRealtime({
     if (deviceInstallationId && clientId && clientSecret) {
       const accessToken = String(loadCloudSession()?.accessToken || '').trim();
       if (accessToken) {
-        fetch(apiUrlDirect(WS_UNREGISTER_URL), {
+        fetch(apiUrl(WS_UNREGISTER_URL), {
           method: 'POST',
           headers: {
             'content-type': 'application/json',

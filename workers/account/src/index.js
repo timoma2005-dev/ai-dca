@@ -1,3 +1,4 @@
+import { handleInternalAccountSync } from './internalSync.js';
 // ai-dca 账号数据服务 v2：普通资源逐资源同步；持仓交易使用真正的 D1 行表。
 // 旧的 /api/sync/latest 整包密文接口保留只读，仅用于存量迁移与回滚。
 
@@ -592,6 +593,8 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(request) });
+
+    if (request.method === 'POST' && url.pathname === '/api/account/internal/sync') return handleInternalAccountSync(request, env, request.headers.get('origin') || '*');
 
     const route = parseRequestPath(url.pathname);
     if (route.kind === 'unknown' || route.kind === 'root') return json(request, { error: 'NOT_FOUND', message: '接口不存在' }, 404);

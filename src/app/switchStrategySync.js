@@ -3,7 +3,7 @@
 // 本地 localStorage 仅作为离线预填缓存。
 
 import { loadCloudSession } from './authClient.js';
-import { apiUrlDirect } from './apiBase.js';
+import { apiUrlWithFallback, fetchWithFallback } from './apiBase.js';
 
 const NOTIFY_ENDPOINT = '/api/notify';
 const LOCAL_CACHE_KEY = 'aiDcaSwitchStrategyWorkerConfig';
@@ -377,7 +377,7 @@ function sanitizeFundCode(value) {
 }
 
 function buildSwitchUrl(path, query = {}) {
-  return apiUrlDirect(`${NOTIFY_ENDPOINT}${path}`, query);
+  return apiUrlWithFallback(`${NOTIFY_ENDPOINT}${path}`, query);
 }
 
 async function readJsonResponse(response) {
@@ -408,7 +408,7 @@ async function requestSwitch(path, { method = 'GET', body = null } = {}) {
   if (body !== null && body !== undefined) {
     init.body = JSON.stringify(body);
   }
-  const response = await fetch(buildSwitchUrl(path), init);
+  const response = await fetchWithFallback(buildSwitchUrl(path), init);
   const payload = await readJsonResponse(response);
   if (!response.ok || payload?.ok === false) {
     const error = new Error(payload?.error || `切换策略请求失败：状态 ${response.status}`);

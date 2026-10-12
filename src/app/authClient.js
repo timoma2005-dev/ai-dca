@@ -8,7 +8,7 @@ import {
   saveCloudSession
 } from './authSession.js';
 import { fetchAccountManifest, fetchLegacyMigrationStatus, isLegacyMigrationSettled } from './accountApi.js';
-import { apiUrlDirect } from './apiBase.js';
+import { apiUrl, apiUrlDirect, fetchWithFallback } from './apiBase.js';
 
 export {
   CLOUD_SYNC_SESSION_EVENT,
@@ -33,7 +33,7 @@ function getSyncBase() {
   if (typeof window !== 'undefined' && window.__AI_DCA_SYNC_BASE__) {
     return String(window.__AI_DCA_SYNC_BASE__).replace(/\/$/, '');
   }
-  return apiUrlDirect('/api/sync');
+  return apiUrl('/api/sync');
 }
 
 function rightRotate(value, bits) {
@@ -150,7 +150,10 @@ async function requestSync(path, { token = '', timeoutMs = AUTH_REQUEST_TIMEOUT_
   }
   let response;
   try {
-    response = await fetch(`${getSyncBase()}${path}`, {
+    response = await fetchWithFallback({
+      primary: `${getSyncBase()}${path}`,
+      fallback: path.startsWith('/auth/') ? undefined : apiUrlDirect(`/api/sync${path}`)
+    }, {
       ...init,
       headers,
       signal: controller ? controller.signal : externalSignal

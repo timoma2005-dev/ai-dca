@@ -39,7 +39,8 @@ test('转发层底层统一走 apiTransport 的 fetchWithGetRetry', () => {
   assert.match(accountApi, /import \{ fetchWithGetRetry \} from '\.\/apiTransport\.js'/);
   assert.match(accountApi, /await fetchWithGetRetry\(/);
   // 传输层自己才是那个真正调用 fetch 的地方。
-  assert.match(readSource('src/app/apiTransport.js'), /\bfetch\s*\(/);
+  assert.match(readSource('src/app/apiTransport.js'), /\bfetchImpl\s*\(/);
+  assert.match(accountApi, /fetchWithFallback\(\{/);
 });
 
 test('转发层为每个账号请求登记统一加载态', () => {

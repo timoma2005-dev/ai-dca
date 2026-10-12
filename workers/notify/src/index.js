@@ -1,3 +1,4 @@
+import { handleInternalSyncRules } from './internalSyncRules.js';
 import { evaluatePositionDigest, evaluateSellPlanSignals, evaluateVixSignal, runNotificationCycle } from './evaluator.js';
 import { readSettings, writeSettings } from './notifyStorage.js';
 import { compileNotifyRules, normalizeNotifyPayload } from './rules.js';
@@ -276,6 +277,7 @@ export default {
     }
 
     try {
+      if (request.method === 'POST' && url.pathname === '/api/notify/internal/sync-rules') return handleInternalSyncRules(request, env, origin);
       if (requiresNotifyAccountAuth(request)) {
         request = await authenticateNotifyAccountRequest(request, env);
       }
