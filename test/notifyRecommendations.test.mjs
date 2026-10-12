@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { buildPresetAlerts } from '../src/pages/notify/notifyPresets.js';
 
 import {
   buildNotifyRecommendations,
@@ -66,6 +67,36 @@ test(`溢价低于触发线（${PREMIUM_REC_TRIGGER}%）不推荐`, () => {
     quotesBySymbol: { 510300: { premiumPercent: 3.2 } },
   });
   assert.ok(!recs.some((rec) => rec.presetId === 'premium'));
+});
+
+test('溢价高于默认阈值时向上取整，并可用于生成同阈值的 market-alert', () => {
+  const rec = build({
+    quotesBySymbol: { 159632: { premiumPercent: 11.6 } },
+    presets: {},
+  }).find((item) => item.id === 'premium:159632');
+  assert.equal(rec.threshold, 12);
+  const alerts = buildPresetAlerts(rec.presetId, rec.threshold, POSITIONS);
+  assert.ok(alerts.length > 0);
+  assert.ok(alerts.every((alert) => alert.type === 'market-alert' && alert.threshold === rec.threshold));
+  assert.ok(rec.data.premium < rec.threshold);
+});
+
+test('溢价低于默认阈值时使用默认 8%', () => {
+  const rec = build({
+    quotesBySymbol: { 159632: { premiumPercent: 7.7 } },
+    presets: {},
+  }).find((item) => item.id === 'premium:159632');
+  assert.equal(rec.threshold, 8);
+});
+
+test('溢价推荐取已存自定义阈值与当前溢价向上取整的最大值', () => {
+  for (const [premium, expected] of [[11.6, 15], [15.2, 16]]) {
+    const rec = build({
+      quotesBySymbol: { 159632: { premiumPercent: premium } },
+      presets: { ...ALL_OFF, premium: { enabled: false, threshold: 15 } },
+    }).find((item) => item.id === 'premium:159632');
+    assert.equal(rec.threshold, expected);
+  }
 });
 
 test('行情缺失时降级：只生成不依赖行情的推荐', () => {

@@ -75,7 +75,7 @@ export function useNotifyPresets({
     return { presetAlerts, threshold };
   }
 
-  async function handleTogglePreset(presetId, nextEnabled) {
+  async function handleTogglePreset(presetId, nextEnabled, thresholdOverride) {
     const presetName = PRESET_NAMES[presetId] || presetId;
     trackFeatureEvent('notify', 'preset_toggle_start', { ...notifyMeta(), presetId, nextEnabled });
     setIsApplyingPreset(true);
@@ -88,7 +88,7 @@ export function useNotifyPresets({
         return;
       }
       if (isPresetAlertId(presetId)) {
-        const { presetAlerts, threshold } = await applyAlertPreset(presetId, nextEnabled);
+        const { presetAlerts, threshold } = await applyAlertPreset(presetId, nextEnabled, thresholdOverride);
         updatePresetState(presetId, { enabled: nextEnabled, threshold });
         showActionToast(nextEnabled ? `已开启「${presetName}」` : `已关闭「${presetName}」`, 'success');
         if (nextEnabled && !presetAlerts.length) {
