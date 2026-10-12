@@ -2,16 +2,17 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { openDb, closeDb } from './db.js';
 import { outboxStats } from './outbox.js';
+import { handleAccountV1Route } from './account/routes.js';
 import { badRequest, handleDataRoute } from './routes/data.js';
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, If-Match',
 };
-function sendJson(res, status, body) {
-  res.writeHead(status, { ...cors, 'Content-Type': 'application/json; charset=utf-8' });
+function sendJson(res, status, body, headers) {
+  res.writeHead(status, { ...cors, 'Content-Type': 'application/json; charset=utf-8', ...headers });
   res.end(JSON.stringify(body));
 }
 function readJsonBody(req, maxBytes) {
@@ -51,9 +52,10 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
       if (req.method === 'GET' && url.pathname === '/health') {
         sendJson(res, 200, { ok: true, outbox: outboxStats(db) }); return;
       }
-      const body = ['POST', 'PUT', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};
-      const result = handleDataRoute(db, req.method, url, body);
-      sendJson(res, result?.status ?? (result ? 200 : 404), result?.body ?? { message: 'Not found' });
+      const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};
+      const result = handleAccountV1Route(db, req.method, url, body, req.headers)
+        ?? handleDataRoute(db, req.method, url, body);
+      sendJson(res, result?.status ?? (result ? 200 : 404), result?.body ?? { message: 'Not found' }, result?.headers);
     } catch (error) {
       if (!error.status) console.error('[cn-data] request failed:', error);
       sendJson(res, error.status || 500, { message: error.status ? error.message : 'Internal server error' });

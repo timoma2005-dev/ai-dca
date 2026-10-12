@@ -25,10 +25,11 @@ test('migrations create tables, are idempotent on reopen, and configure WAL and 
   const path = join(dir, 'db'); let db = openDb(path);
   assert.equal(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.equal(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
-  for (const table of ['notify_rules','notify_configs','account_resources','account_holdings_transactions','sync_backups','sync_outbox','schema_migrations'])
+  for (const table of ['notify_rules','notify_configs','account_resources','account_holdings_transactions','sync_backups','sync_outbox','schema_migrations',
+    'account_holdings_transaction_meta','account_holdings_transaction_history','account_resource_records','account_resource_history','account_migrations','account_data_notices'])
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
   enqueueEvent(db, 'notify', 'x', {}); db.close(); db = openDb(path);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, 2);
   assert.equal(outboxStats(db).pending, 1); db.close();
 });
 test('transaction rolls back event writes', (t) => {
