@@ -171,7 +171,11 @@ export function NotifyRecommendationSection({
       recId: rec.id,
       presetId: rec.presetId,
     });
-    onTogglePreset?.(rec.presetId, true);
+    if (rec.threshold == null) {
+      onTogglePreset?.(rec.presetId, true);
+    } else {
+      onTogglePreset?.(rec.presetId, true, rec.threshold);
+    }
   };
 
   const handleDismiss = (rec) => {

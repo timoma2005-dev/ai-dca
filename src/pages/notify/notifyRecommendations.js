@@ -4,7 +4,7 @@
 //
 // 设计约束：
 // - 推荐只映射到现有预设（daily/gain/loss/premium/dca），不新增提醒类型；
-//   开启一条推荐 = 调用现有 handleTogglePreset(presetId, true)，worker 零改动。
+//   开启一条推荐 = 调用现有 handleTogglePreset 并传入建议阈值，worker 零改动。
 // - 已开启对应预设时不再推荐；用户点 x 关闭后不再出现（localStorage 记录）。
 // - 行情拉取失败时降级：只生成不依赖行情的推荐。
 
@@ -111,7 +111,7 @@ export function buildNotifyRecommendations({
         presetId: 'premium',
         title: `${candidate.symbol} ${candidate.name}`,
         data: { premium: round1(candidate.premium) },
-        threshold: thresholdOf('premium'),
+        threshold: Math.max(thresholdOf('premium'), Math.ceil(candidate.premium)),
         unit: '%',
       });
     }
