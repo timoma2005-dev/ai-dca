@@ -16,7 +16,7 @@
 // data-notice choice, discard/purge): the sync worker has no handler for
 // them, and discard explicitly deletes everything by user request.
 
-import { resolveUserId, HttpError as AuthHttpError } from '../authSession.js';
+import { resolveUser, HttpError } from '../authSession.js';
 import { withTransaction } from '../db.js';
 import { enqueueEvent } from '../outbox.js';
 import {
@@ -69,15 +69,6 @@ import {
 const DISCARD_PATH = '/api/account/v1/migrations/legacy/discard';
 const DATA_NOTICE_PATH = '/api/account/v1/user/data-notice';
 
-class HttpError extends Error {
-  constructor(status, code, message) {
-    super(message || code);
-    this.status = status;
-    this.code = code;
-    this.message = message || code;
-  }
-}
-
 const baseHeaders = {
   'cache-control': 'no-store',
   'access-control-expose-headers': 'etag, x-resource-revision'
@@ -88,7 +79,7 @@ function ok(body, headers = {}) {
 }
 
 function fail(error) {
-  if (error instanceof HttpError || error instanceof AuthHttpError) return { status: error.status, body: { error: error.code, message: error.message }, headers: baseHeaders };
+  if (error instanceof HttpError) return { status: error.status, body: { error: error.code, message: error.message }, headers: baseHeaders };
   console.error('[cn-data account] 未处理异常', error);
   return { status: 500, body: { error: 'INTERNAL_ERROR', message: '服务异常，请稍后重试' }, headers: baseHeaders };
 }
@@ -672,7 +663,7 @@ function handleResourceItemRequest(db, userId, method, headers, body, route) {
 
 function handleDataNotice(db, method, url, body, headers) {
   if (method !== 'GET' && method !== 'PUT') throw new HttpError(405, 'METHOD_NOT_ALLOWED', '仅支持 GET 或 PUT');
-  const userId = resolveUserId(url, body, headers).id;
+  const userId = resolveUser(headers, url, body);
   if (method === 'GET') return ok(readAccountDataNotice(db, userId));
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'INVALID_JSON', '请求体不是合法 JSON');
   try {
@@ -689,7 +680,7 @@ function handleDataNotice(db, method, url, body, headers) {
 }
 
 function handleDiscard(db, url, body, headers) {
-  const userId = resolveUserId(url, body, headers).id;
+  const userId = resolveUser(headers, url, body);
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'INVALID_JSON', '请求体不是合法 JSON');
   if (body.confirmation !== ACCOUNT_PURGE_CONFIRMATION) {
     throw new HttpError(400, 'CONFIRMATION_REQUIRED', '请确认永久删除全部同步数据');
@@ -749,7 +740,7 @@ export function handleAccountV1Route(db, method, url, body = {}, headers = {}) {
     }
     // migrations/legacy 是账号资源的唯一门禁。迁移查询/导入/跳过之外，
     // manifest、bundle、资源与交易行接口都必须在服务端再次确认已 settled。
-    const userId = resolveUserId(url, body, headers).id;
+    const userId = resolveUser(headers, url, body);
     if (route.kind !== 'migration' && route.kind !== 'migration-skip') {
       assertLegacyMigrationSettled(db, userId);
     }
