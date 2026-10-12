@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb, closeDb } from './db.js';
 import { outboxStats } from './outbox.js';
 import { handleAccountV1Route } from './account/routes.js';
+import { handleNotifyRoute } from './notify/routes.js';
 import { badRequest, handleDataRoute } from './routes/data.js';
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -53,7 +54,8 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
         sendJson(res, 200, { ok: true, outbox: outboxStats(db) }); return;
       }
       const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};
-      const result = handleAccountV1Route(db, req.method, url, body, req.headers)
+      const result = handleNotifyRoute(db, req.method, url, body, req.headers)
+        ?? handleAccountV1Route(db, req.method, url, body, req.headers)
         ?? handleDataRoute(db, req.method, url, body);
       sendJson(res, result?.status ?? (result ? 200 : 404), result?.body ?? { message: 'Not found' }, result?.headers);
     } catch (error) {
