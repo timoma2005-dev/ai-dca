@@ -80,7 +80,14 @@ export function createHoldingsRemoteSource({ setLedger, setAccountSettings, setT
     const session = loadCloudSession();
     if (!session?.accessToken) {
       // 未登录时直接使用本地数据
-      setLedger({ ...readLedgerState(), remoteLoading: false });
+      const localLedger = readLedgerState();
+      setLedger((previous) => {
+        if (areHoldingTransactionsEqual(previous?.transactions, localLedger?.transactions)) {
+          if (previous?.remoteLoading === false) return previous;
+          return { ...previous, remoteLoading: false };
+        }
+        return normalizeLedgerState({ ...localLedger, remoteLoading: false });
+      });
       setAccountSettings(readAccountAllocationSettings());
       setTradeLedgerEntries(readTradeLedger());
       return 'local';

@@ -518,6 +518,35 @@ describe('持仓远端数据源（可控延迟行为测试）', () => {
     assert.deepEqual(afterStale.transactions.map((tx) => tx.id), [], '已确认删除的行绝不复活');
     assert.deepEqual(readCurrentHoldingTransactions().map((tx) => tx.id), []);
   });
+
+  it('未登录重复刷新：内容无变化时保持 ledger 引用稳定（防 React #185）', async () => {
+    // 不登录，保持 logged-out 状态
+    const r1 = makeTx('r1');
+    // 预置本地 ledger
+    const { persistLedgerState } = await import('../src/app/holdingsLedger.js');
+    persistLedgerState({ transactions: [r1], snapshotsByCode: {} });
+    // 跟踪 ledger 对象引用
+    let ledgerRef = null;
+    const refs = [];
+    const holder = {
+      setLedger: (update) => {
+        ledgerRef = typeof update === 'function' ? update(ledgerRef) : update;
+        refs.push(ledgerRef);
+      },
+      setAccountSettings: () => {},
+      setTradeLedgerEntries: () => {}
+    };
+    const source = createHoldingsRemoteSource({
+      setLedger: holder.setLedger,
+      setAccountSettings: holder.setAccountSettings,
+      setTradeLedgerEntries: holder.setTradeLedgerEntries
+    });
+    assert.equal(await source.refresh(), 'local');
+    const firstRef = ledgerRef;
+    assert.ok(firstRef, '首次刷新应设置 ledger');
+    assert.equal(await source.refresh(), 'local');
+    assert.strictEqual(ledgerRef, firstRef, '内容无变化时第二次刷新必须保持同一引用，否则触发 persist->event->persist 循环');
+  });
 });
 
 it('远端 hydrate 完成前持仓页禁止持久化 ledger（页面级门禁保留）', () => {
