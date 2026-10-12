@@ -52,9 +52,9 @@ function presetDescription(id, presets, counts) {
     case 'daily':
       return (<>交易日 <b className="font-semibold text-indigo-600">15:30 / 20:30 / 21:30</b> 推送持仓总览</>);
     case 'gain':
-      return (<>任一持仓单日涨幅超过 <b className="font-semibold text-indigo-600">{p.threshold}%</b></>);
+      return (<>任一持仓盈利超过 <b className="font-semibold text-indigo-600">{p.threshold}%</b> 时提醒</>);
     case 'loss':
-      return (<>任一持仓单日跌幅超过 <b className="font-semibold text-indigo-600">{p.threshold}%</b></>);
+      return (<>任一持仓亏损超过 <b className="font-semibold text-indigo-600">{p.threshold}%</b> 时提醒</>);
     case 'premium':
       return (<>QDII / ETF 溢价率超过 <b className="font-semibold text-indigo-600">{p.threshold}%</b></>);
     case 'dca':

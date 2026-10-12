@@ -61,9 +61,9 @@ function RecDescription({ rec, disabled, onThreshold }) {
     case 'premium':
       return (<>当前溢价 <b className="font-semibold text-indigo-600">{rec.data.premium}%</b>，超过 {stepper} 时提醒你</>);
     case 'gain':
-      return (<>你持有 <b className="font-semibold text-indigo-600">{rec.data.count}</b> 只基金，单日涨幅超过 {stepper} 时提醒</>);
+      return (<>你持有 <b className="font-semibold text-indigo-600">{rec.data.count}</b> 只基金，持仓盈利超过 {stepper} 时提醒</>);
     case 'loss':
-      return (<>单日跌幅超过 {stepper} 时提醒</>);
+      return (<>持仓亏损超过 {stepper} 时提醒</>);
     case 'daily':
       return (<>交易日 <b className="font-semibold text-indigo-600">15:30 / 20:30 / 21:30</b> 推送持仓总览</>);
     case 'dca':
