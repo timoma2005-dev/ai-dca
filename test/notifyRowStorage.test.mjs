@@ -302,3 +302,109 @@ test('explicit channel clears are not resurrected by stale-channel preservation'
     false
   );
 });
+
+test('merged holding alert events round-trip with snapshots and channel metadata', async () => {
+  const nowIso = new Date().toISOString();
+  const legacyEvent = {
+    id: `holding-alert:006479:${nowIso}`,
+    eventType: 'holding-alert',
+    ruleId: 'holding-alert:preset:gain:006479',
+    title: '006479 持仓预警',
+    body: '触发值: 5.64%',
+    body_md: '',
+    summary: '006479 持仓预警',
+    symbol: '006479',
+    status: 'delivered',
+    channels: [{ channel: 'pc', status: 'queued', detail: '已写入事件，等待 PC 浏览器拉取' }],
+    createdAt: nowIso,
+    reason: 'scheduled'
+  };
+  const mergedEvent = {
+    id: `holding-alert:merged:gain:1760000000000:0a1b2c3d4e5f`,
+    eventType: 'holding-alert',
+    ruleId: 'holding-alert:merged:gain',
+    title: '持仓涨幅预警（2只）',
+    body: '006479 +5.64%, 008971 +4.21% → 点此查看持仓。',
+    body_md: '**持仓涨幅预警（2只）**',
+    summary: '持仓涨幅预警（2只）',
+    symbol: '',
+    merged: true,
+    alertType: 'gain',
+    holdingCount: 2,
+    alertCount: 2,
+    ruleIds: ['holding-alert:preset:gain:006479', 'holding-alert:preset:gain:008971'],
+    symbols: ['006479', '008971'],
+    alerts: [
+      {
+        ruleId: 'holding-alert:preset:gain:006479',
+        symbol: '006479',
+        name: '广发纳斯达克100ETF联接人民币(QDII)C',
+        fundKind: 'qdii',
+        alertType: 'gain',
+        threshold: 2,
+        actualValue: 5.64,
+        currentPrice: 1.0564,
+        holdingCost: 1,
+        cooldownHours: 24
+      },
+      {
+        ruleId: 'holding-alert:preset:gain:008971',
+        symbol: '008971',
+        name: '示例持仓',
+        fundKind: 'qdii',
+        alertType: 'gain',
+        threshold: 3,
+        actualValue: 4.21,
+        currentPrice: 1.0421,
+        holdingCost: 1,
+        cooldownHours: 24
+      }
+    ],
+    strategyName: '',
+    triggerCondition: '',
+    purchaseAmount: '',
+    detailUrl: 'https://freebacktrack.tech/index.html?tab=holdings&source=notification&trigger=holding-alert&alertType=gain',
+    url: 'https://freebacktrack.tech/index.html?tab=holdings&source=notification&trigger=holding-alert&alertType=gain',
+    links: {
+      web: 'https://freebacktrack.tech/index.html?tab=holdings&source=notification&trigger=holding-alert&alertType=gain',
+      app: '',
+      miniProgram: ''
+    },
+    target: 'holdings',
+    params: { trigger: 'holding-alert', alertType: 'gain' },
+    status: 'delivered',
+    channels: [{
+      channel: 'queue',
+      status: 'delivered',
+      detail: '通知任务已进入发送队列',
+      configKey: 'queue:web:row-test',
+      configType: 'queue',
+      configId: 'notify-deliver:holding-alert:merged:gain:1760000000000:0a1b2c3d4e5f',
+      configLabel: '通知发送队列'
+    }],
+    createdAt: nowIso,
+    reason: 'scheduled'
+  };
+
+  const env = createEnv({ clients: {}, gcmRegistrations: [] });
+  const base = {
+    clients: {
+      'web:row-test': makeClient({
+        state: {
+          ruleStates: {},
+          deliveryFailures: {},
+          recentEvents: [mergedEvent, legacyEvent],
+          deliveryAcks: {},
+          lastRunAt: ''
+        }
+      })
+    },
+    gcmRegistrations: []
+  };
+  await writeSettings(env, base);
+  const loaded = await readSettings(env);
+  const events = loaded.clients['web:row-test'].state.recentEvents;
+
+  assert.deepEqual(events.find((event) => event.id === mergedEvent.id), mergedEvent);
+  assert.deepEqual(events.find((event) => event.id === legacyEvent.id), legacyEvent);
+});

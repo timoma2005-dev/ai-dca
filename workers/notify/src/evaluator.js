@@ -521,32 +521,39 @@ export async function runNotificationCycle(env, payload = {}, storedState = {}, 
       clientId: env.__notifyCurrentClientId,
       settings: env.__notifySettings,
       readState: async () => nextState.ruleStates[holdingAlertStateKey] || {},
-      writeState: async (data) => { nextState.ruleStates[holdingAlertStateKey] = data; }
+      writeState: async (data) => { nextState.ruleStates[holdingAlertStateKey] = data; },
+      now
     });
 
+    // 持仓预警按 alertType 合并投递：delivered 每项对应一次组投递（非单条规则），
+    // 事件直接复用通知的 ID 与内容，状态取投递引擎的真实聚合结果。
     for (const item of holdingAlertResult.delivered || []) {
-      const action = buildNotificationDetailAction(env, 'holdings', '', {
-        code: item.symbol,
-        trigger: 'holding-alert',
-        ruleId: item.ruleId
-      });
+      const notification = item.notification || {};
       const event = {
-        id: `holding-alert:${item.symbol}:${now.toISOString()}`,
-        eventType: 'holding-alert',
-        ruleId: item.ruleId,
-        title: `${item.symbol} 持仓预警`,
-        body: `触发值: ${item.actualValue.toFixed(2)}%`,
-        body_md: '',
-        summary: `${item.symbol} 持仓预警`,
-        symbol: item.symbol,
+        id: notification.eventId,
+        eventType: notification.eventType || 'holding-alert',
+        ruleId: notification.ruleId,
+        title: notification.title,
+        body: notification.body,
+        body_md: notification.body_md || '',
+        summary: notification.summary,
+        symbol: notification.symbol,
+        merged: Boolean(notification.merged),
+        alertType: notification.alertType || item.alertType || '',
+        holdingCount: notification.holdingCount,
+        alertCount: notification.alertCount,
+        ruleIds: notification.ruleIds || [],
+        symbols: notification.symbols || [],
+        alerts: notification.alerts || [],
         strategyName: '',
         triggerCondition: '',
         purchaseAmount: '',
-        detailUrl: action.detailUrl,
-        links: action.links,
-        target: action.target,
-        params: action.params,
-        status: 'delivered',
+        detailUrl: notification.detailUrl,
+        url: notification.url,
+        links: notification.links || null,
+        target: notification.target || '',
+        params: notification.params || null,
+        status: item.status,
         channels: item.results,
         createdAt: now.toISOString(),
         reason

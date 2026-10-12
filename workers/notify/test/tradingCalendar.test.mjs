@@ -68,9 +68,16 @@ test('正常交易日：场内规则不被节假日门禁拦截（行为不变�
 
 test('休市日：持仓预警直接跳过（不跑过期净值）', async () => {
   const { env, calls } = mockEnv();
+  let stateWrites = 0;
   const res = await evaluateHoldingAlertRules(env, [
     { ruleId: 'h1', symbol: '159655', alertType: 'gain', threshold: 5, holdingCost: 1 },
-  ], { now: HOLIDAY_NOON });
+  ], {
+    now: HOLIDAY_NOON,
+    writeState: async () => { stateWrites += 1; },
+  });
   assert.equal(res.skipped, 'market-holiday');
+  assert.deepEqual(res.delivered, []);
+  assert.deepEqual(res.skippedRules, ['h1']);
   assert.equal(calls(), 0, '休市日不应发起行情请求');
+  assert.equal(stateWrites, 0, '休市日不应写入冷却状态');
 });

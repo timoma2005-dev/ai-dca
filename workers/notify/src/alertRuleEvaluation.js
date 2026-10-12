@@ -4,6 +4,7 @@ import {
   loadLatestMarketMap
 } from './notificationRuleEvaluation.js';
 import { deliverNotification } from './deliveryEngine.js';
+import { HOLDING_ALERT_GROUP_ORDER, buildMergedHoldingAlertNotification } from './holdingAlertNotification.js';
 import { isChinaMarketHoliday } from './holdingsNavSupport.js';
 
 const EXCHANGE_PREFIXES = new Set(['15', '50', '51', '52', '54', '56', '58']);
@@ -243,6 +244,7 @@ export async function evaluateHoldingAlertRules(env, rules, options = {}) {
   const nowMs = now instanceof Date ? now.getTime() : Date.now();
   const delivered = [];
   const skipped = [];
+  const eligibleByType = { gain: [], loss: [] };
 
   for (const rule of rules) {
     const symbol = String(rule.symbol || '').trim();
@@ -265,17 +267,14 @@ export async function evaluateHoldingAlertRules(env, rules, options = {}) {
     const gainPct = ((currentPrice - holdingCost) / holdingCost) * 100;
 
     let triggered = false;
-    let actualValue = gainPct;
-    let valueLabel = '';
+    const actualValue = gainPct;
 
     switch (rule.alertType) {
       case 'gain':
         triggered = gainPct >= rule.threshold;
-        valueLabel = `持仓盈利 ${gainPct.toFixed(2)}%`;
         break;
       case 'loss':
         triggered = gainPct <= -rule.threshold;
-        valueLabel = `持仓亏损 ${Math.abs(gainPct).toFixed(2)}%`;
         break;
     }
 
@@ -293,49 +292,50 @@ export async function evaluateHoldingAlertRules(env, rules, options = {}) {
       continue;
     }
 
-    const typeLabel = rule.alertType === 'gain' ? '持仓涨幅预警' : '持仓跌幅预警';
-    const title = `${symbol} ${rule.name || ''} ${typeLabel}`;
-    const body = `${symbol} ${valueLabel}，已超过设定阈值 ${rule.threshold.toFixed(1)}%。当前价 ¥${currentPrice.toFixed(3)}，成本 ¥${holdingCost.toFixed(3)} → 点此查看持仓明细。`;
-    const body_md = [
-      `**${symbol} ${typeLabel}**`,
-      '',
-      `- 持仓：${rule.name || symbol}`,
-      `- 当前价：**¥${currentPrice.toFixed(3)}**`,
-      `- 持仓成本：¥${holdingCost.toFixed(3)}`,
-      `- ${valueLabel}（阈值 ${rule.threshold.toFixed(1)}%）`
-    ].join('\n');
+    // 命中且过了冷却的规则先按 alertType 入桶；循环结束后每桶合并成一条推送，
+    // 避免一次评估周期内 28 只持仓触发 28 条独立推送。
+    if (rule.alertType === 'gain' || rule.alertType === 'loss') {
+      eligibleByType[rule.alertType].push({
+        ruleId: rule.ruleId,
+        symbol,
+        name: String(rule.name || '').trim(),
+        fundKind: String(rule.fundKind || '').trim(),
+        alertType: rule.alertType,
+        threshold: rule.threshold,
+        actualValue,
+        currentPrice,
+        holdingCost,
+        cooldownHours: rule.cooldownHours || 24
+      });
+    }
+  }
 
-    const action = buildNotificationDetailAction(env, 'holdings', '', {
-      code: symbol,
-      trigger: 'holding-alert',
-      ruleId: rule.ruleId
-    });
+  // 顺序固定 gain → loss；每桶一次投递，单组异常不影响另一组。
+  for (const alertType of HOLDING_ALERT_GROUP_ORDER) {
+    const alerts = eligibleByType[alertType];
+    if (!alerts.length) continue;
 
     env.__notifySettings = settings;
     env.__notifyCurrentClientId = clientId;
 
-    const notification = {
-      eventId: buildNotificationEventId(rule.ruleId, `triggered:${actualValue.toFixed(2)}`, new Date(nowMs)),
-      eventType: 'holding-alert',
-      ruleId: rule.ruleId,
-      title,
-      body,
-      body_md,
-      summary: title,
-      symbol,
-      detailUrl: action.detailUrl,
-      url: action.url,
-      links: action.links,
-      target: action.target,
-      params: action.params
-    };
-
     try {
+      const notification = await buildMergedHoldingAlertNotification(env, { alertType, alerts, clientId, nowMs });
       const result = await deliverNotification(env, notification);
-      delivered.push({ ruleId: rule.ruleId, symbol, actualValue, results: result?.results || [] });
-      next[rule.ruleId] = { lastPushedAt: nowMs, lastPushedValue: actualValue };
+      delivered.push({
+        notification,
+        alertType,
+        alerts: notification.alerts,
+        status: result?.status,
+        results: result?.results || []
+      });
+      // 组内一次投递后，每个成员各自推进原 ruleId 的冷却状态（沿用「不抛错即推进」的现有策略）。
+      for (const alert of notification.alerts) {
+        next[alert.ruleId] = { lastPushedAt: nowMs, lastPushedValue: alert.actualValue };
+      }
     } catch (error) {
-      skipped.push({ ruleId: rule.ruleId, reason: 'delivery-error', detail: error.message });
+      for (const alert of alerts) {
+        skipped.push({ ruleId: alert.ruleId, reason: 'delivery-error', detail: error instanceof Error ? error.message : String(error) });
+      }
     }
   }
 
