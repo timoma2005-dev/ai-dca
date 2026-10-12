@@ -25,13 +25,39 @@ function write(db, target, type, fn) {
   });
 }
 
+function switchClientId(user, query, body) {
+  const raw = body.client_id ?? query.get('client_id') ?? '';
+  if (typeof raw === 'string' && raw.trim()) {
+    if (raw.length > 200) throw badRequest('Invalid client_id');
+    return raw.trim();
+  }
+  return `account:${user}`;
+}
+
+function getSwitchConfig(db, user, clientId) {
+  const key = `switch:config:${clientId}`;
+  const row = db.prepare('SELECT * FROM notify_configs WHERE config_key = ?').get(key)
+    ?? db.prepare("SELECT * FROM notify_configs WHERE user_id = 'system' AND config_key = ?").get(key);
+  if (!row) return { clientId, config: { enabled: false } };
+  try {
+    return { clientId, config: JSON.parse(row.payload) };
+  } catch {
+    return { clientId, config: { enabled: false } };
+  }
+}
+
 export function handleDataRoute(db, method, url, body) {
   const path = url.pathname;
   const query = url.searchParams;
-  const known = ['/api/notify/rules', '/api/notify/configs', '/api/account/transactions', '/api/account/resources', '/api/sync/backup'];
+  const known = ['/api/notify/rules', '/api/notify/configs', '/api/account/transactions', '/api/account/resources', '/api/sync/backup',
+    '/api/notify/switch/config', '/api/notify/switch/snapshot', '/api/notify/switch/run'];
   const deletingRule = path.startsWith('/api/notify/rules/');
   if (!known.includes(path) && !deletingRule) return null;
-  const allowed = deletingRule ? ['DELETE'] : path === '/api/sync/backup' ? ['GET', 'PUT'] : ['GET', 'POST'];
+  const allowed = deletingRule ? ['DELETE']
+    : path === '/api/sync/backup' ? ['GET', 'PUT']
+    : path === '/api/notify/switch/snapshot' ? ['GET']
+    : path === '/api/notify/switch/run' ? ['POST']
+    : ['GET', 'POST'];
   if (!allowed.includes(method)) return { status: 405, body: { message: 'Method not allowed' } };
   // TODO: derive user_id from the auth-service session verified by nginx,
   // instead of trusting query/body identity, before exposing these APIs publicly.
@@ -88,6 +114,40 @@ export function handleDataRoute(db, method, url, body) {
         ON CONFLICT(user_id, config_key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`).run(user, key, payload, now);
       return db.prepare('SELECT * FROM notify_configs WHERE user_id = ? AND config_key = ?').get(user, key);
     }) } };
+  }
+  if (path === '/api/notify/switch/config') {
+    const clientId = switchClientId(user, query, body);
+    if (method === 'GET') {
+      const { config } = getSwitchConfig(db, user, clientId);
+      return { body: { ok: true, clientId, config } };
+    }
+    if (body.config === undefined || body.config === null || typeof body.config !== 'object' || Array.isArray(body.config)) {
+      throw badRequest('config is required and must be an object');
+    }
+    const payload = JSON.stringify(body.config);
+    const key = `switch:config:${clientId}`;
+    const row = write(db, 'notify', 'upsert-config', () => {
+      db.prepare(`INSERT INTO notify_configs(user_id, config_key, payload, updated_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, config_key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`)
+        .run(user, key, payload, now);
+      return db.prepare('SELECT * FROM notify_configs WHERE user_id = ? AND config_key = ?').get(user, key);
+    });
+    return { body: { ok: true, clientId, config: row.payload } };
+  }
+  if (path === '/api/notify/switch/snapshot') {
+    const clientId = switchClientId(user, query, body);
+    const key = `switch:snapshot:${clientId}`;
+    const row = db.prepare('SELECT * FROM notify_configs WHERE config_key = ?').get(key)
+      ?? db.prepare("SELECT * FROM notify_configs WHERE user_id = 'system' AND config_key = ?").get(key);
+    let snapshot = null;
+    if (row) {
+      try { snapshot = JSON.parse(row.payload); } catch { snapshot = null; }
+    }
+    const { config } = getSwitchConfig(db, user, clientId);
+    return { body: { ok: true, snapshot, config } };
+  }
+  if (path === '/api/notify/switch/run') {
+    return { status: 501, body: { ok: false, message: 'Not implemented in cn-data; use worker endpoint' } };
   }
   if (path === '/api/account/transactions' || path === '/api/account/resources') {
     const transactions = path === '/api/account/transactions';

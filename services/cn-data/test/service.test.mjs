@@ -165,3 +165,42 @@ test('daemon stop waits for running batch and cancels next poll', async (t) => {
   await ready; const stop = daemon.stop(); release(new Response(null, { status: 204 })); await stop;
   assert.equal(outboxStats(db).processing, 0);
 });
+test('switch config GET returns default when not found, POST upserts and enqueues', async (t) => {
+  const { request, db } = await app(t);
+  // GET non-existent -> default
+  let res = await request('/api/notify/switch/config?user_id=u1');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.clientId, 'account:u1');
+  assert.equal(res.body.config.enabled, false);
+  // POST new config
+  const cfg = { enabled: true, activeRuleId: 'rule-1', rules: [] };
+  res = await request('/api/notify/switch/config', 'POST', { user_id: 'u1', config: cfg });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.deepEqual(res.body.config, cfg);
+  // GET returns stored
+  res = await request('/api/notify/switch/config?user_id=u1');
+  assert.deepEqual(res.body.config, cfg);
+  // outbox has event
+  assert.equal(outboxStats(db).pending, 1);
+  // explicit client_id
+  res = await request('/api/notify/switch/config', 'POST', { user_id: 'u1', client_id: 'custom-c', config: cfg });
+  assert.equal(res.body.clientId, 'custom-c');
+  res = await request('/api/notify/switch/config?user_id=u1&client_id=custom-c');
+  assert.deepEqual(res.body.config, cfg);
+});
+test('switch snapshot GET returns null snapshot with default config when empty', async (t) => {
+  const { request } = await app(t);
+  const res = await request('/api/notify/switch/snapshot?user_id=u2');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.snapshot, null);
+  assert.equal(res.body.config.enabled, false);
+});
+test('switch run returns 501 not implemented', async (t) => {
+  const { request } = await app(t);
+  const res = await request('/api/notify/switch/run', 'POST', { user_id: 'u1' });
+  assert.equal(res.status, 501);
+  assert.equal(res.body.ok, false);
+});
