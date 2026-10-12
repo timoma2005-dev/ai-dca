@@ -41,6 +41,10 @@
 import { HttpError, resolveUserId } from '../authSession.js';
 import { nowIso, withTransaction } from '../db.js';
 import { enqueueEvent } from '../outbox.js';
+import { compileNotifyRules, normalizeNotifyPayload } from './rules.js';
+import { getResourceDescriptor } from '../account/catalog.js';
+import { readResourceRow } from '../account/store.js';
+import { writeResourceRecord } from '../account/recordStore.js';
 
 const HOLDINGS_RULE_CONFIG_KEY = 'holdings-rule';
 const CLIENT_CONFIG_RESOURCE = 'notify/client-config';
@@ -363,10 +367,140 @@ function handleHoldingsRulePost(db, account, body) {
   return ok(holdingsRuleResponse(JSON.parse(row.payload)));
 }
 
+// --- Phase 4 account channel settings and data sync ---
+
+function readUserRecord(db, account, type, id = account.clientId) {
+  return parse(db.prepare(`SELECT payload FROM notify_user_records
+    WHERE owner_user_id = ? AND record_type = ? AND record_id = ?`)
+    .get(account.userId, type, id)?.payload);
+}
+
+function writeUserRecord(db, account, type, id, value, now) {
+  db.prepare(`INSERT INTO notify_user_records
+    (owner_user_id, record_type, record_id, payload, revision, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 1, ?, ?)
+    ON CONFLICT(owner_user_id, record_type, record_id) DO UPDATE SET
+    payload = excluded.payload, revision = notify_user_records.revision + 1, updated_at = excluded.updated_at`)
+    .run(account.userId, type, id, JSON.stringify(value), now, now);
+}
+
+function handleSettings(db, account, body) {
+  const client = readUserRecord(db, account, 'client');
+  // Backfill an existing aggregate resource before selecting the channel storage.
+  readResourceRow(db, account.userId, CLIENT_CONFIG_RESOURCE);
+  const resource = readAccountResourceNotifySettings(db, account.userId);
+  const current = mergeAccountResourceNotifySettings({
+    barkDeviceKey: readUserRecord(db, account, 'client-channel', `${account.clientId}::bark`).barkDeviceKey || '',
+    serverChan3: readUserRecord(db, account, 'client-channel', `${account.clientId}::serverchan3`).serverChan3 || {}
+  }, resource);
+  const barkDeviceKey = String(body.barkDeviceKey ?? current.barkDeviceKey ?? '').trim();
+  const input = body.serverChan3 ?? current.serverChan3 ?? {};
+  const serverChan3 = { uid: String(input?.uid || '').trim(), sendKey: String(input?.sendKey || '').trim() };
+  if (serverChan3.uid && !serverChan3.sendKey && current.serverChan3?.sendKey) {
+    serverChan3.sendKey = current.serverChan3.sendKey;
+  }
+  const now = nowIso();
+  // Update only the caller's own account client channels; multi-device ownership
+  // reconciliation (reconcileStaleChannelOwners/prepareUniqueChannelSettings) stays on CF.
+  withTransaction(db, () => {
+    for (const [channel, value] of [['bark', { barkDeviceKey }], ['serverchan3', { serverChan3 }]]) {
+      if (resource?.hasResource) {
+        const data = channel === 'serverchan3'
+          ? { serverChan3Uid: serverChan3.uid, serverChan3SendKey: serverChan3.sendKey } : value;
+        writeResourceRecord(db, account.userId, getResourceDescriptor(CLIENT_CONFIG_RESOURCE), `channel:${channel}`, data,
+          { kind: 'channel', position: channel === 'bark' ? 1 : 2 });
+      } else {
+        writeUserRecord(db, account, 'client-channel', `${account.clientId}::${channel}`, value, now);
+      }
+    }
+  });
+  return ok({ ok: true, setup: {
+    barkDeviceKey,
+    serverChan3: { uid: serverChan3.uid, sendKeyMasked: maskServerChan3SendKey(serverChan3.sendKey),
+      configured: Boolean(serverChan3.uid && serverChan3.sendKey) },
+    clientId: account.clientId, accountClientId: account.clientId, accountUsername: account.username,
+    clientLabel: text(resource?.meta?.clientLabel || client.clientLabel, 120) || `账号通知 · ${account.username}`
+  } });
+}
+
+function handleSync(db, account, body) {
+  const payload = normalizeNotifyPayload(body);
+  const compiled = compileNotifyRules(payload);
+  const existing = readUserRecord(db, account, 'client');
+  const allowed = new Set(compiled.allRules.map((rule) => rule.ruleId));
+  for (const suffix of ['market-alerts:exchange', 'market-alerts:otc', 'holding-alerts']) {
+    allowed.add(`${account.clientId}:${suffix}`);
+  }
+  const state = {
+    ...existing.state,
+    ruleStates: Object.fromEntries(Object.entries(existing.state?.ruleStates || {}).filter(([id]) => allowed.has(id))),
+    recentEvents: Array.isArray(existing.state?.recentEvents) ? existing.state.recentEvents : []
+  };
+  const meta = { ...existing.meta, ...readUserRecord(db, account, 'client-meta'),
+    counts: compiled.summary, lastSyncedAt: payload.syncedAt };
+  const now = nowIso();
+  withTransaction(db, () => {
+    writeUserRecord(db, account, 'client', account.clientId, {
+      ...existing, clientId: account.clientId, accountClientId: account.clientId,
+      ownerUserId: account.userId, accountUsername: account.username,
+      clientLabel: existing.clientLabel || `账号通知 · ${account.username}`, payload, state, meta
+    }, now);
+    // Status summary reads the split client-meta record, so keep it in sync.
+    writeUserRecord(db, account, 'client-meta', account.clientId, meta, now);
+    const groups = { exchange: [], otc: [] };
+    for (const alert of payload.marketAlerts) {
+      groups[['otc', 'qdii'].includes(alert.fundKind) ? 'otc' : 'exchange'].push(alert);
+    }
+    // The table's (user_id, config_key) key requires venue-scoped account IDs
+    // to retain separate JSON arrays with the same market-alerts config key.
+    for (const venue of ['exchange', 'otc']) {
+      db.prepare(`INSERT INTO notify_configs(user_id, config_key, payload, updated_at)
+        VALUES (?, 'market-alerts', ?, ?) ON CONFLICT(user_id, config_key) DO UPDATE SET
+        payload = excluded.payload, updated_at = excluded.updated_at`)
+        .run(`${account.clientId}:${venue}`, JSON.stringify(groups[venue]), now);
+    }
+    // No sync outbox: unlike holdings-rule, /sync has no CF migration consumer.
+  });
+  // Skip evaluateVixSignal and the other push tails; the full push engine stays on CF.
+  return ok({ ok: true, clientId: account.clientId, accountClientId: account.clientId,
+    counts: compiled.summary, lastSyncedAt: payload.syncedAt });
+}
+
+function phase4PublicRoute(path, method) {
+  const response = (status, body) => ({ status, body, headers: baseHeaders });
+  const restricted = (allowed, status, body) => allowed.includes(method)
+    ? response(status, body) : response(405, { message: 'Method not allowed' });
+  if (path === '/api/wechat/login' || path === '/api/wechat/notification-prefs') {
+    return response(410, { error: '微信接口已下线' });
+  }
+  if (path.startsWith('/api/notify/quant/')) return response(410, { error: '量化研究功能已移除。' });
+  if (path.startsWith('/api/notify/admin/')) return response(404, { error: '未找到通知接口。' });
+  if (path.startsWith('/api/notify/quick/') || path.startsWith('/api/notify/bark/')) {
+    return restricted(['GET', 'POST'], 404, { error: '未找到通知接口。' });
+  }
+  if (path === '/api/notify/gotify-account') return restricted(['POST'], 410, { error: 'Gotify 通知能力已移除。' });
+  if (path.startsWith('/api/notify/gcm/')) return restricted(['POST'], 410, { error: '旧版 Android GCM/FCM 推送已下线。' });
+  if (path === '/api/notify/health') return restricted(['GET'], 200, { ok: true });
+  // Full NAV fetching in workers/notify/src/getNav.js is too complex to port here.
+  if (path === '/api/notify/switch/test-nav') return restricted(['GET'], 501, { error: 'NOT_IMPLEMENTED', message: '诊断接口暂未迁移' });
+  if (path === '/api/notify/test') return restricted(['POST'], 501, { error: 'NOT_IMPLEMENTED', message: '测试推送请走 CF worker' });
+  if (path === '/api/notify/run') return restricted(['POST'], 501, { error: 'NOT_IMPLEMENTED', message: '手动检测请走 CF worker' });
+  return null;
+}
+
 // --- router ---
 
 export function handleNotifyRoute(db, method, url, body, headers) {
   const path = url.pathname;
+  const publicResult = phase4PublicRoute(path, method);
+  if (publicResult) return publicResult;
+  if (path === '/api/notify/settings' || path === '/api/notify/sync') {
+    if (method !== 'POST') return { status: 405, body: { message: 'Method not allowed' }, headers: baseHeaders };
+    try {
+      const account = resolveAccount(url, body, headers);
+      return path === '/api/notify/settings' ? handleSettings(db, account, body) : handleSync(db, account, body);
+    } catch (error) { return fail(error); }
+  }
   if (path !== '/api/notify/status' && path !== '/api/notify/events' && path !== '/api/notify/holdings-rule') return null;
   if (path === '/api/notify/holdings-rule') {
     if (method !== 'GET' && method !== 'POST') return { status: 405, body: { message: 'Method not allowed' }, headers: baseHeaders };

@@ -48,6 +48,9 @@ function getSwitchConfig(db, user, clientId) {
 
 export function handleDataRoute(db, method, url, body) {
   const path = url.pathname;
+  if (path === '/api/geo') return method === 'GET'
+    ? { status: 200, body: { country: 'CN' } }
+    : { status: 405, body: { message: 'Method not allowed' } };
   const query = url.searchParams;
   const known = ['/api/notify/rules', '/api/notify/configs', '/api/account/transactions', '/api/account/resources', '/api/sync/backup',
     '/api/notify/switch/config', '/api/notify/switch/snapshot', '/api/notify/switch/run'];
