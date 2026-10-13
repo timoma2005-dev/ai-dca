@@ -5,6 +5,7 @@ import {
   backtestSpread,
   DEFAULT_AUTO_LOWER_PCT,
   DEFAULT_AUTO_UPPER_PCT,
+  MIN_ACCEPTABLE_RETURN_PCT,
   clearCounterpartyHistoryCache,
   defaultCounterpartyPool,
   selectBestCounterparty
@@ -44,14 +45,14 @@ const alternating = (amplitude, mean = 0) => (i) => mean + (i % 2 ? amplitude : 
 
 test('ranks candidates by realized return after fees', async () => {
   mockHistories({ '159513': points(0), '159509': points(alternating(2, 2)), '159941': points(alternating(3, 2)) });
-  const ranked = await analyzeCounterparties('159513', ['159509', '159941'], { lowerPct: 1, upperPct: 3 });
+  const ranked = await analyzeCounterparties('159513', ['159509', '159941']);
   assert.deepEqual(ranked.map(({ code }) => code), ['159941', '159509']);
   assert.equal(ranked[0].crossingCount, 79);
   assert.equal(ranked[0].volatility, 3);
   assert.equal(ranked[0].trades, 80);
   assert.equal(ranked[0].roundTrips, 40);
-  assert.equal(ranked[0].returnPct, 232);
-  assert.equal(ranked[1].returnPct, 152);
+  assert.equal(ranked[0].bestReturnPct, 232);
+  assert.equal(ranked[1].bestReturnPct, 152);
   assert.ok(ranked[0].name);
   assert.equal(calls[0].url, '/api/market-collector/premium/159513?interval=1d&limit=180');
   assert.deepEqual(calls[0].options.headers, { accept: 'application/json' });
@@ -60,7 +61,7 @@ test('ranks candidates by realized return after fees', async () => {
 
 test('excludes flat high spreads that cannot complete a round trip', async () => {
   mockHistories({ '159501': points(0), '159509': points(18) });
-  assert.deepEqual(await analyzeCounterparties('159501', ['159509'], { lowerPct: 1, upperPct: 3 }), []);
+  assert.deepEqual(await analyzeCounterparties('159501', ['159509']), []);
 });
 
 test('aligns and sorts only intersecting dates, filtering invalid points', async () => {
@@ -167,14 +168,9 @@ test('backtest skips non-finite values and uses strict thresholds', () => {
   });
 });
 
-test('default analysis thresholds equal explicit 1/3 thresholds', async () => {
+test('keeps legacy backtest defaults', () => {
   assert.equal(DEFAULT_AUTO_LOWER_PCT, 1);
   assert.equal(DEFAULT_AUTO_UPPER_PCT, 3);
-  mockHistories({ '159513': points(0), '159509': points(alternating(2, 2)) });
-  assert.deepEqual(
-    await analyzeCounterparties('159513', ['159509']),
-    await analyzeCounterparties('159513', ['159509'], { lowerPct: 1, upperPct: 3 })
-  );
 });
 
 test('normalizes spread when holding is the high side', async () => {
@@ -183,7 +179,7 @@ test('normalizes spread when holding is the high side', async () => {
   assert.equal(result.meanSpread, -2);
   assert.equal(result.roundTrips, 39);
   assert.equal(result.trades, 79);
-  assert.equal(result.returnPct, 156 - 7.9);
+  assert.equal(result.bestReturnPct, 156 - 7.9);
 });
 
 test('accepts a completed round trip with fewer than 20 mean crossings', async () => {
@@ -191,15 +187,39 @@ test('accepts a completed round trip with fewer than 20 mean crossings', async (
   const [result] = await analyzeCounterparties('159513', ['159509']);
   assert.equal(result.crossingCount, 1);
   assert.equal(result.roundTrips, 1);
-  assert.equal(result.returnPct, 3.8);
+  assert.equal(result.bestReturnPct, 3.8);
 });
 
-test('selection forwards custom thresholds and retains backtest stats', async () => {
-  mockHistories({ '159513': points(0), '159509': points((i) => i % 2 ? 1 : 0) });
-  const selection = await selectBestCounterparty('159513', ['159509'], { lowerPct: 0.1, upperPct: 0.9 });
-  assert.equal(selection.code, '159509');
-  assert.equal(selection.stats.trades, 80);
-  assert.equal(selection.stats.roundTrips, 40);
-  assert.equal(selection.stats.returnPct, 32);
-  assert.equal(await selectBestCounterparty('159513', ['159509']), null);
+test('grid search selects the highest return and exposes optimal thresholds', async () => {
+  const cycle = [0.8, 1.8, 4, 4];
+  mockHistories({ '159513': points(0), '159509': points((i) => cycle[i % cycle.length]) });
+  const [result] = await analyzeCounterparties('159513', ['159509']);
+  // Waiting past 1.8 captures 3.2 per cycle; exiting early earns only 1.
+  assert.equal(result.bestLowerPct, 1);
+  assert.equal(result.bestUpperPct, 2);
+  assert.ok(Math.abs(result.bestReturnPct - 60) < 1e-9);
+  const selection = await selectBestCounterparty('159513', ['159509']);
+  assert.equal(selection.bestLowerPct, result.bestLowerPct);
+  assert.equal(selection.bestUpperPct, result.bestUpperPct);
+  assert.ok(Math.abs(selection.stats.bestReturnPct - 60) < 1e-9);
+  assert.equal(selection.stats.roundTrips, 20);
+  assert.equal(selection.stats.trades, 40);
+  assert.equal(calls.length, 2);
+});
+
+test('search finds profitable thresholds below legacy defaults', async () => {
+  mockHistories({ '159513': points(0), '159509': points(alternating(0.5, 0.5)) });
+  const selection = await selectBestCounterparty('159513', ['159509']);
+  assert.equal(selection.bestLowerPct, 0.2);
+  assert.equal(selection.bestUpperPct, 0.7);
+  assert.equal(selection.stats.bestReturnPct, 32);
+});
+
+test('rejects returns at or below the minimum acceptable return', async () => {
+  assert.equal(MIN_ACCEPTABLE_RETURN_PCT, 0.5);
+  for (const peak of [0.8, 0.9]) {
+    clearCounterpartyHistoryCache();
+    mockHistories({ '159513': points(0), '159509': points((i) => i === 0 ? 0.2 : peak) });
+    assert.deepEqual(await analyzeCounterparties('159513', ['159509']), []);
+  }
 });

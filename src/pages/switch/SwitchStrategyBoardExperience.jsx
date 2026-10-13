@@ -136,7 +136,7 @@ function readHoldingForAutoFill(code) {
         usedDefaultNotional: false
       };
     }
-  } catch (_error) {
+  } catch {
     // 持仓读取失败时使用约定的默认金额，自动填充仍可继续。
   }
   return {
@@ -155,7 +155,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
   const [viewMode, setViewMode] = useState('grid');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState('');
-  const [channelMap, setChannelMap] = useState(() => readSwitchRuleChannelMap());
+  const [channelMap] = useState(() => readSwitchRuleChannelMap());
   const [busyRuleId, setBusyRuleId] = useState('');
   const [testingRuleId, setTestingRuleId] = useState('');
 
@@ -291,18 +291,13 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
   }, [config]);
 
   // 复用旧版 Beta 的云端候选分析流程，为新建弹窗生成 H/L 双腿和阈值。
-  const handleAutoFillRule = useCallback(async ({ holdingCode, feeWanRate, lowerPct, upperPct }) => {
+  const handleAutoFillRule = useCallback(async ({ holdingCode, feeWanRate }) => {
     const normalizedHoldingCode = String(holdingCode || '').trim();
     if (!isFundCode(normalizedHoldingCode)) throw new Error('请填写 6 位当前持仓代码。');
     const normalizedFeeWanRate = Number(feeWanRate);
     if (!Number.isFinite(normalizedFeeWanRate) || normalizedFeeWanRate < 0) {
       throw new Error('请填写有效的万分之交易费率。');
     }
-    const parsedLower = Number(lowerPct);
-    const parsedUpper = Number(upperPct);
-    const validThresholds = Number.isFinite(parsedLower) && Number.isFinite(parsedUpper) && parsedUpper > parsedLower;
-    const ruleLowerPct = validThresholds ? parsedLower : AUTO_LOWER_PCT;
-    const ruleUpperPct = validThresholds ? parsedUpper : AUTO_UPPER_PCT;
     const holding = readHoldingForAutoFill(normalizedHoldingCode);
     const commissionRatePct = normalizedFeeWanRate / 100;
     const estimatedTotalFee = Number(
@@ -311,10 +306,18 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
 
     let dynamicSelection = null;
     try {
-      dynamicSelection = await selectBestCounterparty(normalizedHoldingCode, undefined, { lowerPct: ruleLowerPct, upperPct: ruleUpperPct });
+      dynamicSelection = await selectBestCounterparty(normalizedHoldingCode);
     } catch (error) {
       console.warn('dynamic counterparty selection failed, using AUTO_HIGH_CODES fallback:', error);
     }
+
+    const bestLower = Number(dynamicSelection?.bestLowerPct);
+    const bestUpper = Number(dynamicSelection?.bestUpperPct);
+    if (dynamicSelection && (!Number.isFinite(bestLower) || !Number.isFinite(bestUpper) || bestUpper <= bestLower)) {
+      dynamicSelection = null;
+    }
+    const ruleLowerPct = dynamicSelection ? bestLower : AUTO_LOWER_PCT;
+    const ruleUpperPct = dynamicSelection ? bestUpper : AUTO_UPPER_PCT;
 
     const candidates = dynamicSelection ? [dynamicSelection.code] : Array.from(new Set([
       ...SWITCH_STRATEGY_ETFS.map((item) => item.code),
@@ -391,8 +394,8 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
       name: `${normalizedHoldingCode} 切换方案`,
       highCode,
       lowCode,
-      lowerPct: Number(preview?.intraSellLowerPct ?? ruleLowerPct),
-      upperPct: Number(preview?.intraBuyOtherPct ?? ruleUpperPct),
+      lowerPct: dynamicSelection ? ruleLowerPct : Number(preview?.intraSellLowerPct ?? ruleLowerPct),
+      upperPct: dynamicSelection ? ruleUpperPct : Number(preview?.intraBuyOtherPct ?? ruleUpperPct),
       holdingSide: holdingClass,
       holdingFundCode: normalizedHoldingCode,
       holdingFundName: String(holding.name || group?.benchmarkName || normalizedHoldingCode),
@@ -402,7 +405,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
       feeConfig: previewRule.feeConfig,
       backtestTimeframe: previewRule.backtestTimeframe,
       message: `已匹配 ${candidate.code} ${candidate.name || ''}。按${holding.usedDefaultNotional ? '默认' : '当前'}持仓金额 ${holding.notional.toLocaleString('zh-CN')} 元、万${normalizedFeeWanRate}估算单次切换费用 ${estimatedTotalFee.toLocaleString('zh-CN')} 元。` + (dynamicSelection
-        ? `（180 天回测：在 ${ruleLowerPct}%/${ruleUpperPct}% 阈值下走完 ${dynamicSelection.stats.roundTrips} 个来回，价差收益 ${dynamicSelection.stats.returnPct.toFixed(2)}%）`
+        ? `（180天回测最优阈值 L→H ${ruleLowerPct}%/H→L ${ruleUpperPct}%，${dynamicSelection.stats.roundTrips}个来回，价差收益${dynamicSelection.stats.bestReturnPct.toFixed(2)}%）`
         : '')
     };
   }, []);

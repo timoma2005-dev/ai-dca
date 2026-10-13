@@ -3,6 +3,10 @@ import { NASDAQ_ETFS } from './nasdaqCatalog.js';
 
 export const DEFAULT_AUTO_LOWER_PCT = 1;
 export const DEFAULT_AUTO_UPPER_PCT = 3;
+export const MIN_ACCEPTABLE_RETURN_PCT = 0.5;
+
+const GRID_LOWER_PCTS = [0.2, 0.5, 1, 1.5, 2];
+const GRID_UPPER_OFFSETS = [0.5, 1, 1.5, 2, 3];
 
 const HISTORY_TTL_MS = 60 * 60 * 1000;
 const historyCache = new Map();
@@ -67,10 +71,7 @@ export function backtestSpread(spread, { lowerPct = DEFAULT_AUTO_LOWER_PCT, uppe
   return { trades, roundTrips, returnPct: pnl - trades * 0.1 };
 }
 
-export async function analyzeCounterparties(holdingCode, candidateCodes, {
-  lowerPct = DEFAULT_AUTO_LOWER_PCT,
-  upperPct = DEFAULT_AUTO_UPPER_PCT
-} = {}) {
+export async function analyzeCounterparties(holdingCode, candidateCodes) {
   const codes = [...new Set(candidateCodes)].filter((code) => code !== holdingCode);
   const [holding, ...histories] = await Promise.all([holdingCode, ...codes].map(fetchHistory));
   if (!holding || holding.length < 60) return [];
@@ -92,17 +93,33 @@ export async function analyzeCounterparties(holdingCode, candidateCodes, {
     ), 0);
     const holdingIsLow = meanSpread >= 0;
     const hlSpread = holdingIsLow ? spread : spread.map((value) => -value);
-    const { trades, roundTrips, returnPct } = backtestSpread(hlSpread, { lowerPct, upperPct });
-    if (roundTrips < 1) return;
+    let best = null;
+    for (const lowerPct of GRID_LOWER_PCTS) {
+      for (const offset of GRID_UPPER_OFFSETS) {
+        const upperPct = lowerPct + offset;
+        const result = backtestSpread(hlSpread, { lowerPct, upperPct });
+        if (result.roundTrips < 1 || result.returnPct <= MIN_ACCEPTABLE_RETURN_PCT) continue;
+        if (!best || result.returnPct > best.bestReturnPct) {
+          best = {
+            bestLowerPct: lowerPct,
+            bestUpperPct: upperPct,
+            bestReturnPct: result.returnPct,
+            roundTrips: result.roundTrips,
+            trades: result.trades
+          };
+        }
+      }
+    }
+    if (!best) return;
     const code = codes[index];
-    ranked.push({ code, name: names.get(code) || '', meanSpread, volatility, crossingCount, alignedCount, trades, roundTrips, returnPct });
+    ranked.push({ code, name: names.get(code) || '', meanSpread, volatility, crossingCount, alignedCount, ...best });
   });
-  return ranked.sort((a, b) => b.returnPct - a.returnPct);
+  return ranked.sort((a, b) => b.bestReturnPct - a.bestReturnPct);
 }
 
-export async function selectBestCounterparty(holdingCode, candidateCodes = defaultCounterpartyPool(holdingCode), options = {}) {
-  const [best] = await analyzeCounterparties(holdingCode, candidateCodes, options);
+export async function selectBestCounterparty(holdingCode, candidateCodes = defaultCounterpartyPool(holdingCode)) {
+  const [best] = await analyzeCounterparties(holdingCode, candidateCodes);
   if (!best) return null;
-  const { code, name, ...stats } = best;
-  return { code, name, stats };
+  const { code, name, bestLowerPct, bestUpperPct, ...stats } = best;
+  return { code, name, bestLowerPct, bestUpperPct, stats };
 }

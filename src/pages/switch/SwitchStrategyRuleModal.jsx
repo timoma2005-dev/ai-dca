@@ -168,9 +168,7 @@ export function SwitchStrategyRuleModal({
     try {
       const result = await onAutoFill?.({
         holdingCode: normalizedCode,
-        feeWanRate,
-        lowerPct: Number(lowerPct),
-        upperPct: Number(upperPct)
+        feeWanRate
       });
       const resultHighCodes = Array.isArray(result?.highCodes) ? result.highCodes : [result?.highCode];
       const resultLowCodes = Array.isArray(result?.lowCodes) ? result.lowCodes : [result?.lowCode];
