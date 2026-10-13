@@ -6,6 +6,7 @@ import {
   readSwitchConfigCache,
   saveSwitchConfigToWorker
 } from '../../app/switchStrategySync.js';
+import { selectBestCounterparty } from '../../app/switchCounterpartyAnalyzer.js';
 import { testSwitchConfig } from '../../app/switchStrategyTestSync.js';
 import { SWITCH_STRATEGY_ETFS } from '../../app/nasdaqCatalog.js';
 import { readLedgerState } from '../../app/holdingsLedger.js';
@@ -303,14 +304,24 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
       (holding.notional * normalizedFeeWanRate / 10_000 * 2).toFixed(2)
     );
 
-    const candidates = Array.from(new Set([
+    let dynamicSelection = null;
+    try {
+      dynamicSelection = await selectBestCounterparty(normalizedHoldingCode);
+    } catch (error) {
+      console.warn('dynamic counterparty selection failed, using AUTO_HIGH_CODES fallback:', error);
+    }
+
+    const candidates = dynamicSelection ? [dynamicSelection.code] : Array.from(new Set([
       ...SWITCH_STRATEGY_ETFS.map((item) => item.code),
       ...AUTO_HIGH_CODES
     ]))
       .filter((code) => isFundCode(code) && code !== normalizedHoldingCode)
       .slice(0, 20);
     const codes = [normalizedHoldingCode, ...candidates];
-    const premiumClass = Object.fromEntries(
+    const premiumClass = dynamicSelection ? {
+      [normalizedHoldingCode]: dynamicSelection.stats.meanSpread > 0 ? 'L' : 'H',
+      [dynamicSelection.code]: dynamicSelection.stats.meanSpread > 0 ? 'H' : 'L'
+    } : Object.fromEntries(
       codes.map((code) => [code, AUTO_HIGH_CODES.has(code) ? 'H' : 'L'])
     );
     const holdingClass = premiumClass[normalizedHoldingCode];
@@ -385,7 +396,9 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
       candidateFundCodes: [candidate.code],
       feeConfig: previewRule.feeConfig,
       backtestTimeframe: previewRule.backtestTimeframe,
-      message: `已匹配 ${candidate.code} ${candidate.name || ''}。按${holding.usedDefaultNotional ? '默认' : '当前'}持仓金额 ${holding.notional.toLocaleString('zh-CN')} 元、万${normalizedFeeWanRate}估算单次切换费用 ${estimatedTotalFee.toLocaleString('zh-CN')} 元。`
+      message: `已匹配 ${candidate.code} ${candidate.name || ''}。按${holding.usedDefaultNotional ? '默认' : '当前'}持仓金额 ${holding.notional.toLocaleString('zh-CN')} 元、万${normalizedFeeWanRate}估算单次切换费用 ${estimatedTotalFee.toLocaleString('zh-CN')} 元。` + (dynamicSelection
+        ? `（180 天溢价价差穿越均值 ${dynamicSelection.stats.crossingCount} 次，波动 ${dynamicSelection.stats.volatility.toFixed(2)}%）`
+        : '')
     };
   }, []);
 
