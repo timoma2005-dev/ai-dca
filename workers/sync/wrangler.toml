@@ -1,5 +1,5 @@
 name = "ai-dca-sync"
-main = "src/optimizedEntry.js"
+main = "src/index.js"
 compatibility_date = "2026-03-30"
 compatibility_flags = ["nodejs_compat"]
 

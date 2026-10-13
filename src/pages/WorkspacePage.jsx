@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUp, BarChart3, Bell, BookOpen, FlaskConical, House, LineChart, ListChecks, Radar, Shuffle, Trash2, Wallet, Wrench, X } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Bell, BookOpen, FlaskConical, House, LineChart, ListChecks, Radar, Shuffle, Trash2, Wallet, Wrench, X } from 'lucide-react';
 import { DEFAULT_WORKSPACE_TAB, LEGACY_TAB_REDIRECTS, WORKSPACE_TAB_META, createPageLinks, getPrimaryTabs, getAdminTabs, isWorkspaceGroup } from '../app/screens.js';
 import { ConsoleLayout } from '../components/console-layout.jsx';
 import { BrandPreviewBar } from '../components/brand-preview-bar.jsx';
@@ -27,7 +27,6 @@ const MarketsExperience = lazy(() => import('./MarketsExperience.jsx').then((m) 
 const CnHomeExperience = lazy(() => import('./CnHomeExperience.jsx').then((m) => ({ default: m.CnHomeExperience })));
 const ArticlesExperience = lazy(() => import('./ArticlesExperience.jsx').then((m) => ({ default: m.ArticlesExperience })));
 const DataRepairExperience = lazy(() => import('./DataRepairExperience.jsx').then((m) => ({ default: m.DataRepairExperience })));
-const AdminAnalyticsExperience = lazy(() => import('./AdminAnalyticsExperience.jsx').then((m) => ({ default: m.AdminAnalyticsExperience })));
 const AdminQuantExperience = lazy(() => import('./AdminQuantExperience.jsx').then((m) => ({ default: m.AdminQuantExperience })));
 const AdminRadarExperience = lazy(() => import('./AdminRadarExperience.jsx').then((m) => ({ default: m.AdminRadarExperience })));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
@@ -72,7 +71,6 @@ const WORKSPACE_TITLES = {
   holdings: '持仓总览',
   notify: '通知设置',
   dataRepair: '数据诊断与修复',
-  adminData: '数据看板',
   adminQuant: '量化看板',
   adminRadar: '纳指雷达'
 };
@@ -86,7 +84,6 @@ const SIDEBAR_ICONS = {
   holdings: Wallet,
   notify: Bell,
   dataRepair: Wrench,
-  adminData: BarChart3,
   adminQuant: FlaskConical,
   adminRadar: Radar,
   articles: BookOpen
@@ -610,8 +607,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         return <NotifyExperience {...sharedProps} />;
       case 'dataRepair':
         return <DataRepairExperience {...sharedProps} onNavigateToHoldings={() => handleSelectTab('holdings')} />;
-      case 'adminData':
-        return isAdminUser ? <AdminAnalyticsExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
       case 'adminQuant':
         return isAdminUser ? <AdminQuantExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
       case 'adminRadar':

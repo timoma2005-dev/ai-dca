@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { pruneOldAnalyticsEvents, USER_EVENT_WHERE } from '../src/index.js';
+import { pruneOldAnalyticsEvents } from '../src/index.js';
 
 function createCleanupFixture(changes) {
   const calls = [];
@@ -26,11 +26,6 @@ function createCleanupFixture(changes) {
   };
   return { env, calls };
 }
-
-test('user analytics filter includes events without a background reason', () => {
-  assert.match(USER_EVENT_WHERE, /COALESCE/);
-  assert.match(USER_EVENT_WHERE, /<> 'switch-cron'/);
-});
 
 test('analytics cleanup drains multiple full batches in one run', async () => {
   const fixture = createCleanupFixture([5000, 5000, 123]);
