@@ -64,6 +64,24 @@ function seedServerChan3(db) {
     .run(USER, JSON.stringify({ serverChan3Uid: '12345', serverChan3SendKey: 'sctptestkey' }), now, now);
 }
 
+function seedEmail(db, email) {
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO account_resource_records
+    (user_id, resource, record_id, payload, deleted, created_at, updated_at)
+    VALUES (?, 'notify/client-config', 'channel:email', ?, 0, ?, ?)`)
+    .run(USER, JSON.stringify({ email }), now, now);
+}
+
+function withResendToken(t, value) {
+  const previous = process.env.RESEND_TOKEN;
+  if (value === undefined) delete process.env.RESEND_TOKEN;
+  else process.env.RESEND_TOKEN = value;
+  t.after(() => {
+    if (previous === undefined) delete process.env.RESEND_TOKEN;
+    else process.env.RESEND_TOKEN = previous;
+  });
+}
+
 function mockFetch(t, handler) {
   const original = globalThis.fetch;
   globalThis.fetch = (url, init) => {
@@ -136,9 +154,10 @@ test('POST /api/notify/test with unconfigured bark returns skipped', async (t) =
   assert.match(channels[0].detail, /未配置/);
 });
 
-test('POST /api/notify/test email channel returns not-configured skip', async (t) => {
+test('POST /api/notify/test email without verified address returns skipped', async (t) => {
   setupAuth(t);
   const { request } = await app(t);
+  withResendToken(t, 're_test_token');
 
   let fetchCalled = false;
   mockFetch(t, async () => { fetchCalled = true; return new Response('ok', { status: 200 }); });
@@ -147,11 +166,82 @@ test('POST /api/notify/test email channel returns not-configured skip', async (t
     title: 't', body: 'b', targetChannel: 'email'
   });
   assert.equal(res.status, 200);
-  assert.equal(fetchCalled, false);
+  assert.equal(fetchCalled, false, 'no HTTP call without address');
   const channels = res.body.summary.events[0].channels;
   assert.equal(channels[0].channel, 'email');
   assert.equal(channels[0].status, 'skipped');
-  assert.match(channels[0].detail, /cn 主机未配置邮件/);
+  assert.match(channels[0].detail, /未配置收件邮箱/);
+});
+
+test('POST /api/notify/test email without RESEND_TOKEN returns skipped', async (t) => {
+  setupAuth(t);
+  const { db, request } = await app(t);
+  seedEmail(db, { address: 'user@example.com', verified: true, enabled: true });
+  withResendToken(t, undefined);
+
+  let fetchCalled = false;
+  mockFetch(t, async () => { fetchCalled = true; return new Response('ok', { status: 200 }); });
+
+  const res = await request('/api/notify/test', 'POST', {
+    title: 't', body: 'b', targetChannel: 'email'
+  });
+  assert.equal(res.status, 200);
+  assert.equal(fetchCalled, false, 'no HTTP call without token');
+  const channels = res.body.summary.events[0].channels;
+  assert.equal(channels[0].channel, 'email');
+  assert.equal(channels[0].status, 'skipped');
+  assert.match(channels[0].detail, /RESEND_TOKEN/);
+});
+
+test('POST /api/notify/test email delivers via resend', async (t) => {
+  setupAuth(t);
+  const { db, request } = await app(t);
+  seedEmail(db, { address: 'user@example.com', verified: true, enabled: true });
+  withResendToken(t, 're_test_token');
+
+  let fetchCalled = null;
+  mockFetch(t, async (url, init) => {
+    fetchCalled = { url: String(url), body: JSON.parse(String(init?.body || '{}')), auth: init?.headers?.Authorization };
+    return new Response(JSON.stringify({ id: 'mock-msg-id' }), { status: 200 });
+  });
+
+  const res = await request('/api/notify/test', 'POST', {
+    title: '测试标题', body: '测试正文', targetChannel: 'email'
+  });
+  assert.equal(res.status, 200);
+  assert.ok(fetchCalled, 'resend API should have been called');
+  assert.equal(fetchCalled.url, 'https://api.resend.com/emails');
+  assert.equal(fetchCalled.auth, 'Bearer re_test_token');
+  assert.equal(fetchCalled.body.from, 'notify@freebacktrack.tech');
+  assert.deepEqual(fetchCalled.body.to, ['user@example.com']);
+  assert.equal(fetchCalled.body.subject, '测试标题');
+  assert.equal(fetchCalled.body.text, '测试正文');
+
+  const summary = res.body.summary;
+  assert.equal(summary.deliveredCount, 1);
+  const channels = summary.events[0].channels;
+  assert.equal(channels[0].channel, 'email');
+  assert.equal(channels[0].status, 'delivered');
+  assert.match(channels[0].detail, /mock-msg-id/);
+});
+
+test('POST /api/notify/test email resend API error returns failed', async (t) => {
+  setupAuth(t);
+  const { db, request } = await app(t);
+  seedEmail(db, { address: 'user@example.com', verified: true, enabled: true });
+  withResendToken(t, 're_test_token');
+
+  mockFetch(t, async () => new Response('invalid api key', { status: 401 }));
+
+  const res = await request('/api/notify/test', 'POST', {
+    title: 't', body: 'b', targetChannel: 'email'
+  });
+  assert.equal(res.status, 200);
+  const channels = res.body.summary.events[0].channels;
+  assert.equal(channels[0].channel, 'email');
+  assert.equal(channels[0].status, 'failed');
+  assert.match(channels[0].detail, /401/);
+  assert.equal(res.body.summary.deliveredCount, 0);
 });
 
 test('POST /api/notify/test serverchan3 failure returns failed status', async (t) => {

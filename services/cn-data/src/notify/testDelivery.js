@@ -1,11 +1,13 @@
 // Test notification delivery for cn-data
 // Ported from workers/notify/src/accountDeliveryRoute.js (handleDirectAccountTest,
 // deliverAccountNotification, loadAccountDeliverySettings) to synchronous node:sqlite.
-// Email channel is not available on cn-data (no Resend/Brevo API keys); it returns
-// a clear "not configured" skip result.
+// Email channel goes through Resend (workers/notify/src/channels/emailProviders.js:
+// sendViaResend), token read from process.env.RESEND_TOKEN (supervisor env on cn host).
 
 import { sendBarkNotification } from './barkChannel.js';
 import { sendServerChan3Notification } from './serverChan3Channel.js';
+
+const RESEND_FROM = 'notify@freebacktrack.tech'; // mirrors worker's DEFAULT_FROM
 
 function text(value = '', max = 5000) { return String(value ?? '').trim().slice(0, max); }
 function parse(value, fallback = {}) {
@@ -78,6 +80,62 @@ export function loadTestDeliverySettings(db, account) {
   return settings;
 }
 
+// Ported from workers/notify/src/channels/emailProviders.js: sendViaResend.
+// payload: { fromEmail, to, subject, text, html }
+async function sendViaResend(payload) {
+  const token = String(process.env.RESEND_TOKEN || '').trim();
+  if (!token) throw new Error('cn 主机未配置 RESEND_TOKEN');
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: payload.fromEmail,
+      to: [payload.to],
+      subject: payload.subject,
+      ...(payload.html ? { html: payload.html } : {}),
+      ...(payload.text ? { text: payload.text } : {})
+    })
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '');
+    throw new Error(`resend error ${resp.status}: ${body.slice(0, 200)}`);
+  }
+  const data = await resp.json().catch(() => ({}));
+  return { messageId: data?.id ? String(data.id) : '', provider: 'resend' };
+}
+
+function normalizeEmailConfig(value = {}) {
+  const input = value && typeof value === 'object' ? value : {};
+  const address = String(input.address || '').trim();
+  const verified = Boolean(address && input.verified);
+  return {
+    address,
+    verified,
+    enabled: Boolean(verified && input.enabled)
+  };
+}
+
+async function deliverTestEmail(notification, settings) {
+  const config = normalizeEmailConfig(settings.email);
+  if (!config.address || !config.verified) {
+    return { channel: 'email', status: 'skipped', detail: '未配置收件邮箱' };
+  }
+  const token = String(process.env.RESEND_TOKEN || '').trim();
+  if (!token) {
+    return { channel: 'email', status: 'skipped', detail: 'cn 主机未配置 RESEND_TOKEN' };
+  }
+  const { messageId } = await sendViaResend({
+    fromEmail: RESEND_FROM,
+    to: config.address,
+    subject: notification.title,
+    text: notification.body
+  });
+  return { channel: 'email', status: 'delivered', detail: `via resend ${messageId}` };
+}
+
 async function deliverTestChannel(notification, channel, settings) {
   try {
     if (channel === 'bark') {
@@ -96,7 +154,7 @@ async function deliverTestChannel(notification, channel, settings) {
       });
     }
     if (channel === 'email') {
-      return { channel: 'email', status: 'skipped', detail: 'cn 主机未配置邮件发送服务，测试请走 CF worker' };
+      return await deliverTestEmail(notification, settings);
     }
     if (channel === 'pc') {
       return { channel: 'pc', status: 'queued', detail: '已写入事件，等待 PC 浏览器拉取' };
