@@ -34,16 +34,32 @@ function switchClientId(user, query, body) {
   return `account:${user}`;
 }
 
+function switchKeyOwner(clientId) {
+  // Mirrors workers/notify/src/notifyRowStorage.js keyOwnerAndId()
+  if (clientId.startsWith('account:')) return clientId.slice('account:'.length);
+  return `legacy:${clientId}`;
+}
+
 function getSwitchConfig(db, user, clientId) {
   const key = `switch:config:${clientId}`;
-  const row = db.prepare('SELECT * FROM notify_configs WHERE config_key = ?').get(key)
-    ?? db.prepare("SELECT * FROM notify_configs WHERE user_id = 'system' AND config_key = ?").get(key);
+  const owner = switchKeyOwner(clientId);
+  const row = db.prepare(`SELECT payload FROM notify_user_records
+    WHERE owner_user_id = ? AND record_type = 'user-kv' AND record_id = ?`).get(owner, key);
   if (!row) return { clientId, config: { enabled: false } };
   try {
     return { clientId, config: JSON.parse(row.payload) };
   } catch {
     return { clientId, config: { enabled: false } };
   }
+}
+
+function getSwitchSnapshot(db, clientId) {
+  const key = `switch:snapshot:${clientId}`;
+  const owner = switchKeyOwner(clientId);
+  const row = db.prepare(`SELECT payload FROM notify_user_records
+    WHERE owner_user_id = ? AND record_type = 'user-kv' AND record_id = ?`).get(owner, key);
+  if (!row) return null;
+  try { return JSON.parse(row.payload); } catch { return null; }
 }
 
 export function handleDataRoute(db, method, url, body) {
@@ -129,23 +145,20 @@ export function handleDataRoute(db, method, url, body) {
     }
     const payload = JSON.stringify(body.config);
     const key = `switch:config:${clientId}`;
+    const owner = switchKeyOwner(clientId);
     const row = write(db, 'notify', 'upsert-config', () => {
-      db.prepare(`INSERT INTO notify_configs(user_id, config_key, payload, updated_at) VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id, config_key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`)
-        .run(user, key, payload, now);
-      return db.prepare('SELECT * FROM notify_configs WHERE user_id = ? AND config_key = ?').get(user, key);
+      db.prepare(`INSERT INTO notify_user_records(owner_user_id, record_type, record_id, payload, revision, created_at, updated_at)
+        VALUES (?, 'user-kv', ?, ?, 1, ?, ?)
+        ON CONFLICT(owner_user_id, record_type, record_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`)
+        .run(owner, key, payload, now, now);
+      return db.prepare(`SELECT payload FROM notify_user_records
+        WHERE owner_user_id = ? AND record_type = 'user-kv' AND record_id = ?`).get(owner, key);
     });
     return { body: { ok: true, clientId, config: row.payload } };
   }
   if (path === '/api/notify/switch/snapshot') {
     const clientId = switchClientId(user, query, body);
-    const key = `switch:snapshot:${clientId}`;
-    const row = db.prepare('SELECT * FROM notify_configs WHERE config_key = ?').get(key)
-      ?? db.prepare("SELECT * FROM notify_configs WHERE user_id = 'system' AND config_key = ?").get(key);
-    let snapshot = null;
-    if (row) {
-      try { snapshot = JSON.parse(row.payload); } catch { snapshot = null; }
-    }
+    const snapshot = getSwitchSnapshot(db, clientId);
     const { config } = getSwitchConfig(db, user, clientId);
     return { body: { ok: true, snapshot, config } };
   }
