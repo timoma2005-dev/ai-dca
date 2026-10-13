@@ -291,13 +291,18 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
   }, [config]);
 
   // 复用旧版 Beta 的云端候选分析流程，为新建弹窗生成 H/L 双腿和阈值。
-  const handleAutoFillRule = useCallback(async ({ holdingCode, feeWanRate }) => {
+  const handleAutoFillRule = useCallback(async ({ holdingCode, feeWanRate, lowerPct, upperPct }) => {
     const normalizedHoldingCode = String(holdingCode || '').trim();
     if (!isFundCode(normalizedHoldingCode)) throw new Error('请填写 6 位当前持仓代码。');
     const normalizedFeeWanRate = Number(feeWanRate);
     if (!Number.isFinite(normalizedFeeWanRate) || normalizedFeeWanRate < 0) {
       throw new Error('请填写有效的万分之交易费率。');
     }
+    const parsedLower = Number(lowerPct);
+    const parsedUpper = Number(upperPct);
+    const validThresholds = Number.isFinite(parsedLower) && Number.isFinite(parsedUpper) && parsedUpper > parsedLower;
+    const ruleLowerPct = validThresholds ? parsedLower : AUTO_LOWER_PCT;
+    const ruleUpperPct = validThresholds ? parsedUpper : AUTO_UPPER_PCT;
     const holding = readHoldingForAutoFill(normalizedHoldingCode);
     const commissionRatePct = normalizedFeeWanRate / 100;
     const estimatedTotalFee = Number(
@@ -306,7 +311,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
 
     let dynamicSelection = null;
     try {
-      dynamicSelection = await selectBestCounterparty(normalizedHoldingCode);
+      dynamicSelection = await selectBestCounterparty(normalizedHoldingCode, undefined, { lowerPct: ruleLowerPct, upperPct: ruleUpperPct });
     } catch (error) {
       console.warn('dynamic counterparty selection failed, using AUTO_HIGH_CODES fallback:', error);
     }
@@ -332,8 +337,8 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
       benchmarkCodes: [normalizedHoldingCode],
       enabledCodes: codes,
       premiumClass,
-      intraSellLowerPct: AUTO_LOWER_PCT,
-      intraBuyOtherPct: AUTO_UPPER_PCT,
+      intraSellLowerPct: ruleLowerPct,
+      intraBuyOtherPct: ruleUpperPct,
       holdingFundCode: normalizedHoldingCode,
       holdingFundName: holding.name,
       holdingQuantity: holding.quantity,
@@ -386,8 +391,8 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
       name: `${normalizedHoldingCode} 切换方案`,
       highCode,
       lowCode,
-      lowerPct: Number(preview?.intraSellLowerPct ?? AUTO_LOWER_PCT),
-      upperPct: Number(preview?.intraBuyOtherPct ?? AUTO_UPPER_PCT),
+      lowerPct: Number(preview?.intraSellLowerPct ?? ruleLowerPct),
+      upperPct: Number(preview?.intraBuyOtherPct ?? ruleUpperPct),
       holdingSide: holdingClass,
       holdingFundCode: normalizedHoldingCode,
       holdingFundName: String(holding.name || group?.benchmarkName || normalizedHoldingCode),
@@ -397,7 +402,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
       feeConfig: previewRule.feeConfig,
       backtestTimeframe: previewRule.backtestTimeframe,
       message: `已匹配 ${candidate.code} ${candidate.name || ''}。按${holding.usedDefaultNotional ? '默认' : '当前'}持仓金额 ${holding.notional.toLocaleString('zh-CN')} 元、万${normalizedFeeWanRate}估算单次切换费用 ${estimatedTotalFee.toLocaleString('zh-CN')} 元。` + (dynamicSelection
-        ? `（180 天溢价价差穿越均值 ${dynamicSelection.stats.crossingCount} 次，波动 ${dynamicSelection.stats.volatility.toFixed(2)}%）`
+        ? `（180 天回测：在 ${ruleLowerPct}%/${ruleUpperPct}% 阈值下走完 ${dynamicSelection.stats.roundTrips} 个来回，价差收益 ${dynamicSelection.stats.returnPct.toFixed(2)}%）`
         : '')
     };
   }, []);
