@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { nowIso, withTransaction } from '../db.js';
 import { enqueueEvent } from '../outbox.js';
 import { resolveUserId } from '../authSession.js';
+import { runSwitchConfigDryRun } from '../notify/switchDryRun.js';
 
 export function badRequest(message) { return Object.assign(new Error(message), { status: 400 }); }
 export function required(value, name) {
@@ -63,20 +64,21 @@ function getSwitchSnapshot(db, clientId) {
   try { return JSON.parse(row.payload); } catch { return null; }
 }
 
-export function handleDataRoute(db, method, url, body, headers = {}) {
+export async function handleDataRoute(db, method, url, body, headers = {}) {
   const path = url.pathname;
   if (path === '/api/geo') return method === 'GET'
     ? { status: 200, body: { country: 'CN' } }
     : { status: 405, body: { message: 'Method not allowed' } };
   const query = url.searchParams;
   const known = ['/api/notify/rules', '/api/notify/configs', '/api/account/transactions', '/api/account/resources', '/api/sync/backup',
-    '/api/notify/switch/config', '/api/notify/switch/snapshot', '/api/notify/switch/run'];
+    '/api/notify/switch/config', '/api/notify/switch/snapshot', '/api/notify/switch/run', '/api/notify/switch/test'];
   const deletingRule = path.startsWith('/api/notify/rules/');
   if (!known.includes(path) && !deletingRule) return null;
   const allowed = deletingRule ? ['DELETE']
     : path === '/api/sync/backup' ? ['GET', 'PUT']
     : path === '/api/notify/switch/snapshot' ? ['GET']
     : path === '/api/notify/switch/run' ? ['POST']
+    : path === '/api/notify/switch/test' ? ['POST']
     : ['GET', 'POST'];
   if (!allowed.includes(method)) return { status: 405, body: { message: 'Method not allowed' } };
   // Switch endpoints use Bearer auth (like account v1); others use legacy query/body user_id
@@ -166,6 +168,16 @@ export function handleDataRoute(db, method, url, body, headers = {}) {
     const snapshot = getSwitchSnapshot(db, clientId);
     const { config } = getSwitchConfig(db, user, clientId);
     return { body: { ok: true, snapshot, config } };
+  }
+  if (path === '/api/notify/switch/test') {
+    const config = (body && typeof body === 'object' && (body.config || body)) || {};
+    try {
+      const result = await runSwitchConfigDryRun(config);
+      return { body: { ok: true, ...result } };
+    } catch (error) {
+      const status = Number(error?.status) >= 400 && Number(error?.status) < 600 ? Number(error.status) : 500;
+      return { status, body: { ok: false, error: error?.message || 'switch test failed', code: error?.code || 'SWITCH_TEST_FAILED' } };
+    }
   }
   if (path === '/api/notify/switch/run') {
     return { status: 501, body: { ok: false, message: 'Not implemented in cn-data; use worker endpoint' } };

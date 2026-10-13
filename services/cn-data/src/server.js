@@ -58,7 +58,7 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
       const result = handleNotifyRoute(db, req.method, url, body, req.headers)
         ?? handleAccountV1Route(db, req.method, url, body, req.headers)
         ?? handleSyncRoute(db, req.method, url, body, req.headers)
-        ?? handleDataRoute(db, req.method, url, body, req.headers);
+        ?? await handleDataRoute(db, req.method, url, body, req.headers);
       sendJson(res, result?.status ?? (result ? 200 : 404), result?.body ?? { message: 'Not found' }, result?.headers);
     } catch (error) {
       if (!error.status) console.error('[cn-data] request failed:', error);
