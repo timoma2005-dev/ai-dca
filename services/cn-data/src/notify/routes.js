@@ -45,6 +45,7 @@ import { compileNotifyRules, normalizeNotifyPayload } from './rules.js';
 import { getResourceDescriptor } from '../account/catalog.js';
 import { readResourceRow } from '../account/store.js';
 import { writeResourceRecord } from '../account/recordStore.js';
+import { deliverTestNotification, normalizeTestTarget, notificationFromTestPayload } from './testDelivery.js';
 
 const HOLDINGS_RULE_CONFIG_KEY = 'holdings-rule';
 const CLIENT_CONFIG_RESOURCE = 'notify/client-config';
@@ -483,14 +484,13 @@ function phase4PublicRoute(path, method) {
   if (path === '/api/notify/health') return restricted(['GET'], 200, { ok: true });
   // Full NAV fetching in workers/notify/src/getNav.js is too complex to port here.
   if (path === '/api/notify/switch/test-nav') return restricted(['GET'], 501, { error: 'NOT_IMPLEMENTED', message: '诊断接口暂未迁移' });
-  if (path === '/api/notify/test') return restricted(['POST'], 501, { error: 'NOT_IMPLEMENTED', message: '测试推送请走 CF worker' });
   if (path === '/api/notify/run') return restricted(['POST'], 501, { error: 'NOT_IMPLEMENTED', message: '手动检测请走 CF worker' });
   return null;
 }
 
 // --- router ---
 
-export function handleNotifyRoute(db, method, url, body, headers) {
+export async function handleNotifyRoute(db, method, url, body, headers) {
   const path = url.pathname;
   const publicResult = phase4PublicRoute(path, method);
   if (publicResult) return publicResult;
@@ -499,6 +499,16 @@ export function handleNotifyRoute(db, method, url, body, headers) {
     try {
       const account = resolveAccount(url, body, headers);
       return path === '/api/notify/settings' ? handleSettings(db, account, body) : handleSync(db, account, body);
+    } catch (error) { return fail(error); }
+  }
+  if (path === '/api/notify/test') {
+    if (method !== 'POST') return { status: 405, body: { message: 'Method not allowed' }, headers: baseHeaders };
+    try {
+      const account = resolveAccount(url, body, headers);
+      const notification = notificationFromTestPayload(body || {});
+      const target = normalizeTestTarget(body?.targetChannel || body?.channel || body?.platform);
+      const summary = await deliverTestNotification(db, account, notification, target ? [target] : null);
+      return { status: 200, body: { ok: true, summary }, headers: baseHeaders };
     } catch (error) { return fail(error); }
   }
   if (path !== '/api/notify/status' && path !== '/api/notify/events' && path !== '/api/notify/holdings-rule') return null;

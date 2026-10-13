@@ -55,7 +55,7 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
         sendJson(res, 200, { ok: true, outbox: outboxStats(db) }); return;
       }
       const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};
-      const result = handleNotifyRoute(db, req.method, url, body, req.headers)
+      const result = await handleNotifyRoute(db, req.method, url, body, req.headers)
         ?? handleAccountV1Route(db, req.method, url, body, req.headers)
         ?? handleSyncRoute(db, req.method, url, body, req.headers)
         ?? await handleDataRoute(db, req.method, url, body, req.headers);

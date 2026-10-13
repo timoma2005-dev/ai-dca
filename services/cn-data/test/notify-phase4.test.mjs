@@ -65,7 +65,6 @@ const publicRoutes = [
   ['DELETE', '/api/notify/quant/research', 410, { error: '量化研究功能已移除。' }],
   ['GET', '/api/notify/health', 200, { ok: true }],
   ['GET', '/api/notify/switch/test-nav', 501, { error: 'NOT_IMPLEMENTED', message: '诊断接口暂未迁移' }],
-  ['POST', '/api/notify/test', 501, { error: 'NOT_IMPLEMENTED', message: '测试推送请走 CF worker' }],
   ['POST', '/api/notify/run', 501, { error: 'NOT_IMPLEMENTED', message: '手动检测请走 CF worker' }],
   ['PUT', '/api/wechat/login', 410, { error: '微信接口已下线' }],
   ['GET', '/api/wechat/notification-prefs', 410, { error: '微信接口已下线' }],
