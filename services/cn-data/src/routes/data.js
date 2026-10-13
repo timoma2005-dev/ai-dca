@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { nowIso, withTransaction } from '../db.js';
 import { enqueueEvent } from '../outbox.js';
+import { resolveUserId } from '../authSession.js';
 
 export function badRequest(message) { return Object.assign(new Error(message), { status: 400 }); }
 export function required(value, name) {
@@ -62,7 +63,7 @@ function getSwitchSnapshot(db, clientId) {
   try { return JSON.parse(row.payload); } catch { return null; }
 }
 
-export function handleDataRoute(db, method, url, body) {
+export function handleDataRoute(db, method, url, body, headers = {}) {
   const path = url.pathname;
   if (path === '/api/geo') return method === 'GET'
     ? { status: 200, body: { country: 'CN' } }
@@ -78,11 +79,15 @@ export function handleDataRoute(db, method, url, body) {
     : path === '/api/notify/switch/run' ? ['POST']
     : ['GET', 'POST'];
   if (!allowed.includes(method)) return { status: 405, body: { message: 'Method not allowed' } };
-  // TODO: derive user_id from the auth-service session verified by nginx,
-  // instead of trusting query/body identity, before exposing these APIs publicly.
-  const queryUser = query.get('user_id');
-  if (queryUser && body.user_id && queryUser !== body.user_id) throw badRequest('Conflicting user_id');
-  const user = required(body.user_id ?? queryUser, 'user_id');
+  // Switch endpoints use Bearer auth (like account v1); others use legacy query/body user_id
+  const isSwitch = path.startsWith('/api/notify/switch/');
+  const user = isSwitch
+    ? resolveUserId(url, body, headers).id
+    : (() => {
+        const queryUser = query.get('user_id');
+        if (queryUser && body.user_id && queryUser !== body.user_id) throw badRequest('Conflicting user_id');
+        return required(body.user_id ?? queryUser, 'user_id');
+      })();
   const now = nowIso();
   if (deletingRule) {
     let id;
