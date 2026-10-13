@@ -36,7 +36,9 @@
 // workers/notify/src/internalSyncRules.js consumes ('holdings-rule' is mapped
 // back to `holdings-rule:account:<user>` there).
 //
-// /api/notify/email/* is intentionally NOT handled here (stays on CF).
+// /api/notify/email/* is handled here (migrated from CF worker 2026-10-13).
+// Ports workers/notify/src/accountEmailRoutes.js (handleFastEmailRoute)
+// and workers/notify/src/emailVerification.js.
 
 import { HttpError, resolveUserId } from '../authSession.js';
 import { nowIso, withTransaction } from '../db.js';
@@ -46,6 +48,13 @@ import { getResourceDescriptor } from '../account/catalog.js';
 import { readResourceRow } from '../account/store.js';
 import { writeResourceRecord } from '../account/recordStore.js';
 import { deliverTestNotification, normalizeTestTarget, notificationFromTestPayload } from './testDelivery.js';
+import {
+  handleEmailSave,
+  handleEmailSendCode,
+  handleEmailStatus,
+  handleEmailToggle,
+  handleEmailVerify
+} from './emailRoutes.js';
 
 const HOLDINGS_RULE_CONFIG_KEY = 'holdings-rule';
 const CLIENT_CONFIG_RESOURCE = 'notify/client-config';
@@ -60,7 +69,12 @@ function ok(body, headers = {}) {
 }
 
 function fail(error) {
-  if (error instanceof HttpError) return { status: error.status, body: { error: error.message, code: error.code }, headers: baseHeaders };
+  if (error instanceof HttpError) {
+    const body = { error: error.message, code: error.code };
+    // Pass through worker-compatible extra fields (e.g. canRebind on EMAIL_REBIND_REQUIRED).
+    if (error.canRebind !== undefined) body.canRebind = error.canRebind;
+    return { status: error.status, body, headers: baseHeaders };
+  }
   console.error('[cn-data notify] 未处理异常', error);
   return { status: 500, body: { error: '服务异常，请稍后重试', code: 'INTERNAL_ERROR' }, headers: baseHeaders };
 }
@@ -509,6 +523,38 @@ export async function handleNotifyRoute(db, method, url, body, headers) {
       const target = normalizeTestTarget(body?.targetChannel || body?.channel || body?.platform);
       const summary = await deliverTestNotification(db, account, notification, target ? [target] : null);
       return { status: 200, body: { ok: true, summary }, headers: baseHeaders };
+    } catch (error) { return fail(error); }
+  }
+  // --- email verification + channel management (ported from accountEmailRoutes.js) ---
+  if (path.startsWith('/api/notify/email/')) {
+    try {
+      const account = resolveAccount(url, body, headers);
+      if (path === '/api/notify/email/status') {
+        if (method !== 'GET') return { status: 405, body: { message: 'Method not allowed' }, headers: baseHeaders };
+        return ok(handleEmailStatus(db, account));
+      }
+      if (method !== 'POST') return { status: 405, body: { message: 'Method not allowed' }, headers: baseHeaders };
+      if (path === '/api/notify/email/send-code') {
+        const result = await handleEmailSendCode(db, account, body, headers);
+        return ok(result);
+      }
+      if (path === '/api/notify/email/verify') {
+        const result = await handleEmailVerify(db, account, body);
+        return ok(result);
+      }
+      if (path === '/api/notify/email/save') {
+        const result = await handleEmailSave(db, account, body);
+        return ok(result);
+      }
+      if (path === '/api/notify/email/enable') {
+        const result = await handleEmailToggle(db, account, true);
+        return ok(result);
+      }
+      if (path === '/api/notify/email/disable') {
+        const result = await handleEmailToggle(db, account, false);
+        return ok(result);
+      }
+      return { status: 404, body: { error: '未找到通知接口。' }, headers: baseHeaders };
     } catch (error) { return fail(error); }
   }
   if (path !== '/api/notify/status' && path !== '/api/notify/events' && path !== '/api/notify/holdings-rule') return null;

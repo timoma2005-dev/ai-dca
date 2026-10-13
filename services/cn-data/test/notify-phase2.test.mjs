@@ -112,7 +112,7 @@ test('migration 003 creates notify_user_records with D1-compatible schema', (t) 
   for (const index of ['idx_notify_user_records_type_id', 'idx_notify_user_records_owner_type']) {
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?").get(index), `has index ${index}`);
   }
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, 4);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, 5);
 });
 
 test('notify phase 2 routes: auth failures return 401', async (t) => {
@@ -264,12 +264,12 @@ test('holdings-rule POST toggles off and refreshes updatedAt', async (t) => {
   assert.ok(second.body.updatedAt >= first.body.updatedAt);
 });
 
-test('notify phase 2 routes reject wrong methods and email stays on CF (404)', async (t) => {
+test('notify phase 2 routes reject wrong methods', async (t) => {
   setupAuth(t);
   const { request } = await app(t);
   assert.equal((await request('/api/notify/status', 'POST', {})).status, 405);
   assert.equal((await request('/api/notify/events', 'DELETE')).status, 405);
   assert.equal((await request('/api/notify/holdings-rule', 'PUT', {})).status, 405);
-  // /api/notify/email/* is out of scope for cn-data; it keeps resolving to CF.
-  assert.equal((await request('/api/notify/email/status')).status, 404);
+  // /api/notify/email/* is now implemented in cn-data (migrated from CF 2026-10-13).
+  assert.equal((await request('/api/notify/email/status', 'GET')).status, 200);
 });

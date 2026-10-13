@@ -29,7 +29,7 @@ test('migrations create tables, are idempotent on reopen, and configure WAL and 
     'account_holdings_transaction_meta','account_holdings_transaction_history','account_resource_records','account_resource_history','account_migrations','account_data_notices'])
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
   enqueueEvent(db, 'notify', 'x', {}); db.close(); db = openDb(path);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, 4);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, 5);
   assert.equal(outboxStats(db).pending, 1); db.close();
 });
 test('transaction rolls back event writes', (t) => {
