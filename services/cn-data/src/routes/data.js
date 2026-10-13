@@ -147,10 +147,14 @@ export async function handleDataRoute(db, method, url, body, headers = {}) {
       const { config } = getSwitchConfig(db, user, clientId);
       return { body: { ok: true, clientId, config } };
     }
-    if (body.config === undefined || body.config === null || typeof body.config !== 'object' || Array.isArray(body.config)) {
+    // Worker accepts config fields at top level OR wrapped in body.config
+    const configInput = body.config && typeof body.config === 'object' && !Array.isArray(body.config)
+      ? body.config
+      : body;
+    if (!configInput || typeof configInput !== 'object' || Array.isArray(configInput)) {
       throw badRequest('config is required and must be an object');
     }
-    const payload = JSON.stringify(body.config);
+    const payload = JSON.stringify(configInput);
     const key = `switch:config:${clientId}`;
     const owner = switchKeyOwner(clientId);
     const row = write(db, 'notify', 'upsert-config', () => {
