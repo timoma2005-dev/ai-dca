@@ -1,5 +1,5 @@
-import { mapReferencePrice } from '../../../../src/app/strategyEngine.js';
-import { isKnownQdiiFundCode } from '../../../../src/app/qdiiFundCodes.js';
+import { mapReferencePrice } from './strategyEnginePort.js';
+import { isKnownQdiiFundCode } from './qdiiFundCodesPort.js';
 import { webcrypto as crypto } from 'node:crypto';
 const DEFAULT_TIMEZONE = 'Asia/Shanghai';
 export const HOLDINGS_RULE_KEY_PREFIX = 'holdings-rule:';

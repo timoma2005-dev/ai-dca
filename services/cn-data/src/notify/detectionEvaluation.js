@@ -1,5 +1,8 @@
 import { buildNotificationDetailAction, buildNotificationEventId, HOLDING_ALERT_GROUP_ORDER, buildMergedHoldingAlertNotification, isChinaMarketHoliday } from './detectionSupport.js';
 import { loadLatestMarketMap } from './marketClient.js';
+import { buildMovingAverageValues, buildNasdaqStrategyPlan, buildPeakDrawdownStrategyPlan, findLatestFiniteValue, mapReferencePrice } from './strategyEnginePort.js';
+import { getLatestBarClose, buildStageHighPrice, toDisplayLayers, resolveDeepestTriggeredLayer, getCurrency, roundPrice } from './detectionSupport.js';
+import { loadDailyBars } from './marketClient.js';
 const EXCHANGE_PREFIXES = new Set(['15', '50', '51', '52', '54', '56', '58']);
 
 function getShanghaiParts(now = new Date()) {
@@ -50,7 +53,7 @@ function isPremiumAlert(rule = {}) {
 }
 
 export async function evaluateMarketAlertRules(env, rules, options = {}) {
-  const { clientId = '', readState, writeState, now = new Date() } = options;
+  const { readState, writeState, now = new Date() } = options;
   if (!Array.isArray(rules) || !rules.length) return { skipped: 'no-rules' };
 
   const exchangeTrading = isChinaExchangeTradingSession(now);
@@ -335,9 +338,6 @@ export async function evaluateHoldingAlertRules(env, rules, options = {}) {
   return { delivered, skipped };
 }
 
-import { buildMovingAverageValues, buildNasdaqStrategyPlan, buildPeakDrawdownStrategyPlan, findLatestFiniteValue, mapReferencePrice } from '../../../../src/app/strategyEngine.js';
-import { getLatestBarClose, buildStageHighPrice, toDisplayLayers, resolveDeepestTriggeredLayer, getCurrency, roundPrice } from './detectionSupport.js';
-import { loadDailyBars } from './marketClient.js';
 export async function evaluatePlanRule(rule, latestMarketMap, dailyCache) {
   const selectedEntry = latestMarketMap[rule.symbol] || null;
   const benchmarkEntry = latestMarketMap[rule.referenceSymbol] || selectedEntry || null;
