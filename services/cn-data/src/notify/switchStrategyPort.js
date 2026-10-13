@@ -237,3 +237,291 @@ export function getRunnableSwitchRules(input = {}, { forceEnabled = false } = {}
   if (!forceEnabled && !config.enabled) return [];
   return (config.rules || []).filter((rule) => isSwitchRuleRunnable(rule));
 }
+
+export function collectSwitchConfigCodes(input = {}) {
+  const config = normalizeSwitchConfig(input);
+  const codes = new Set();
+  for (const rule of config.rules || []) {
+    for (const code of (rule.benchmarkCodes || [])) codes.add(code);
+    for (const code of (rule.enabledCodes || [])) codes.add(code);
+  }
+  return Array.from(codes);
+}
+
+
+export function getShanghaiHourMinute(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(date).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const hourRaw = parts.hour === '24' ? '00' : parts.hour;
+  return {
+    weekday: String(parts.weekday || ''),
+    hour: Number(hourRaw),
+    minute: Number(parts.minute || '0')
+  };
+}
+
+export function isInTradingSession(date = new Date()) {
+  const { weekday, hour, minute } = getShanghaiHourMinute(date);
+  if (weekday === 'Sat' || weekday === 'Sun') return false;
+  const m = hour * 60 + minute;
+  // 上午：09:30-11:30；下午：13:00-15:00。
+  if (m >= 570 && m <= 690) return true;
+  if (m >= 780 && m <= 900) return true;
+  return false;
+}
+
+export function getShanghaiDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value || Date.now());
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = formatter.formatToParts(date).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+
+const MAX_SWITCH_PUSHES_PER_TRADING_DAY = 3;
+
+// per-pair dedup：同一交易日内同一 rule 最多推 3 次；跨交易日重新计数。
+function classifyRule({ benchClass, candClass, gap, sellLower, buyOther }) {
+  if (!Number.isFinite(gap)) return 'none';
+  if (benchClass !== 'H' && benchClass !== 'L') return 'none';
+  if (candClass !== 'H' && candClass !== 'L') return 'none';
+  if (benchClass === candClass) return 'none';
+  if (benchClass === 'L' && gap <= sellLower) return 'A';
+  if (benchClass === 'H' && gap >= buyOther) return 'B';
+  return 'none';
+}
+
+function readDailyTriggerCount(prev = {}, rule = '', signalDate = '') {
+  const prevRule = String(prev.lastTriggeredRule || prev.rule || '').trim();
+  const prevDate = String(prev.lastTriggeredDate || '').trim();
+  if (prevRule !== rule || prevDate !== signalDate) return 0;
+  return Math.max(0, Number.parseInt(String(prev.dailyTriggerCount || '0'), 10) || 0);
+}
+
+function buildTriggerCounterState(prev = {}, rule = '', signalDate = '', didTrigger = false) {
+  if (rule === 'none') {
+    return {
+      lastTriggeredDate: String(prev.lastTriggeredDate || '').trim(),
+      lastTriggeredRule: String(prev.lastTriggeredRule || '').trim(),
+      dailyTriggerCount: Math.max(0, Number.parseInt(String(prev.dailyTriggerCount || '0'), 10) || 0)
+    };
+  }
+  const prevCount = readDailyTriggerCount(prev, rule, signalDate);
+  return {
+    lastTriggeredDate: signalDate,
+    lastTriggeredRule: rule,
+    dailyTriggerCount: didTrigger ? prevCount + 1 : prevCount
+  };
+}
+
+export function evaluateSwitchTriggers(snapshot, prevTriggerStates = {}) {
+  const sellLower = Number(snapshot.intraSellLowerPct);
+  const buyOther = Number(snapshot.intraBuyOtherPct);
+  const premiumClass = (snapshot && typeof snapshot.premiumClass === 'object' && snapshot.premiumClass) ? snapshot.premiumClass : {};
+  const signalDate = getShanghaiDateKey(snapshot?.computedAt || Date.now());
+  const nextTriggerStates = {};
+  const triggers = [];
+
+  function preservePreviousOtcStates() {
+    for (const [key, value] of Object.entries(prevTriggerStates || {})) {
+      if (String(key).startsWith('otc:')) nextTriggerStates[key] = value;
+    }
+  }
+
+  const groups = Array.isArray(snapshot.byBenchmark) ? snapshot.byBenchmark : [];
+  for (const group of groups) {
+    const benchmark = group?.benchmarkCode || '';
+    const benchName = group?.benchmarkName || '';
+    if (!benchmark) continue;
+    const benchClass = premiumClass[benchmark];
+    for (const cand of group.candidates || []) {
+      const pairKey = `${benchmark}:${cand.code}`;
+      const candClass = premiumClass[cand.code];
+      // Number(null) 会变成 0，会被误当作「diff = 0%」。仅在原始值为 number 时才计算。
+      const rawDiff = cand.spreadVsBenchmarkPct;
+      const diff = (typeof rawDiff === 'number' && Number.isFinite(rawDiff)) ? rawDiff : NaN;
+      if (!Number.isFinite(diff)) {
+        const prev = prevTriggerStates?.[pairKey];
+        if (prev) nextTriggerStates[pairKey] = prev;
+        continue;
+      }
+      // diff = benchPremium − candPremium。gap 始终以 H 为被减数：
+      //   bench=H → gap = diff；bench=L → gap = -diff。未分类 → gap=NaN。
+      let gap = NaN;
+      if (benchClass === 'H') gap = diff;
+      else if (benchClass === 'L') gap = -diff;
+      const rule = classifyRule({ benchClass, candClass, gap, sellLower, buyOther });
+      // 方向始终是「卖/观察基准 bench, 买候选 cand」。
+      const fromCode = rule === 'none' ? '' : benchmark;
+      const toCode = rule === 'none' ? '' : cand.code;
+      const fromName = benchName;
+      const toName = cand.name || '';
+      const threshold = rule === 'A' ? sellLower : (rule === 'B' ? buyOther : NaN);
+      const prev = prevTriggerStates?.[pairKey] || { rule: 'none' };
+      const dailyTriggerCount = readDailyTriggerCount(prev, rule, signalDate);
+      const didTrigger = rule !== 'none' && dailyTriggerCount < MAX_SWITCH_PUSHES_PER_TRADING_DAY;
+      if (didTrigger) {
+        triggers.push({
+          pairKey,
+          rule,
+          fromCode,
+          toCode,
+          fromName,
+          toName,
+          // 保存触发瞬间两侧各自的溢价，通知发送时直接使用该快照，避免重新取行情后发生偏移。
+          fromPremiumPct: Number.isFinite(group?.benchmarkPremiumPct) ? group.benchmarkPremiumPct : null,
+          toPremiumPct: Number.isFinite(cand?.premiumPct) ? cand.premiumPct : null,
+          // diffPct 字段保留为「H−L gap」（UI 渲染以该值为准）。
+          diffPct: gap,
+          gapPct: gap,
+          threshold,
+          benchClass,
+          candClass
+        });
+      }
+      nextTriggerStates[pairKey] = {
+        rule,
+        fromCode,
+        ...buildTriggerCounterState(prev, rule, signalDate, didTrigger),
+        lastDiffPct: diff,
+        lastGapPct: Number.isFinite(gap) ? gap : null,
+        updatedAt: snapshot.computedAt
+      };
+    }
+  }
+
+  const otc = snapshot?.otcSignal;
+  if (otc?.ready && otc.benchCode && otc.lowestCode) {
+    const pairKey = `otc:${otc.benchCode}:${otc.lowestCode}`;
+    const rule = otc.triggered
+      ? (otc.intraLowHard ? 'OTC_STRONG' : 'OTC_WEAK')
+      : 'none';
+    const prev = prevTriggerStates?.[pairKey] || { rule: 'none' };
+    const dailyTriggerCount = readDailyTriggerCount(prev, rule, signalDate);
+    const didTrigger = rule !== 'none' && dailyTriggerCount < MAX_SWITCH_PUSHES_PER_TRADING_DAY;
+    if (didTrigger) {
+      triggers.push({
+        kind: 'otc',
+        pairKey,
+        rule,
+        fromCode: otc.benchCode,
+        fromName: otc.benchName || '',
+        toCode: otc.lowestCode,
+        toName: otc.lowestName || '',
+        level: otc.level || (rule === 'OTC_STRONG' ? '强信号' : '弱信号'),
+        benchPremiumPct: otc.benchPremiumPct,
+        lowestPremiumPct: otc.lowestPremiumPct,
+        threshold: otc.otcPremiumThresholdPct,
+        lowThreshold: otc.otcMinIntraPremiumLow,
+        highThreshold: otc.otcMinIntraPremiumHigh
+      });
+    }
+    nextTriggerStates[pairKey] = {
+      rule,
+      fromCode: otc.benchCode,
+      toCode: otc.lowestCode,
+      ...buildTriggerCounterState(prev, rule, signalDate, didTrigger),
+      level: otc.level || '',
+      lastBenchPremiumPct: Number.isFinite(otc.benchPremiumPct) ? otc.benchPremiumPct : null,
+      lastLowestPremiumPct: Number.isFinite(otc.lowestPremiumPct) ? otc.lowestPremiumPct : null,
+      updatedAt: snapshot.computedAt
+    };
+  } else {
+    preservePreviousOtcStates();
+  }
+
+  return { triggers, nextTriggerStates };
+}
+
+
+function stripTaggedPairKey(ruleId = '', pairKey = '') {
+  const normalizedRuleId = String(ruleId || '').trim();
+  const normalizedPairKey = String(pairKey || '').trim();
+  const prefix = `${normalizedRuleId}:`;
+  return normalizedRuleId && normalizedPairKey.startsWith(prefix)
+    ? normalizedPairKey.slice(prefix.length)
+    : normalizedPairKey;
+}
+
+export function restoreUndeliveredSwitchTriggerStates(prevStatesByRule = {}, nextStatesByRule = {}, pushedTriggerRecords = []) {
+  const deliveredPairs = new Set(
+    (Array.isArray(pushedTriggerRecords) ? pushedTriggerRecords : [])
+      .map((record) => {
+        const ruleId = String(record?.ruleId || record?.trigger?.ruleId || '').trim();
+        const pairKey = stripTaggedPairKey(ruleId, record?.pairKey || record?.trigger?.pairKey || '');
+        return ruleId && pairKey ? `${ruleId}:${pairKey}` : '';
+      })
+      .filter(Boolean)
+  );
+
+  return Object.entries(nextStatesByRule || {}).reduce((map, [ruleId, nextStates]) => {
+    const previousStates = prevStatesByRule?.[ruleId] || {};
+    map[ruleId] = Object.entries(nextStates || {}).reduce((stateMap, [pairKey, state]) => {
+      const nextState = { ...(state || {}) };
+      const rule = String(nextState.rule || 'none');
+      const deliveryKey = `${ruleId}:${pairKey}`;
+      if (rule !== 'none' && !deliveredPairs.has(deliveryKey)) {
+        const prevState = previousStates?.[pairKey] || {};
+        nextState.lastTriggeredDate = String(prevState.lastTriggeredDate || '').trim();
+        nextState.lastTriggeredRule = String(prevState.lastTriggeredRule || '').trim();
+        nextState.dailyTriggerCount = Math.max(0, Number.parseInt(String(prevState.dailyTriggerCount || '0'), 10) || 0);
+      }
+      stateMap[pairKey] = nextState;
+      return stateMap;
+    }, {});
+    return map;
+  }, {});
+}
+
+
+function normalizeDailyTriggerCount(value) {
+  return Math.max(0, Number.parseInt(String(value || '0'), 10) || 0);
+}
+
+function countDeliveredSwitchTriggersForDate(ruleStates = {}, dateKey = '') {
+  const normalizedDate = String(dateKey || '').trim();
+  if (!normalizedDate) return 0;
+  return Object.values(ruleStates && typeof ruleStates === 'object' ? ruleStates : {}).reduce((total, state) => {
+    if (String(state?.lastTriggeredDate || '').trim() !== normalizedDate) return total;
+    return total + normalizeDailyTriggerCount(state?.dailyTriggerCount);
+  }, 0);
+}
+
+export function attachSwitchDailyTriggerCounts(snapshot = null, triggerStatesByRule = {}, dateKey = '') {
+  if (!snapshot || typeof snapshot !== 'object') return snapshot;
+  const statesByRule = triggerStatesByRule && typeof triggerStatesByRule === 'object' ? triggerStatesByRule : {};
+  const decorate = (value, ruleId) => {
+    if (!value || typeof value !== 'object') return value;
+    const todayTriggerCount = countDeliveredSwitchTriggersForDate(statesByRule?.[ruleId], dateKey);
+    return { ...value, hitCount: todayTriggerCount, todayTriggerCount };
+  };
+  const rules = Array.isArray(snapshot.rules)
+    ? snapshot.rules.map((entry) => {
+        const ruleId = String(entry?.ruleId || entry?.id || entry?.snapshot?.ruleId || '').trim();
+        const decoratedSnapshot = decorate(entry?.snapshot || entry, ruleId);
+        return entry?.snapshot
+          ? { ...entry, hitCount: decoratedSnapshot.hitCount, todayTriggerCount: decoratedSnapshot.todayTriggerCount, snapshot: decoratedSnapshot }
+          : decoratedSnapshot;
+      })
+    : null;
+  const rootRuleId = String(snapshot.ruleId || snapshot.id || '').trim();
+  const decoratedRoot = rootRuleId ? decorate(snapshot, rootRuleId) : { ...snapshot };
+  return rules ? { ...decoratedRoot, rules } : decoratedRoot;
+}

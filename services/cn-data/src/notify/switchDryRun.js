@@ -1,6 +1,6 @@
 import { getRunnableSwitchRules, normalizeSwitchConfig } from './switchStrategyPort.js';
 
-async function fetchSwitchCollectorSnapshot(codes = []) {
+export async function fetchSwitchCollectorSnapshot(codes = []) {
   const base = process.env.MARKET_COLLECTOR_URL || 'http://127.0.0.1:18080';
   const requested = Array.from(new Set((codes || []).map(String).filter((c) => /^\d{6}$/.test(c)))).slice(0, 30);
   const res = await fetch(`${base}/fund-metrics?codes=${requested.join(',')}`, { signal: AbortSignal.timeout(10000) });

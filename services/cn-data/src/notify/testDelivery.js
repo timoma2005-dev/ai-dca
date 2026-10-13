@@ -175,7 +175,7 @@ function saveTestEvent(db, account, event) {
     }), now, now);
 }
 
-export async function deliverTestNotification(db, account, notification, targetChannels = null) {
+export async function deliverNotification(db, account, notification, { targetChannels = null, reason = 'manual-test' } = {}) {
   const settings = loadTestDeliverySettings(db, account);
   const channels = channelsOfTest(targetChannels);
   const results = [];
@@ -202,7 +202,7 @@ export async function deliverTestNotification(db, account, notification, targetC
     status,
     channels: results,
     createdAt,
-    reason: 'manual-test'
+    reason
   };
   saveTestEvent(db, account, event);
   return {
@@ -210,4 +210,8 @@ export async function deliverTestNotification(db, account, notification, targetC
     events: [event],
     clientId: account.clientId
   };
+}
+
+export async function deliverTestNotification(db, account, notification, targetChannels = null) {
+  return deliverNotification(db, account, notification, { targetChannels, reason: 'manual-test' });
 }
