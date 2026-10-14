@@ -6,6 +6,7 @@ import {
   limitLabel,
   creationLabel,
   snapshotLabel,
+  sharesPeriodDates,
   freshnessMessage,
   SHARES_DESCRIPTION
 } from '../app/etfPcfSharesClient.js';
@@ -87,10 +88,12 @@ export default function EtfPcfSharesPanel() {
     return () => clearTimeout(timer);
   }, [result.data, result.receivedAt, result.state]);
   const data = result.data;
+  const period = sharesPeriodDates(data);
+  const freshness = data ? freshnessMessage(data) : '';
   const heads = [
     '代码 / 名称',
-    `本期份额${data ? `（统计 ${data.date.slice(5)}）` : ''}`,
-    `上期份额${data?.prevDate ? `（统计 ${data.prevDate.slice(5)}）` : ''}`,
+    `本期份额${period.currentDate ? `（${period.basis} ${period.currentDate.slice(5)}）` : ''}`,
+    `上期份额${period.previousDate ? `（${period.basis} ${period.previousDate.slice(5)}）` : ''}`,
     '新增份额（份）',
     '统计日申购（份，推算）',
     '新增金额（万元，估算）',
@@ -104,12 +107,12 @@ export default function EtfPcfSharesPanel() {
           <div className="text-sm text-slate-600">
             <p>{snapshotLabel(data)}</p>
             <p>
-              份额统计日期：{data.date} · 对比日期：{data.prevDate || '—'} · 获取日期：{data.availableOn}
+              本期统计：{data.date} · 上期统计：{data.prevDate || '—'} · 获取日期：{data.availableOn}
             </p>
             <p>源抓取时间：{fetchedTime(data.fetchedAt)}（上海时间）</p>
           </div>
         )}
-        {data && <p className="text-xs text-amber-700">{freshnessMessage(data)}</p>}
+        {freshness && <p className="text-xs text-amber-700">{freshness}</p>}
         {result.state === 'stale' && (
           <p role="status" className="text-sm text-amber-700">
             {['revalidating', 'ttl_expired'].includes(result.reason)

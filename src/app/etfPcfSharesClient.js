@@ -139,7 +139,26 @@ export function creationLabel(r) {
   return r.creationSharesKind === 'estimate' ? `约 ${value}` : value;
 }
 export const SHARES_DESCRIPTION =
-  'PCF 快照日与份额统计日分别展示；新增份额为相邻统计交易日之差，申购份额按统计日的申赎状态推算。';
+  '本期与上期按 PCF 快照日标注，份额统计日单独列出；新增及申购推算按相邻统计交易日计算。';
+
+export function sharesPeriodDates(data) {
+  const statistics = {
+    basis: '统计',
+    currentDate: data?.date || null,
+    previousDate: data?.prevDate || null
+  };
+  if (data?.pcfSnapshot?.source !== 'szse_pcf') return statistics;
+  const currentDate = data.pcfSnapshot.date;
+  const previousDate = previousSession(currentDate, data.calendar);
+  if (!previousDate) return statistics;
+  if (currentDate === data.date) return { basis: 'PCF', currentDate, previousDate };
+  if (
+    previousDate === data.date &&
+    (!data.prevDate || data.prevDate === previousSession(data.date, data.calendar))
+  )
+    return { basis: 'PCF', currentDate, previousDate };
+  return statistics;
+}
 
 export function snapshotLabel(data) {
   return data.pcfSnapshot?.date
@@ -149,6 +168,13 @@ export function snapshotLabel(data) {
 
 export function freshnessMessage(data, accessDay = shanghaiAccessDay()) {
   const expected = previousSession(accessDay, data.calendar);
+  if (
+    expected &&
+    data.date >= expected &&
+    data.pcfSnapshot?.source === 'szse_pcf' &&
+    data.pcfSnapshot.date === accessDay
+  )
+    return '';
   return expected && data.date < expected
     ? `数据滞后：最新报表截至 ${data.date}，尚未获得预期交易日数据`
     : `最新已验证报表：${data.date}，更新及时性待确认`;

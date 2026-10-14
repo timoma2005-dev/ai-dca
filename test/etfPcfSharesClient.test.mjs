@@ -5,9 +5,12 @@ import {
   limitLabel,
   creationLabel,
   snapshotLabel,
+  sharesPeriodDates,
+  freshnessMessage,
   validateSharesProjection
 } from '../src/app/etfPcfSharesClient.js';
 import { syntheticProjection } from './helpers/etfPcfSharesFixture.mjs';
+import { confirmedSharesCalendar } from '../shared/etfPcfTradingCalendar.js';
 const base = Date.parse('2026-10-13T01:03:20.000Z');
 const response = (data) => new Response(JSON.stringify(data));
 test('non-admin/inactive disabled, memory/local hit, strict cycle inflight share; no extra GET', async () => {
@@ -222,4 +225,66 @@ test('PCF snapshot caption preserves the real statistics date; unverified dates 
       ),
       false
     );
+});
+
+test('October 14 PCF column dates align while measured October 13/12 balances remain unchanged', () => {
+  const data = {
+    ...syntheticProjection({
+      date: '2026-10-13',
+      prevDate: '2026-10-12',
+      tradingCalendar: confirmedSharesCalendar('2026-10-04', '2026-10-14')
+    }),
+    pcfSnapshot: { source: 'szse_pcf', date: '2026-10-14', codes: ['159941'] }
+  };
+  const before = JSON.stringify(data);
+  assert.deepEqual(sharesPeriodDates(data), {
+    basis: 'PCF',
+    currentDate: '2026-10-14',
+    previousDate: '2026-10-13'
+  });
+  assert.equal(freshnessMessage(data, '2026-10-14'), '');
+  assert.equal(JSON.stringify(data), before);
+  assert.equal(data.records[0].date, '2026-10-13');
+  assert.equal(data.records[0].prevDate, '2026-10-12');
+  assert.equal(data.records[0].deltaShares, 10000000);
+  const sameDay = {
+    ...syntheticProjection({
+      fetchedAt: '2026-10-14T01:00:00.000Z',
+      date: '2026-10-14',
+      prevDate: '2026-10-13',
+      tradingCalendar: data.calendar
+    }),
+    pcfSnapshot: data.pcfSnapshot
+  };
+  assert.deepEqual(sharesPeriodDates(sameDay), {
+    basis: 'PCF',
+    currentDate: '2026-10-14',
+    previousDate: '2026-10-13'
+  });
+});
+
+test('PCF period dates follow trading sessions across a weekend; unsupported mapping keeps statistics', () => {
+  const data = {
+    date: '2026-10-09',
+    prevDate: '2026-10-08',
+    pcfSnapshot: { source: 'szse_pcf', date: '2026-10-12', codes: ['159941'] },
+    calendar: confirmedSharesCalendar('2026-10-04', '2026-10-14')
+  };
+  assert.deepEqual(sharesPeriodDates(data), {
+    basis: 'PCF',
+    currentDate: '2026-10-12',
+    previousDate: '2026-10-09'
+  });
+  for (const changes of [
+    { calendar: null },
+    { pcfSnapshot: null },
+    { pcfSnapshot: { ...data.pcfSnapshot, source: 'bad' } },
+    { pcfSnapshot: { ...data.pcfSnapshot, date: '2026-10-14' } }
+  ])
+    assert.deepEqual(sharesPeriodDates({ ...data, ...changes }), {
+      basis: '统计',
+      currentDate: data.date,
+      previousDate: data.prevDate
+    });
+  assert.match(freshnessMessage(data, '2026-10-14'), /数据滞后/);
 });

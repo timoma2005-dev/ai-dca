@@ -3,11 +3,12 @@ import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { syntheticProjection } from '../helpers/etfPcfSharesFixture.mjs';
+import { confirmedSharesCalendar } from '../../shared/etfPcfTradingCalendar.js';
 import { mockAcceptanceNetwork } from './acceptance-helpers.js';
 test.use({ video: 'off' });
 if (existsSync('/opt/meta-chromium/chrome'))
   test.use({ launchOptions: { executablePath: '/opt/meta-chromium/chrome', args: ['--no-sandbox'] } });
-async function setup(page, { admin = true, state = 'snapshot', hold = false } = {}) {
+async function setup(page, { admin = true, state = 'snapshot', hold = false, liveDates = false } = {}) {
   await mockAcceptanceNetwork(page);
   // Serve local build bytes through interception so this offline test does not
   // depend on the managed Chromium's loopback network permissions.
@@ -40,7 +41,14 @@ async function setup(page, { admin = true, state = 'snapshot', hold = false } = 
     if (hold) await wait;
     const data = syntheticProjection({
       fetchedAt: new Date(Date.now() - 1000).toISOString(),
-      partial: mode === 'partial'
+      partial: mode === 'partial',
+      ...(liveDates
+        ? {
+            date: '2026-10-13',
+            prevDate: '2026-10-12',
+            tradingCalendar: confirmedSharesCalendar('2026-10-04', '2026-10-14')
+          }
+        : {})
     });
     data.pcfSnapshot = { source: 'szse_pcf', date: data.availableOn, codes: ['159941'] };
     await route.fulfill({
@@ -77,17 +85,17 @@ async function setup(page, { admin = true, state = 'snapshot', hold = false } = 
 test('admin tabs load only active shares, cache repeated switches, keyboard ARIA and mobile cards', async ({
   page
 }) => {
-  const { counts } = await setup(page);
+  const { counts } = await setup(page, { liveDates: true });
   const shares = page.getByRole('tab', { name: '份额新增', exact: true });
   await expect(shares).toBeVisible();
   expect(counts.shares).toBe(0);
   await shares.click();
-  await expect(page.getByText(/PCF 快照，份额统计截至 2026-10-12/)).toBeVisible();
-  await expect(
-    page.getByText('份额统计日期：2026-10-12 · 对比日期：2026-10-09', { exact: false })
-  ).toBeVisible();
+  await expect(page.getByText('2026-10-14 PCF 快照，份额统计截至 2026-10-13')).toBeVisible();
+  await expect(page.getByText('本期统计：2026-10-13 · 上期统计：2026-10-12', { exact: false })).toBeVisible();
   await expect(page.getByText('统计日申购（份，推算）').first()).toBeVisible();
-  await expect(page.getByText('本期份额（统计 10-12）').first()).toBeVisible();
+  await expect(page.getByText('本期份额（PCF 10-14）').first()).toBeVisible();
+  await expect(page.getByText('上期份额（PCF 10-13）').first()).toBeVisible();
+  await expect(page.getByText(/更新及时性待确认/)).toHaveCount(0);
   const radarBefore = counts.radar;
   await expect(page.getByText('是（100% 精确相等）')).toBeVisible();
   expect(counts.shares).toBe(1);
