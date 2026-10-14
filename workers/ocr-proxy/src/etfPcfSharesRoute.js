@@ -1,6 +1,30 @@
 import { jsonResponse } from './ocrHttp.js';
-import { isWellFormedEtfPcfDateKey, shanghaiDateKey } from './etfPcfLimit.js';
+import {
+  buildEtfPcfCacheKey,
+  isWellFormedEtfPcfDateKey,
+  shanghaiDateKey,
+  validateEtfPcfCachedData,
+  validateEtfPcfHistoryData
+} from './etfPcfLimit.js';
+import { mapLimit } from './fundLimit.js';
 import { sharesKey, validSharesPointer, validateSharesProjection } from './etfPcfSharesProjection.js';
+
+// PCF dates describe the snapshot, while share dates continue to describe the measured balances.
+async function readPcfSnapshot(kv, records, date, now) {
+  const validate = date < shanghaiDateKey(now) ? validateEtfPcfHistoryData : validateEtfPcfCachedData;
+  const codes = records.filter((r) => r.code.startsWith('159')).map((r) => r.code);
+  const results = await mapLimit(codes, 4, async (code) => {
+    try {
+      const raw = await kv.get(buildEtfPcfCacheKey(code, date));
+      const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return validate(data, { code, date, now }).ok ? code : null;
+    } catch {
+      return null;
+    }
+  });
+  const verifiedCodes = results.filter((code) => typeof code === 'string');
+  return verifiedCodes.length ? { source: 'szse_pcf', date, codes: verifiedCodes } : null;
+}
 export async function handleEtfPcfShares(
   request,
   env,
@@ -61,5 +85,11 @@ export async function handleEtfPcfShares(
     (pointer && (pointer.fetchedAt !== data.fetchedAt || pointer.expiresAt !== data.expiresAt))
   )
     return error('cache_miss', 404);
-  return jsonResponse(data, 200, headers);
+  const pcfSnapshot = await readPcfSnapshot(
+    kv,
+    data.records,
+    query === 'latest' ? shanghaiDateKey(now) : date,
+    now
+  );
+  return jsonResponse({ ...data, pcfSnapshot }, 200, headers);
 }

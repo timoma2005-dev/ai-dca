@@ -190,6 +190,20 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
     ![x.fetchedAt, x.projectedAt, x.expiresAt].every(iso)
   )
     return false;
+  if (
+    x.pcfSnapshot != null &&
+    (x.pcfSnapshot.source !== 'szse_pcf' ||
+      !dateOK(x.pcfSnapshot.date) ||
+      x.pcfSnapshot.date < date ||
+      x.pcfSnapshot.date > shanghaiDateKey(now) ||
+      !Array.isArray(x.pcfSnapshot.codes) ||
+      !x.pcfSnapshot.codes.length ||
+      !x.pcfSnapshot.codes.every(
+        (code) => typeof code === 'string' && code.startsWith('159') && TARGET_CODES.includes(code)
+      ) ||
+      new Set(x.pcfSnapshot.codes).size !== x.pcfSnapshot.codes.length)
+  )
+    return false;
   const fetched = Date.parse(x.fetchedAt),
     projected = Date.parse(x.projectedAt);
   if (

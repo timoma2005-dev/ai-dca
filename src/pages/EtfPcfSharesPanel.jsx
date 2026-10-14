@@ -5,6 +5,7 @@ import {
   shanghaiAccessDay,
   limitLabel,
   creationLabel,
+  snapshotLabel,
   freshnessMessage,
   SHARES_DESCRIPTION
 } from '../app/etfPcfSharesClient.js';
@@ -86,10 +87,10 @@ export default function EtfPcfSharesPanel() {
   const data = result.data;
   const heads = [
     '代码 / 名称',
-    `本期份额${data ? `（${data.date.slice(5)}）` : ''}`,
-    `上期份额${data?.prevDate ? `（${data.prevDate.slice(5)}）` : ''}`,
+    `本期份额${data ? `（统计 ${data.date.slice(5)}）` : ''}`,
+    `上期份额${data?.prevDate ? `（统计 ${data.prevDate.slice(5)}）` : ''}`,
     '新增份额（份）',
-    '当日申购（份，推算）',
+    '统计日申购（份，推算）',
     '新增金额（万元，估算）',
     '是否顶格'
   ];
@@ -99,6 +100,7 @@ export default function EtfPcfSharesPanel() {
       <Card className="p-4 space-y-3">
         {data && (
           <div className="text-sm text-slate-600">
+            <p>{snapshotLabel(data)}</p>
             <p>
               份额统计日期：{data.date} · 对比日期：{data.prevDate || '—'} · 获取日期：{data.availableOn}
             </p>
@@ -175,7 +177,7 @@ export default function EtfPcfSharesPanel() {
         )}
         <p className="text-xs text-slate-500">新增金额暂缺 D 日净值日期证据，不拿实时行情/IOPV 凑数。</p>
         <p className="text-xs text-slate-500">
-          当日申购对应份额统计日。申赎同时开放时仅按净增估算，实际申购与赎回可能互相抵消。
+          申购推算对应份额统计日。申赎同时开放时仅按净增估算，实际申购与赎回可能互相抵消。
         </p>
         <p className="text-xs text-slate-500">
           顶格指净增精确等于数据日累计申购限额；90% 为接近。净差分可能抵消赎回，不能证明实际总申购顶格。

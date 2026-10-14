@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSharesClient, limitLabel, creationLabel } from '../src/app/etfPcfSharesClient.js';
+import {
+  createSharesClient,
+  limitLabel,
+  creationLabel,
+  snapshotLabel,
+  validateSharesProjection
+} from '../src/app/etfPcfSharesClient.js';
 import { syntheticProjection } from './helpers/etfPcfSharesFixture.mjs';
 const base = Date.parse('2026-10-13T01:03:20.000Z');
 const response = (data) => new Response(JSON.stringify(data));
@@ -188,4 +194,32 @@ test('creation labels distinguish inferred net growth, exact zero and unknown su
   assert.equal(creationLabel({ creationShares: 0, creationSharesKind: 'exact' }), '0');
   assert.equal(creationLabel({ creationShares: null, creationSharesKind: null }), '暂无');
   assert.equal(creationLabel({ creationShares: -1000, creationSharesKind: 'estimate' }), '暂无');
+});
+
+test('PCF snapshot caption preserves the real statistics date; unverified dates never replace it', () => {
+  const data = syntheticProjection();
+  const pcfSnapshot = { source: 'szse_pcf', date: '2026-10-13', codes: ['159941'] };
+  const snapshot = { ...data, pcfSnapshot };
+  assert.equal(validateSharesProjection(snapshot, { now: new Date(base) }), true);
+  assert.equal(snapshotLabel(snapshot), '2026-10-13 PCF 快照，份额统计截至 2026-10-12');
+  assert.equal(snapshotLabel(data), '份额统计截至 2026-10-12，PCF 快照日期暂无');
+  assert.equal(snapshotLabel({ ...data, pcfSnapshot: null }), snapshotLabel(data));
+  assert.deepEqual(snapshot.records, data.records);
+  for (const invalid of [
+    { source: 'bad' },
+    { date: '2026-10-14' },
+    { date: '2026-10-09' },
+    { codes: [] },
+    { codes: ['513100'] },
+    { codes: ['159941', '159941'] },
+    { codes: [null] },
+    { codes: ['159000'] }
+  ])
+    assert.equal(
+      validateSharesProjection(
+        { ...data, pcfSnapshot: { ...pcfSnapshot, ...invalid } },
+        { now: new Date(base) }
+      ),
+      false
+    );
 });

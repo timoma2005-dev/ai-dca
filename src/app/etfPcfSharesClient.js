@@ -12,7 +12,7 @@ export function createSharesClient({
 } = {}) {
   const memory = new Map(),
     inflight = new Map();
-  const keyFor = (date = 'latest') => `etf-pcf-shares:v1:${endpoint}:${shanghaiAccessDay(now())}:${date}`;
+  const keyFor = (date = 'latest') => `etf-pcf-shares:v2:${endpoint}:${shanghaiAccessDay(now())}:${date}`;
   const valid = (entry, key, date) =>
     entry?.key === key &&
     Number.isFinite(entry.receivedAt) &&
@@ -139,7 +139,13 @@ export function creationLabel(r) {
   return r.creationSharesKind === 'estimate' ? `约 ${value}` : value;
 }
 export const SHARES_DESCRIPTION =
-  '按源报表标注的统计日期展示最新份额，支持当天数据；新增份额为本期与上一交易日之差，申购份额由净增及同日申赎状态推算。';
+  'PCF 快照日与份额统计日分别展示；新增份额为相邻统计交易日之差，申购份额按统计日的申赎状态推算。';
+
+export function snapshotLabel(data) {
+  return data.pcfSnapshot?.date
+    ? `${data.pcfSnapshot.date} PCF 快照，份额统计截至 ${data.date}`
+    : `份额统计截至 ${data.date}，PCF 快照日期暂无`;
+}
 
 export function freshnessMessage(data, accessDay = shanghaiAccessDay()) {
   const expected = previousSession(accessDay, data.calendar);
