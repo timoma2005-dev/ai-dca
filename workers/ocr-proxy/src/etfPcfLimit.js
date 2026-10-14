@@ -194,14 +194,14 @@ function parseShareLimitValue(rawValue) {
   return { invalid: true };
 }
 
-function parseMoneyValue(rawValue, { allowNegative }) {
+function parseMoneyValue(rawValue, { allowNegative, preservePrecision = false }) {
   const s = String(rawValue == null ? '' : rawValue).trim();
   if (!s || PCF_UNKNOWN_VALUE_PATTERN.test(s)) return { value: null };
   const t = s.replace(/,/g, '').replace(/元$/, '').trim();
   const pattern = allowNegative ? /^-?\d+(\.\d+)?$/ : /^\d+(\.\d+)?$/;
   if (pattern.test(t)) {
     const num = Number(t);
-    if (Number.isFinite(num)) return { value: Math.round(num * 100) / 100 };
+    if (Number.isFinite(num)) return { value: preservePrecision ? num : Math.round(num * 100) / 100 };
   }
   return { invalid: true };
 }
@@ -437,6 +437,21 @@ export function parseEtfPcf(text, { code, date } = {}) {
   );
   result.localBasketSecurityCount = optionalValue(PCF_DAY_LABELS.localBasketCount, parseBasketCountValue);
   result.totalBasketSecurityCount = optionalValue(PCF_DAY_LABELS.totalBasketCount, parseBasketCountValue);
+  // P 日只取严格早于请求日期的最近段落，缺失或损坏静默留空。
+  const prevDayDate = [...segments.keys()].filter((key) => key < dateKey).sort().at(-1) || null;
+  const prevFields = segments.get(prevDayDate)?.fields;
+  const previousMoney = (labels, options) => {
+    const label = labels.find((key) => prevFields?.has(key));
+    return label ? parseMoneyValue(prevFields.get(label), options).value ?? null : null;
+  };
+  result.prevDayDate = prevDayDate;
+  result.prevDayCashDifference = previousMoney(
+    ['现金差额', '最小申购、赎回单位的现金差额'], { allowNegative: true }
+  );
+  result.prevDayUnitNav = previousMoney(
+    ['最小申购、赎回单位资产净值', '最小申购、赎回单位净值'], { allowNegative: false }
+  );
+  result.prevDayNav = previousMoney(['基金份额净值'], { allowNegative: false, preservePrecision: true });
   result.rawFields = rawFields;
   result.basicRawFields = basicRawFields;
   result.warnings = warnings;
@@ -490,7 +505,10 @@ export function validateEtfPcfCachedData(data, { code, date, now = new Date() })
   for (const key of ['subscriptionAllowed', 'redemptionAllowed', 'iopvRequired']) {
     if (data[key] != null && typeof data[key] !== 'boolean') return { ok: false, reason: key };
   }
-  for (const key of ['estimatedCashDifference', 'unitCashDividend']) {
+  if (data.prevDayDate != null && !isWellFormedEtfPcfDateKey(data.prevDayDate)) {
+    return { ok: false, reason: 'prev_day_date' };
+  }
+  for (const key of ['estimatedCashDifference', 'unitCashDividend', 'prevDayCashDifference', 'prevDayUnitNav', 'prevDayNav']) {
     if (data[key] != null && !(typeof data[key] === 'number' && Number.isFinite(data[key]))) {
       return { ok: false, reason: key };
     }
@@ -577,7 +595,10 @@ export function validateEtfPcfHistoryData(data, { code, date, now = new Date() }
   for (const key of ['subscriptionAllowed', 'redemptionAllowed', 'iopvRequired']) {
     if (data[key] != null && typeof data[key] !== 'boolean') return { ok: false, reason: key };
   }
-  for (const key of ['estimatedCashDifference', 'unitCashDividend']) {
+  if (data.prevDayDate != null && !isWellFormedEtfPcfDateKey(data.prevDayDate)) {
+    return { ok: false, reason: 'prev_day_date' };
+  }
+  for (const key of ['estimatedCashDifference', 'unitCashDividend', 'prevDayCashDifference', 'prevDayUnitNav', 'prevDayNav']) {
     if (data[key] != null && !(typeof data[key] === 'number' && Number.isFinite(data[key]))) {
       return { ok: false, reason: key };
     }

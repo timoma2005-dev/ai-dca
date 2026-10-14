@@ -726,3 +726,27 @@ test('159941 仍走深交所：POST 抓 szse 固定 URL，不带上交所 Refere
   const body = await result.json();
   assert.equal(body.source, 'szse_pcf');
 });
+
+test('SSE 前日可选字段解析与缓存形态，真实接口缺字段不造日期', async () => {
+  const { mapSsePcfFields, validateSsePcfCachedData } = await import('../workers/ocr-proxy/src/ssePcfLimit.js');
+  const row = JSON.parse(SSE_FIXTURES.get('513100')).result[0];
+  const parse = (overrides) => mapSsePcfFields({ ...row, ...overrides }, { code: '513100' });
+  const missing = parse({});
+  assert.equal(missing.prevDayDate, null);
+  assert.equal(missing.prevDayCashDifference, null);
+  const p = parse({ PRE_CASH_COMPONENT: '￥-8933.50', PRE_TRADING_DAY: '20261012' });
+  assert.equal(p.prevDayCashDifference, -8933.5);
+  assert.equal(p.prevDayDate, '2026-10-12');
+  for (const value of ['20261399', '20260229', '2026101', 20261012]) {
+    const invalid = parse({ PRE_TRADING_DAY: value });
+    assert.equal(invalid.prevDayDate, null);
+    assert.ok(invalid.warnings.some((w) => w.includes('PRE_TRADING_DAY')));
+  }
+  const cached = { ...p, sourceUrl: SSE_URL('513100'), fetchedAt: '2026-10-13T01:00:00Z', expiresAt: '2026-10-14T01:00:00Z' };
+  const check = (data) => validateSsePcfCachedData(data, { code: '513100', date: '2026-10-13', now: NOW });
+  assert.equal(check(cached).ok, true);
+  const old = { ...cached }; delete old.prevDayDate; delete old.prevDayCashDifference;
+  assert.equal(check(old).ok, true);
+  for (const prevDayDate of ['2026-02-30', 1]) assert.equal(check({ ...cached, prevDayDate }).ok, false);
+  for (const prevDayCashDifference of ['1', Infinity, NaN]) assert.equal(check({ ...cached, prevDayCashDifference }).ok, false);
+});

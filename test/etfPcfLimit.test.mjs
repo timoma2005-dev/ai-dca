@@ -13,6 +13,7 @@ import {
   shanghaiDateKey,
   validateEtfPcfRequest,
   validateEtfPcfHistoryData,
+  validateEtfPcfCachedData,
   buildEtfPcfSourceUrl,
   buildEtfPcfCacheKey,
   decodeEtfPcf,
@@ -1079,4 +1080,52 @@ test('cron 单标的当日刷新不修改历史永久 key，TTL 保持 86400', a
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:159941:20261013');
   assert.equal(kv.putCalls[0].options.expirationTtl, 86400);
+});
+
+test('P 日真实数值与原始净值精度，T 日现金不串段', () => {
+  const p = parseEtfPcf(decodeEtfPcf(FIXTURE_BYTES), { code: '159941', date: '2026-10-13' });
+  assert.equal(p.prevDayDate, '2026-10-09');
+  assert.equal(p.prevDayCashDifference, 5388);
+  assert.equal(p.prevDayUnitNav, 2014903.94);
+  assert.equal(p.prevDayNav, 1.5499);
+  assert.equal(p.estimatedCashDifference, 4275.36);
+});
+
+test('P 日缺失、不可识别静默；最近较早日期与标签优先级和变体', () => {
+  const parse = (sections) => parseEtfPcf(synthPcf({ day: FULL_DAY, sections }), { code: '159941', date: '2026-10-13' });
+  const empty = parse([]);
+  for (const key of ['prevDayDate', 'prevDayCashDifference', 'prevDayUnitNav', 'prevDayNav']) assert.equal(empty[key], null);
+  const p = parse([
+    { date: '2026-10-08', lines: ['现金差额：999'] },
+    { date: '2026-10-14', lines: ['现金差额：888'] },
+    { date: '2026-10-09', lines: ['现金差额：无法识别', '最小申购、赎回单位的现金差额：123', '基金份额净值：1.5499'] }
+  ]);
+  assert.equal(p.prevDayDate, '2026-10-09');
+  assert.equal(p.prevDayCashDifference, null);
+  assert.equal(p.prevDayUnitNav, null);
+  assert.equal(p.prevDayNav, 1.5499);
+  assert.deepEqual(p.warnings, empty.warnings);
+  const variant = parse([{ date: '2026-10-12', lines: ['最小申购、赎回单位的现金差额：-8933.50', '最小申购、赎回单位净值：12345.67', '基金份额净值：坏值'] }]);
+  assert.equal(variant.prevDayCashDifference, -8933.5);
+  assert.equal(variant.prevDayUnitNav, 12345.67);
+  assert.equal(variant.prevDayNav, null);
+  const preferred = parse([{ date: '2026-10-12', lines: ['现金差额：1', '最小申购、赎回单位的现金差额：2', '最小申购、赎回单位资产净值：3', '最小申购、赎回单位净值：4'] }]);
+  assert.equal(preferred.prevDayCashDifference, 1);
+  assert.equal(preferred.prevDayUnitNav, 3);
+});
+
+test('P 日缓存与历史形态校验兼容旧对象，拒绝非法日期和非有限数值', () => {
+  const checks = [
+    (data) => validateEtfPcfCachedData(data, { code: data.code, date: data.date, now: NOW }),
+    (data) => validateEtfPcfHistoryData(data, { code: data.code, date: data.date, now: new Date('2026-10-14T02:00:00Z') })
+  ];
+  for (const check of checks) {
+    assert.equal(check(makeCachedData()).ok, true);
+    assert.equal(check(makeCachedData({ prevDayDate: null, prevDayNav: null })).ok, true);
+    assert.equal(check(makeCachedData({ prevDayDate: '2026-10-09', prevDayNav: 1.5499, prevDayCashDifference: -12 })).ok, true);
+    for (const value of ['2026-02-30', '20261009', 123]) assert.equal(check(makeCachedData({ prevDayDate: value })).ok, false);
+    for (const key of ['prevDayCashDifference', 'prevDayUnitNav', 'prevDayNav']) {
+      for (const value of ['1', Infinity, NaN, {}]) assert.equal(check(makeCachedData({ [key]: value })).ok, false);
+    }
+  }
 });

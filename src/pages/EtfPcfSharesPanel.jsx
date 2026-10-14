@@ -8,6 +8,7 @@ import {
   SHARES_DESCRIPTION
 } from '../app/etfPcfSharesClient.js';
 import './etfPcfShares.css';
+import EtfPcfSharesDetail from './EtfPcfSharesDetail.jsx';
 const format = (n) => (n === null ? '—' : n.toLocaleString('zh-CN'));
 const fetchedTime = (s) =>
   new Intl.DateTimeFormat('sv-SE', {
@@ -23,6 +24,7 @@ const fetchedTime = (s) =>
 export default function EtfPcfSharesPanel() {
   const [result, setResult] = useState({ state: 'loading' });
   const [retry, setRetry] = useState(0);
+  const [expanded, setExpanded] = useState(null);
   const [day, setDay] = useState(() => shanghaiAccessDay());
   useEffect(() => {
     const check = () => {
@@ -146,8 +148,22 @@ export default function EtfPcfSharesPanel() {
             {data.records.map((r) => (
               <article key={r.code} className="shares-grid shares-row">
                 <div>
-                  <b>{r.code}</b>
-                  <p>{r.name}</p>
+                  <button
+                    id={`shares-toggle-${r.code}`}
+                    className="shares-detail-toggle"
+                    aria-expanded={expanded === `${data.date}:${r.code}`}
+                    aria-controls={`shares-detail-${r.code}`}
+                    onClick={() =>
+                      setExpanded((old) =>
+                        old === `${data.date}:${r.code}` ? null : `${data.date}:${r.code}`
+                      )
+                    }
+                  >
+                    <b>{r.code}</b> · {r.name}
+                    <span className="block">
+                      申赎信息 {expanded === `${data.date}:${r.code}` ? '收起 ▴' : '展开 ▾'}
+                    </span>
+                  </button>
                   {r.status === 'partial' && <Pill>部分数据</Pill>}
                 </div>
                 {[
@@ -177,6 +193,17 @@ export default function EtfPcfSharesPanel() {
                 {r.shares === null && <p className="shares-reason">缺少本期份额</p>}
                 {r.deltaShares === null && (
                   <p className="shares-reason">缺少可确认的上一交易日份额，暂无法计算新增</p>
+                )}
+                {expanded === `${data.date}:${r.code}` ? (
+                  <EtfPcfSharesDetail
+                    key={`${data.date}:${r.code}`}
+                    code={r.code}
+                    date={data.date}
+                    id={`shares-detail-${r.code}`}
+                    labelledBy={`shares-toggle-${r.code}`}
+                  />
+                ) : (
+                  <div id={`shares-detail-${r.code}`} hidden />
                 )}
               </article>
             ))}
