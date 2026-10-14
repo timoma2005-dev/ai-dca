@@ -66,7 +66,8 @@ ai-dca/
 ├── workers/               # Cloudflare Workers
 │   ├── sync/             # 数据同步
 │   └── notify/           # 通知服务
-├── DATA_ANALYSIS_REPORT.md  # 数据分析报告
+├── docs/
+│   └── analytics/       # 埋点分析（README_ANALYTICS / POSTHOG 集成 / DATA_ANALYSIS_REPORT）
 ├── NEXT_STEPS.md            # 下一步行动计划
 └── ...
 ```
@@ -79,7 +80,7 @@ ai-dca/
 
 **日期**：2026-06-23  
 **数据周期**：最近 30 天  
-**报告文件**：`DATA_ANALYSIS_REPORT.md`
+**报告文件**：`docs/analytics/DATA_ANALYSIS_REPORT.md`
 
 **核心发现**：
 - 行情中心是绝对核心功能（51.6% 使用率）
@@ -94,7 +95,7 @@ ai-dca/
 - [ ] holdings 使用率是否达到 10%+
 - [ ] 评估是否需要回滚策略指南
 - [ ] 核心功能优化效果评估
-- [ ] 更新 `DATA_ANALYSIS_REPORT.md`
+- [ ] 更新 `docs/analytics/DATA_ANALYSIS_REPORT.md`
 - [ ] 更新 `NEXT_STEPS.md`
 
 ---
@@ -337,7 +338,7 @@ function MyDropdown() {
 
 ## 📚 相关文档
 
-- **数据分析报告**：`DATA_ANALYSIS_REPORT.md`
+- **数据分析报告**：`docs/analytics/DATA_ANALYSIS_REPORT.md`
 - **下一步行动计划**：`NEXT_STEPS.md`
 - **URL 设计优化方案**：`URL_REDESIGN_PLAN.md`
 
