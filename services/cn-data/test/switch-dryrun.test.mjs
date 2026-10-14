@@ -8,6 +8,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { openDb } from '../src/db.js';
 import { createApp } from '../src/server.js';
 import { sha256Hex } from '../src/account/store.js';
+import { fetchSwitchCollectorSnapshot, runSwitchConfigDryRun } from '../src/notify/switchDryRun.js';
+import { buildRuleSnapshot } from '../src/notify/switchMonitor.js';
+import { evaluateSwitchTriggers, normalizeSwitchConfig } from '../src/notify/switchStrategyPort.js';
 
 const USER = 'testuser';
 const AUTH_TOKEN = 'phase2-valid-token';
@@ -145,4 +148,41 @@ test('collector HTTP failure returns 502 with collector error code', async (t) =
   const res = await request('/api/notify/switch/test', 'POST', config);
   assert.equal(res.status, 502);
   assert.equal(res.body.code, 'SWITCH_TEST_COLLECTOR_FAILED');
+});
+
+for (const premiumPercent of [null, undefined]) {
+  test(`collector preserves ${premiumPercent} premiums and skips switch/OTC without consuming quota`, async (t) => {
+    mockCollector(t, { items: ['513100', '159632'].map((code) => ({
+      code, price: 1.5, iopv: 1.5, premiumPercent, quality: { status: 'ok' }
+    })) });
+    const collector = await fetchSwitchCollectorSnapshot(['513100', '159632']);
+    for (const code of ['513100', '159632']) assert.equal(collector.funds[code].premiumPct, null);
+    const snapshot = buildRuleSnapshot(normalizeSwitchConfig(config).rules[0], collector.funds, collector.generatedAt);
+    assert.equal(snapshot.byBenchmark[0].benchmarkPremiumPct, null);
+    assert.equal(snapshot.byBenchmark[0].candidates[0].premiumPct, null);
+    assert.equal(snapshot.byBenchmark[0].candidates[0].spreadVsBenchmarkPct, null);
+    assert.equal(snapshot.otcSignal.ready, false);
+    assert.equal(snapshot.ready, false);
+    const previous = {
+      '513100:159632': { dailyTriggerCount: 2 },
+      'otc:513100:159632': { dailyTriggerCount: 1 }
+    };
+    for (const states of [{}, previous]) {
+      const result = evaluateSwitchTriggers(snapshot, states);
+      assert.deepEqual(result.triggers, []);
+      assert.deepEqual(result.nextTriggerStates, states);
+    }
+    const preview = await runSwitchConfigDryRun(config);
+    assert.equal(preview.snapshot.ready, false);
+    assert.deepEqual(preview.snapshot.triggers, []);
+    assert.equal(preview.snapshot.rules[0].snapshot.byBenchmark[0].candidates[0].spreadVsBenchmarkPct, null);
+  });
+}
+
+test('collector keeps numeric zero and finite numeric strings, rejects non-finite premiums', async (t) => {
+  const values = [0, '0', '3.5', 'invalid', Infinity];
+  const codes = values.map((_, index) => String(513100 + index));
+  mockCollector(t, { items: codes.map((code, index) => ({ code, premiumPercent: values[index] })) });
+  const collector = await fetchSwitchCollectorSnapshot(codes);
+  assert.deepEqual(codes.map((code) => collector.funds[code].premiumPct), [0, 0, 3.5, null, null]);
 });

@@ -10,7 +10,7 @@ export async function fetchSwitchCollectorSnapshot(codes = []) {
   for (const item of (payload && Array.isArray(payload.items) ? payload.items : [])) {
     const code = String(item?.code || '').trim();
     if (!/^\d{6}$/.test(code)) continue;
-    funds[code] = { code, name: String(item?.name || code).slice(0, 80), price: Number.isFinite(Number(item?.price)) ? Number(item.price) : null, iopv: Number.isFinite(Number(item?.iopv)) ? Number(item.iopv) : null, premiumPct: Number(item?.premiumPercent), asOf: item?.asOf || '', expiresAt: item?.expiresAt || '', valid: item?.quality?.status === 'ok', invalidReasons: [], source: 'market-collector' };
+    funds[code] = { code, name: String(item?.name || code).slice(0, 80), price: Number.isFinite(Number(item?.price)) ? Number(item.price) : null, iopv: Number.isFinite(Number(item?.iopv)) ? Number(item.iopv) : null, premiumPct: item?.premiumPercent !== null && item?.premiumPercent !== undefined && Number.isFinite(Number(item.premiumPercent)) ? Number(item.premiumPercent) : null, asOf: item?.asOf || '', expiresAt: item?.expiresAt || '', valid: item?.quality?.status === 'ok', invalidReasons: [], source: 'market-collector' };
   }
   return { generatedAt: (payload && payload.generatedAt) || new Date().toISOString(), funds, source: 'market-collector', successCount: Number(payload?.successCount) || 0, failureCount: Number(payload?.failureCount) || 0 };
 }
