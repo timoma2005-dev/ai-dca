@@ -1,0 +1,16 @@
+# 仅用于 test/etfPcfRuntime.test.mjs 的本地 workerd 运行时验证 harness，不部署。
+name = "etf-pcf-runtime-harness"
+main = "worker.js"
+# 与生产 ocr-proxy 相同的兼容日期：验证 workerd 在该日期下 GBK TextDecoder 可用。
+compatibility_date = "2026-03-26"
+compatibility_flags = ["nodejs_compat"]
+
+# 把上一级目录的真实 GBK fixture 作为 Data 模块（ArrayBuffer）导入，worker 内不读文件系统。
+rules = [
+  { type = "Data", globs = ["*.gbk.txt"], fallthrough = true }
+]
+
+# 本地 dev 由 Miniflare 模拟 KV；id 为 32 位十六进制占位，不需要真实 namespace。
+[[kv_namespaces]]
+binding = "FUND_LIMIT_KV"
+id = "00000000000000000000000000000000"
