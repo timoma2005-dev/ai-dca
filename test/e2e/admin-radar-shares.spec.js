@@ -42,6 +42,7 @@ async function setup(page, { admin = true, state = 'snapshot', hold = false } = 
       fetchedAt: new Date(Date.now() - 1000).toISOString(),
       partial: mode === 'partial'
     });
+    data.pcfSnapshot = { source: 'szse_pcf', date: data.availableOn, codes: ['159941'] };
     await route.fulfill({
       status: mode === 'error' ? 503 : ['empty', 'missing'].includes(mode) ? 404 : 200,
       contentType: 'application/json',
@@ -81,8 +82,12 @@ test('admin tabs load only active shares, cache repeated switches, keyboard ARIA
   await expect(shares).toBeVisible();
   expect(counts.shares).toBe(0);
   await shares.click();
-  await expect(page.getByText('份额统计日期：2026-10-12 · 对比日期：2026-10-09', { exact: false })).toBeVisible();
-  await expect(page.getByText('当日申购（份，推算）').first()).toBeVisible();
+  await expect(page.getByText(/PCF 快照，份额统计截至 2026-10-12/)).toBeVisible();
+  await expect(
+    page.getByText('份额统计日期：2026-10-12 · 对比日期：2026-10-09', { exact: false })
+  ).toBeVisible();
+  await expect(page.getByText('统计日申购（份，推算）').first()).toBeVisible();
+  await expect(page.getByText('本期份额（统计 10-12）').first()).toBeVisible();
   const radarBefore = counts.radar;
   await expect(page.getByText('是（100% 精确相等）')).toBeVisible();
   expect(counts.shares).toBe(1);
@@ -157,7 +162,7 @@ test('expired local TTL revalidates once; read failure keeps unexpired last snap
 }) => {
   const data = syntheticProjection({ fetchedAt: new Date(Date.now() - 600000).toISOString() });
   const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(Date.now());
-  const key = `etf-pcf-shares:v1:https://api.freebacktrack.tech/api/etf-pcf-shares:${day}:latest`;
+  const key = `etf-pcf-shares:v2:https://api.freebacktrack.tech/api/etf-pcf-shares:${day}:latest`;
   await page.addInitScript(
     ({ key, data }) =>
       localStorage.setItem(key, JSON.stringify({ key, receivedAt: Date.now() - 600000, data })),
