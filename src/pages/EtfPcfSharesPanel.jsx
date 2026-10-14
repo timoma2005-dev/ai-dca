@@ -13,6 +13,7 @@ import {
 import './etfPcfShares.css';
 import EtfPcfSharesDetail from './EtfPcfSharesDetail.jsx';
 const format = (n) => (n === null ? '—' : n.toLocaleString('zh-CN'));
+const formatWan = (n) => (n === null ? '—' : (n / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 }));
 const fetchedTime = (s) =>
   new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Asia/Shanghai',
@@ -94,8 +95,8 @@ export default function EtfPcfSharesPanel() {
     '代码 / 名称',
     `本期份额${period.currentDate ? `（${period.basis} ${period.currentDate.slice(5)}）` : ''}`,
     `上期份额${period.previousDate ? `（${period.basis} ${period.previousDate.slice(5)}）` : ''}`,
-    '新增份额（份）',
-    '统计日申购（份，推算）',
+    '新增份额（万份）',
+    '统计日申购（万份，推算）',
     '新增金额（万元，估算）',
     '是否顶格'
   ];
@@ -175,7 +176,7 @@ export default function EtfPcfSharesPanel() {
                 {[
                   format(r.shares),
                   format(r.prevShares),
-                  format(r.deltaShares),
+                  formatWan(r.deltaShares),
                   creationLabel(r),
                   '—',
                   limitLabel(r)

@@ -193,7 +193,8 @@ test('limit labels preserve exact/near/over/negative/unlimited/unknown', () => {
 });
 
 test('creation labels distinguish inferred net growth, exact zero and unknown subscription volume', () => {
-  assert.equal(creationLabel({ creationShares: 10000000, creationSharesKind: 'estimate' }), '约 10,000,000');
+  assert.equal(creationLabel({ creationShares: 10000000, creationSharesKind: 'estimate' }), '约 1,000');
+  assert.equal(creationLabel({ creationShares: 8425300, creationSharesKind: 'estimate' }), '约 842.53');
   assert.equal(creationLabel({ creationShares: 0, creationSharesKind: 'exact' }), '0');
   assert.equal(creationLabel({ creationShares: null, creationSharesKind: null }), '暂无');
   assert.equal(creationLabel({ creationShares: -1000, creationSharesKind: 'estimate' }), '暂无');

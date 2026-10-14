@@ -92,7 +92,7 @@ test('admin tabs load only active shares, cache repeated switches, keyboard ARIA
   await shares.click();
   await expect(page.getByText('2026-10-14 PCF 快照，份额统计截至 2026-10-13')).toBeVisible();
   await expect(page.getByText('本期统计：2026-10-13 · 上期统计：2026-10-12', { exact: false })).toBeVisible();
-  await expect(page.getByText('统计日申购（份，推算）').first()).toBeVisible();
+  await expect(page.getByText('统计日申购（万份，推算）').first()).toBeVisible();
   await expect(page.getByText('本期份额（PCF 10-14）').first()).toBeVisible();
   await expect(page.getByText('上期份额（PCF 10-13）').first()).toBeVisible();
   await expect(page.getByText(/更新及时性待确认/)).toHaveCount(0);

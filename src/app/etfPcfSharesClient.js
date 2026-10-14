@@ -135,7 +135,7 @@ export function limitLabel(r) {
 }
 export function creationLabel(r) {
   if (r.creationShares === null || r.creationShares === undefined || r.creationShares < 0) return '暂无';
-  const value = r.creationShares.toLocaleString('zh-CN');
+  const value = (r.creationShares / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
   return r.creationSharesKind === 'estimate' ? `约 ${value}` : value;
 }
 export const SHARES_DESCRIPTION =
