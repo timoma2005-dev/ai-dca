@@ -182,13 +182,20 @@ test('wrong-source and wrong-date cached PCFs never lend their limits or subscri
 
 test('same-day shares without the confirmed prior session cannot manufacture a delta', async () => {
   const store = kv();
-  await run(store, async () => datedSource([row(today, 200), row('2026-10-12', 100)]));
+  await run(store, async () => datedSource([row(today, 200), row('2026-10-12', 100)]), [
+    pcf(today, { totalSubscribeLimitShares: 100 })
+  ]);
   const { record } = projection(store);
   assert.equal(record.shares, 200);
   assert.equal(record.prevShares, null);
   assert.equal(record.deltaShares, null);
   assert.equal(record.creationShares, null);
   assert.equal(record.atLimit, null);
+  const log = JSON.parse(store.values.get(eventKey(today)));
+  assert.equal(
+    log.events.some((event) => event.code === code && event.signal_type === 'net_creation_near_total_limit'),
+    false
+  );
 });
 
 test('a current report with a missing adjacent session still fetches the historical comparison', async () => {

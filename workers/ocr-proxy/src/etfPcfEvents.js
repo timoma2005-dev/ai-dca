@@ -573,7 +573,7 @@ async function runStage({
         (a, b) => b.date.localeCompare(a.date)
       );
       const latest = rows[0],
-        older = latest && rows.find((r) => r.date === selectPreviousDate(latest.date, evidence, evidence));
+        older = latest && rows.find((r) => r.date === previousSession(latest.date, calendar));
       // A more recent known PCF session proves that a stale report is not T-1.
       if (
         latest &&
