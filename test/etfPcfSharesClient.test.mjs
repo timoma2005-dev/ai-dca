@@ -22,7 +22,7 @@ test('non-admin/inactive disabled, memory/local hit, strict cycle inflight share
   a.release();
   const b = client.subscribe();
   assert.equal(a.promise, b.promise);
-  assert.equal((await b.promise).state, 'complete');
+  assert.equal((await b.promise).state, 'partial');
   b.release();
   assert.equal(options.redirect, 'manual');
   assert.equal(options.credentials, 'omit');
@@ -78,7 +78,7 @@ test('404 memory negative cache 30s, corrupt local storage/source/key/expired de
         return response(syntheticProjection());
       }
     });
-    assert.equal((await c.subscribe().promise).state, 'complete');
+    assert.equal((await c.subscribe().promise).state, 'partial');
     assert.equal(count, 1);
   }
 });

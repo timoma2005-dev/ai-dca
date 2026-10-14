@@ -8,7 +8,7 @@ export const calendar = {
 };
 export function syntheticProjection({ fetchedAt = '2026-10-13T01:03:20.000Z', partial = false } = {}) {
   const deltas = [10000000, 9500000, 12500000, -1000000, 2000000, 0, 0, 0];
-  const records = TARGET_CODES.flatMap((code, i) => [
+  const records = TARGET_CODES.slice(0, 8).flatMap((code, i) => [
     {
       code,
       date: '2026-10-12',
@@ -18,7 +18,7 @@ export function syntheticProjection({ fetchedAt = '2026-10-13T01:03:20.000Z', pa
     },
     ...(partial && i === 6 ? [] : [{ code, date: '2026-10-09', shares: 20000000000, unit: '份' }])
   ]);
-  const limits = TARGET_CODES.map((code, i) => ({
+  const limits = TARGET_CODES.slice(0, 8).map((code, i) => ({
     code,
     date: '2026-10-12',
     total: {

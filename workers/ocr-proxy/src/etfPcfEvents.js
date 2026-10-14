@@ -1,5 +1,10 @@
+import { buildSsePcfCacheKey, validateSsePcfCachedData } from './ssePcfLimit.js';
 import { confirmedSharesCalendar } from '../../../shared/etfPcfTradingCalendar.js';
-import { buildSharesProjection, persistSharesProjection } from './etfPcfSharesProjection.js';
+import {
+  buildSharesProjection,
+  persistSharesProjection,
+  normalizeCreationStatus
+} from './etfPcfSharesProjection.js';
 import {
   isWellFormedEtfPcfDateKey,
   shanghaiDateKey,
@@ -13,6 +18,7 @@ import {
   fetchEtfPcfShares,
   parseEtfPcfSharesXlsx
 } from './etfPcfShares.js';
+const EVENT_CODES = TARGET_CODES.filter((code) => code.startsWith('159'));
 const validLimit = (x) =>
   !!x &&
   ['limited', 'unlimited', 'unknown'].includes(x.kind) &&
@@ -110,7 +116,7 @@ const id = (e) => [e.date, e.code, e.signal_type, e.basis].join(':');
 const stamp = (s) => typeof s === 'string' && Number.isFinite(Date.parse(s));
 const identity = (e) =>
   e &&
-  TARGET_CODES.includes(e.code) &&
+  EVENT_CODES.includes(e.code) &&
   isWellFormedEtfPcfDateKey(e.date) &&
   ['limit_relaxation', 'net_creation_near_total_limit'].includes(e.signal_type) &&
   ['net', 'total'].includes(e.basis) &&
@@ -300,7 +306,12 @@ function snapshotValid(s, date, type) {
   const seen = new Set();
   return s.records.every((r) => {
     const key = r.code + ':' + r.date;
-    if (!TARGET_CODES.includes(r.code) || r.date !== date || seen.has(key)) return false;
+    if (
+      !(type === 'limits' ? TARGET_CODES : EVENT_CODES).includes(r.code) ||
+      r.date !== date ||
+      seen.has(key)
+    )
+      return false;
     seen.add(key);
     return type === 'limits'
       ? validLimit(r.net) && validLimit(r.total)
@@ -435,7 +446,7 @@ async function runStage({
     // Collector data avoids a read-after-write miss; standalone callers may supply identities only.
     const inputs = [];
     for (const p of pcfData) {
-      if (!TARGET_CODES.includes(p?.code) || p.date !== date) continue;
+      if (!EVENT_CODES.includes(p?.code) || p.date !== date) continue;
       if (p.source) inputs.push(p);
       else {
         const raw = await read(buildEtfPcfCacheKey(p.code, p.date));
@@ -449,16 +460,36 @@ async function runStage({
     const current = [...new Map(inputs.map((p) => [p.code, p])).values()]
       .filter(
         (p) =>
-          TARGET_CODES.includes(p.code) &&
+          EVENT_CODES.includes(p.code) &&
           p.date === date &&
           validateEtfPcfCachedData(p, { code: p.code, date, now: new Date(scheduledTime) }).ok
       )
       .map((p) => ({
         code: p.code,
         date,
+        ...normalizeCreationStatus(p),
         net: { kind: p.netSubscribeLimitKind, shares: p.netSubscribeLimitShares },
         total: { kind: p.totalSubscribeLimitKind, shares: p.totalSubscribeLimitShares }
       }));
+    // SSE has no aligned total-limit/share source; retain only validated PCF status.
+    for (const code of TARGET_CODES.filter((code) => code.startsWith('513'))) {
+      const raw = await read(buildSsePcfCacheKey(code, date));
+      if (!raw) continue;
+      try {
+        const p = parse(raw);
+        if (!validateSsePcfCachedData(p, { code, date, now: new Date(scheduledTime) }).ok) continue;
+        current.push({
+          code,
+          date,
+          creationRedemption: p.creationRedemption,
+          ...normalizeCreationStatus(p),
+          net: { kind: 'unknown', shares: null },
+          total: { kind: 'unknown', shares: null }
+        });
+      } catch {
+        /* 无效缓存不构造状态快照 */
+      }
+    }
     let records = [...cachedShares];
     let sharesReason = 'missing_shares';
     const projectionBatches = [];
@@ -490,7 +521,7 @@ async function runStage({
           records.push(
             ...response.records.filter(
               (r) =>
-                TARGET_CODES.includes(r.code) &&
+                EVENT_CODES.includes(r.code) &&
                 isWellFormedEtfPcfDateKey(r.date) &&
                 r.date < date &&
                 r.date >= day(date, -10) &&
@@ -508,7 +539,7 @@ async function runStage({
       byDate = new Map(),
       previousDates = [...history.keys()],
       evidence = [...previousDates, ...records.map((r) => r.date)];
-    for (const code of TARGET_CODES) {
+    for (const code of EVENT_CODES) {
       const cur = current.find((r) => r.code === code),
         prevDate = selectPreviousDate(date, evidence, evidence),
         prev = history.get(prevDate)?.records.find((r) => r.code === code);
@@ -607,10 +638,29 @@ async function runStage({
             continue;
           }
           const row = batch.records.find((r) => r.date === d);
+          const creationStatus = Object.fromEntries(
+            (history.get(d)?.records || []).map((r) => [r.code, normalizeCreationStatus(r)])
+          );
+          // Older limit snapshots omitted status; read only validated small PCF cache objects.
+          for (const code of TARGET_CODES) {
+            if (creationStatus[code]?.subscriptionAllowed != null) continue;
+            const sse = code.startsWith('513');
+            const raw = await read(sse ? buildSsePcfCacheKey(code, d) : buildEtfPcfCacheKey(code, d));
+            if (!raw) continue;
+            try {
+              const cached = parse(raw);
+              const validate = sse ? validateSsePcfCachedData : validateEtfPcfCachedData;
+              if (validate(cached, { code, date: d, now: new Date(scheduledTime) }).ok)
+                creationStatus[code] = normalizeCreationStatus(cached);
+            } catch {
+              /* 无效缓存不推导状态 */
+            }
+          }
           const data = buildSharesProjection({
             date: d,
             records: [...records.filter((r) => r.date !== d), ...batch.records.filter((r) => r.date === d)],
             limits: history.get(d)?.records || [],
+            creationStatus,
             fetchedAt: batch.fetchedAt,
             dateEvidence: row?.dateEvidence,
             calendar:

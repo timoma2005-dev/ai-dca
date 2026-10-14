@@ -169,3 +169,106 @@ test('acknowledged isolate state prevents rollback when KV reads remain temporar
   // Acknowledged matching pointer must also skip writing despite stale get(null).
   assert.equal(puts.filter((p) => p.key === sharesKey(current.date)).length, 1);
 });
+
+test('13 ETFs: normalized PCF creation status, signed estimates, and honest SSE gaps', async () => {
+  const { normalizeCreationStatus, TARGET_CODES } = await import('../shared/etfPcfSharesSchema.js');
+  for (const [input, expected] of [
+    ['仅允许赎回', [false, true]],
+    ['仅允许申购', [true, false]],
+    ['申购和赎回皆允许', [true, true]],
+    ['申购赎回都允许', [true, true]],
+    ['申购和赎回都允许', [true, true]],
+    ['未知状态', [null, null]],
+    [{ subscriptionAllowed: true, redemptionAllowed: false }, [true, false]],
+    [{ subscriptionAllowed: 'false' }, [null, null]],
+    [null, [null, null]]
+  ])
+    assert.deepEqual(Object.values(normalizeCreationStatus(input)), expected);
+  const base = syntheticProjection();
+  const records = base.records.slice(0, 8).flatMap((r) => [
+    { code: r.code, date: base.date, shares: r.shares, unit: '份' },
+    { code: r.code, date: base.prevDate, shares: r.prevShares, unit: '份' }
+  ]);
+  const build = (creationStatus) =>
+    buildSharesProjection({
+      date: base.date,
+      records,
+      creationStatus,
+      calendar: base.calendar,
+      fetchedAt: base.fetchedAt,
+      projectedAt: base.projectedAt,
+      dateEvidence: base.dateEvidence,
+      limits: [{ code: '513100', date: base.date, total: { kind: 'limited', shares: 100 } }]
+    });
+  const x = build({
+    159501: normalizeCreationStatus('仅允许赎回'),
+    159509: normalizeCreationStatus('仅允许申购'),
+    159513: normalizeCreationStatus('申购和赎回皆允许'),
+    159632: normalizeCreationStatus('申购和赎回皆允许'),
+    513100: normalizeCreationStatus('仅允许赎回'),
+    513110: normalizeCreationStatus('仅允许申购'),
+    513300: normalizeCreationStatus('申购和赎回皆允许')
+  });
+  assert.equal(x.records.length, 13);
+  assert.deepEqual(
+    x.records.map((r) => r.code),
+    TARGET_CODES
+  );
+  assert.deepEqual(
+    x.records.slice(0, 4).map((r) => [r.creationShares, r.creationSharesKind]),
+    [
+      [0, 'exact'],
+      [9500000, 'exact'],
+      [12500000, 'estimate'],
+      [-1000000, 'estimate']
+    ]
+  );
+  assert.equal(x.records[4].creationShares, null);
+  for (const [i, r] of x.records.slice(8).entries()) {
+    assert.equal(
+      r.name,
+      ['纳斯达克100ETF国泰', '纳指ETF国泰', '纳指ETF广发', '纳斯达克100ETF华夏', '纳指ETF华宝'][i]
+    );
+    assert.equal(r.status, 'partial');
+    assert.ok(r.reasons.includes('missing_shares'));
+    assert.deepEqual(
+      [r.shares, r.prevShares, r.deltaShares, r.totalLimitShares, r.limitDate],
+      [null, null, null, null, null]
+    );
+    assert.equal(r.totalLimitKind, 'unknown');
+    assert.equal(r.creationShares, i === 0 ? 0 : null);
+    assert.equal(r.creationSharesKind, i === 0 ? 'exact' : null);
+  }
+  assert.equal(validateSharesProjection(x, { now }), true);
+  const negativeExact = build({ 159632: normalizeCreationStatus('仅允许申购') });
+  assert.equal(negativeExact.records[3].creationShares, null);
+  assert.equal(negativeExact.records[3].creationSharesKind, null);
+  for (const mutate of [
+    (r) => {
+      r.creationShares = 1.5;
+      r.creationSharesKind = 'exact';
+    },
+    (r) => {
+      r.creationShares = -1;
+      r.creationSharesKind = 'exact';
+    },
+    (r) => {
+      r.creationShares = null;
+      r.creationSharesKind = 'estimate';
+    },
+    (r) => {
+      r.creationShares = 1;
+      r.creationSharesKind = 'estimate';
+    },
+    (r) => {
+      delete r.creationShares;
+    },
+    (r) => {
+      r.creationSharesKind = 'unknown';
+    }
+  ]) {
+    const corrupted = structuredClone(x);
+    mutate(corrupted.records[0]);
+    assert.equal(validateSharesProjection(corrupted, { now }), false);
+  }
+});
