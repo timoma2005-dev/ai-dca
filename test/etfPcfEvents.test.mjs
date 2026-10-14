@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { limitRelaxation, netCreationNearTotalLimit, mergeEventLogs, validateEventLog, persistEventLog, eventKey, selectPreviousDate, runEtfPcfEvents } from '../workers/ocr-proxy/src/etfPcfEvents.js';
-import { parseEtfPcf } from '../workers/ocr-proxy/src/etfPcfLimit.js';
+import { parseEtfPcf, buildEtfPcfCacheKey } from '../workers/ocr-proxy/src/etfPcfLimit.js';
 const at='2026-10-13T01:00:00.000Z',date='2026-10-13',previous='2026-10-12',code='159659';
 const l=shares=>({kind:'limited',shares}),unlimited={kind:'unlimited',shares:null},unknown={kind:'unknown',shares:null};
 const relax=(prev,cur,overrides={})=>limitRelaxation({code,date,basis:'total',prev_date:previous,when_detected:at,prev,cur,...overrides});
@@ -184,4 +184,48 @@ test('validateEventLog accepts tier field', () => {
   const rUnlimited = relax(l(100), unlimited, {code: '159660'});
   const testLog = log(date, [r5, r10, rUnlimited]);
   assert.ok(validateEventLog(testLog, date));
+});
+
+test('fallback baseline populates history when snapshot missing', async () => {
+  const kv = new KV();
+  for (const code of ['159941', '159659', '159660', '159696', '159632']) {
+    kv.store.set(buildEtfPcfCacheKey(code, previous), JSON.stringify({
+      ...pcf(), code, date: previous, netSubscribeLimitKind: 'limited', netSubscribeLimitShares: 100000
+    }));
+  }
+  const result = await stage(kv);
+  assert.equal(result.ok, true);
+  const data = JSON.parse(kv.store.get(eventKey(date)));
+  const event = data.events.find(e => e.signal_type === 'limit_relaxation' && e.code === '159941' && e.basis === 'net');
+  assert.ok(event);
+  assert.equal(event.ratio, 13);
+  assert.equal(event.tier, '10x');
+  assert.equal(data.checks.find(c => c.signal_type === 'limit_relaxation' && c.code === '159941' && c.basis === 'net').status, 'ok');
+  assert.ok(kv.puts.every(p => p.key !== eventKey(previous, 'limits')));
+});
+
+test('fallback below 50% coverage leaves baseline empty', async () => {
+  const kv = new KV();
+  for (const code of ['159941', '159659', '159660']) {
+    kv.store.set(buildEtfPcfCacheKey(code, previous), JSON.stringify({
+      ...pcf(), code, date: previous, netSubscribeLimitKind: 'limited', netSubscribeLimitShares: 100000
+    }));
+  }
+  const result = await stage(kv);
+  assert.equal(result.ok, true);
+  const data = JSON.parse(kv.store.get(eventKey(date)));
+  assert.equal(data.checks.find(c => c.signal_type === 'limit_relaxation' && c.code === '159941' && c.basis === 'net').status, 'unknown');
+});
+
+test('invalid fallback entries skipped gracefully', async () => {
+  const kv = new KV();
+  for (const code of ['159501', '159509', '159513', '159632', '159659', '159660', '159696', '159941']) {
+    kv.store.set(buildEtfPcfCacheKey(code, previous), JSON.stringify({ schemaVersion: 1, source: 'wrong_source', code, date: previous }));
+  }
+  kv.store.set(buildEtfPcfCacheKey('159501', previous), 'not-json');
+  const result = await stage(kv);
+  assert.equal(result.ok, true);
+  const data = JSON.parse(kv.store.get(eventKey(date)));
+  assert.equal(data.events.length, 0);
+  assert.ok(data.checks.every(c => c.status === 'unknown'));
 });

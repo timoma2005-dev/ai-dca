@@ -440,6 +440,29 @@ async function runStage({
         }
         if (snapshotValid(snap, d, 'limits')) history.set(d, snap);
       }
+      // 快照缺失时回退读单条 KV，避免空基准导致当日全部 unknown。
+      if (!history.has(d)) {
+        const fallback = [];
+        for (const code of EVENT_CODES) {
+          try {
+            const cached = await read(buildEtfPcfCacheKey(code, d));
+            if (!cached) continue;
+            const p = parse(cached);
+            if (!validateEtfPcfHistoryData(p, { code, date: d, now: new Date(scheduledTime) }).ok) continue;
+            fallback.push({
+              code,
+              date: d,
+              ...normalizeCreationStatus(p),
+              net: { kind: p.netSubscribeLimitKind, shares: p.netSubscribeLimitShares },
+              total: { kind: p.totalSubscribeLimitKind, shares: p.totalSubscribeLimitShares }
+            });
+          } catch {
+            /* 单条读取/解析失败只跳过，不阻断整体 */
+          }
+        }
+        if (fallback.length * 2 >= EVENT_CODES.length)
+          history.set(d, { schemaVersion: 1, source: 'szse_pcf', date: d, fetchedAt: detectedAt, records: fallback });
+      }
       const share = await read(eventKey(d, 'shares'));
       if (share) {
         let snap;
