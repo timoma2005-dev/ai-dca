@@ -13,6 +13,7 @@ import {
   handleHoldingsNavHistoryBatch
 } from './holdingsNavRoutes.js';
 import { handleHoldingsOcr, handleOcr } from './imageOcrRoutes.js';
+import { sendPcfSignalNotifications } from './pcfSignalNotify.js';
 import { emptyResponse, jsonResponse } from './ocrHttp.js';
 import { HOLDINGS_PROMPT_VERSION, PROMPT_VERSION } from './geminiPrompt.js';
 
@@ -37,6 +38,7 @@ export async function runEtfPcfDailyRefresh({
       sse: { ok: false, reason: 'invalid_scheduled_time' },
       szse: { ok: false, reason: 'invalid_scheduled_time' },
       events: { ok: false, reason: 'invalid_scheduled_time' },
+      pcfSignal: null,
       jobDurationMs: Date.now() - startMs
     };
   }
@@ -57,7 +59,17 @@ export async function runEtfPcfDailyRefresh({
   }
   let events;
   try { events = await eventsRefresh({ env, pcfs: pcfs.map(({ code, date }) => ({ code, date })), pcfData: pcfs, scheduledTime }); } catch (_e) { events = { ok: false, reason: 'events_stage_error' }; }
-  return { sse, szse, events, jobDurationMs: Date.now() - startMs };
+  // PCF 限额放开信号推送：检测到 5x/10x/unlimited 事件后发送通知
+  let pcfSignal = null;
+  if (events?.ok && Array.isArray(events.detectedEvents) && events.detectedEvents.length > 0) {
+    try {
+      pcfSignal = await sendPcfSignalNotifications(env, events.detectedEvents);
+    } catch (e) {
+      console.log('[etf-pcf][pcf-signal] notification failed: ' + ((e && e.message) || e));
+      pcfSignal = { ok: false, reason: 'notification_error' };
+    }
+  }
+  return { sse, szse, events, pcfSignal, jobDurationMs: Date.now() - startMs };
 }
 
 export default {

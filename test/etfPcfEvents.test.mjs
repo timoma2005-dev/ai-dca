@@ -152,3 +152,36 @@ test('SSE status uses validated date-specific KV cache only; expired/source/iden
     assert.ok(kv.puts.every(p => !p.key.startsWith('sse-pcf:')));
   }
 });
+
+test('limit_relaxation tier: 5x, 10x, unlimited', () => {
+  // 5x tier: ratio 5-9.99
+  const r5 = relax(l(100), l(500));
+  assert.equal(r5.event.tier, '5x');
+  assert.equal(r5.event.ratio, 5);
+
+  const r8 = relax(l(100), l(800));
+  assert.equal(r8.event.tier, '5x');
+  assert.equal(r8.event.ratio, 8);
+
+  // 10x tier: ratio >= 10
+  const r10 = relax(l(100), l(1000));
+  assert.equal(r10.event.tier, '10x');
+  assert.equal(r10.event.ratio, 10);
+
+  const r15 = relax(l(100), l(1500));
+  assert.equal(r15.event.tier, '10x');
+
+  // unlimited tier: transition to unlimited
+  const rUnlimited = relax(l(100), unlimited);
+  assert.equal(rUnlimited.event.tier, 'unlimited');
+  assert.equal(rUnlimited.event.ratio, null);
+  assert.equal(rUnlimited.event.transition, 'to_unlimited');
+});
+
+test('validateEventLog accepts tier field', () => {
+  const r5 = relax(l(100), l(500), {code: '159501'});
+  const r10 = relax(l(100), l(1000), {code: '159659'});
+  const rUnlimited = relax(l(100), unlimited, {code: '159660'});
+  const testLog = log(date, [r5, r10, rUnlimited]);
+  assert.ok(validateEventLog(testLog, date));
+});

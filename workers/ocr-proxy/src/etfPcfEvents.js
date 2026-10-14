@@ -50,12 +50,13 @@ export function limitRelaxation(input) {
     if (cur.kind === 'limited') r.check.reason = 'tightening';
     return r;
   }
-  if (cur.kind === 'unlimited') extra = { ratio_kind: 'unbounded', transition: 'to_unlimited' };
+  if (cur.kind === 'unlimited') extra = { ratio_kind: 'unbounded', transition: 'to_unlimited', tier: 'unlimited' };
   else {
     if (prev.shares === 0)
       return cur.shares === 0 ? r : result(input, 'limit_relaxation', basis, 'unknown', 'zero_denominator');
     ratio = cur.shares / prev.shares;
     if (ratio < 5) return r;
+    extra.tier = ratio >= 10 ? '10x' : '5x';
   }
   r.event = {
     signal_type: 'limit_relaxation',
@@ -160,13 +161,15 @@ export function validateEventLog(log, date) {
             ? e.cur.kind === 'unlimited' &&
               e.prev.kind === 'limited' &&
               e.ratio_kind === 'unbounded' &&
-              e.transition === 'to_unlimited'
+              e.transition === 'to_unlimited' &&
+              e.tier === 'unlimited'
             : Number.isFinite(e.ratio) &&
               e.ratio >= 5 &&
               e.prev.kind === 'limited' &&
               e.prev.shares > 0 &&
               e.cur.kind === 'limited' &&
-              e.ratio === e.cur.shares / e.prev.shares)
+              e.ratio === e.cur.shares / e.prev.shares &&
+              e.tier === (e.ratio >= 10 ? '10x' : '5x'))
         );
       return (
         Number.isSafeInteger(e.netCreation) &&
@@ -708,7 +711,8 @@ async function runStage({
     }
     for (const result of projectionResults)
       if (!result.ok) console.warn('shares_projection_skipped', result.reason);
-    return { ok: true, date, events: [...byDate.values()].flat().filter((r) => r.event).length };
+    const detectedEvents = [...byDate.values()].flat().filter((r) => r.event).map((r) => r.event);
+    return { ok: true, date, events: detectedEvents.length, detectedEvents };
   } catch (e) {
     return { ok: false, reason: e.message === 'timeout' ? 'timeout' : 'events_stage_error' };
   } finally {
