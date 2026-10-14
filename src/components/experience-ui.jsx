@@ -111,19 +111,32 @@ export function SectionHeading({ eyebrow, title, description, action, className 
   );
 }
 
-export function PageTabs({ tabs = [], activeKey = '', className = '', onSelect }) {
+export function PageTabs({ tabs = [], activeKey = '', className = '', onSelect, tablistLabel }) {
   if (!tabs.length) {
     return null;
   }
 
   return (
     <div className={cx('overflow-x-auto', className)}>
-      <div className="inline-flex min-w-full items-center gap-1.5 rounded-2xl bg-slate-100 p-1.5 sm:min-w-0">
+      <div role={tablistLabel ? 'tablist' : undefined} aria-label={tablistLabel} className="inline-flex min-w-full items-center gap-1.5 rounded-2xl bg-slate-100 p-1.5 sm:min-w-0">
         {tabs.map((tab) => {
           const isActive = tab.key === activeKey;
           return (
             <a
               key={tab.key}
+              id={tablistLabel ? `tab-${tab.key}` : undefined}
+              role={tablistLabel ? 'tab' : undefined}
+              aria-selected={tablistLabel ? isActive : undefined}
+              aria-controls={tablistLabel ? `panel-${tab.key}` : undefined}
+              tabIndex={tablistLabel ? (isActive ? 0 : -1) : undefined}
+              onKeyDown={event => {
+                if (!tablistLabel || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const index = tabs.findIndex(t => t.key === tab.key);
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+                onSelect?.(tabs[next].key);
+                document.getElementById(`tab-${tabs[next].key}`)?.focus();
+              }}
               className={cx(
                 'inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-xl px-3.5 py-2 text-[13px] font-semibold transition-all',
                 isActive ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'text-slate-500 hover:bg-white hover:text-slate-800'

@@ -5,7 +5,8 @@
 import { useEffect, useState } from 'react';
 import { isAnalyticsAdmin } from '../app/analytics.js';
 import { apiUrl, apiUrlWithFallback, fetchWithFallback } from '../app/apiBase.js';
-import { cx } from '../components/experience-ui.jsx';
+import EtfPcfSharesPanel from './EtfPcfSharesPanel.jsx';
+import { cx, PageTabs } from '../components/experience-ui.jsx';
 
 function PercentileBar({ percentile }) {
   const pct = Math.max(0, Math.min(100, Number(percentile) || 0));
@@ -29,7 +30,7 @@ function PercentileBar({ percentile }) {
   );
 }
 
-export function AdminRadarExperience({ session }) {
+function RadarPanel({ session }) {
   const isAdmin = isAnalyticsAdmin(session);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,16 +38,22 @@ export function AdminRadarExperience({ session }) {
   const [computing, setComputing] = useState(false);
   const [selectedCode, setSelectedCode] = useState(null);
 
-  const fetchRadar = async () => {
+  const fetchRadar = async (signal, isActive) => {
     try {
       // 直连 Worker：接口为公开路由（测试阶段直接放行），不能带 credentials，
       // 否则跨域下 Worker 未返回 allow-credentials 会导致响应被浏览器拦截。
-      const resp = await fetchWithFallback(apiUrlWithFallback('/api/notify/nasdaq-radar'));
+      const resp = await fetchWithFallback(apiUrlWithFallback('/api/notify/nasdaq-radar'), { signal, redirect: 'manual' });
+      if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400)) {
+        try { await resp.body?.cancel(); } catch { /* redirect remains rejected */ }
+        throw Error('redirect_rejected');
+      }
       const json = await resp.json();
+      if (!isActive()) return;
       setData(json?.data || null);
       if (!json?.data) setError('暂无雷达数据（每日21:35净值发布后计算）');
       else setError('');
     } catch (e) {
+      if (!isActive()) return;
       setError('加载失败：' + (e?.message || '网络错误'));
     }
   };
@@ -72,11 +79,12 @@ export function AdminRadarExperience({ session }) {
   useEffect(() => {
     if (!isAdmin) return;
     let cancelled = false;
+    const controller = new AbortController();
     (async () => {
-      if (!cancelled) await fetchRadar();
+      if (!cancelled) await fetchRadar(controller.signal, () => !cancelled);
       if (!cancelled) setLoading(false);
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [isAdmin]);
 
   if (!isAdmin) {
@@ -310,4 +318,29 @@ export function AdminRadarExperience({ session }) {
   );
 }
 
+export function AdminRadarExperience({ session }) {
+  const [activeTab, setActiveTab] = useState('radar');
+  if (!isAnalyticsAdmin(session)) {
+    return <p className="p-5 text-sm text-slate-500">当前账号没有权限。请使用 lovexl 登录后访问。</p>;
+  }
+  return (
+    <div className="mx-auto max-w-6xl min-w-0 p-4">
+      <PageTabs
+        tablistLabel="管理员雷达"
+        tabs={[
+          { key: 'radar', label: '套利雷达', href: '#radar' },
+          { key: 'shares', label: '份额新增', href: '#shares' }
+        ]}
+        activeKey={activeTab}
+        onSelect={setActiveTab}
+      />
+      <div role="tabpanel" id="panel-radar" aria-labelledby="tab-radar" hidden={activeTab !== 'radar'} tabIndex={0} className="mt-4">
+        {activeTab === 'radar' && <RadarPanel session={session} />}
+      </div>
+      <div role="tabpanel" id="panel-shares" aria-labelledby="tab-shares" hidden={activeTab !== 'shares'} tabIndex={0} className="mt-4">
+        {activeTab === 'shares' && <EtfPcfSharesPanel />}
+      </div>
+    </div>
+  );
+}
 export default AdminRadarExperience;

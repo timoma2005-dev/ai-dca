@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>
+    份额新增 synthetic demo</title
+  ><style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #f5f7fb;
+      color: #1e293b;
+      font:
+        14px system-ui,
+        sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: auto;
+      padding: 24px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    button,
+    select {
+      font: inherit;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px;
+      background: #e2e8f0;
+      color: #334155;
+      cursor: pointer;
+    }
+    button[aria-selected='true'] {
+      background: #4f46e5;
+      color: white;
+    }
+    [role='tablist'] {
+      display: flex;
+      gap: 8px;
+      margin: 20px 0;
+    }
+    .card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.3fr repeat(3, 1fr) 1fr 1.3fr;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .grid > div:not(:first-child) {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .name {
+      overflow-wrap: anywhere;
+    }
+    .label {
+      display: none;
+    }
+    .muted {
+      color: #64748b;
+    }
+    .banner {
+      background: #fff7ed;
+      padding: 12px;
+      border-radius: 12px;
+    }
+    .skeleton {
+      height: 60px;
+      background: #e2e8f0;
+      border-radius: 12px;
+      margin: 12px 0;
+    }
+    .reason {
+      grid-column: 1/-1;
+      color: #64748b;
+    }
+    footer {
+      margin-top: 20px;
+      font-size: 12px;
+      color: #64748b;
+    }
+    @media (max-width: 900px) {
+      main {
+        padding: 12px;
+      }
+      .card {
+        padding: 14px;
+      }
+      .grid.head {
+        display: none;
+      }
+      .grid {
+        display: block;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 14px;
+        margin: 12px 0;
+      }
+      .grid > div:not(:first-child) {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding-top: 10px;
+      }
+      .grid > div > span:last-child {
+        max-width: 55%;
+        overflow-wrap: anywhere;
+      }
+      .label {
+        display: block;
+        text-align: left;
+        color: #64748b;
+      }
+      .reason {
+        margin-top: 12px;
+      }
+    }
+  </style>
+  <main>
+    <header>
+      <h2>管理员雷达</h2>
+      <span class="muted">synthetic 演示数据</span>
+    </header>
+    <label
+      >场景
+      <select id="state">
+        <option>snapshot</option>
+        <option>loading</option>
+        <option>error</option>
+        <option>empty</option>
+        <option>partial</option>
+        <option>stale</option>
+        <option value="missing">缺报表日期</option>
+      </select></label
+    >
+    <label><input type="checkbox" id="admin" checked />管理员</label>
+    <div role="tablist" aria-label="管理员雷达">
+      <button role="tab" id="tab-radar" aria-controls="panel-radar" aria-selected="true">套利雷达</button
+      ><button role="tab" id="tab-shares" aria-controls="panel-shares" aria-selected="false" tabindex="-1">
+        份额新增
+      </button>
+    </div>
+    <section id="panel-radar" role="tabpanel" aria-labelledby="tab-radar" class="card">
+      套利雷达 · synthetic 布局演示
+    </section>
+    <section id="panel-shares" role="tabpanel" aria-labelledby="tab-shares" hidden></section>
+    <footer>
+      全部数值、日期及差分为 synthetic 演示数据。真实 XLSX 缺少报表日期，不能据此计算真实份额新增或金额。
+    </footer>
+  </main>
+  <script>
+    const codes = ['159501', '159509', '159513', '159632', '159659', '159660', '159696', '159941'];
+    const names = [
+      '纳指ETF嘉实',
+      '纳指科技ETF景顺',
+      '纳斯达克100ETF大成',
+      '纳斯达克ETF华安',
+      '纳斯达克100ETF招商',
+      '纳指ETF汇添富',
+      '纳指ETF易方达',
+      '纳指ETF广发'
+    ];
+    const labels = [
+      '是（100% 精确相等）',
+      '否（95% 接近）',
+      '否（超过上限观测 125%）',
+      '否（净减少）',
+      '不适用（累计不限）',
+      '—（unknown）',
+      '—（缺上期无法判断）',
+      '否'
+    ];
+    const delta = [10000000, 9500000, 12500000, -1000000, 2000000, 3000000, null, 0];
+    const fmt = (x) => (x === null ? '—' : x.toLocaleString('zh-CN'));
+    const heads = [
+      '代码 / 名称',
+      '本期份额（10-12）',
+      '上期份额（10-09）',
+      '新增份额（份）',
+      '新增金额（万元，估算）',
+      '是否顶格'
+    ];
+    const panel = document.getElementById('panel-shares');
+    function render() {
+      const state = document.getElementById('state').value;
+      const admin = document.getElementById('admin').checked;
+      document.getElementById('panel-radar').textContent = admin ? '套利雷达 · synthetic 布局演示' : '当前账号没有权限。';
+      if (!admin) {
+        panel.innerHTML = '<p>当前账号没有权限。</p>';
+        return;
+      }
+      let content = '<p>今天可获得的最新场内份额报表，非今日实时新增；新增份额为数据日与上一交易日之差。</p>';
+      if (['snapshot', 'partial', 'stale'].includes(state))
+        content +=
+          '<p>数据日期：2026-10-12 · 对比日期：2026-10-09</p><p>源抓取时间：2026-10-13 09:03:20（上海时间）</p>';
+      if (state === 'stale')
+        content +=
+          '<p class="banner">数据滞后：最新报表截至 2026-10-12，尚未获得预期交易日数据</p><p class="banner">本地缓存待重新确认</p>';
+      if (state === 'loading')
+        content +=
+          '<p role="status">正在读取份额快照…</p>' + Array(3).fill('<div class="skeleton"></div>').join('');
+      else if (state === 'error')
+        content += '<p role="alert">份额快照读取失败，请稍后重试</p><button id="retry">重试读取</button>';
+      else if (state === 'empty') content += '<p>暂无已验证份额快照，等待定时任务更新</p>';
+      else if (state === 'missing') content += '<p>报表缺少数据日期，暂无法计算份额新增</p>';
+      else {
+        content += '<div class="grid head">' + heads.map((x) => '<div>' + x + '</div>').join('') + '</div>';
+        codes.forEach((code, i) => {
+          const missing = i === 6 || (state === 'partial' && i === 7);
+          const d = missing ? null : delta[i];
+          const prior = d === null ? null : 20000000000;
+          content +=
+            '<article class="grid"><div class="name"><b>' +
+            code +
+            '</b><p>' +
+            names[i] +
+            '</p></div>' +
+            [
+              fmt(20000000000 + (d || 0)),
+              fmt(prior),
+              fmt(d),
+              '—',
+              missing ? '—（缺上期无法判断）' : labels[i]
+            ]
+              .map(
+                (x, j) => '<div><span class="label">' + heads[j + 1] + '</span><span>' + x + '</span></div>'
+              )
+              .join('') +
+            (missing ? '<p class="reason">缺少可确认的上一交易日份额，暂无法计算新增</p>' : '') +
+            '</article>';
+        });
+      }
+      content +=
+        '<p class="muted">新增金额 v1 全部 —：不拿实时行情/IOPV 凑数。</p><p class="muted">顶格指净增精确等于数据日累计申购限额；90% 为接近。净差分不能证明实际总申购顶格。</p>';
+      panel.innerHTML = '<div class="card">' + content + '</div>';
+      document.getElementById('retry')?.addEventListener('click', () => {
+        document.getElementById('state').value = 'loading';
+        render();
+        setTimeout(() => {
+          document.getElementById('state').value = 'snapshot';
+          render();
+        }, 400);
+      });
+    }
+    const tabs = [...document.querySelectorAll('[role=tab]')];
+    function activate(i) {
+      tabs.forEach((tab, j) => {
+        tab.setAttribute('aria-selected', String(i === j));
+        tab.tabIndex = i === j ? 0 : -1;
+        document.getElementById(tab.getAttribute('aria-controls')).hidden = i !== j;
+      });
+      render();
+    }
+    tabs.forEach((tab, i) => {
+      tab.onclick = () => activate(i);
+      tab.onkeydown = (e) => {
+        if (['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+          e.preventDefault();
+          const j = 1 - i;
+          activate(j);
+          tabs[j].focus();
+        }
+      };
+    });
+    document.getElementById('state').onchange = () => {
+      activate(1);
+    };
+    document.getElementById('admin').onchange = render;
+    render();
+  </script>
+</html>

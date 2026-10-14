@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { isWellFormedEtfPcfDateKey } from './etfPcfLimit.js';
-export const TARGET_CODES = ['159501', '159509', '159513', '159632', '159659', '159660', '159696', '159941'];
+import { TARGET_CODES } from '../../../shared/etfPcfSharesSchema.js';
+export { TARGET_CODES };
 const MAX = 1048576;
 const fail = (reason) => {
   throw Error(reason);
@@ -195,7 +196,9 @@ export async function unzipXlsx(input) {
 }
 export function decimalShares(value, unit) {
   if (!['份', '万份'].includes(unit)) fail('unknown_unit');
-  const m = /^(\d+)(?:\.(\d+))?$/.exec(String(value));
+  const raw = String(value);
+  if (raw.includes(',') && !/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(raw)) fail('shares_decimal');
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(raw.replaceAll(',', ''));
   if (!m) fail('shares_decimal');
   const fraction = m[2] || '',
     scale = 10n ** BigInt(fraction.length),
@@ -203,7 +206,7 @@ export function decimalShares(value, unit) {
   if (n % scale || n / scale > BigInt(Number.MAX_SAFE_INTEGER)) fail('shares_integer');
   return Number(n / scale);
 }
-export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES } = {}) {
+export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES, includeEvidence = false } = {}) {
   const files = await unzipXlsx(buffer),
     read = (name) => {
       const b = files.get(name);
@@ -244,7 +247,7 @@ export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES } = {
   const table = rows.map((r) =>
     children(r, 'c').map((c) => ({ cell: c, col: (c.attrs.r || '').replace(/\d+$/, ''), value: value(c) }))
   );
-  let header, codeCol, sharesCol, dateCol, unit;
+  let header, codeCol, sharesCol, dateCol, nameCol, unit;
   for (const row of table) {
     const a = row.find((c) => /基金代码|证券代码/.test(c.value)),
       b = row.find((c) => /份额|规模/.test(c.value)),
@@ -255,6 +258,7 @@ export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES } = {
       codeCol = a.col;
       sharesCol = b.col;
       dateCol = d.col;
+      nameCol = row.find((c) => /^(基金简称|证券简称)$/.test(c.value))?.col;
       unit = /[（(]\s*(万份|份)\s*[）)]/.exec(b.value)?.[1] || null;
       break;
     }
@@ -291,7 +295,22 @@ export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES } = {
       if (!isWellFormedEtfPcfDateKey(date)) fail('excel_date');
     }
     if (records.some((r) => r.code === code && r.date === date)) fail('report_shape');
-    records.push({ code, date, shares: decimalShares(b.value, unit), unit });
+    records.push({
+      code,
+      date,
+      shares: decimalShares(b.value, unit),
+      unit,
+      ...(includeEvidence
+        ? {
+            ...(nameCol ? { name: row.find((c) => c.col === nameCol)?.value || code } : {}),
+            dateEvidence: {
+              source: 'szse_fund_report',
+              column: header.find((c) => c.col === dateCol).value,
+              type: isWellFormedEtfPcfDateKey(d.value) ? 'iso_date' : 'excel_date'
+            }
+          }
+        : {})
+    });
   }
   if (!records.length) fail('report_shape');
   return records;

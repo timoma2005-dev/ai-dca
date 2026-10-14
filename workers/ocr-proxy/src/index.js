@@ -1,3 +1,4 @@
+import { handleEtfPcfShares } from './etfPcfSharesRoute.js';
 import { handleFundFee, handleFundLimit, handleFundLimitOverview } from './fundRoutes.js';
 import { refreshFundLimitCache } from './fundLimit.js';
 import { refreshFundLimitOverview } from './fundLimitOverview.js';
@@ -77,6 +78,8 @@ export default {
 
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (url.pathname === '/api/etf-pcf-shares') return handleEtfPcfShares(request, env, ctx, url.searchParams);
 
     if (request.method === 'OPTIONS') {
       return emptyResponse();

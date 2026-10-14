@@ -78,3 +78,37 @@ test('failed reads stop writes; timeout budget and holiday avoid fabricated limi
  const zero=new KV();await stage(zero,{deadlineMs:0});assert.equal(zero.puts.length,0);
  const holiday=new KV();await stage(holiday,{pcfs:[]});assert.equal(holiday.store.has(eventKey(date,'limits')),false);const data=JSON.parse(holiday.store.get(eventKey(date)));assert.equal(data.events.length,0);assert.ok(data.checks.every(c=>c.status==='unknown'));
 });
+test('projection sidecar reuses one download; validator/date-put/pointer failures preserve original events and permanent writes', async () => {
+  for (const failure of ['none', 'validator', 'put', 'pointer']) {
+    const kv = new KV();
+    seed(kv, limits(previous, [{ code: '159941', net: unlimited, total: l(10000000) }]));
+    const put = kv.put.bind(kv);
+    kv.put = async (key, value, opts) => {
+      if ((failure === 'put' && key.startsWith('etf-pcf-shares:') && !key.endsWith('latest')) || (failure === 'pointer' && key.endsWith('shares:latest'))) throw Error('synthetic_failure');
+      return put(key, value, opts);
+    };
+    let downloads = 0;
+    const fetchedAt = new Date(Date.now() - 1000).toISOString();
+    const sharesFetch = async () => {
+      downloads++;
+      return { ok: true, source: 'szse_fund_report', fetchedAt, records: [
+        { code: '159941', date: previous, shares: 10001000, unit: '份', ...(failure === 'validator' ? {} : { dateEvidence: { source: 'szse_fund_report', column: '日期', type: 'iso_date' } }) },
+        { code: '159941', date: '2026-10-09', shares: 1000, unit: '份', dateEvidence: { source: 'szse_fund_report', column: '日期', type: 'iso_date' } }
+      ] };
+    };
+    const result = await stage(kv, { sharesFetch });
+    assert.equal(result.ok, true); assert.equal(downloads, 1);
+    const events = JSON.parse(kv.store.get(eventKey(previous)));
+    assert.ok(events.events.some(e => e.signal_type === 'net_creation_near_total_limit'));
+    assert.ok(kv.store.has(eventKey(date, 'limits')));
+    assert.ok(kv.puts.filter(p => p.key.startsWith('etf-pcf-events')).every(p => p.options === undefined));
+    if (failure === 'none') {
+      const data = JSON.parse(kv.store.get('etf-pcf-shares:20261012'));
+      assert.equal(data.records.find(r => r.code === '159941').deltaShares, 10000000);
+      assert.equal(data.records.find(r => r.code === '159941').atLimit, true);
+      assert.match(data.calendar.notice, /szse\.cn/);
+      assert.ok(kv.store.has('etf-pcf-shares:latest'));
+    }
+    if (failure === 'pointer') assert.ok(kv.store.has('etf-pcf-shares:20261012'));
+  }
+});

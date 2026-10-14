@@ -1,3 +1,5 @@
+import { confirmedSharesCalendar } from '../../../shared/etfPcfTradingCalendar.js';
+import { buildSharesProjection, persistSharesProjection } from './etfPcfSharesProjection.js';
 import {
   isWellFormedEtfPcfDateKey,
   shanghaiDateKey,
@@ -348,8 +350,14 @@ function persistSnapshot(kv, incoming, type, deadlineAt, signal) {
 async function defaultSharesFetch(args) {
   const r = await fetchEtfPcfShares(args);
   if (!r.ok) return r;
+  const fetchedAt = new Date().toISOString();
   try {
-    return { ok: true, source: 'szse_fund_report', records: await parseEtfPcfSharesXlsx(r.bytes) };
+    return {
+      ok: true,
+      source: 'szse_fund_report',
+      fetchedAt,
+      records: await parseEtfPcfSharesXlsx(r.bytes, { includeEvidence: true })
+    };
   } catch (e) {
     return { ok: false, reason: e.message };
   }
@@ -363,7 +371,8 @@ export function runEtfPcfEvents(options = {}) {
       options.detectedAt,
       options.pcfs,
       options.pcfData,
-      options.deadlineMs
+      options.deadlineMs,
+      options.tradingCalendar
     ]);
   if (s.inflight.has(key)) return s.inflight.get(key);
   const task = runStage(options);
@@ -378,7 +387,8 @@ async function runStage({
   pcfs = [],
   pcfData = pcfs,
   sharesFetch = defaultSharesFetch,
-  deadlineMs = 20000
+  deadlineMs = 20000,
+  tradingCalendar = undefined
 }) {
   if (!Number.isFinite(scheduledTime)) return { ok: false, reason: 'invalid_scheduled_time' };
   const deadline = Date.now() + deadlineMs,
@@ -451,6 +461,7 @@ async function runStage({
       }));
     let records = [...cachedShares];
     let sharesReason = 'missing_shares';
+    const projectionBatches = [];
     // Without any previous PCF ceiling the production downloader cannot assess signal 2.
     if (current.length && (history.size || sharesFetch !== defaultSharesFetch)) {
       for (const url of [CURRENT_SHARES_URL, historicalSharesUrl(day(date, -10), day(date, -1))]) {
@@ -469,7 +480,13 @@ async function runStage({
           response = { ok: false, reason: 'source_failure' };
         }
         expired();
-        if (response.ok && response.source === 'szse_fund_report' && Array.isArray(response.records))
+        if (response.ok && response.source === 'szse_fund_report' && Array.isArray(response.records)) {
+          try {
+            if (response.fetchedAt)
+              projectionBatches.push({ fetchedAt: response.fetchedAt, records: response.records });
+          } catch (e) {
+            console.warn('shares_projection_collect_failed', e.message);
+          }
           records.push(
             ...response.records.filter(
               (r) =>
@@ -482,7 +499,7 @@ async function runStage({
                 ['份', '万份'].includes(r.unit)
             )
           );
-        else sharesReason = response.reason || 'invalid_shares_source';
+        } else sharesReason = response.reason || 'invalid_shares_source';
         const dates = [...new Set(records.map((r) => r.date))];
         if (dates.length >= 2) break;
       }
@@ -578,6 +595,37 @@ async function runStage({
         signal: controller.signal
       });
     }
+    // Independent sidecar after all original event writes; never downloads or mutates logs.
+    const projectionResults = [];
+    for (const batch of projectionBatches) {
+      for (const d of [...new Set(batch.records.map((r) => r.date))]
+        .filter((d) => isWellFormedEtfPcfDateKey(d) && d < date && d >= day(date, -10))
+        .sort()) {
+        try {
+          if (controller.signal.aborted || Date.now() + 1000 >= deadline) {
+            projectionResults.push({ ok: false, reason: 'projection_budget' });
+            continue;
+          }
+          const row = batch.records.find((r) => r.date === d);
+          const data = buildSharesProjection({
+            date: d,
+            records: [...records.filter((r) => r.date !== d), ...batch.records.filter((r) => r.date === d)],
+            limits: history.get(d)?.records || [],
+            fetchedAt: batch.fetchedAt,
+            dateEvidence: row?.dateEvidence,
+            calendar:
+              tradingCalendar === undefined ? confirmedSharesCalendar(day(date, -10), date) : tradingCalendar
+          });
+          projectionResults.push(
+            await persistSharesProjection(kv, data, { deadlineAt: deadline, signal: controller.signal })
+          );
+        } catch (e) {
+          projectionResults.push({ ok: false, reason: 'projection_failed', detail: e.message });
+        }
+      }
+    }
+    for (const result of projectionResults)
+      if (!result.ok) console.warn('shares_projection_skipped', result.reason);
     return { ok: true, date, events: [...byDate.values()].flat().filter((r) => r.event).length };
   } catch (e) {
     return { ok: false, reason: e.message === 'timeout' ? 'timeout' : 'events_stage_error' };

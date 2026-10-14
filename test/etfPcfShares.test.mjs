@@ -77,3 +77,12 @@ test('download abort/timeout and missing runtime capability degrade unknown',asy
  const original=globalThis.DecompressionStream;globalThis.DecompressionStream=undefined;try{assert.equal(supportsRawDeflate(),false);await assert.rejects(unzipXlsx(zip(syntheticParts(),{method:8})),/deflate_raw_unavailable/);}finally{globalThis.DecompressionStream=original;}
  assert.throws(()=>historicalSharesUrl('2026-01-01','2026-10-01'));
 });
+test('strict thousands grouping and opt-in report date evidence, still rejects real undated fixture', async () => {
+  assert.equal(decimalShares('7,062,986,575', '份'), 7062986575);
+  for (const value of ['70,62,986,575', '1,00', ',100', '1,000,', '1,000.1']) assert.throws(() => decimalShares(value, '份'));
+  const [row] = await parseEtfPcfSharesXlsx(zip(syntheticParts({ shares: '1,000' })), { includeEvidence: true });
+  assert.deepEqual(row.dateEvidence, { source: 'szse_fund_report', column: '日期', type: 'iso_date' });
+  assert.equal(row.shares, 1000);
+  const bytes = readFileSync(new URL('./fixtures/etf-pcf-events/szse-current-20261013.xlsx', import.meta.url));
+  await assert.rejects(parseEtfPcfSharesXlsx(bytes, { includeEvidence: true }), /missing_report_date/);
+});
