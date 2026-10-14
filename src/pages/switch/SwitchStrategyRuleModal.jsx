@@ -300,6 +300,8 @@ export function SwitchStrategyRuleModal({
             </div>
           ) : null}
 
+          {!autoPanelOpen ? (
+          <>
           <Field label="方案名称">
             <TextInput
               value={name}
@@ -388,6 +390,8 @@ export function SwitchStrategyRuleModal({
 
           {validation ? (
             <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-5 text-amber-800">{validation}</p>
+          ) : null}
+          </>
           ) : null}
         </div>
 
