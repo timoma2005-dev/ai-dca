@@ -1,6 +1,7 @@
 import { validateSharesProjection, previousSession } from '../../shared/etfPcfSharesSchema.js';
+import { apiUrl } from './apiBase.js';
 export { validateSharesProjection };
-export const SHARES_ENDPOINT = 'https://api.freebacktrack.tech/api/etf-pcf-shares';
+export const SHARES_ENDPOINT = apiUrl('/api/etf-pcf-shares');
 export const shanghaiAccessDay = (now = Date.now()) =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(now);
 export function createSharesClient({
