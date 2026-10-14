@@ -179,11 +179,13 @@ function KpiCol({ label, value, rate, align = 'center', centerRate = false, stat
 	const alignClass = align === 'left' ? 'items-start text-left' : align === 'right' ? 'items-end text-right' : 'items-center text-center';
 	return (
 		<div className={cx('flex min-w-0 flex-col gap-0.5', alignClass)}>
-			{statusLabel ? (
-				<div className="mb-0.5 inline-flex max-w-full items-center rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-700">
-					<span className="truncate">{statusLabel}</span>
-				</div>
-			) : null}
+			<div className={cx('flex h-4 w-full', align === 'left' ? 'justify-start' : align === 'right' ? 'justify-end' : 'justify-center')}>
+				{statusLabel ? (
+					<div className="inline-flex max-w-full items-center rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-700">
+						<span className="truncate">{statusLabel}</span>
+					</div>
+				) : null}
+			</div>
 			<div className="text-[11px] font-medium text-slate-500">
 				{label}
 			</div>
