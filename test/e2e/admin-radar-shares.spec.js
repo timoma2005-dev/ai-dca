@@ -32,7 +32,33 @@ async function setup(page, { admin = true, state = 'snapshot', hold = false, liv
     },
     { admin }
   );
-  const counts = { shares: 0, radar: 0, compute: 0, heavy: 0 };
+  const counts = { shares: 0, radar: 0, compute: 0, heavy: 0, details: 0 };
+  await page.route('**/api/etf-pcf-limit?*', async (route) => {
+    counts.details++;
+    const params = new URL(route.request().url()).searchParams;
+    await route.fulfill({
+      json: {
+        code: params.get('code'),
+        date: params.get('date'),
+        source: 'szse_pcf',
+        prevDayDate: '2026-10-09',
+        prevDayNav: 1.2345,
+        prevDayUnitNav: 1234500,
+        prevDayCashDifference: 100,
+        subscriptionAllowed: true,
+        redemptionAllowed: false,
+        totalSubscribeLimitShares: 10000000,
+        totalRedeemLimitShares: null,
+        netSubscribeLimitShares: null,
+        netRedeemLimitShares: null,
+        creationRedemptionUnitShares: 1000000,
+        cashSubstitutionRatioLimitPct: 50,
+        estimatedCashDifference: 200,
+        iopvRequired: true,
+        expiresAt: new Date(Date.now() + 300000).toISOString()
+      }
+    });
+  });
   let mode = state,
     release;
   const wait = new Promise((resolve) => (release = resolve));
@@ -91,13 +117,13 @@ test('admin tabs load only active shares, cache repeated switches, keyboard ARIA
   expect(counts.shares).toBe(0);
   await shares.click();
   await expect(page.getByText('2026-10-14 PCF 快照，份额统计截至 2026-10-13')).toBeVisible();
-  await expect(page.getByText('本期统计：2026-10-13 · 上期统计：2026-10-12', { exact: false })).toBeVisible();
-  await expect(page.getByText('统计日申购（万份，推算）').first()).toBeVisible();
-  await expect(page.getByText('本期份额（PCF 10-14）').first()).toBeVisible();
-  await expect(page.getByText('上期份额（PCF 10-13）').first()).toBeVisible();
+  await expect(page.getByText('份额统计基准日：', { exact: false })).toBeVisible();
+  await expect(page.getByText('净变动 · 推算申购').first()).toBeVisible();
+  await expect(page.getByText('本期总份额').first()).toBeVisible();
+  await expect(page.getByText('上期总份额').first()).toBeVisible();
   await expect(page.getByText(/更新及时性待确认/)).toHaveCount(0);
   const radarBefore = counts.radar;
-  await expect(page.getByText('是（100% 精确相等）')).toBeVisible();
+  await expect(page.getByText('顶格 100%')).toBeVisible();
   expect(counts.shares).toBe(1);
   expect(counts.radar).toBe(radarBefore);
   await shares.press('ArrowLeft');
@@ -107,14 +133,14 @@ test('admin tabs load only active shares, cache repeated switches, keyboard ARIA
   );
   await page.getByRole('tab', { name: '套利雷达', exact: true }).press('ArrowRight');
   await expect(shares).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('否（超过上限观测 125%）')).toBeVisible();
+  await expect(page.getByText('超限 125%')).toBeVisible();
   expect(counts.shares).toBe(1);
   expect(counts.compute).toBe(0);
   expect(counts.heavy).toBe(0);
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await expect(page.getByText('新增金额暂缺 D 日净值日期证据，不拿实时行情/IOPV 凑数。')).toBeVisible();
+    await expect(page.getByText('新增金额设计决策 (v1)：', { exact: false })).toBeVisible();
     await page.screenshot({ path: `test-results/shares-ui-${width}.png`, fullPage: true });
   }
 });
@@ -123,16 +149,16 @@ for (const state of ['error', 'empty', 'partial', 'missing'])
     const harness = await setup(page, { state });
     await page.getByRole('tab', { name: '份额新增', exact: true }).click();
     const texts = {
-      error: '份额快照读取失败，请稍后重试',
-      empty: '暂无已验证份额快照，等待定时任务更新',
-      partial: '缺少可确认的上一交易日份额，暂无法计算新增',
+      error: '份额快照读取失败',
+      empty: '暂无已验证份额快照',
+      partial: '数据待确认',
       missing: '报表缺少数据日期，暂无法计算份额新增'
     };
-    await expect(page.getByText(texts[state]).first()).toBeVisible();
+    await expect(page.getByText(texts[state], { exact: true }).first()).toBeVisible();
     if (state === 'error') {
       harness.setMode('snapshot');
-      await page.getByRole('button', { name: '重试读取' }).click();
-      await expect(page.getByText('是（100% 精确相等）')).toBeVisible();
+      await page.getByRole('button', { name: /重试读取快照|刷新重试/ }).click();
+      await expect(page.getByText('顶格 100%')).toBeVisible();
       expect(harness.counts.shares).toBe(2);
     }
     expect(harness.counts.compute).toBe(0);
@@ -141,7 +167,7 @@ for (const state of ['error', 'empty', 'partial', 'missing'])
 test('loading and rapid switch release prevents old response consumption', async ({ page }) => {
   const harness = await setup(page, { hold: true });
   await page.getByRole('tab', { name: '份额新增', exact: true }).click();
-  await expect(page.getByText('正在读取份额快照…')).toBeVisible();
+  await expect(page.getByText('正在读取深交所 PCF 份额快照…')).toBeVisible();
   await page.getByRole('tab', { name: '套利雷达', exact: true }).click();
   harness.release();
   await expect(page.getByText('数据日期：2026-10-12 · 对比日期：2026-10-09')).toHaveCount(0);
@@ -170,7 +196,7 @@ test('expired local TTL revalidates once; read failure keeps unexpired last snap
 }) => {
   const data = syntheticProjection({ fetchedAt: new Date(Date.now() - 600000).toISOString() });
   const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(Date.now());
-  const key = `etf-pcf-shares:v2:https://api.freebacktrack.tech/api/etf-pcf-shares:${day}:latest`;
+  const key = `etf-pcf-shares:v2:/api/etf-pcf-shares:${day}:latest`;
   await page.addInitScript(
     ({ key, data }) =>
       localStorage.setItem(key, JSON.stringify({ key, receivedAt: Date.now() - 600000, data })),
@@ -179,7 +205,7 @@ test('expired local TTL revalidates once; read failure keeps unexpired last snap
   const { counts } = await setup(page, { state: 'error' });
   await page.getByRole('tab', { name: '份额新增', exact: true }).click();
   await expect(page.getByText('读取失败，展示上次快照')).toBeVisible();
-  await expect(page.getByText('是（100% 精确相等）')).toBeVisible();
+  await expect(page.getByText('顶格 100%')).toBeVisible();
   expect(counts.shares).toBe(1);
   expect(counts.compute).toBe(0);
   expect(counts.heavy).toBe(0);
@@ -191,13 +217,53 @@ test('visible snapshot becomes stale at client TTL without polling; user retry m
   await page.clock.install({ time: new Date() });
   const { counts } = await setup(page);
   await page.getByRole('tab', { name: '份额新增', exact: true }).click();
-  await expect(page.getByText('是（100% 精确相等）')).toBeVisible();
+  await expect(page.getByText('顶格 100%')).toBeVisible();
   await page.clock.fastForward(300001);
   await expect(page.getByText('本地缓存待重新确认')).toBeVisible();
   expect(counts.shares).toBe(1);
-  await page.getByRole('button', { name: '重试读取' }).click();
+  await page.getByRole('button', { name: /重试读取快照|刷新重试/ }).click();
   await expect(page.getByText('本地缓存待重新确认')).toHaveCount(0);
   expect(counts.shares).toBe(2);
   expect(counts.compute).toBe(0);
+  expect(counts.heavy).toBe(0);
+});
+
+test('filters, search, amount collapse and on-demand T/P detail keep list reads light', async ({ page }) => {
+  const { counts } = await setup(page);
+  await page.getByRole('tab', { name: '份额新增', exact: true }).click();
+  const panel = page.getByRole('tabpanel', { name: '份额新增' });
+  await expect(panel.locator('tbody .shares-row')).toHaveCount(13);
+  expect(counts.details).toBe(0);
+  await expect(panel.getByRole('columnheader', { name: '新增金额估算' })).toHaveCount(0);
+  await panel.getByRole('button', { name: '新增金额：智能折叠' }).click();
+  await expect(panel.getByRole('columnheader', { name: '新增金额估算' })).toBeVisible();
+  await expect(panel.locator('tbody .shares-row').first().getByText('待官方净值').first()).toBeVisible();
+  await panel.getByRole('button', { name: '顶格 / 接近 2', exact: true }).click();
+  await expect(panel.locator('tbody .shares-row')).toHaveCount(2);
+  await panel.getByRole('button', { name: '全部标的 13', exact: true }).click();
+  await panel.getByRole('textbox', { name: '搜索代码或简称' }).fill('does-not-exist');
+  await expect(panel.getByText('未找到符合条件的 ETF 标的')).toBeVisible();
+  await panel.getByRole('textbox', { name: '搜索代码或简称' }).fill('159501');
+  await expect(panel.locator('tbody .shares-row')).toHaveCount(1);
+  await panel.getByRole('button', { name: '明细', exact: true }).click();
+  await expect(panel.getByText('T 日即时申赎规则与上限控制')).toBeVisible();
+  await expect(panel.getByText('P 日前一交易日清算基准')).toBeVisible();
+  await expect(panel.getByText('✓ 允许申购')).toBeVisible();
+  await expect(panel.getByText('✕ 暂停赎回')).toBeVisible();
+  expect(counts.details).toBe(1);
+  await panel.getByRole('button', { name: '收起', exact: true }).click();
+  await panel.getByRole('button', { name: '明细', exact: true }).click();
+  await expect(panel.getByText('T 日即时申赎规则与上限控制')).toBeVisible();
+  expect(counts.details).toBe(1);
+  await panel.getByRole('textbox', { name: '搜索代码或简称' }).fill('513100');
+  await panel.getByRole('button', { name: '明细', exact: true }).click();
+  await expect(panel.getByText('该标的为上交所 (SSE) 跨市场 ETF')).toBeVisible();
+  expect(counts.details).toBe(1);
+  await panel.getByRole('button', { name: '移动端卡片看板视图' }).click();
+  await expect(panel.locator('.card-kpi-row')).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 900 });
+  await expect(panel.getByRole('button', { name: '收起 PCF 明细' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(counts.shares).toBe(1);
   expect(counts.heavy).toBe(0);
 });

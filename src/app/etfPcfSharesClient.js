@@ -179,3 +179,16 @@ export function freshnessMessage(data, accessDay = shanghaiAccessDay()) {
     ? `数据滞后：最新报表截至 ${data.date}，尚未获得预期交易日数据`
     : `最新已验证报表：${data.date}，更新及时性待确认`;
 }
+
+// Compact presentation for the shares decision cards; legacy labels stay unchanged.
+export function sharesCeiling(r) {
+  if (!r.code.startsWith('159')) return { kind: 'pending', label: '沪市待接入' };
+  if (r.totalLimitKind === 'unlimited') return { kind: 'unlimited', label: '累计不限' };
+  if (r.deltaShares === null || r.atLimit === null) return { kind: 'pending', label: '数据待确认' };
+  if (r.deltaShares < 0) return { kind: 'outflow', label: '净流出' };
+  const percent = Math.round(r.utilization * 100);
+  if (r.atLimit) return { kind: 'at-limit', label: '顶格 100%' };
+  if (r.utilization > 1) return { kind: 'over-limit', label: `超限 ${percent}%` };
+  if (r.nearTotalLimit) return { kind: 'near-limit', label: `接近 ${percent}%` };
+  return { kind: 'normal', label: `未顶格 ${percent}%` };
+}

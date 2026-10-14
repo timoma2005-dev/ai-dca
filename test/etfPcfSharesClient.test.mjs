@@ -289,3 +289,26 @@ test('PCF period dates follow trading sessions across a weekend; unsupported map
     });
   assert.match(freshnessMessage(data, '2026-10-14'), /数据滞后/);
 });
+
+test('decision pills cover exact, near, over, outflow, unlimited and missing without quote fallbacks', async () => {
+  const { sharesCeiling } = await import('../src/app/etfPcfSharesClient.js');
+  const rows = syntheticProjection().records;
+  assert.deepEqual(
+    rows.slice(0, 6).map((r) => sharesCeiling(r).label),
+    ['顶格 100%', '接近 95%', '超限 125%', '净流出', '累计不限', '数据待确认']
+  );
+  assert.deepEqual(sharesCeiling(rows.find((r) => r.code.startsWith('513'))), {
+    kind: 'pending',
+    label: '沪市待接入'
+  });
+  assert.equal(
+    sharesCeiling({ ...rows[0], deltaShares: null, atLimit: null, high52w: 123 }).label,
+    '数据待确认'
+  );
+  assert.equal(
+    sharesCeiling({ ...rows[0], atLimit: false, nearTotalLimit: false, utilization: 0.5 }).label,
+    '未顶格 50%'
+  );
+  assert.equal(creationLabel({ creationShares: null, deltaShares: 10000 }), '暂无');
+  assert.ok(rows.every((r) => r.deltaAmountWan === null));
+});
