@@ -81,7 +81,11 @@ test('failed reads stop writes; timeout budget and holiday avoid fabricated limi
 test('projection sidecar reuses one download; validator/date-put/pointer failures preserve original events and permanent writes', async () => {
   for (const failure of ['none', 'validator', 'put', 'pointer']) {
     const kv = new KV();
-    seed(kv, limits(previous, [{ code: '159941', net: unlimited, total: l(10000000) }]));
+    seed(kv, limits(previous, [
+      { code: '159941', net: unlimited, total: l(10000000), subscriptionAllowed: true, redemptionAllowed: true },
+      { code: '513100', net: unknown, total: unknown, creationRedemption: '仅允许赎回' },
+      { code: '513110', net: unknown, total: unknown, creationRedemption: '申购和赎回皆允许' }
+    ]));
     const put = kv.put.bind(kv);
     kv.put = async (key, value, opts) => {
       if ((failure === 'put' && key.startsWith('etf-pcf-shares:') && !key.endsWith('latest')) || (failure === 'pointer' && key.endsWith('shares:latest'))) throw Error('synthetic_failure');
@@ -106,9 +110,45 @@ test('projection sidecar reuses one download; validator/date-put/pointer failure
       const data = JSON.parse(kv.store.get('etf-pcf-shares:20261012'));
       assert.equal(data.records.find(r => r.code === '159941').deltaShares, 10000000);
       assert.equal(data.records.find(r => r.code === '159941').atLimit, true);
+      assert.equal(data.records.length, 13);
+      assert.equal(data.records.find(r => r.code === '159941').creationShares, 10000000);
+      assert.equal(data.records.find(r => r.code === '159941').creationSharesKind, 'estimate');
+      assert.equal(data.records.find(r => r.code === '513100').creationShares, 0);
+      assert.equal(data.records.find(r => r.code === '513100').creationSharesKind, 'exact');
+      assert.equal(data.records.find(r => r.code === '513110').creationShares, null);
+      const snapshot = JSON.parse(kv.store.get(eventKey(date, 'limits')));
+      assert.equal(snapshot.records.find(r => r.code === '159941').subscriptionAllowed, true);
       assert.match(data.calendar.notice, /szse\.cn/);
       assert.ok(kv.store.has('etf-pcf-shares:latest'));
     }
     if (failure === 'pointer') assert.ok(kv.store.has('etf-pcf-shares:20261012'));
+  }
+});
+
+test('SSE status uses validated date-specific KV cache only; expired/source/identity misses stay unknown', async () => {
+  const { mapSsePcfFields, buildSsePcfCacheKey, buildSsePcfSourceUrl } = await import('../workers/ocr-proxy/src/ssePcfLimit.js');
+  const fixture = JSON.parse(readFileSync(new URL('./fixtures/etf-pcf-sse/SSE51310020261013.json', import.meta.url)));
+  for (const failure of ['none', 'expired', 'source', 'identity']) {
+    const kv = new KV();
+    const cached = {
+      ...mapSsePcfFields(fixture.result[0], { code: '513100', now: new Date(at) }),
+      sourceUrl: buildSsePcfSourceUrl('513100'), fetchedAt: at, expiresAt: '2026-10-14T01:00:00.000Z'
+    };
+    if (failure === 'expired') cached.expiresAt = at;
+    if (failure === 'source') cached.source = 'szse_pcf';
+    if (failure === 'identity') cached.code = '513110';
+    kv.store.set(buildSsePcfCacheKey('513100', date), JSON.stringify(cached));
+    const result = await stage(kv);
+    assert.equal(result.ok, true);
+    const snapshot = JSON.parse(kv.store.get(eventKey(date, 'limits')));
+    const row = snapshot.records.find(r => r.code === '513100');
+    if (failure === 'none') {
+      assert.equal(row.subscriptionAllowed, false);
+      assert.equal(row.redemptionAllowed, true);
+      assert.equal(row.creationRedemption, '仅允许赎回');
+      assert.deepEqual(row.total, unknown);
+    } else assert.equal(row, undefined);
+    assert.ok(kv.gets.includes(buildSsePcfCacheKey('513100', date)));
+    assert.ok(kv.puts.every(p => !p.key.startsWith('sse-pcf:')));
   }
 });

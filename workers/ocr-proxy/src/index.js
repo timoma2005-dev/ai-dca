@@ -50,7 +50,7 @@ export async function runEtfPcfDailyRefresh({
   }
   let szse; const pcfs = [];
   try {
-    szse = await szseRefresh({ env, scheduledTime, onSuccess: data => { if (TARGET_CODES.includes(data.code)) pcfs.push(data); } });
+    szse = await szseRefresh({ env, scheduledTime, onSuccess: data => { if (TARGET_CODES.includes(data.code) && data.code.startsWith('159')) pcfs.push(data); } });
   } catch (e) {
     szse = { ok: false, reason: 'szse_stage_error', error: (e && e.message) || String(e) };
     console.log('[etf-pcf] scheduled stage crashed: ' + ((e && e.message) || e));

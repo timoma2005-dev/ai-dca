@@ -88,12 +88,13 @@ export default function EtfPcfSharesPanel() {
     `本期份额${data ? `（${data.date.slice(5)}）` : ''}`,
     `上期份额${data?.prevDate ? `（${data.prevDate.slice(5)}）` : ''}`,
     '新增份额（份）',
+    '当日申购（份）',
     '新增金额（万元，估算）',
     '是否顶格'
   ];
   return (
     <div className="shares-panel space-y-4">
-      <SectionHeading title="份额新增" description={SHARES_DESCRIPTION} />
+      <SectionHeading title="份额新增 · 13 只 ETF" description={SHARES_DESCRIPTION} />
       <Card className="p-4 space-y-3">
         {data && (
           <div className="text-sm text-slate-600">
@@ -149,15 +150,30 @@ export default function EtfPcfSharesPanel() {
                   <p>{r.name}</p>
                   {r.status === 'partial' && <Pill>部分数据</Pill>}
                 </div>
-                {[format(r.shares), format(r.prevShares), format(r.deltaShares), '—', limitLabel(r)].map(
-                  (value, i) => (
-                    <div key={i} className="shares-number">
-                      <span className="shares-mobile-label">{heads[i + 1]}</span>
-                      <span>{value}</span>
-                      {i === 1 && !data.prevDate && r.prevDate && <small>{r.prevDate}</small>}
-                    </div>
-                  )
-                )}
+                {[
+                  format(r.shares),
+                  format(r.prevShares),
+                  format(r.deltaShares),
+                  r.creationSharesKind === 'estimate'
+                    ? `≈${format(r.creationShares)}`
+                    : format(r.creationShares),
+                  '—',
+                  limitLabel(r)
+                ].map((value, i) => (
+                  <div key={i} className="shares-number">
+                    <span className="shares-mobile-label">{heads[i + 1]}</span>
+                    <span
+                      title={
+                        i === 3 && r.creationSharesKind === 'estimate'
+                          ? '估算值：实际申购 ≥ 净增，赎回会抵消'
+                          : undefined
+                      }
+                    >
+                      {value}
+                    </span>
+                    {i === 1 && !data.prevDate && r.prevDate && <small>{r.prevDate}</small>}
+                  </div>
+                ))}
                 {r.shares === null && <p className="shares-reason">缺少本期份额</p>}
                 {r.deltaShares === null && (
                   <p className="shares-reason">缺少可确认的上一交易日份额，暂无法计算新增</p>
