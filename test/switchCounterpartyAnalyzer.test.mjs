@@ -123,11 +123,11 @@ test('excludes insufficient aligned history and malformed candidate payloads', a
   assert.deepEqual(await analyzeCounterparties('159513', ['159509', '159941']), []);
 });
 
-test('default pool excludes holding and includes the six-digit LOF code', () => {
+test('default pool excludes holding and only includes Nasdaq 100 ETFs', () => {
   const pool = defaultCounterpartyPool('159513');
-  assert.equal(pool.length, 13);
+  assert.equal(pool.length, 12);
   assert.ok(!pool.includes('159513'));
-  assert.ok(pool.includes('161128'));
+  assert.ok(!pool.includes('161128'));
   assert.ok(pool.every((code) => /^\d{6}$/.test(code)));
 });
 

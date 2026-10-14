@@ -16,8 +16,7 @@ export const NASDAQ_ETFS = Object.freeze([
   { code: '513870', name: '富国纳斯达克100ETF(QDII)', index_key: 'nasdaq100' },
   { code: '159660', name: '汇添富纳斯达克100ETF', index_key: 'nasdaq100' },
   { code: '513110', name: '华泰柏瑞纳斯达克100ETF(QDII)', index_key: 'nasdaq100' },
-  { code: '159659', name: '招商纳斯达克100ETF(QDII)', index_key: 'nasdaq100' },
-  { code: '161128', name: '易方达标普信息科技指数(QDII-LOF)A', index_key: 'nasdaq100' }
+  { code: '159659', name: '招商纳斯达克100ETF(QDII)', index_key: 'nasdaq100' }
 ]);
 
 export const SP500_ETFS = Object.freeze([
