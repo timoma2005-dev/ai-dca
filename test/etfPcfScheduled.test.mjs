@@ -29,6 +29,7 @@ const FIXTURE_BYTES = new Uint8Array(
 // 2026-10-13 09:00 上海（= UTC 01:00）：新 cron 的名义触发时间。
 const SCHEDULED_MS = Date.UTC(2026, 9, 13, 1, 0, 0);
 const DATE_KEY = '2026-10-13';
+const originalGlobalFetch = globalThis.fetch;
 
 // 上交所 2026-10-13 五只真实脱敏 fixture（TRADING_DAY 均为 20261013）。
 const SSE_FIXTURES = new Map();
@@ -171,6 +172,10 @@ function createCombinedMock(
   const fetchImpl = async (url, init = {}) => {
     const u = String(url);
     const seq = calls.length + 1;
+    if (u.includes('/api/report/ShowReport?')) {
+      calls.push({ seq, url: u, method: 'GET', market: 'shares', init });
+      return { status: 404 };
+    }
     if (u.startsWith(SSE_URL_PREFIX)) {
       const code = u.slice(SSE_URL_PREFIX.length).split('&')[0];
       activeSse += 1;
@@ -204,7 +209,9 @@ function createCombinedMock(
 test.beforeEach(() => {
   clearEtfPcfRuntimeStateForTests();
   clearSsePcfRuntimeStateForTests();
+  globalThis.fetch = async () => { throw new Error('offline test'); };
 });
+test.afterEach(() => { globalThis.fetch = originalGlobalFetch; });
 
 // ─── runEtfPcfScheduledRefresh 全流程 ─────────────────────────────
 
@@ -537,7 +544,11 @@ test('新 cron 0 1 * * * 经 index 分发：先上交所 5 只刷新，再深交
   const szseCalls = mock.calls.filter((c) => c.market === 'szse');
   assert.equal(szseCalls.filter((c) => c.method === 'HEAD').length, 1000);
   assert.equal(szseCalls.filter((c) => c.method === 'GET').length, 1);
-  assert.equal(mock.calls.length, 1006);
+  const sharesCalls = mock.calls.filter((c) => c.market === 'shares');
+  assert.equal(sharesCalls.length, 2);
+  assert.equal(new URL(sharesCalls[1].url).searchParams.get('txtEnd'), DATE_KEY);
+  assert.ok(Math.max(...szseCalls.map((c) => c.seq)) < Math.min(...sharesCalls.map((c) => c.seq)));
+  assert.equal(mock.calls.length, 1008);
   assert.ok(kv.store.has('etf-pcf:159941:20261013'));
   assert.ok(kv.store.has(ETF_PCF_UNIVERSE_KEY));
 

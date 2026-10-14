@@ -4,6 +4,7 @@ import {
   sharesClient,
   shanghaiAccessDay,
   limitLabel,
+  creationLabel,
   freshnessMessage,
   SHARES_DESCRIPTION
 } from '../app/etfPcfSharesClient.js';
@@ -90,7 +91,7 @@ export default function EtfPcfSharesPanel() {
     `本期份额${data ? `（${data.date.slice(5)}）` : ''}`,
     `上期份额${data?.prevDate ? `（${data.prevDate.slice(5)}）` : ''}`,
     '新增份额（份）',
-    '当日申购（份）',
+    '当日申购（份，推算）',
     '新增金额（万元，估算）',
     '是否顶格'
   ];
@@ -101,7 +102,7 @@ export default function EtfPcfSharesPanel() {
         {data && (
           <div className="text-sm text-slate-600">
             <p>
-              数据日期：{data.date} · 对比日期：{data.prevDate || '—'}
+              份额统计日期：{data.date} · 对比日期：{data.prevDate || '—'} · 获取日期：{data.availableOn}
             </p>
             <p>源抓取时间：{fetchedTime(data.fetchedAt)}（上海时间）</p>
           </div>
@@ -170,23 +171,13 @@ export default function EtfPcfSharesPanel() {
                   format(r.shares),
                   format(r.prevShares),
                   format(r.deltaShares),
-                  r.creationSharesKind === 'estimate'
-                    ? `≈${format(r.creationShares)}`
-                    : format(r.creationShares),
+                  creationLabel(r),
                   '—',
                   limitLabel(r)
                 ].map((value, i) => (
                   <div key={i} className="shares-number">
                     <span className="shares-mobile-label">{heads[i + 1]}</span>
-                    <span
-                      title={
-                        i === 3 && r.creationSharesKind === 'estimate'
-                          ? '估算值：实际申购 ≥ 净增，赎回会抵消'
-                          : undefined
-                      }
-                    >
-                      {value}
-                    </span>
+                    <span>{value}</span>
                     {i === 1 && !data.prevDate && r.prevDate && <small>{r.prevDate}</small>}
                   </div>
                 ))}
@@ -210,6 +201,9 @@ export default function EtfPcfSharesPanel() {
           </>
         )}
         <p className="text-xs text-slate-500">新增金额暂缺 D 日净值日期证据，不拿实时行情/IOPV 凑数。</p>
+        <p className="text-xs text-slate-500">
+          当日申购对应份额统计日。申赎同时开放时仅按净增估算，实际申购与赎回可能互相抵消。
+        </p>
         <p className="text-xs text-slate-500">
           顶格指净增精确等于数据日累计申购限额；90% 为接近。净差分可能抵消赎回，不能证明实际总申购顶格。
         </p>

@@ -133,8 +133,13 @@ export function limitLabel(r) {
   if (r.nearTotalLimit) return `否（${percent} 接近）`;
   return '否';
 }
+export function creationLabel(r) {
+  if (r.creationShares === null || r.creationShares === undefined || r.creationShares < 0) return '暂无';
+  const value = r.creationShares.toLocaleString('zh-CN');
+  return r.creationSharesKind === 'estimate' ? `约 ${value}` : value;
+}
 export const SHARES_DESCRIPTION =
-  '今天可获得的最新场内份额报表，非今日实时新增；新增份额为数据日与上一交易日之差。';
+  '按源报表标注的统计日期展示最新份额，支持当天数据；新增份额为本期与上一交易日之差，申购份额由净增及同日申赎状态推算。';
 
 export function freshnessMessage(data, accessDay = shanghaiAccessDay()) {
   const expected = previousSession(accessDay, data.calendar);

@@ -4,7 +4,7 @@
 }
 .shares-grid {
   display: grid;
-  grid-template-columns: minmax(130px, 1.3fr) repeat(4, minmax(115px, 1fr)) minmax(100px, 1fr) minmax(
+  grid-template-columns: minmax(115px, 1.3fr) repeat(4, minmax(95px, 1fr)) minmax(90px, 1fr) minmax(
       130px,
       1.2fr
     );
