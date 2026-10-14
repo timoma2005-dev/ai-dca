@@ -81,7 +81,8 @@ test('admin tabs load only active shares, cache repeated switches, keyboard ARIA
   await expect(shares).toBeVisible();
   expect(counts.shares).toBe(0);
   await shares.click();
-  await expect(page.getByText('数据日期：2026-10-12 · 对比日期：2026-10-09')).toBeVisible();
+  await expect(page.getByText('份额统计日期：2026-10-12 · 对比日期：2026-10-09', { exact: false })).toBeVisible();
+  await expect(page.getByText('当日申购（份，推算）').first()).toBeVisible();
   const radarBefore = counts.radar;
   await expect(page.getByText('是（100% 精确相等）')).toBeVisible();
   expect(counts.shares).toBe(1);

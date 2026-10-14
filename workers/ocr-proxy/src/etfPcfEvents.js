@@ -1,9 +1,16 @@
 import { confirmedSharesCalendar } from '../../../shared/etfPcfTradingCalendar.js';
-import { buildSharesProjection, persistSharesProjection } from './etfPcfSharesProjection.js';
+import {
+  buildSharesProjection,
+  persistSharesProjection,
+  normalizeCreationStatus,
+  previousSession
+} from './etfPcfSharesProjection.js';
+import { buildSsePcfCacheKey, validateSsePcfCachedData } from './ssePcfLimit.js';
 import {
   isWellFormedEtfPcfDateKey,
   shanghaiDateKey,
   validateEtfPcfCachedData,
+  validateEtfPcfHistoryData,
   buildEtfPcfCacheKey
 } from './etfPcfLimit.js';
 import {
@@ -13,6 +20,7 @@ import {
   fetchEtfPcfShares,
   parseEtfPcfSharesXlsx
 } from './etfPcfShares.js';
+const EVENT_CODES = TARGET_CODES.filter((code) => code.startsWith('159'));
 const validLimit = (x) =>
   !!x &&
   ['limited', 'unlimited', 'unknown'].includes(x.kind) &&
@@ -110,7 +118,7 @@ const id = (e) => [e.date, e.code, e.signal_type, e.basis].join(':');
 const stamp = (s) => typeof s === 'string' && Number.isFinite(Date.parse(s));
 const identity = (e) =>
   e &&
-  TARGET_CODES.includes(e.code) &&
+  EVENT_CODES.includes(e.code) &&
   isWellFormedEtfPcfDateKey(e.date) &&
   ['limit_relaxation', 'net_creation_near_total_limit'].includes(e.signal_type) &&
   ['net', 'total'].includes(e.basis) &&
@@ -300,7 +308,12 @@ function snapshotValid(s, date, type) {
   const seen = new Set();
   return s.records.every((r) => {
     const key = r.code + ':' + r.date;
-    if (!TARGET_CODES.includes(r.code) || r.date !== date || seen.has(key)) return false;
+    if (
+      !(type === 'limits' ? TARGET_CODES : EVENT_CODES).includes(r.code) ||
+      r.date !== date ||
+      seen.has(key)
+    )
+      return false;
     seen.add(key);
     return type === 'limits'
       ? validLimit(r.net) && validLimit(r.total)
@@ -395,6 +408,9 @@ async function runStage({
     kv = env.FUND_LIMIT_KV,
     date = shanghaiDateKey(new Date(scheduledTime)),
     controller = new AbortController();
+  const calendar =
+    tradingCalendar === undefined ? confirmedSharesCalendar(day(date, -10), date) : tradingCalendar;
+  const previous = previousSession(date, calendar);
   if (deadlineMs <= 0) return { ok: false, reason: 'timeout' };
   const timer = setTimeout(() => controller.abort(), deadlineMs);
   const expired = () => {
@@ -435,7 +451,7 @@ async function runStage({
     // Collector data avoids a read-after-write miss; standalone callers may supply identities only.
     const inputs = [];
     for (const p of pcfData) {
-      if (!TARGET_CODES.includes(p?.code) || p.date !== date) continue;
+      if (!EVENT_CODES.includes(p?.code) || p.date !== date) continue;
       if (p.source) inputs.push(p);
       else {
         const raw = await read(buildEtfPcfCacheKey(p.code, p.date));
@@ -449,22 +465,41 @@ async function runStage({
     const current = [...new Map(inputs.map((p) => [p.code, p])).values()]
       .filter(
         (p) =>
-          TARGET_CODES.includes(p.code) &&
+          EVENT_CODES.includes(p.code) &&
           p.date === date &&
           validateEtfPcfCachedData(p, { code: p.code, date, now: new Date(scheduledTime) }).ok
       )
       .map((p) => ({
         code: p.code,
         date,
+        ...normalizeCreationStatus(p),
         net: { kind: p.netSubscribeLimitKind, shares: p.netSubscribeLimitShares },
         total: { kind: p.totalSubscribeLimitKind, shares: p.totalSubscribeLimitShares }
       }));
+    for (const code of TARGET_CODES.filter((code) => code.startsWith('513'))) {
+      const raw = await read(buildSsePcfCacheKey(code, date));
+      if (!raw) continue;
+      try {
+        const p = parse(raw);
+        if (!validateSsePcfCachedData(p, { code, date, now: new Date(scheduledTime) }).ok) continue;
+        current.push({
+          code,
+          date,
+          creationRedemption: p.creationRedemption,
+          ...normalizeCreationStatus(p),
+          net: { kind: 'unknown', shares: null },
+          total: { kind: 'unknown', shares: null }
+        });
+      } catch {
+        /* 无效缓存不提供申赎状态 */
+      }
+    }
     let records = [...cachedShares];
     let sharesReason = 'missing_shares';
     const projectionBatches = [];
-    // Without any previous PCF ceiling the production downloader cannot assess signal 2.
-    if (current.length && (history.size || sharesFetch !== defaultSharesFetch)) {
-      for (const url of [CURRENT_SHARES_URL, historicalSharesUrl(day(date, -10), day(date, -1))]) {
+    // Shares have their own dated source. A missing PCF baseline must not block collection.
+    {
+      for (const url of [CURRENT_SHARES_URL, historicalSharesUrl(day(date, -10), date)]) {
         expired();
         let response;
         try {
@@ -490,9 +525,9 @@ async function runStage({
           records.push(
             ...response.records.filter(
               (r) =>
-                TARGET_CODES.includes(r.code) &&
+                EVENT_CODES.includes(r.code) &&
                 isWellFormedEtfPcfDateKey(r.date) &&
-                r.date < date &&
+                r.date <= date &&
                 r.date >= day(date, -10) &&
                 Number.isSafeInteger(r.shares) &&
                 r.shares >= 0 &&
@@ -500,15 +535,25 @@ async function runStage({
             )
           );
         } else sharesReason = response.reason || 'invalid_shares_source';
-        const dates = [...new Set(records.map((r) => r.date))];
-        if (dates.length >= 2) break;
+        // A failed or T-1-only current report must still try the dated historical source.
+        const currentShares = records.filter((r) => r.date === date);
+        if (
+          response.ok &&
+          previous &&
+          currentShares.length &&
+          currentShares.every((cur) =>
+            records.some((old) => old.code === cur.code && old.date === previous && old.unit === cur.unit)
+          )
+        )
+          break;
       }
     }
+    records = [...new Map(records.map((r) => [`${r.code}:${r.date}`, r])).values()];
     const results = [],
       byDate = new Map(),
       previousDates = [...history.keys()],
       evidence = [...previousDates, ...records.map((r) => r.date)];
-    for (const code of TARGET_CODES) {
+    for (const code of EVENT_CODES) {
       const cur = current.find((r) => r.code === code),
         prevDate = selectPreviousDate(date, evidence, evidence),
         prev = history.get(prevDate)?.records.find((r) => r.code === code);
@@ -530,8 +575,14 @@ async function runStage({
       const latest = rows[0],
         older = latest && rows.find((r) => r.date === selectPreviousDate(latest.date, evidence, evidence));
       // A more recent known PCF session proves that a stale report is not T-1.
-      if (current.length && latest && older && latest.date === selectPreviousDate(date, evidence, evidence)) {
-        const total = history.get(latest.date)?.records.find((r) => r.code === code)?.total;
+      if (
+        latest &&
+        older &&
+        (latest.date === date || latest.date === selectPreviousDate(date, evidence, evidence))
+      ) {
+        const total = (latest.date === date ? current : history.get(latest.date)?.records)?.find(
+          (r) => r.code === code
+        )?.total;
         const r = netCreationNearTotalLimit({
           code,
           date: latest.date,
@@ -547,7 +598,8 @@ async function runStage({
           result({ code, date }, 'net_creation_near_total_limit', 'total', 'unknown', sharesReason)
         );
     }
-    byDate.set(date, results);
+    // Same-day net-creation checks share the same log as today's limit changes.
+    byDate.set(date, [...results, ...(byDate.get(date) || [])]);
     // Preflight logs too, before saving auxiliary snapshots.
     for (const d of byDate.keys()) {
       const raw = await read(eventKey(d));
@@ -599,7 +651,7 @@ async function runStage({
     const projectionResults = [];
     for (const batch of projectionBatches) {
       for (const d of [...new Set(batch.records.map((r) => r.date))]
-        .filter((d) => isWellFormedEtfPcfDateKey(d) && d < date && d >= day(date, -10))
+        .filter((d) => isWellFormedEtfPcfDateKey(d) && d <= date && d >= day(date, -10))
         .sort()) {
         try {
           if (controller.signal.aborted || Date.now() + 1000 >= deadline) {
@@ -607,14 +659,46 @@ async function runStage({
             continue;
           }
           const row = batch.records.find((r) => r.date === d);
+          const datedLimits = new Map(
+            (d === date ? current : history.get(d)?.records || []).map((r) => [r.code, r])
+          );
+          for (const code of TARGET_CODES) {
+            const existing = datedLimits.get(code);
+            if (existing?.subscriptionAllowed != null && known(existing.total)) continue;
+            const sse = code.startsWith('513');
+            const raw = await read(sse ? buildSsePcfCacheKey(code, d) : buildEtfPcfCacheKey(code, d));
+            if (!raw) continue;
+            try {
+              const cached = parse(raw);
+              const validate = sse
+                ? validateSsePcfCachedData
+                : d < date
+                  ? validateEtfPcfHistoryData
+                  : validateEtfPcfCachedData;
+              if (validate(cached, { code, date: d, now: new Date(scheduledTime) }).ok) {
+                datedLimits.set(code, {
+                  code,
+                  date: d,
+                  ...normalizeCreationStatus(cached),
+                  net: { kind: cached.netSubscribeLimitKind, shares: cached.netSubscribeLimitShares },
+                  total: { kind: cached.totalSubscribeLimitKind, shares: cached.totalSubscribeLimitShares }
+                });
+              }
+            } catch {
+              /* 无效缓存不提供申赎状态 */
+            }
+          }
+          const creationStatus = Object.fromEntries(
+            [...datedLimits.values()].map((r) => [r.code, normalizeCreationStatus(r)])
+          );
           const data = buildSharesProjection({
             date: d,
             records: [...records.filter((r) => r.date !== d), ...batch.records.filter((r) => r.date === d)],
-            limits: history.get(d)?.records || [],
+            limits: [...datedLimits.values()],
+            creationStatus,
             fetchedAt: batch.fetchedAt,
             dateEvidence: row?.dateEvidence,
-            calendar:
-              tradingCalendar === undefined ? confirmedSharesCalendar(day(date, -10), date) : tradingCalendar
+            calendar
           });
           projectionResults.push(
             await persistSharesProjection(kv, data, { deadlineAt: deadline, signal: controller.signal })

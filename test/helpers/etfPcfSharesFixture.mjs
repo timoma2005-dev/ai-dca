@@ -8,7 +8,7 @@ export const calendar = {
 };
 export function syntheticProjection({ fetchedAt = '2026-10-13T01:03:20.000Z', partial = false } = {}) {
   const deltas = [10000000, 9500000, 12500000, -1000000, 2000000, 0, 0, 0];
-  const records = TARGET_CODES.flatMap((code, i) => [
+  const records = TARGET_CODES.filter((code) => code.startsWith('159')).flatMap((code, i) => [
     {
       code,
       date: '2026-10-12',

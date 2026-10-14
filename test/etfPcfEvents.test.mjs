@@ -78,7 +78,7 @@ test('failed reads stop writes; timeout budget and holiday avoid fabricated limi
  const zero=new KV();await stage(zero,{deadlineMs:0});assert.equal(zero.puts.length,0);
  const holiday=new KV();await stage(holiday,{pcfs:[]});assert.equal(holiday.store.has(eventKey(date,'limits')),false);const data=JSON.parse(holiday.store.get(eventKey(date)));assert.equal(data.events.length,0);assert.ok(data.checks.every(c=>c.status==='unknown'));
 });
-test('projection sidecar reuses one download; validator/date-put/pointer failures preserve original events and permanent writes', async () => {
+test('projection sidecar reuses bounded downloads; validator/date-put/pointer failures preserve original events and permanent writes', async () => {
   for (const failure of ['none', 'validator', 'put', 'pointer']) {
     const kv = new KV();
     seed(kv, limits(previous, [{ code: '159941', net: unlimited, total: l(10000000) }]));
@@ -97,7 +97,7 @@ test('projection sidecar reuses one download; validator/date-put/pointer failure
       ] };
     };
     const result = await stage(kv, { sharesFetch });
-    assert.equal(result.ok, true); assert.equal(downloads, 1);
+    assert.equal(result.ok, true); assert.equal(downloads, 2);
     const events = JSON.parse(kv.store.get(eventKey(previous)));
     assert.ok(events.events.some(e => e.signal_type === 'net_creation_near_total_limit'));
     assert.ok(kv.store.has(eventKey(date, 'limits')));

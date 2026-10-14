@@ -397,6 +397,12 @@ export function mapSsePcfFields(row, { code, now } = {}) {
   // NAVPERCU / NAV 分别保存，不互相推导或填充。
   result.navPerCreationUnit = optionalValue(row, 'NAVPERCU', parseSseMoneyValue, warnings);
   result.nav = optionalValue(row, 'NAV', parseSseMoneyValue, warnings);
+  result.prevDayCashDifference = optionalValue(row, 'PRE_CASH_COMPONENT', parseSseMoneyValue, warnings);
+  result.prevDayDate = optionalValue(row, 'PRE_TRADING_DAY', (value) => {
+    if (typeof value !== 'string' || !/^\d{8}$/.test(value)) return { unparseable: true };
+    const date = `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+    return isWellFormedSsePcfDateKey(date) ? { value: date } : { unparseable: true };
+  }, warnings);
 
   result.rawFields = rawFields;
   result.warnings = warnings;
@@ -463,7 +469,10 @@ export function validateSsePcfCachedData(data, { code, date, now = new Date() })
   for (const key of ['subscriptionAllowed', 'redemptionAllowed', 'iopvRequired']) {
     if (data[key] != null && typeof data[key] !== 'boolean') return { ok: false, reason: key };
   }
-  for (const key of ['estimatedCashDifference', 'navPerCreationUnit', 'nav']) {
+  if (data.prevDayDate != null && !isWellFormedSsePcfDateKey(data.prevDayDate)) {
+    return { ok: false, reason: 'prev_day_date' };
+  }
+  for (const key of ['estimatedCashDifference', 'navPerCreationUnit', 'nav', 'prevDayCashDifference']) {
     if (data[key] != null && !(typeof data[key] === 'number' && Number.isFinite(data[key]))) {
       return { ok: false, reason: key };
     }

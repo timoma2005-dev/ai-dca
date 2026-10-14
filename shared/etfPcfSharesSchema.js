@@ -1,5 +1,19 @@
 import { isCompleteSharesCalendar } from './etfPcfTradingCalendar.js';
-export const TARGET_CODES = ['159501', '159509', '159513', '159632', '159659', '159660', '159696', '159941'];
+export const TARGET_CODES = [
+  '159501',
+  '159509',
+  '159513',
+  '159632',
+  '159659',
+  '159660',
+  '159696',
+  '159941',
+  '513100',
+  '513110',
+  '513300',
+  '513390',
+  '513870'
+];
 export function isWellFormedEtfPcfDateKey(dateKey) {
   if (typeof dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return false;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
@@ -25,7 +39,12 @@ const NAMES = [
   '纳斯达克100ETF招商',
   '纳指ETF汇添富',
   '纳指ETF易方达',
-  '纳指ETF广发'
+  '纳指ETF广发',
+  '纳斯达克100ETF国泰',
+  '纳指ETF国泰',
+  '纳指ETF广发',
+  '纳斯达克100ETF华夏',
+  '纳指ETF华宝'
 ];
 export const TTL = 30 * 86400000;
 export const SOURCE = 'szse_pcf_shares_projection';
@@ -62,10 +81,39 @@ export function previousSession(date, calendar) {
   const i = sessions.indexOf(date);
   return i > 0 ? sessions[i - 1] : null;
 }
+export function normalizeCreationStatus(input) {
+  const states = {
+    仅允许赎回: [false, true],
+    仅允许申购: [true, false],
+    申购和赎回皆允许: [true, true],
+    申购赎回都允许: [true, true],
+    申购和赎回都允许: [true, true]
+  };
+  const text = typeof input === 'string' ? input : input?.creationRedemption;
+  if (typeof text === 'string') {
+    const pair = states[text.trim()];
+    return { subscriptionAllowed: pair?.[0] ?? null, redemptionAllowed: pair?.[1] ?? null };
+  }
+  return {
+    subscriptionAllowed: typeof input?.subscriptionAllowed === 'boolean' ? input.subscriptionAllowed : null,
+    redemptionAllowed: typeof input?.redemptionAllowed === 'boolean' ? input.redemptionAllowed : null
+  };
+}
+function creationFromStatus(status, deltaShares) {
+  const { subscriptionAllowed, redemptionAllowed } = normalizeCreationStatus(status);
+  if (subscriptionAllowed === false) return { creationShares: 0, creationSharesKind: 'exact' };
+  if (subscriptionAllowed === true && deltaShares !== null) {
+    if (redemptionAllowed === false && deltaShares >= 0)
+      return { creationShares: deltaShares, creationSharesKind: 'exact' };
+    if (redemptionAllowed === true) return { creationShares: deltaShares, creationSharesKind: 'estimate' };
+  }
+  return { creationShares: null, creationSharesKind: null };
+}
 export function buildSharesProjection({
   date,
   records,
   limits = [],
+  creationStatus = {},
   fetchedAt,
   projectedAt = new Date().toISOString(),
   dateEvidence,
@@ -73,13 +121,14 @@ export function buildSharesProjection({
 }) {
   const previous = previousSession(date, calendar);
   const rows = TARGET_CODES.map((code, index) => {
-    const cur = records.find((r) => r.code === code && r.date === date);
+    const hasSharesSource = code.startsWith('159');
+    const cur = hasSharesSource && records.find((r) => r.code === code && r.date === date);
     const old = previous && records.find((r) => r.code === code && r.date === previous);
     const shares = integer(cur?.shares) ? cur.shares : null;
     const prevShares = shares !== null && integer(old?.shares) && old.unit === cur.unit ? old.shares : null;
     const delta = prevShares === null ? null : shares - prevShares;
     const deltaShares = Number.isSafeInteger(delta) ? delta : null;
-    const limit = limits.find((r) => r.code === code && r.date === date)?.total;
+    const limit = hasSharesSource && limits.find((r) => r.code === code && r.date === date)?.total;
     const kind = ['limited', 'unlimited', 'unknown'].includes(limit?.kind) ? limit.kind : 'unknown';
     const total = kind === 'limited' && integer(limit.shares) ? limit.shares : null;
     const usable = deltaShares !== null && total > 0;
@@ -96,6 +145,7 @@ export function buildSharesProjection({
       shares,
       prevShares,
       deltaShares,
+      ...creationFromStatus(creationStatus[code], deltaShares),
       deltaAmountWan: null,
       unit: '份',
       price: null,
@@ -199,6 +249,26 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
     )
       return false;
     if (r.shares !== null && !integer(r.shares)) return false;
+    if (r.creationShares === null) {
+      if (r.creationSharesKind !== null) return false;
+    } else if (
+      !Number.isSafeInteger(r.creationShares) ||
+      !['exact', 'estimate'].includes(r.creationSharesKind) ||
+      (r.creationSharesKind === 'exact' && r.creationShares < 0) ||
+      (r.creationSharesKind === 'estimate' &&
+        (r.deltaShares === null || r.creationShares !== r.deltaShares)) ||
+      (r.creationSharesKind === 'exact' && r.creationShares !== 0 && r.creationShares !== r.deltaShares)
+    )
+      return false;
+    if (
+      r.code.startsWith('513') &&
+      (r.shares !== null ||
+        r.prevShares !== null ||
+        r.deltaShares !== null ||
+        r.totalLimitKind !== 'unknown' ||
+        r.limitDate !== null)
+    )
+      return false;
     if (r.prevShares === null) {
       if (r.prevDate !== null || r.deltaShares !== null) return false;
     } else if (
