@@ -147,17 +147,17 @@ for (const resourceBacked of [false, true]) {
       clientId: CLIENT, accountClientId: CLIENT, accountUsername: USER, clientLabel: `账号通知 · ${USER}`
     } } });
     const status = (await request('/api/notify/status')).body.data.channels;
-    assert.deepEqual(status.bark, { configured: true, deviceKey: 'bark-key' });
-    assert.deepEqual(status.serverChan3, result.body.setup.serverChan3);
+    assert.deepEqual(status.bark, { configured: true, deviceKey: 'bark-key', enabled: true });
+    assert.deepEqual(status.serverChan3, { ...result.body.setup.serverChan3, enabled: true });
     const preserved = await request('/api/notify/settings', 'POST', { serverChan3: { uid: 'uid-2', sendKey: '' } });
     assert.deepEqual(preserved.body.setup.serverChan3, { uid: 'uid-2', sendKeyMasked: 'sendke...1234', configured: true });
     assert.deepEqual((await request('/api/notify/settings', 'POST', {})).body, preserved.body);
-    assert.deepEqual((await request('/api/notify/status')).body.data.channels.serverChan3, preserved.body.setup.serverChan3);
+    assert.deepEqual((await request('/api/notify/status')).body.data.channels.serverChan3, { ...preserved.body.setup.serverChan3, enabled: true });
     const cleared = await request('/api/notify/settings', 'POST', { barkDeviceKey: '', serverChan3: {} });
     assert.deepEqual(cleared.body.setup.serverChan3, { uid: '', sendKeyMasked: '', configured: false });
-    assert.deepEqual((await request('/api/notify/status')).body.data.channels.bark, { configured: false, deviceKey: '' });
+    assert.deepEqual((await request('/api/notify/status')).body.data.channels.bark, { configured: false, deviceKey: '', enabled: false });
     if (resourceBacked) {
-      assert.equal(db.prepare("SELECT COUNT(*) n FROM notify_user_records WHERE owner_user_id = ? AND record_type='client-channel'").get(USER).n, 0);
+      assert.equal(db.prepare("SELECT COUNT(*) n FROM notify_user_records WHERE owner_user_id = ? AND record_type='client-channel'").get(USER).n, 2);
       assert.equal(db.prepare("SELECT COUNT(*) n FROM account_resource_records WHERE user_id = ? AND record_id LIKE 'channel:%'").get(USER).n, 2);
     } else {
       assert.equal(db.prepare("SELECT COUNT(*) n FROM notify_user_records WHERE owner_user_id = ? AND record_type='client-channel'").get(USER).n, 2);
@@ -231,10 +231,10 @@ test('settings backfills an aggregate resource and preserves unrelated email con
   assert.deepEqual(result.body.setup.serverChan3, { uid: 'new-uid', sendKeyMasked: 'existi...1234', configured: true });
   const status = (await request('/api/notify/status')).body.data.channels;
   assert.equal(status.email.configured, true);
-  assert.deepEqual(status.serverChan3, result.body.setup.serverChan3);
+  assert.deepEqual(status.serverChan3, { ...result.body.setup.serverChan3, enabled: true });
   const channel = db.prepare(`SELECT payload, content_hash, bytes, revision FROM account_resource_records
     WHERE user_id = ? AND record_id = 'channel:serverchan3'`).get(USER);
-  assert.deepEqual(JSON.parse(channel.payload), { serverChan3Uid: 'new-uid', serverChan3SendKey: 'existing-secret-1234' });
+  assert.deepEqual(JSON.parse(channel.payload), { serverChan3Uid: 'new-uid', serverChan3SendKey: 'existing-secret-1234', enabled: true });
   assert.ok(channel.content_hash);
   assert.equal(channel.bytes, Buffer.byteLength(channel.payload));
   assert.ok(channel.revision > 1);

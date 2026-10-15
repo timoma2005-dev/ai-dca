@@ -153,9 +153,9 @@ test('GET /api/notify/status summary aggregates legacy records and resource chan
     label: '资源标签', notifyGroupId: CLIENT
   });
   // Resource channel:bark overrides the legacy notify_user_records value.
-  assert.deepEqual(data.channels.bark, { configured: true, deviceKey: 'resource-bark-key' });
+  assert.deepEqual(data.channels.bark, { configured: true, deviceKey: 'resource-bark-key', enabled: true });
   assert.deepEqual(data.channels.serverChan3, {
-    uid: 'uid-1', sendKeyMasked: 'sendke...1234', configured: true
+    uid: 'uid-1', sendKeyMasked: 'sendke...1234', configured: true, enabled: true
   });
   assert.deepEqual(data.channels.email, {
     maskedAddress: 'us**@example.com', verified: true,

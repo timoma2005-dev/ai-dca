@@ -1,4 +1,4 @@
-import { sendBarkNotification } from './barkChannel.js';
+import { normalizeBarkDeviceKey, sendBarkNotification } from './barkChannel.js';
 import { sendServerChan3Notification } from './serverChan3Channel.js';
 import { loadTestDeliverySettings } from './testDelivery.js';
 const RESEND_FROM = 'notify@freebacktrack.tech'; // mirrors worker's DEFAULT_FROM
@@ -44,6 +44,19 @@ async function sendViaResend(payload) {
   return { messageId: data?.id ? String(data.id) : '', provider: 'resend' };
 }
 
+function normalizeBarkConfig(value = {}) {
+  const input = typeof value === 'string' ? { deviceKey: value } : value || {};
+  const deviceKey = normalizeBarkDeviceKey(input.deviceKey ?? input.barkDeviceKey ?? '');
+  return { deviceKey, enabled: Boolean(deviceKey && input.enabled !== false) };
+}
+
+function normalizeServerChan3Config(value = {}) {
+  const input = value || {};
+  const uid = String(input.uid || '').trim();
+  const sendKey = String(input.sendKey || '').trim();
+  return { uid, sendKey, enabled: Boolean(uid && sendKey && input.enabled !== false) };
+}
+
 function normalizeEmailConfig(value = {}) {
   const input = value && typeof value === 'object' ? value : {};
   const address = String(input.address || '').trim();
@@ -79,14 +92,19 @@ async function deliverTestEmail(notification, settings) {
 async function deliverTestChannel(notification, channel, settings) {
   try {
     if (channel === 'bark') {
+      const config = normalizeBarkConfig(settings.bark ?? settings.barkDeviceKey);
+      if (!config.deviceKey) return { channel, status: 'skipped', detail: '未配置 Bark' };
+      if (!config.enabled) return { channel, status: 'skipped', detail: 'Bark 通知已关闭' };
       return await sendBarkNotification({
         ...notification,
         url: notification.url || notification.detailUrl || '',
-        deviceKey: text(settings.barkDeviceKey, 512)
+        deviceKey: config.deviceKey
       });
     }
     if (channel === 'serverchan3') {
-      const config = settings.serverChan3 || {};
+      const config = normalizeServerChan3Config(settings.serverChan3);
+      if (!(config.uid && config.sendKey)) return { channel, status: 'skipped', detail: '未配置 Server酱' };
+      if (!config.enabled) return { channel, status: 'skipped', detail: 'Server酱通知已关闭' };
       return await sendServerChan3Notification({
         ...notification,
         uid: text(config.uid, 240),

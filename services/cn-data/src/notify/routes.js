@@ -40,6 +40,7 @@
 // Ports workers/notify/src/accountEmailRoutes.js (handleFastEmailRoute)
 // and workers/notify/src/emailVerification.js.
 
+import { handleChannelToggle, readBark, readServerChan3, publicBark, publicServerChan3 } from './channelToggle.js';
 import { HttpError, resolveUserId } from '../authSession.js';
 import { nowIso, withTransaction } from '../db.js';
 import { enqueueEvent } from '../outbox.js';
@@ -248,6 +249,8 @@ function handleStatusSummary(db, account) {
     state.server = merged.serverChan3 || {};
     state.email = merged.email || {};
   }
+  const bark = readBark(db, account);
+  const server = readServerChan3(db, account);
   const email = normalizeEmailConfig(state.email);
   const registrationCount = Number(counts?.registration_count) || 0;
   return ok({
@@ -262,12 +265,8 @@ function handleStatusSummary(db, account) {
         notifyGroupId: account.clientId
       },
       channels: {
-        bark: { configured: Boolean(state.bark), deviceKey: state.bark },
-        serverChan3: {
-          uid: text(state.server.uid),
-          sendKeyMasked: maskServerChan3SendKey(state.server.sendKey || ''),
-          configured: Boolean(text(state.server.uid) && text(state.server.sendKey))
-        },
+        bark: { ...publicBark(bark), configured: Boolean(bark.deviceKey && bark.enabled) },
+        serverChan3: { ...publicServerChan3(server), configured: Boolean(server.uid && server.sendKey && server.enabled) },
         email: {
           maskedAddress: maskEmailAddress(email.address),
           verified: Boolean(email.verified),
@@ -384,13 +383,13 @@ function handleHoldingsRulePost(db, account, body) {
 
 // --- Phase 4 account channel settings and data sync ---
 
-function readUserRecord(db, account, type, id = account.clientId) {
+export function readUserRecord(db, account, type, id = account.clientId) {
   return parse(db.prepare(`SELECT payload FROM notify_user_records
     WHERE owner_user_id = ? AND record_type = ? AND record_id = ?`)
     .get(account.userId, type, id)?.payload);
 }
 
-function writeUserRecord(db, account, type, id, value, now) {
+export function writeUserRecord(db, account, type, id, value, now) {
   db.prepare(`INSERT INTO notify_user_records
     (owner_user_id, record_type, record_id, payload, revision, created_at, updated_at)
     VALUES (?, ?, ?, ?, 1, ?, ?)
@@ -404,9 +403,11 @@ function handleSettings(db, account, body) {
   // Backfill an existing aggregate resource before selecting the channel storage.
   readResourceRow(db, account.userId, CLIENT_CONFIG_RESOURCE);
   const resource = readAccountResourceNotifySettings(db, account.userId);
+  const barkRecord = readUserRecord(db, account, 'client-channel', `${account.clientId}::bark`);
+  const serverRecord = readUserRecord(db, account, 'client-channel', `${account.clientId}::serverchan3`);
   const current = mergeAccountResourceNotifySettings({
-    barkDeviceKey: readUserRecord(db, account, 'client-channel', `${account.clientId}::bark`).barkDeviceKey || '',
-    serverChan3: readUserRecord(db, account, 'client-channel', `${account.clientId}::serverchan3`).serverChan3 || {}
+    barkDeviceKey: barkRecord.barkDeviceKey || '',
+    serverChan3: serverRecord.serverChan3 || {}
   }, resource);
   const barkDeviceKey = String(body.barkDeviceKey ?? current.barkDeviceKey ?? '').trim();
   const input = body.serverChan3 ?? current.serverChan3 ?? {};
@@ -418,15 +419,17 @@ function handleSettings(db, account, body) {
   // Update only the caller's own account client channels; multi-device ownership
   // reconciliation (reconcileStaleChannelOwners/prepareUniqueChannelSettings) stays on CF.
   withTransaction(db, () => {
-    for (const [channel, value] of [['bark', { barkDeviceKey }], ['serverchan3', { serverChan3 }]]) {
+    for (const [channel, value] of [
+      ['bark', { barkDeviceKey, enabled: barkRecord.enabled !== false }],
+      ['serverchan3', { serverChan3, enabled: serverRecord.enabled !== false }]
+    ]) {
       if (resource?.hasResource) {
         const data = channel === 'serverchan3'
-          ? { serverChan3Uid: serverChan3.uid, serverChan3SendKey: serverChan3.sendKey } : value;
+          ? { serverChan3Uid: serverChan3.uid, serverChan3SendKey: serverChan3.sendKey, enabled: value.enabled } : value;
         writeResourceRecord(db, account.userId, getResourceDescriptor(CLIENT_CONFIG_RESOURCE), `channel:${channel}`, data,
           { kind: 'channel', position: channel === 'bark' ? 1 : 2 });
-      } else {
-        writeUserRecord(db, account, 'client-channel', `${account.clientId}::${channel}`, value, now);
       }
+      writeUserRecord(db, account, 'client-channel', `${account.clientId}::${channel}`, value, now);
     }
   });
   return ok({ ok: true, setup: {
@@ -490,7 +493,7 @@ function phase4PublicRoute(path, method) {
   }
   if (path.startsWith('/api/notify/quant/')) return response(410, { error: '量化研究功能已移除。' });
   if (path.startsWith('/api/notify/admin/')) return response(404, { error: '未找到通知接口。' });
-  if (path.startsWith('/api/notify/quick/') || path.startsWith('/api/notify/bark/')) {
+  if (path.startsWith('/api/notify/quick/') || (path.startsWith('/api/notify/bark/') && !/^\/api\/notify\/bark\/(status|enable|disable)$/.test(path))) {
     return restricted(['GET', 'POST'], 404, { error: '未找到通知接口。' });
   }
   if (path === '/api/notify/gotify-account') return restricted(['POST'], 410, { error: 'Gotify 通知能力已移除。' });
@@ -523,6 +526,18 @@ export async function handleNotifyRoute(db, method, url, body, headers) {
       const target = normalizeTestTarget(body?.targetChannel || body?.channel || body?.platform);
       const summary = await deliverTestNotification(db, account, notification, target ? [target] : null);
       return { status: 200, body: { ok: true, summary }, headers: baseHeaders };
+    } catch (error) { return fail(error); }
+  }
+  const channelMatch = path.match(/^\/api\/notify\/(bark|serverchan3)\/(status|enable|disable)$/);
+  if (channelMatch) {
+    const [, channel, action] = channelMatch;
+    if (method !== (action === 'status' ? 'GET' : 'POST')) return { status: 405, body: { message: 'Method not allowed' }, headers: baseHeaders };
+    try {
+      const account = resolveAccount(url, body, headers);
+      if (action !== 'status') return ok(handleChannelToggle(db, account, channel, action === 'enable'));
+      return ok({ ok: true, binding: { scope: 'account', accountClientId: account.clientId },
+        [channel === 'bark' ? 'bark' : 'serverChan3']: channel === 'bark'
+          ? publicBark(readBark(db, account)) : publicServerChan3(readServerChan3(db, account)) });
     } catch (error) { return fail(error); }
   }
   // --- email verification + channel management (ported from accountEmailRoutes.js) ---

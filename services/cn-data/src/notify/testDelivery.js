@@ -4,7 +4,7 @@
 // Email channel goes through Resend (workers/notify/src/channels/emailProviders.js:
 // sendViaResend), token read from process.env.RESEND_TOKEN (supervisor env on cn host).
 
-import { sendBarkNotification } from './barkChannel.js';
+import { normalizeBarkDeviceKey, sendBarkNotification } from './barkChannel.js';
 import { sendServerChan3Notification } from './serverChan3Channel.js';
 
 const RESEND_FROM = 'notify@freebacktrack.tech'; // mirrors worker's DEFAULT_FROM
@@ -58,11 +58,13 @@ export function loadTestDeliverySettings(db, account) {
     WHERE user_id = ? AND resource = 'notify/client-config' ORDER BY position ASC, record_id ASC`)
     .all(account.userId);
 
-  const settings = { barkDeviceKey: '', serverChan3: {}, email: {} };
+  const settings = { bark: {}, serverChan3: {}, email: {} };
+  let barkEnabled;
+  let serverEnabled;
   for (const row of channelRows) {
     const value = parse(row.payload);
-    if (String(row.record_id).endsWith('::bark')) settings.barkDeviceKey = text(value.barkDeviceKey, 512);
-    else if (String(row.record_id).endsWith('::serverchan3')) settings.serverChan3 = value.serverChan3 || {};
+    if (String(row.record_id).endsWith('::bark')) { settings.bark = { deviceKey: value.barkDeviceKey }; barkEnabled = value.enabled; }
+    else if (String(row.record_id).endsWith('::serverchan3')) { settings.serverChan3 = value.serverChan3 || {}; serverEnabled = value.enabled; }
     else if (String(row.record_id).endsWith('::email')) settings.email = value.email || {};
   }
   // Resource settings take priority (same as worker's mergeAccountResourceNotifySettings)
@@ -70,13 +72,15 @@ export function loadTestDeliverySettings(db, account) {
     if (Number(row.deleted || 0) === 1) continue;
     const value = parse(row.payload);
     const id = String(row.record_id || '');
-    if (id === 'channel:bark' && value.barkDeviceKey) settings.barkDeviceKey = text(value.barkDeviceKey, 512);
+    if (id === 'channel:bark' && value.barkDeviceKey) settings.bark = { deviceKey: value.barkDeviceKey };
     else if (id === 'channel:serverchan3') {
       const uid = text(value.serverChan3Uid || value.serverChan3?.uid, 240);
       const sendKey = text(value.serverChan3SendKey || value.serverChan3?.sendKey, 512);
       if (uid || sendKey) settings.serverChan3 = { uid, sendKey };
     } else if (id === 'channel:email' && value.email) settings.email = value.email;
   }
+  settings.bark = normalizeBarkConfig({ ...settings.bark, enabled: barkEnabled });
+  settings.serverChan3 = normalizeServerChan3Config({ ...settings.serverChan3, enabled: serverEnabled });
   return settings;
 }
 
@@ -105,6 +109,19 @@ async function sendViaResend(payload) {
   }
   const data = await resp.json().catch(() => ({}));
   return { messageId: data?.id ? String(data.id) : '', provider: 'resend' };
+}
+
+function normalizeBarkConfig(value = {}) {
+  const input = typeof value === 'string' ? { deviceKey: value } : value || {};
+  const deviceKey = normalizeBarkDeviceKey(input.deviceKey ?? input.barkDeviceKey ?? '');
+  return { deviceKey, enabled: Boolean(deviceKey && input.enabled !== false) };
+}
+
+function normalizeServerChan3Config(value = {}) {
+  const input = value || {};
+  const uid = String(input.uid || '').trim();
+  const sendKey = String(input.sendKey || '').trim();
+  return { uid, sendKey, enabled: Boolean(uid && sendKey && input.enabled !== false) };
 }
 
 function normalizeEmailConfig(value = {}) {
@@ -142,14 +159,19 @@ async function deliverTestEmail(notification, settings) {
 async function deliverTestChannel(notification, channel, settings) {
   try {
     if (channel === 'bark') {
+      const config = normalizeBarkConfig(settings.bark ?? settings.barkDeviceKey);
+      if (!config.deviceKey) return { channel, status: 'skipped', detail: '未配置 Bark' };
+      if (!config.enabled) return { channel, status: 'skipped', detail: 'Bark 通知已关闭' };
       return await sendBarkNotification({
         ...notification,
         url: notification.url || notification.detailUrl || '',
-        deviceKey: text(settings.barkDeviceKey, 512)
+        deviceKey: config.deviceKey
       });
     }
     if (channel === 'serverchan3') {
-      const config = settings.serverChan3 || {};
+      const config = normalizeServerChan3Config(settings.serverChan3);
+      if (!(config.uid && config.sendKey)) return { channel, status: 'skipped', detail: '未配置 Server酱' };
+      if (!config.enabled) return { channel, status: 'skipped', detail: 'Server酱通知已关闭' };
       return await sendServerChan3Notification({
         ...notification,
         uid: text(config.uid, 240),
