@@ -238,10 +238,12 @@ function normalizeNotifyStatusSummary(payload = {}) {
     deliveryFailureCount: Number(delivery.failureCount ?? delivery.deliveryFailureCount) || 0,
     setup: {
       barkDeviceKey: String(bark.deviceKey ?? legacySetup.barkDeviceKey ?? '').trim(),
+      barkEnabled: Boolean(bark.enabled ?? legacySetup.barkEnabled ?? true),
       serverChan3: {
         uid: String(serverChan3.uid || '').trim(),
         sendKeyMasked: String(serverChan3.sendKeyMasked || '').trim(),
-        configured: Boolean(serverChan3.configured ?? legacyConfigured.serverChan3)
+        configured: Boolean(serverChan3.configured ?? legacyConfigured.serverChan3),
+        enabled: Boolean(serverChan3.enabled ?? legacySetup.serverChan3?.enabled ?? true)
       },
       email: {
         maskedAddress: String(email.maskedAddress || '').trim(),
@@ -619,6 +621,22 @@ export function disableNotifyEmail() {
 
 export function enableNotifyEmail() {
   return requestNotify('/email/enable', { method: 'POST' });
+}
+
+export function disableNotifyBark() {
+  return requestNotify('/bark/disable', { method: 'POST' });
+}
+
+export function enableNotifyBark() {
+  return requestNotify('/bark/enable', { method: 'POST' });
+}
+
+export function disableNotifyServerChan3() {
+  return requestNotify('/serverchan3/disable', { method: 'POST' });
+}
+
+export function enableNotifyServerChan3() {
+  return requestNotify('/serverchan3/enable', { method: 'POST' });
 }
 
 export function sendEmailNotifyTest() {

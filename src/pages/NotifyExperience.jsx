@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { loadNotifyEvents, loadNotifyStatus, loadHoldingsNotifyRule, saveHoldingsNotifyRule, mergeNotifyStatusIntoClientConfig, persistNotifyClientConfig, readNotifyClientConfig, saveNotifySettings, sendNotifyTest, syncTradePlanRules } from '../app/notifySync.js';
+import { loadNotifyEvents, loadNotifyStatus, loadHoldingsNotifyRule, saveHoldingsNotifyRule, mergeNotifyStatusIntoClientConfig, persistNotifyClientConfig, readNotifyClientConfig, saveNotifySettings, sendNotifyTest, syncTradePlanRules, enableNotifyBark, disableNotifyBark, enableNotifyServerChan3, disableNotifyServerChan3 } from '../app/notifySync.js';
 import { getWebNotifyState, persistWebNotifyConfig, readWebNotifyConfig, requestWebNotifyPermission, showLocalWebNotification } from '../app/webNotifyClient.js';
 import { aggregateByCode, buildHoldingsNotifyDigest, summarizePortfolio } from '../app/holdingsLedgerCore.js';
 import { readLedgerState } from '../app/holdingsLedger.js';
@@ -127,6 +127,54 @@ export function NotifyExperience({ embedded = false }) {
   const emailChannel = useNotifyEmailChannel({
     emailConfigured, refreshNotifyData, refreshNotifyEvents, setNotifyError, setNotifyMessage
   });
+  const barkHasCredentials = Boolean(String(notifySetup?.barkDeviceKey || '').trim());
+  const barkEnabled = barkHasCredentials && notifySetup?.barkEnabled !== false;
+  const serverChan3HasCredentials = Boolean(String(notifySetup?.serverChan3?.uid || '').trim());
+  const serverChan3Enabled = serverChan3HasCredentials && notifySetup?.serverChan3?.enabled !== false;
+  const [isTogglingBark, setIsTogglingBark] = useState(false);
+  const [isTogglingServerChan3, setIsTogglingServerChan3] = useState(false);
+
+  async function handleToggleBarkEnabled() {
+    setIsTogglingBark(true);
+    setNotifyError('');
+    setNotifyMessage('');
+    try {
+      if (barkEnabled) {
+        await disableNotifyBark();
+        setNotifyMessage('Bark 提醒已关闭，Device Key 会保留。');
+      } else {
+        await enableNotifyBark();
+        setNotifyMessage('Bark 提醒已重新开启。');
+      }
+      await refreshNotifyData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Bark 提醒设置失败';
+      setNotifyError(message);
+    } finally {
+      setIsTogglingBark(false);
+    }
+  }
+
+  async function handleToggleServerChan3Enabled() {
+    setIsTogglingServerChan3(true);
+    setNotifyError('');
+    setNotifyMessage('');
+    try {
+      if (serverChan3Enabled) {
+        await disableNotifyServerChan3();
+        setNotifyMessage('Server酱³ 提醒已关闭，UID 和 SendKey 会保留。');
+      } else {
+        await enableNotifyServerChan3();
+        setNotifyMessage('Server酱³ 提醒已重新开启。');
+      }
+      await refreshNotifyData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Server酱³ 提醒设置失败';
+      setNotifyError(message);
+    } finally {
+      setIsTogglingServerChan3(false);
+    }
+  }
   const pcConfigured = Boolean(pcFeaturesAvailable && webNotifySupported && webNotifyPermission === 'granted' && webNotifyEnabled);
   const notifyMeta = () => buildNotifyMeta({ embedded, notifyPlatform, barkConfigured, serverChan3Configured, pcConfigured, pcFeaturesAvailable, webNotifySupported, webNotifyPermission, webNotifyEnabled, notifyWsStatus, holdingsRule, visibleEvents, pairedWebWsDevices, marketAlerts, holdingAlerts });
   const summary = useMemo(() => {
@@ -778,6 +826,14 @@ export function NotifyExperience({ embedded = false }) {
         emailConfigured={emailConfigured}
         emailSetup={emailSetup}
         {...emailChannel}
+        barkEnabled={barkEnabled}
+        barkHasCredentials={barkHasCredentials}
+        isTogglingBark={isTogglingBark}
+        handleToggleBarkEnabled={handleToggleBarkEnabled}
+        serverChan3Enabled={serverChan3Enabled}
+        serverChan3HasCredentials={serverChan3HasCredentials}
+        isTogglingServerChan3={isTogglingServerChan3}
+        handleToggleServerChan3Enabled={handleToggleServerChan3Enabled}
         notifyPlatform={notifyPlatform}
         setNotifyPlatform={setNotifyPlatform}
         availablePlatforms={availablePlatforms}
