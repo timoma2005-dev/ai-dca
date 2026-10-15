@@ -1,4 +1,4 @@
-import { confirmedSharesCalendar } from '../../../shared/etfPcfTradingCalendar.js';
+import { confirmedSharesCalendar, isCompleteSharesCalendar } from '../../../shared/etfPcfTradingCalendar.js';
 import {
   buildSharesProjection,
   persistSharesProjection,
@@ -13,6 +13,7 @@ import {
   validateEtfPcfHistoryData,
   buildEtfPcfCacheKey
 } from './etfPcfLimit.js';
+import { mapLimit } from './fundLimit.js';
 import {
   TARGET_CODES,
   CURRENT_SHARES_URL,
@@ -21,6 +22,14 @@ import {
   parseEtfPcfSharesXlsx
 } from './etfPcfShares.js';
 const EVENT_CODES = TARGET_CODES.filter((code) => code.startsWith('159'));
+// 方案 B 阶段预算：历史快照/单条回退 ≤40%，shares 下载累计 ≤80%，剩余 ≥20% 预留给
+// 快照与事件日志持久化及 shares projection，读取和下载不再挤占全部 deadline。
+const HISTORY_BUDGET_SHARE = 0.4,
+  SHARES_BUDGET_SHARE = 0.8;
+// 单条 PCF fallback：仅限日历确认的交易日（日历不可用时保留全窗口），mapLimit 并发 3，
+// 单次运行总读取上限 64（≈8 个交易日 × 8 只），超限或超出历史预算立即停止分配。
+export const ETF_PCF_FALLBACK_CONCURRENCY = 3;
+export const ETF_PCF_FALLBACK_MAX_READS = 64;
 const validLimit = (x) =>
   !!x &&
   ['limited', 'unlimited', 'unknown'].includes(x.kind) &&
@@ -407,7 +416,8 @@ async function runStage({
   tradingCalendar = undefined
 }) {
   if (!Number.isFinite(scheduledTime)) return { ok: false, reason: 'invalid_scheduled_time' };
-  const deadline = Date.now() + deadlineMs,
+  const startMs = Date.now(),
+    deadline = startMs + deadlineMs,
     kv = env.FUND_LIMIT_KV,
     date = shanghaiDateKey(new Date(scheduledTime)),
     controller = new AbortController();
@@ -415,72 +425,156 @@ async function runStage({
     tradingCalendar === undefined ? confirmedSharesCalendar(day(date, -10), date) : tradingCalendar;
   const previous = previousSession(date, calendar);
   if (deadlineMs <= 0) return { ok: false, reason: 'timeout' };
+  const historyDeadlineAt = startMs + Math.max(1, Math.floor(deadlineMs * HISTORY_BUDGET_SHARE)),
+    sharesDeadlineAt = startMs + Math.max(2, Math.floor(deadlineMs * SHARES_BUDGET_SHARE));
   const timer = setTimeout(() => controller.abort(), deadlineMs);
   const expired = () => {
     if (controller.signal.aborted || Date.now() >= deadline) throw Error('timeout');
   };
-  const read = (key) => {
+  // 分阶段耗时、KV 读取次数、快照命中/失败原因：冷、热路径基线与超时定位都依赖这份统计。
+  const stats = {
+    phase: 'history',
+    stages: {},
+    reads: { history: 0, fallback: 0, current: 0, preflight: 0, projection: 0 },
+    limitsSnapshots: { hit: 0, missing: 0, invalid: 0, corrupt: 0 },
+    sharesSnapshots: { hit: 0, missing: 0, invalid: 0, corrupt: 0 },
+    fallback: { dates: 0, reads: 0, errors: 0, populated: 0, stopped: '' },
+    shares: { downloads: 0, failures: [] },
+    limitsSnapshot: 'pending',
+    persisted: { sharesSnapshots: 0, eventLogs: 0 },
+    projection: { attempted: 0, ok: 0 }
+  };
+  let phaseStart = startMs;
+  const setPhase = (name) => {
+    stats.stages[stats.phase] = Date.now() - phaseStart;
+    phaseStart = Date.now();
+    stats.phase = name;
+  };
+  const summary = (extra) =>
+    JSON.stringify({
+      date,
+      previous,
+      deadlineMs,
+      elapsedMs: Date.now() - startMs,
+      ...stats,
+      ...extra
+    });
+  const read = (key, phase = 'history') => {
     expired();
+    stats.reads[phase] += 1;
     return abortable(kv.get(key), controller.signal);
   };
   try {
     const history = new Map(),
-      cachedShares = [];
+      cachedShares = [],
+      fallbackFailed = new Set();
     // Read all dependent keys before writes. Errors must never become an empty baseline.
+    const sessionSet = isCompleteSharesCalendar(calendar) ? new Set(calendar.sessions) : null;
+    let fallbackStopped = '';
     for (let i = 1; i <= 10; i++) {
       expired();
       const d = day(date, -i),
         raw = await read(eventKey(d, 'limits'));
       if (raw) {
-        let snap;
+        let snap = null,
+          miss = '';
         try {
           snap = parse(raw);
         } catch {
-          continue;
+          miss = 'corrupt';
         }
-        if (snapshotValid(snap, d, 'limits')) history.set(d, snap);
-      }
-      // 快照缺失时回退读单条 KV，避免空基准导致当日全部 unknown。
-      if (!history.has(d)) {
-        const fallback = [];
-        for (const code of EVENT_CODES) {
-          try {
-            const cached = await read(buildEtfPcfCacheKey(code, d));
-            if (!cached) continue;
-            const p = parse(cached);
-            if (!validateEtfPcfHistoryData(p, { code, date: d, now: new Date(scheduledTime) }).ok) continue;
-            fallback.push({
-              code,
-              date: d,
-              ...normalizeCreationStatus(p),
-              net: { kind: p.netSubscribeLimitKind, shares: p.netSubscribeLimitShares },
-              total: { kind: p.totalSubscribeLimitKind, shares: p.totalSubscribeLimitShares }
-            });
-          } catch {
-            /* 单条读取/解析失败只跳过，不阻断整体 */
+        if (miss === 'corrupt') stats.limitsSnapshots.corrupt += 1;
+        else if (snapshotValid(snap, d, 'limits')) {
+          history.set(d, snap);
+          stats.limitsSnapshots.hit += 1;
+        } else stats.limitsSnapshots.invalid += 1;
+      } else stats.limitsSnapshots.missing += 1;
+      // 快照缺失或损坏时回退读单条 KV；仅限确认交易日，且受总读取上限与历史阶段预算约束。
+      if (!history.has(d) && !fallbackStopped) {
+        if (sessionSet && !sessionSet.has(d)) {
+          // 非确认交易日无 PCF 发布，跳过单条回退，避免无效读取。
+        } else if (Date.now() >= historyDeadlineAt) fallbackStopped = 'history_budget';
+        else if (stats.fallback.reads + EVENT_CODES.length > ETF_PCF_FALLBACK_MAX_READS)
+          fallbackStopped = 'read_cap';
+        else {
+          stats.fallback.dates += 1;
+          const outcomes = await mapLimit(EVENT_CODES, ETF_PCF_FALLBACK_CONCURRENCY, async (code) => {
+            if (Date.now() >= historyDeadlineAt) return { code, failed: 'history_budget' };
+            stats.fallback.reads += 1;
+            let cached;
+            try {
+              cached = await read(buildEtfPcfCacheKey(code, d), 'fallback');
+            } catch (e) {
+              // KV 读取失败/超时必须与“无历史记录”区分，绝不静默当作空基准。
+              return { code, failed: e.message === 'timeout' ? 'timeout' : 'kv_read_failed' };
+            }
+            if (!cached) return { code };
+            try {
+              const p = parse(cached);
+              if (!validateEtfPcfHistoryData(p, { code, date: d, now: new Date(scheduledTime) }).ok)
+                return { code };
+              return {
+                code,
+                record: {
+                  code,
+                  date: d,
+                  ...normalizeCreationStatus(p),
+                  net: { kind: p.netSubscribeLimitKind, shares: p.netSubscribeLimitShares },
+                  total: { kind: p.totalSubscribeLimitKind, shares: p.totalSubscribeLimitShares }
+                }
+              };
+            } catch {
+              // 解析失败可跳过：损坏的单条缓存不代表没有历史记录。
+              return { code };
+            }
+          });
+          const fallback = outcomes.flatMap((o) => (o?.record ? [o.record] : [])),
+            readFailures = outcomes.filter((o) => o?.failed === 'timeout' || o?.failed === 'kv_read_failed'),
+            incomplete = outcomes.some((o) => o?.failed);
+          if (readFailures.length) {
+            fallbackFailed.add(d);
+            stats.fallback.errors += readFailures.length;
+            console.warn(
+              'etf_pcf_events_fallback_read_failed',
+              JSON.stringify({
+                date: d,
+                errors: readFailures.length,
+                timeouts: readFailures.filter((o) => o.failed === 'timeout').length
+              })
+            );
+          }
+          // 任一读取失败即不落 history：该日按读取失败报告，不用部分数据冒充完整基准。
+          if (!incomplete && fallback.length * 2 >= EVENT_CODES.length) {
+            history.set(d, { schemaVersion: 1, source: 'szse_pcf', date: d, fetchedAt: detectedAt, records: fallback });
+            stats.fallback.populated += 1;
           }
         }
-        if (fallback.length * 2 >= EVENT_CODES.length)
-          history.set(d, { schemaVersion: 1, source: 'szse_pcf', date: d, fetchedAt: detectedAt, records: fallback });
       }
       const share = await read(eventKey(d, 'shares'));
       if (share) {
-        let snap;
+        let snap = null,
+          miss = '';
         try {
           snap = parse(share);
         } catch {
-          continue;
+          miss = 'corrupt';
         }
-        if (snapshotValid(snap, d, 'shares')) cachedShares.push(...snap.records);
-      }
+        if (miss === 'corrupt') stats.sharesSnapshots.corrupt += 1;
+        else if (snapshotValid(snap, d, 'shares')) {
+          cachedShares.push(...snap.records);
+          stats.sharesSnapshots.hit += 1;
+        } else stats.sharesSnapshots.invalid += 1;
+      } else stats.sharesSnapshots.missing += 1;
     }
+    stats.fallback.stopped = fallbackStopped;
+    setPhase('current');
     // Collector data avoids a read-after-write miss; standalone callers may supply identities only.
     const inputs = [];
     for (const p of pcfData) {
       if (!EVENT_CODES.includes(p?.code) || p.date !== date) continue;
       if (p.source) inputs.push(p);
       else {
-        const raw = await read(buildEtfPcfCacheKey(p.code, p.date));
+        const raw = await read(buildEtfPcfCacheKey(p.code, p.date), 'current');
         try {
           if (raw) inputs.push(parse(raw));
         } catch {
@@ -503,7 +597,7 @@ async function runStage({
         total: { kind: p.totalSubscribeLimitKind, shares: p.totalSubscribeLimitShares }
       }));
     for (const code of TARGET_CODES.filter((code) => code.startsWith('513'))) {
-      const raw = await read(buildSsePcfCacheKey(code, date));
+      const raw = await read(buildSsePcfCacheKey(code, date), 'current');
       if (!raw) continue;
       try {
         const p = parse(raw);
@@ -520,19 +614,64 @@ async function runStage({
         /* 无效缓存不提供申赎状态 */
       }
     }
+    // 当日 PCF 校验完成后立即独立保存 limits 快照：不等 shares 下载和整个事件阶段完成，
+    // 后续任何超时或源故障都不再导致次日基准缺失（方案 B 解耦点）。current 为空时单独记录。
+    setPhase('limits_save');
+    if (current.length) {
+      try {
+        await persistSnapshot(
+          kv,
+          { schemaVersion: 1, source: 'szse_pcf', date, fetchedAt: detectedAt, records: current },
+          'limits',
+          deadline,
+          controller.signal
+        );
+        stats.limitsSnapshot = 'saved';
+        console.log(
+          'etf_pcf_events_limits_snapshot_saved',
+          JSON.stringify({ date, records: current.length, elapsedMs: Date.now() - startMs })
+        );
+      } catch (e) {
+        stats.limitsSnapshot = 'failed:' + e.message;
+        console.warn(
+          'etf_pcf_events_limits_snapshot_failed',
+          JSON.stringify({ date, key: eventKey(date, 'limits'), error: e.message })
+        );
+        throw e;
+      }
+    } else {
+      stats.limitsSnapshot = 'skipped_empty_current';
+      console.log('etf_pcf_events_limits_snapshot_skipped', JSON.stringify({ date, reason: 'empty_current' }));
+    }
+    setPhase('shares');
     let records = [...cachedShares];
     let sharesReason = 'missing_shares';
     const projectionBatches = [];
     // Shares have their own dated source. A missing PCF baseline must not block collection.
-    {
+    // 下载独占 80% 累计预算：到期只取消下载，不取消整个事件阶段，持久化始终有 ≥20% 余量。
+    const sharesController = new AbortController();
+    const cascadeAbort = () => sharesController.abort();
+    if (controller.signal.aborted) cascadeAbort();
+    else controller.signal.addEventListener('abort', cascadeAbort, { once: true });
+    const sharesTimer = setTimeout(cascadeAbort, Math.max(1, sharesDeadlineAt - Date.now()));
+    try {
       for (const url of [CURRENT_SHARES_URL, historicalSharesUrl(day(date, -10), date)]) {
         expired();
+        const remaining = Math.min(sharesDeadlineAt, deadline) - Date.now();
+        if (remaining <= 0) {
+          if (stats.shares.downloads === 0) {
+            sharesReason = 'shares_budget';
+            stats.shares.failures.push(sharesReason);
+          }
+          break;
+        }
         let response;
+        stats.shares.downloads += 1;
         try {
           response = await Promise.race([
-            sharesFetch({ url, signal: controller.signal, timeoutMs: Math.min(8000, deadline - Date.now()) }),
+            sharesFetch({ url, signal: sharesController.signal, timeoutMs: Math.min(8000, remaining) }),
             new Promise((resolve) =>
-              controller.signal.addEventListener('abort', () => resolve({ ok: false, reason: 'timeout' }), {
+              sharesController.signal.addEventListener('abort', () => resolve({ ok: false, reason: 'timeout' }), {
                 once: true
               })
             )
@@ -560,7 +699,10 @@ async function runStage({
                 ['份', '万份'].includes(r.unit)
             )
           );
-        } else sharesReason = response.reason || 'invalid_shares_source';
+        } else {
+          sharesReason = response.reason || 'invalid_shares_source';
+          stats.shares.failures.push(sharesReason);
+        }
         // A failed or T-1-only current report must still try the dated historical source.
         const currentShares = records.filter((r) => r.date === date);
         if (
@@ -573,27 +715,40 @@ async function runStage({
         )
           break;
       }
+    } finally {
+      clearTimeout(sharesTimer);
+      controller.signal.removeEventListener('abort', cascadeAbort);
+      sharesController.abort();
     }
+    setPhase('compute');
     records = [...new Map(records.map((r) => [`${r.code}:${r.date}`, r])).values()];
     const results = [],
-      byDate = new Map(),
-      previousDates = [...history.keys()],
-      evidence = [...previousDates, ...records.map((r) => r.date)];
+      byDate = new Map();
+    // 基准锁定为日历确认的上一交易日：最近交易日缺失、未知或读取失败时输出 unknown 及原因，
+    // 绝不跳过最近交易日去用更旧但“恰好有值”的日期制造信号。
+    const baselineReason = !previous
+      ? 'unconfirmed_previous_session'
+      : history.has(previous)
+        ? null
+        : fallbackFailed.has(previous)
+          ? 'baseline_read_failed'
+          : 'unconfirmed_recent_baseline';
     for (const code of EVENT_CODES) {
       const cur = current.find((r) => r.code === code),
-        prevDate = selectPreviousDate(date, evidence, evidence),
-        prev = history.get(prevDate)?.records.find((r) => r.code === code);
+        prev = previous && history.get(previous)?.records.find((r) => r.code === code);
       for (const basis of ['net', 'total'])
         results.push(
-          limitRelaxation({
-            code,
-            date,
-            basis,
-            prev_date: prevDate,
-            when_detected: detectedAt,
-            prev: prev?.[basis],
-            cur: cur?.[basis]
-          })
+          baselineReason
+            ? result({ code, date, prev_date: null }, 'limit_relaxation', basis, 'unknown', baselineReason)
+            : limitRelaxation({
+                code,
+                date,
+                basis,
+                prev_date: previous,
+                when_detected: detectedAt,
+                prev: prev?.[basis],
+                cur: cur?.[basis]
+              })
         );
       const rows = [...new Map(records.filter((r) => r.code === code).map((r) => [r.date, r])).values()].sort(
         (a, b) => b.date.localeCompare(a.date)
@@ -601,11 +756,7 @@ async function runStage({
       const latest = rows[0],
         older = latest && rows.find((r) => r.date === previousSession(latest.date, calendar));
       // A more recent known PCF session proves that a stale report is not T-1.
-      if (
-        latest &&
-        older &&
-        (latest.date === date || latest.date === selectPreviousDate(date, evidence, evidence))
-      ) {
+      if (latest && older && (latest.date === date || latest.date === previous)) {
         const total = (latest.date === date ? current : history.get(latest.date)?.records)?.find(
           (r) => r.code === code
         )?.total;
@@ -627,23 +778,19 @@ async function runStage({
     // Same-day net-creation checks share the same log as today's limit changes.
     byDate.set(date, [...results, ...(byDate.get(date) || [])]);
     // Preflight logs too, before saving auxiliary snapshots.
+    setPhase('preflight');
     for (const d of byDate.keys()) {
-      const raw = await read(eventKey(d));
-      if (raw !== null && raw !== undefined && !validateEventLog(parse(raw), d))
+      const raw = await read(eventKey(d), 'preflight');
+      if (raw !== null && raw !== undefined && !validateEventLog(parse(raw), d)) {
+        console.warn(
+          'etf_pcf_events_log_preflight_failed',
+          JSON.stringify({ key: eventKey(d), reason: 'corrupt_event_log' })
+        );
         throw Error('corrupt_event_log');
+      }
     }
+    // 当日 limits 快照已先行独立保存，此处只收集 shares 快照。
     const snapshots = [];
-    if (current.length)
-      snapshots.push({
-        type: 'limits',
-        data: {
-          schemaVersion: 1,
-          source: 'szse_pcf',
-          date,
-          fetchedAt: detectedAt,
-          records: current
-        }
-      });
     const shareDates = [...new Set(records.map((r) => r.date))];
     for (const d of shareDates) {
       expired();
@@ -659,12 +806,22 @@ async function runStage({
       });
     }
     for (const { type, data } of snapshots) {
-      const raw = await read(eventKey(data.date, type));
-      mergeSnapshot(raw === null || raw === undefined ? null : parse(raw), data, type);
+      const raw = await read(eventKey(data.date, type), 'preflight');
+      try {
+        mergeSnapshot(raw === null || raw === undefined ? null : parse(raw), data, type);
+      } catch (e) {
+        console.warn(
+          'etf_pcf_events_snapshot_preflight_failed',
+          JSON.stringify({ key: eventKey(data.date, type), reason: e.message })
+        );
+        throw e;
+      }
     }
+    setPhase('persist');
     for (const { type, data } of snapshots) {
       expired();
       await persistSnapshot(kv, data, type, deadline, controller.signal);
+      stats.persisted.sharesSnapshots += 1;
     }
     for (const [d, rs] of byDate) {
       expired();
@@ -672,13 +829,16 @@ async function runStage({
         deadlineAt: deadline,
         signal: controller.signal
       });
+      stats.persisted.eventLogs += 1;
     }
     // Independent sidecar after all original event writes; never downloads or mutates logs.
+    setPhase('projection');
     const projectionResults = [];
     for (const batch of projectionBatches) {
       for (const d of [...new Set(batch.records.map((r) => r.date))]
         .filter((d) => isWellFormedEtfPcfDateKey(d) && d <= date && d >= day(date, -10))
         .sort()) {
+        stats.projection.attempted += 1;
         try {
           if (controller.signal.aborted || Date.now() + 1000 >= deadline) {
             projectionResults.push({ ok: false, reason: 'projection_budget' });
@@ -691,7 +851,7 @@ async function runStage({
           for (const code of TARGET_CODES) {
             const existing = datedLimits.get(code);
             if (existing?.subscriptionAllowed != null && known(existing.total)) continue;            const sse = code.startsWith('513');
-            const raw = await read(sse ? buildSsePcfCacheKey(code, d) : buildEtfPcfCacheKey(code, d));
+            const raw = await read(sse ? buildSsePcfCacheKey(code, d) : buildEtfPcfCacheKey(code, d), 'projection');
             if (!raw) continue;
             try {
               const cached = parse(raw);
@@ -734,10 +894,16 @@ async function runStage({
     }
     for (const result of projectionResults)
       if (!result.ok) console.warn('shares_projection_skipped', result.reason);
+    stats.projection.ok = projectionResults.filter((r) => r.ok).length;
     const detectedEvents = [...byDate.values()].flat().filter((r) => r.event).map((r) => r.event);
+    setPhase('done');
+    console.log('etf_pcf_events_stage_summary', summary({ events: detectedEvents.length }));
     return { ok: true, date, events: detectedEvents.length, detectedEvents };
   } catch (e) {
-    return { ok: false, reason: e.message === 'timeout' ? 'timeout' : 'events_stage_error' };
+    stats.stages[stats.phase] = Date.now() - phaseStart;
+    const reason = e.message === 'timeout' ? 'timeout' : 'events_stage_error';
+    console.warn('etf_pcf_events_stage_failed', summary({ reason, error: e.message }));
+    return { ok: false, reason };
   } finally {
     clearTimeout(timer);
     controller.abort();

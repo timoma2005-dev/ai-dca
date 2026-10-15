@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { limitRelaxation, netCreationNearTotalLimit, mergeEventLogs, validateEventLog, persistEventLog, eventKey, selectPreviousDate, runEtfPcfEvents } from '../workers/ocr-proxy/src/etfPcfEvents.js';
+import { limitRelaxation, netCreationNearTotalLimit, mergeEventLogs, validateEventLog, persistEventLog, eventKey, selectPreviousDate, runEtfPcfEvents, ETF_PCF_FALLBACK_MAX_READS } from '../workers/ocr-proxy/src/etfPcfEvents.js';
 import { parseEtfPcf, buildEtfPcfCacheKey } from '../workers/ocr-proxy/src/etfPcfLimit.js';
 const at='2026-10-13T01:00:00.000Z',date='2026-10-13',previous='2026-10-12',code='159659';
 const l=shares=>({kind:'limited',shares}),unlimited={kind:'unlimited',shares:null},unknown={kind:'unknown',shares:null};
@@ -228,4 +228,104 @@ test('invalid fallback entries skipped gracefully', async () => {
   const data = JSON.parse(kv.store.get(eventKey(date)));
   assert.equal(data.events.length, 0);
   assert.ok(data.checks.every(c => c.status === 'unknown'));
+});
+
+// ─── 方案 B：快照解耦、fallback 收敛与持久化预算 ───────────────────
+const back = (n) => new Date(Date.parse(date) - n * 86400000).toISOString().slice(0, 10);
+const today = date.replaceAll('-', '');
+const perCodeKey = (k) => /^etf-pcf:\d{6}:\d{8}$/.test(k);
+// fallback 只读历史日期；当日 etf-pcf:<513xxx> 是 SSE 申赎状态读取，不计入。
+const fallbackGets = (kv) => kv.gets.filter((k) => perCodeKey(k) && !k.endsWith(today));
+
+test('complete snapshots skip per-code fallback reads', async () => {
+  const kv = new KV();
+  for (let i = 1; i <= 10; i++) {
+    const d = back(i);
+    seed(kv, limits(d, [{ code: '159941', net: l(100000), total: unlimited }]));
+    kv.store.set(eventKey(d, 'shares'), JSON.stringify({
+      schemaVersion: 1, source: 'szse_fund_report', date: d, fetchedAt: at,
+      records: [{ code: '159941', date: d, shares: 1000, unit: '份' }]
+    }));
+  }
+  const result = await stage(kv);
+  assert.equal(result.ok, true);
+  assert.equal(fallbackGets(kv).length, 0); // 快照齐全不触发单条 fallback
+  assert.ok(kv.store.has(eventKey(date, 'limits'))); // 当日 limits 快照独立保存
+});
+
+test('all-missing snapshots with unconfirmed calendar bound fallback reads', async () => {
+  const kv = new KV();
+  const result = await stage(kv, { tradingCalendar: null });
+  assert.equal(result.ok, true);
+  const gets = fallbackGets(kv);
+  assert.equal(gets.length, ETF_PCF_FALLBACK_MAX_READS); // 读取次数受明确上限控制
+  assert.ok(gets.includes(buildEtfPcfCacheKey('159941', back(1))));
+  assert.ok(!gets.includes(buildEtfPcfCacheKey('159941', back(9)))); // 最近日期优先，超限日不再读取
+  const data = JSON.parse(kv.store.get(eventKey(date)));
+  assert.equal(data.events.length, 0);
+  assert.ok(data.checks.filter(c => c.signal_type === 'limit_relaxation')
+    .every(c => c.status === 'unknown' && c.reason === 'unconfirmed_previous_session'));
+  assert.ok(kv.store.has(eventKey(date, 'limits')));
+});
+
+test('fallback reads skip non-session dates in the 10-day window', async () => {
+  const kv = new KV();
+  const result = await stage(kv);
+  assert.equal(result.ok, true);
+  const gets = fallbackGets(kv);
+  assert.ok(gets.length > 0 && gets.length <= ETF_PCF_FALLBACK_MAX_READS);
+  for (const weekend of ['20261003', '20261004', '20261010', '20261011'])
+    assert.ok(!gets.some(k => k.endsWith(weekend)), weekend); // 周末无 PCF，不浪费读取
+});
+
+test('hanging shares source cannot block limits snapshot or limit events', async () => {
+  const kv = new KV();
+  seed(kv, limits(previous, [{ code: '159941', net: l(100000), total: unlimited }]));
+  const result = await stage(kv, { deadlineMs: 2000, sharesFetch: () => new Promise(() => {}) });
+  assert.equal(result.ok, true); // shares 下载在预算内止损，事件阶段继续完成
+  assert.ok(kv.store.has(eventKey(date, 'limits')));
+  const data = JSON.parse(kv.store.get(eventKey(date)));
+  assert.ok(data.events.some(e => e.code === '159941' && e.basis === 'net')); // 限额事件不受 shares 故障阻断
+  assert.ok(data.checks.some(c => c.signal_type === 'net_creation_near_total_limit' && c.reason === 'timeout'));
+});
+
+test('fallback KV read failures never become an empty baseline', async () => {
+  const kv = new KV();
+  const store = kv.store;
+  kv.get = async (key) => {
+    if (/^etf-pcf:159\d{3}:\d{8}$/.test(key)) throw Error('kv read down');
+    return store.get(key) ?? null;
+  };
+  const warns = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warns.push(args.join(' '));
+  try {
+    const result = await stage(kv);
+    assert.equal(result.ok, true);
+    assert.ok(kv.store.has(eventKey(date, 'limits'))); // fallback 失败不阻断当日快照保存
+    const data = JSON.parse(kv.store.get(eventKey(date)));
+    assert.equal(data.events.length, 0); // 不冒充基准，无伪造事件
+    const check = data.checks.find(c => c.signal_type === 'limit_relaxation' && c.code === '159941' && c.basis === 'net');
+    assert.equal(check.status, 'unknown');
+    assert.equal(check.reason, 'baseline_read_failed'); // 读取失败与缺失明确区分
+    assert.ok(warns.some(w => w.includes('etf_pcf_events_fallback_read_failed'))); // 明确报错
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test('older dated fallback data cannot replace the missing previous session', async () => {
+  const kv = new KV();
+  for (const code of ['159941', '159659', '159660', '159696', '159632']) {
+    kv.store.set(buildEtfPcfCacheKey(code, '2026-10-09'), JSON.stringify({
+      ...pcf(), code, date: '2026-10-09', netSubscribeLimitKind: 'limited', netSubscribeLimitShares: 100000
+    }));
+  }
+  const result = await stage(kv);
+  assert.equal(result.ok, true);
+  const data = JSON.parse(kv.store.get(eventKey(date)));
+  assert.equal(data.events.length, 0); // 最近交易日基准缺失时不用 T-2 造信号
+  const check = data.checks.find(c => c.signal_type === 'limit_relaxation' && c.code === '159941' && c.basis === 'net');
+  assert.equal(check.status, 'unknown');
+  assert.equal(check.reason, 'unconfirmed_recent_baseline');
 });
