@@ -123,6 +123,9 @@ async function deliverTestEmail(notification, settings) {
   if (!config.address || !config.verified) {
     return { channel: 'email', status: 'skipped', detail: '未配置收件邮箱' };
   }
+  if (!config.enabled) {
+    return { channel: 'email', status: 'skipped', detail: '邮箱通知已关闭' };
+  }
   const token = String(process.env.RESEND_TOKEN || '').trim();
   if (!token) {
     return { channel: 'email', status: 'skipped', detail: 'cn 主机未配置 RESEND_TOKEN' };
