@@ -6,21 +6,15 @@ import {
   readSwitchConfigCache,
   saveSwitchConfigToWorker
 } from '../../app/switchStrategySync.js';
-import { selectBestCounterparty } from '../../app/switchCounterpartyAnalyzer.js';
 import { testSwitchConfig } from '../../app/switchStrategyTestSync.js';
-import { SWITCH_STRATEGY_ETFS } from '../../app/nasdaqCatalog.js';
-import { readLedgerState } from '../../app/holdingsLedger.js';
-import { aggregateByCode } from '../../app/holdingsLedgerCore.js';
+import { loadCloudSession } from '../../app/authClient.js';
+import { apiUrl } from '../../app/apiBase.js';
 import { buildSwitchBoardRows, filterSwitchBoardRows, summarizeSwitchBoard } from './switchBoardModel.js';
 import { readSwitchRuleChannelMap } from './switchRuleChannels.js';
 import { SwitchStrategyMetricsBar } from './SwitchStrategyMetricsBar.jsx';
 import { SwitchStrategyCardItem } from './SwitchStrategyCardItem.jsx';
 import { SwitchStrategyTable } from './SwitchStrategyTable.jsx';
 import { SwitchStrategyRuleModal } from './SwitchStrategyRuleModal.jsx';
-
-const AUTO_HIGH_CODES = new Set(['159501', '513100']);
-const AUTO_LOWER_PCT = 1;
-const AUTO_UPPER_PCT = 3;
 
 function isFundCode(value) {
   return /^\d{6}$/.test(String(value || '').trim());
@@ -120,33 +114,6 @@ function snapshotHasRulePremium(snapshot, ruleId) {
       || (Array.isArray(group?.candidates) && group.candidates.some((item) => hasFiniteValue(item?.premiumPct)))
   ));
 }
-
-function readHoldingForAutoFill(code) {
-  try {
-    const ledger = readLedgerState();
-    const item = aggregateByCode(ledger.transactions || [], ledger.snapshotsByCode || {})
-      .find((holding) => String(holding?.code || '').replace(/^(sh|sz|bj)/i, '') === code);
-    const marketValue = Number(item?.marketValue);
-    const quantity = Number(item?.totalShares || item?.movingTotalShares);
-    if (item && Number.isFinite(marketValue) && marketValue > 0) {
-      return {
-        name: String(item.name || ''),
-        notional: marketValue,
-        quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : null,
-        usedDefaultNotional: false
-      };
-    }
-  } catch {
-    // 持仓读取失败时使用约定的默认金额，自动填充仍可继续。
-  }
-  return {
-    name: '',
-    notional: 10_000,
-    quantity: null,
-    usedDefaultNotional: true
-  };
-}
-
 
 export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade } = {}) {
   const [config, setConfig] = useState(() => normalizeSwitchConfigShape(readSwitchConfigCache()));
@@ -298,116 +265,32 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
     if (!Number.isFinite(normalizedFeeWanRate) || normalizedFeeWanRate < 0) {
       throw new Error('请填写有效的万分之交易费率。');
     }
-    const holding = readHoldingForAutoFill(normalizedHoldingCode);
-    const commissionRatePct = normalizedFeeWanRate / 100;
-    const estimatedTotalFee = Number(
-      (holding.notional * normalizedFeeWanRate / 10_000 * 2).toFixed(2)
-    );
-
-    let dynamicSelection = null;
-    try {
-      dynamicSelection = await selectBestCounterparty(normalizedHoldingCode);
-    } catch (error) {
-      console.warn('dynamic counterparty selection failed, using AUTO_HIGH_CODES fallback:', error);
+    // 对手方选择与阈值计算全部由后端 /api/notify/switch/recommend 完成，
+    // 前端不再做客户端回测与硬编码兜底，避免选出固定对手方。
+    const session = loadCloudSession();
+    const accessToken = String(session?.accessToken || '').trim();
+    if (!accessToken) {
+      const error = new Error('请先登录账户后使用自动填充。');
+      error.status = 401;
+      error.code = 'AUTH_REQUIRED';
+      throw error;
     }
-
-    const bestLower = Number(dynamicSelection?.bestLowerPct);
-    const bestUpper = Number(dynamicSelection?.bestUpperPct);
-    if (dynamicSelection && (!Number.isFinite(bestLower) || !Number.isFinite(bestUpper) || bestUpper <= bestLower)) {
-      dynamicSelection = null;
-    }
-    const ruleLowerPct = dynamicSelection ? bestLower : AUTO_LOWER_PCT;
-    const ruleUpperPct = dynamicSelection ? bestUpper : AUTO_UPPER_PCT;
-
-    const candidates = dynamicSelection ? [dynamicSelection.code] : Array.from(new Set([
-      ...SWITCH_STRATEGY_ETFS.map((item) => item.code),
-      ...AUTO_HIGH_CODES
-    ]))
-      .filter((code) => isFundCode(code) && code !== normalizedHoldingCode)
-      .slice(0, 20);
-    const codes = [normalizedHoldingCode, ...candidates];
-    const premiumClass = dynamicSelection ? {
-      [normalizedHoldingCode]: dynamicSelection.stats.meanSpread > 0 ? 'L' : 'H',
-      [dynamicSelection.code]: dynamicSelection.stats.meanSpread > 0 ? 'H' : 'L'
-    } : Object.fromEntries(
-      codes.map((code) => [code, AUTO_HIGH_CODES.has(code) ? 'H' : 'L'])
-    );
-    const holdingClass = premiumClass[normalizedHoldingCode];
-    const previewRule = {
-      id: 'recommend-preview',
-      name: `${normalizedHoldingCode} 切换方案`,
-      enabled: true,
-      benchmarkCodes: [normalizedHoldingCode],
-      enabledCodes: codes,
-      premiumClass,
-      intraSellLowerPct: ruleLowerPct,
-      intraBuyOtherPct: ruleUpperPct,
-      holdingFundCode: normalizedHoldingCode,
-      holdingFundName: holding.name,
-      holdingQuantity: holding.quantity,
-      holdingNotional: holding.notional,
-      candidateFundCodes: candidates,
-      feeConfig: {
-        mode: 'detailed',
-        sellCommissionRate: commissionRatePct,
-        buyCommissionRate: commissionRatePct,
-        minimumCommission: 0,
-        otherFee: 0,
-        estimatedTotalFee
+    const response = await fetch(apiUrl('/api/notify/switch/recommend'), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`
       },
-      backtestTimeframe: '5m'
-    };
-
-    const api = await testSwitchConfig({
-      enabled: true,
-      activeRuleId: previewRule.id,
-      rules: [previewRule]
+      body: JSON.stringify({ holdingCode: normalizedHoldingCode, feeWanRate: normalizedFeeWanRate })
     });
-    const preview = api?.snapshot?.rules?.[0]?.snapshot;
-    const group = (preview?.byBenchmark || []).find(
-      (item) => String(item?.benchmarkCode || '') === normalizedHoldingCode
-    ) || preview?.byBenchmark?.[0];
-    const choices = (group?.candidates || [])
-      .filter((item) => (
-        item?.valid
-        && premiumClass[item.code]
-        && premiumClass[item.code] !== holdingClass
-        && Number.isFinite(Number(item.spreadVsBenchmarkPct))
-      ))
-      .map((item) => ({
-        ...item,
-        normalizedGap: holdingClass === 'H'
-          ? Number(item.spreadVsBenchmarkPct)
-          : -Number(item.spreadVsBenchmarkPct)
-      }))
-      .sort((a, b) => (
-        holdingClass === 'H'
-          ? b.normalizedGap - a.normalizedGap
-          : a.normalizedGap - b.normalizedGap
-      ));
-    const candidate = choices[0];
-    if (!candidate) throw new Error('云端暂未返回可用的反向候选基金，请稍后重试。');
-
-    const highCode = holdingClass === 'H' ? normalizedHoldingCode : candidate.code;
-    const lowCode = holdingClass === 'L' ? normalizedHoldingCode : candidate.code;
-    return {
-      name: `${normalizedHoldingCode} 切换方案`,
-      highCode,
-      lowCode,
-      lowerPct: dynamicSelection ? ruleLowerPct : Number(preview?.intraSellLowerPct ?? ruleLowerPct),
-      upperPct: dynamicSelection ? ruleUpperPct : Number(preview?.intraBuyOtherPct ?? ruleUpperPct),
-      holdingSide: holdingClass,
-      holdingFundCode: normalizedHoldingCode,
-      holdingFundName: String(holding.name || group?.benchmarkName || normalizedHoldingCode),
-      holdingQuantity: holding.quantity,
-      holdingNotional: holding.notional,
-      candidateFundCodes: [candidate.code],
-      feeConfig: previewRule.feeConfig,
-      backtestTimeframe: previewRule.backtestTimeframe,
-      message: `已匹配 ${candidate.code} ${candidate.name || ''}。按${holding.usedDefaultNotional ? '默认' : '当前'}持仓金额 ${holding.notional.toLocaleString('zh-CN')} 元、万${normalizedFeeWanRate}估算单次切换费用 ${estimatedTotalFee.toLocaleString('zh-CN')} 元。` + (dynamicSelection
-        ? `（180天回测最优阈值 L→H ${ruleLowerPct}%/H→L ${ruleUpperPct}%，${dynamicSelection.stats.roundTrips}个来回，价差收益${dynamicSelection.stats.bestReturnPct.toFixed(2)}%）`
-        : '')
-    };
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false || !payload?.rule) {
+      const error = new Error(payload?.error || `自动填充失败：状态 ${response.status}`);
+      error.status = response.status;
+      error.code = String(payload?.code || '');
+      throw error;
+    }
+    return payload.rule;
   }, []);
 
   return (
