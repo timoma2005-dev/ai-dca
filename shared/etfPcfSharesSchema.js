@@ -132,6 +132,8 @@ export function buildSharesProjection({
     const limit = hasSharesSource && limits.find((r) => r.code === code && r.date === date)?.total;
     const kind = ['limited', 'unlimited', 'unknown'].includes(limit?.kind) ? limit.kind : 'unknown';
     const total = kind === 'limited' && integer(limit.shares) ? limit.shares : null;
+    const limitEntry = hasSharesSource && limits.find((r) => r.code === code && r.date === date);
+    const creationUnit = integer(limitEntry?.creationUnitShares) ? limitEntry.creationUnitShares : null;
     const usable = deltaShares !== null && total > 0;
     const reasons = ['missing_dated_nav'];
     if (shares === null) reasons.push('missing_shares');
@@ -157,6 +159,7 @@ export function buildSharesProjection({
       totalLimitKind: kind,
       totalLimitShares: total,
       limitDate: limit ? date : null,
+      creationUnitShares: creationUnit,
       utilization: usable ? deltaShares / total : null,
       atLimit: usable ? deltaShares === total : null,
       nearTotalLimit: usable ? deltaShares >= 0 && deltaShares / total >= 0.9 : null,
@@ -300,7 +303,8 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
       !['limited', 'unlimited', 'unknown'].includes(r.totalLimitKind) ||
       (r.totalLimitKind === 'limited' ? !integer(r.totalLimitShares) : r.totalLimitShares !== null) ||
       (r.limitDate !== null && r.limitDate !== date) ||
-      (r.totalLimitKind !== 'unknown' && r.limitDate !== date)
+      (r.totalLimitKind !== 'unknown' && r.limitDate !== date) ||
+      (r.creationUnitShares !== null && !integer(r.creationUnitShares))
     )
       return false;
     const usable =

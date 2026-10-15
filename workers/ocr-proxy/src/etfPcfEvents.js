@@ -866,7 +866,10 @@ async function runStage({
                   date: d,
                   ...normalizeCreationStatus(cached),
                   net: { kind: cached.netSubscribeLimitKind, shares: cached.netSubscribeLimitShares },
-                  total: { kind: cached.totalSubscribeLimitKind, shares: cached.totalSubscribeLimitShares }
+                  total: { kind: cached.totalSubscribeLimitKind, shares: cached.totalSubscribeLimitShares },
+                  creationUnitShares: Number.isSafeInteger(cached.creationRedemptionUnitShares)
+                    ? cached.creationRedemptionUnitShares
+                    : null
                 });
               }
             } catch {

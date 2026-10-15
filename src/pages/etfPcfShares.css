@@ -481,6 +481,17 @@
 }
 
 /* 顶格状态微胶囊 (Status Pill) - 一眼可辨 */
+.shares-panel .ceiling-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.shares-panel .ceiling-detail {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
 .shares-panel .ceiling-tag {
   display: inline-flex;
   align-items: center;

@@ -46,18 +46,26 @@ const fetchedTime = (s) =>
   }).format(new Date(s));
 function Ceiling({ row }) {
   const badge = sharesCeiling(row);
+  const fmtWan = (v) => (Number.isSafeInteger(v) ? `${(v / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}万份` : '—');
+  const limitText = row.totalLimitKind === 'unlimited' ? '无' : row.totalLimitKind === 'limited' ? fmtWan(row.totalLimitShares) : '—';
+  const unitText = Number.isSafeInteger(row.creationUnitShares) ? fmtWan(row.creationUnitShares) : '—';
   return (
-    <span className={`ceiling-tag ${badge.kind}`}>
-      <span className="ceiling-bullet" />
-      {badge.label}
+    <span className="ceiling-wrap">
+      <span className={`ceiling-tag ${badge.kind}`}>
+        <span className="ceiling-bullet" />
+        {badge.label}
+      </span>
+      <span className="ceiling-detail">
+        最小 {unitText} · 上限 {limitText}
+      </span>
     </span>
   );
 }
 function Creation({ row }) {
-  if (!Number.isFinite(row.creationShares) || row.creationShares < 0) return '暂无推算';
+  if (!Number.isFinite(row.creationShares) || row.creationShares < 0) return '暂无数据';
   return (
     <>
-      推算申购: <strong>{creationLabel(row)} 万</strong>{' '}
+      盘前净新增份额: <strong>{creationLabel(row)} 万</strong>{' '}
       <span className="est-badge">{row.creationSharesKind === 'exact' ? '确定' : '估算'}</span>
     </>
   );
@@ -362,7 +370,7 @@ export default function EtfPcfSharesPanel() {
                   <th>代码 / 标的简称</th>
                   <th className="text-right">
                     <div className="th-with-help">
-                      净变动 · 推算申购 <span className="th-tag">万份</span>
+                      净变动 · 盘前净新增份额 <span className="th-tag">万份</span>
                     </div>
                   </th>
                   <th className="text-center">限额顶格状态</th>
@@ -501,7 +509,7 @@ export default function EtfPcfSharesPanel() {
       <footer className="panel-footer-notes">
         <ul className="footer-note-list">
           {[
-            '推算申购口径：仅允许赎回时申购推算恒为 0（确定）；仅允许申购时净增即为申购量（确定）；申赎双向开放时净差分标注为「约」（因盘中实际申购与赎回可能互相抵消）。',
+            '盘前净新增份额口径：份额日报表是收盘后披露，净增份额=本期总份额-上期总份额，为盘前已知数。仅允许赎回时为 0（确定）；仅允许申购时净增即为申购量（确定）；申赎双向开放时净差分标注为「约」（因盘中实际申购与赎回可能互相抵消）。',
             '顶格判定规范：净增份额精确等于数据日 PCF 累计申购限额时标为「顶格 (100%)」；达到上限 90% 以上标为「接近」；超过上限观测通常为大宗特批申购；累计不限标的免受配额约束。',
             '新增金额设计决策 (v1)：深交所当前报表源缺少经过双重审计的 D 日每份人民币净值凭证。为恪守金融严谨性、拒绝以盘中 IOPV 凑数产生误导，本期新增金额暂留空，待官方净值流打通后自动解锁。'
           ].map((text) => (
