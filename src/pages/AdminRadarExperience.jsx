@@ -16,7 +16,7 @@ export function AdminRadarExperience({ session }) {
     window.addEventListener('hashchange', syncHash);
     return () => window.removeEventListener('hashchange', syncHash);
   }, []);
-  if (!isAnalyticsAdmin(session)) {
+  if (activeTab !== 'shares' && !isAnalyticsAdmin(session)) {
     return <p className="p-5 text-sm text-slate-500">当前账号没有权限。请使用 lovexl 登录后访问。</p>;
   }
   return (

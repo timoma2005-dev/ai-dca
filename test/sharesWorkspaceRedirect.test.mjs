@@ -30,3 +30,52 @@ test('shares legacy URL resolves to adminRadar, rewrites the target and notifies
   assert.deepEqual(events, ['hashchange']);
   assert.match(source, /HASH_ROUTE_TABS = new Set\(\[[^\]]*'adminRadar'/);
 });
+
+test('workspace admin effect allows public shares and still resets other admin tabs', () => {
+  const marker = source.indexOf('const isPublicShares = activeTab');
+  const start = source.lastIndexOf('  useEffect(() => {', marker);
+  const end = source.indexOf('\n\n  useEffect', marker);
+  const run = new Function('window', 'activeTab', 'isAdminUser', 'WORKSPACE_TAB_META',
+    'setActiveTab', 'resolveDefaultWorkspaceTab', 'DEFAULT_WORKSPACE_TAB', 'useEffect',
+    source.slice(start, end));
+  for (const [tab, hash, admin, reset] of [
+    ['adminRadar', '#shares', false, false],
+    ['adminRadar', '#radar', false, true],
+    ['adminRadar', '', false, true],
+    ['otherAdmin', '#shares', false, true],
+    ['adminRadar', '#radar', true, false]
+  ]) {
+    const updates = [];
+    run({ location: { hash } }, tab, admin,
+      { adminRadar: { adminOnly: true }, otherAdmin: { adminOnly: true } },
+      (value) => updates.push(value), (value) => value, DEFAULT_WORKSPACE_TAB, (effect) => effect());
+    assert.deepEqual(updates, reset ? [DEFAULT_WORKSPACE_TAB] : [], `${tab} ${hash} admin=${admin}`);
+  }
+});
+
+test('tab selection allows public shares while retaining other admin guards', () => {
+  const start = source.indexOf('  function handleSelectTab(');
+  const end = source.indexOf('    const hash =', start);
+  const select = new Function('nextTab', 'options', 'isAdminUser', 'WORKSPACE_TAB_META',
+    'normalizeWorkspaceTab', source.slice(start, end) + '\nreturn true;\n}\nreturn handleSelectTab(nextTab, options);');
+  const meta = { adminRadar: { adminOnly: true }, otherAdmin: { adminOnly: true } };
+  for (const [tab, hash, admin, allowed] of [
+    ['adminRadar', '#shares', false, true],
+    ['adminRadar', '#radar', false, false],
+    ['adminRadar', undefined, false, false],
+    ['otherAdmin', '#shares', false, false],
+    ['adminRadar', '#radar', true, true]
+  ]) {
+    assert.equal(select(tab, { hash }, admin, meta, (value) => value), allowed ? true : undefined,
+      `${tab} ${hash} admin=${admin}`);
+  }
+});
+
+test('radar page only grants non-admin access to the shares subtab', () => {
+  const radarSource = readFileSync(new URL('../src/pages/AdminRadarExperience.jsx', import.meta.url), 'utf8');
+  const condition = radarSource.match(/if \((.*?)\) \{\n {4}return <p/)[1];
+  const denied = new Function('activeTab', 'session', 'isAnalyticsAdmin', `return ${condition};`);
+  assert.equal(denied('shares', null, () => false), false);
+  assert.equal(denied('radar', null, () => false), true);
+  assert.equal(denied('radar', {}, () => true), false);
+});

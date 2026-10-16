@@ -390,7 +390,9 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const heroTitle = WORKSPACE_TITLES[activeTab] || WORKSPACE_TITLES.strategy;
 
   useEffect(() => {
-    if (WORKSPACE_TAB_META[activeTab]?.adminOnly && !isAdminUser) {
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const isPublicShares = activeTab === 'adminRadar' && hash === '#shares';
+    if (!isPublicShares && WORKSPACE_TAB_META[activeTab]?.adminOnly && !isAdminUser) {
       setActiveTab(resolveDefaultWorkspaceTab(DEFAULT_WORKSPACE_TAB));
     }
   }, [activeTab, isAdminUser]);
@@ -480,7 +482,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   function handleSelectTab(nextTab, options = {}) {
     const normalizedTab = normalizeWorkspaceTab(nextTab);
-    if (WORKSPACE_TAB_META[normalizedTab]?.adminOnly && !isAdminUser) {
+    const isPublicShares = normalizedTab === 'adminRadar' && options.hash === '#shares';
+    if (!isPublicShares && WORKSPACE_TAB_META[normalizedTab]?.adminOnly && !isAdminUser) {
       return;
     }
     const hash = typeof options.hash === 'string' ? options.hash : '';
