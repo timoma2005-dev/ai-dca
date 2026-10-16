@@ -287,9 +287,7 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
       r.code.startsWith('513') &&
       (r.shares !== null ||
         r.prevShares !== null ||
-        r.deltaShares !== null ||
-        r.totalLimitKind !== 'unknown' ||
-        r.limitDate !== null)
+        r.deltaShares !== null)
     )
       return false;
 
@@ -307,8 +305,8 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
     if (
       !['limited', 'unlimited', 'unknown'].includes(r.totalLimitKind) ||
       (r.totalLimitKind === 'limited' ? !integer(r.totalLimitShares) : r.totalLimitShares !== null) ||
-      (r.limitDate !== null && r.limitDate !== date) ||
-      (r.totalLimitKind !== 'unknown' && r.limitDate !== date) ||
+      (r.limitDate !== null && !dateOK(r.limitDate)) ||
+      (r.totalLimitKind !== 'unknown' && r.limitDate === null) ||
       (r.creationUnitShares !== null && !integer(r.creationUnitShares))
     )
       return false;
@@ -316,7 +314,7 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
       r.deltaShares !== null &&
       r.totalLimitKind === 'limited' &&
       r.totalLimitShares > 0 &&
-      r.limitDate === date;
+      r.limitDate !== null;
     if (
       r.utilization !== (usable ? r.deltaShares / r.totalLimitShares : null) ||
       r.atLimit !== (usable ? r.deltaShares === r.totalLimitShares : null) ||
