@@ -1,3 +1,5 @@
+/* global console, URL */
+/* eslint no-unused-vars: ["error", { "caughtErrorsIgnorePattern": "^_" }] */
 import { handleEtfPcfShares } from './etfPcfSharesRoute.js';
 import { handleFundFee, handleFundLimit, handleFundLimitOverview } from './fundRoutes.js';
 import { refreshFundLimitCache } from './fundLimit.js';
@@ -16,6 +18,24 @@ import { handleHoldingsOcr, handleOcr } from './imageOcrRoutes.js';
 import { sendPcfSignalNotifications } from './pcfSignalNotify.js';
 import { emptyResponse, jsonResponse } from './ocrHttp.js';
 import { HOLDINGS_PROMPT_VERSION, PROMPT_VERSION } from './geminiPrompt.js';
+import { isTradingDayShanghai } from '../../../shared/etfPcfTradingCalendar.js';
+
+const FUND_LIMIT_CRON = '0 12 * * *';
+const ETF_PCF_DAILY_CRONS = new Set(['0 1 * * *', '0 1 * * 1-5']);
+
+export function resolveEtfPcfDailyTrigger({ cron, scheduledTime } = {}) {
+  if (!ETF_PCF_DAILY_CRONS.has(cron)) {
+    return { shouldRun: false, date: null, reason: 'wrong-cron' };
+  }
+  if (!Number.isFinite(scheduledTime) || !Number.isFinite(new Date(scheduledTime).getTime())) {
+    return { shouldRun: false, date: null, reason: 'invalid-scheduled-time' };
+  }
+  const date = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date(scheduledTime));
+  const shouldRun = isTradingDayShanghai(date);
+  return { shouldRun, date, reason: shouldRun ? 'ok' : 'non-trading-day' };
+}
 
 // SSE 阶段 60 秒软预算：到期停止分配、取消进行中请求并分类 skippedDeadline；
 // 不延长深交所阶段原 12 分钟预算，两阶段顺序执行不重叠。
@@ -75,15 +95,20 @@ export async function runEtfPcfDailyRefresh({
 export default {
   async scheduled(controller, env, ctx) {
     const cron = String(controller?.cron || '').trim();
-    if (cron === '0 12 * * *') {
+    if (cron === FUND_LIMIT_CRON) {
       ctx.waitUntil((async () => {
         await refreshFundLimitCache({ env, ctx, force: true, concurrency: 4 });
         await refreshFundLimitOverview({ env, concurrency: 4 });
       })());
     }
-    // 北京时间每天 09:00（UTC 01:00）：先上交所 5 只纳指 ETF 小规模刷新，再深交所
+    // 北京时间交易日 09:00（UTC 01:00）：先上交所 5 只纳指 ETF 小规模刷新，再深交所
     // ETF PCF 全量刷新（探测 → 校准 → 逐项抓取），两阶段异常隔离、统计独立。
-    if (cron === '0 1 * * *') {
+    if (ETF_PCF_DAILY_CRONS.has(cron)) {
+      const trigger = resolveEtfPcfDailyTrigger({ cron, scheduledTime: controller?.scheduledTime });
+      if (!trigger.shouldRun) {
+        console.log(`[etf-pcf] skip daily refresh: ${trigger.reason}`, trigger);
+        return;
+      }
       ctx.waitUntil(runEtfPcfDailyRefresh({ env, scheduledTime: controller?.scheduledTime }));
     }
   },

@@ -1,4 +1,5 @@
 import { isTradingDayShanghai } from '../src/app/holidaysCN.js';
+export { isTradingDayShanghai };
 // The existing 2026 closure table was checked against both exchange notices.
 // No network request occurs here; unsupported years fail closed.
 export const CALENDAR_NOTICE = 'https://investor.szse.cn/disclosure/notice/general/t20251222_618087.html';
