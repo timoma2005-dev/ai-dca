@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { isWellFormedEtfPcfDateKey } from './etfPcfLimit.js';
+import { confirmedSharesCalendar } from '../../../shared/etfPcfTradingCalendar.js';
 import { TARGET_CODES } from '../../../shared/etfPcfSharesSchema.js';
 export { TARGET_CODES };
 const MAX = 1048576;
@@ -206,7 +207,7 @@ export function decimalShares(value, unit) {
   if (n % scale || n / scale > BigInt(Number.MAX_SAFE_INTEGER)) fail('shares_integer');
   return Number(n / scale);
 }
-export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES, includeEvidence = false } = {}) {
+export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES, includeEvidence = false, fetchedAt = new Date().toISOString() } = {}) {
   const files = await unzipXlsx(buffer),
     read = (name) => {
       const b = files.get(name);
@@ -253,11 +254,11 @@ export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES, incl
       b = row.find((c) => /份额|规模/.test(c.value)),
       d = row.find((c) => /^(日期|报表日期|截止日期|报告日期|统计日期|数据日期)$/.test(c.value));
     if (a && b) {
-      if (!d) continue;
+      if (!d && !(a.value === '基金代码' && /^当前规模[（(]份[）)]$/.test(b.value))) continue;
       header = row;
       codeCol = a.col;
       sharesCol = b.col;
-      dateCol = d.col;
+      dateCol = d?.col;
       nameCol = row.find((c) => /^(基金简称|证券简称)$/.test(c.value))?.col;
       unit = /[（(]\s*(万份|份)\s*[）)]/.exec(b.value)?.[1] || null;
       break;
@@ -268,6 +269,16 @@ export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES, incl
     fail('report_shape');
   }
   if (!unit) fail('unknown_unit');
+  let inferredDate;
+  if (!dateCol) {
+    const time = new Date(fetchedAt).getTime();
+    if (!Number.isFinite(time)) fail('missing_report_date');
+    const date = new Date(time + 8 * 3600000).toISOString().slice(0, 10);
+    const from = new Date(Date.parse(date) - 40 * 86400000).toISOString().slice(0, 10);
+    const calendar = confirmedSharesCalendar(from, date);
+    inferredDate = calendar?.sessions.filter((session) => session < date).at(-1);
+    if (!inferredDate) fail('missing_report_date');
+  }
   const system1904 = ['true', '1'].includes(descendants(book, 'workbookPr')[0]?.attrs.date1904),
     records = [];
   for (const row of table.slice(table.indexOf(header) + 1)) {
@@ -278,8 +289,8 @@ export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES, incl
     let code = a.value;
     if (/^\d{1,6}$/.test(code)) code = code.padStart(6, '0');
     if (!codes.includes(code)) continue;
-    if (!b || !d) fail('report_shape');
-    let date = d.value;
+    if (!b || (dateCol && !d)) fail('report_shape');
+    let date = inferredDate || d.value;
     if (!isWellFormedEtfPcfDateKey(date)) {
       if (!/^\d+(?:\.0+)?$/.test(date)) fail('excel_date');
       const id = Number(xfs[Number(d.cell.attrs.s)]?.attrs.numFmtId),
@@ -303,7 +314,12 @@ export async function parseEtfPcfSharesXlsx(buffer, { codes = TARGET_CODES, incl
       ...(includeEvidence
         ? {
             ...(nameCol ? { name: row.find((c) => c.col === nameCol)?.value || code } : {}),
-            dateEvidence: {
+            dateEvidence: inferredDate ? {
+              source: 'szse_fund_report',
+              column: null,
+              type: 'inferred_from_fetch_time',
+              inferredDate
+            } : {
               source: 'szse_fund_report',
               column: header.find((c) => c.col === dateCol).value,
               type: isWellFormedEtfPcfDateKey(d.value) ? 'iso_date' : 'excel_date'
@@ -333,7 +349,8 @@ export async function fetchEtfPcfShares({
   url = CURRENT_SHARES_URL,
   fetchImpl = fetch,
   timeoutMs = 8000,
-  signal
+  signal,
+  fetchedAt = new Date().toISOString()
 } = {}) {
   if (signal?.aborted) return { ok: false, reason: 'timeout' };
   let reader;
@@ -389,6 +406,31 @@ export async function fetchEtfPcfShares({
       )
     )
       return { ok: false, reason: 'html_rejected' };
+    // Keep historical downloads on the dated path; never recursively validate them.
+    if (url === CURRENT_SHARES_URL) {
+      try {
+        const records = await parseEtfPcfSharesXlsx(bytes, { includeEvidence: true, fetchedAt });
+        const inferred = records.find((row) => row.dateEvidence.type === 'inferred_from_fetch_time');
+        if (inferred) {
+          const sample = records.find((row) => row.code === '159501');
+          if (!sample) fail('date_mismatch');
+          const history = await fetchEtfPcfShares({
+            url: historicalSharesUrl(inferred.date, inferred.date),
+            fetchImpl,
+            timeoutMs,
+            signal: controller.signal,
+            fetchedAt
+          });
+          if (!history.ok) return history;
+          const dated = await parseEtfPcfSharesXlsx(history.bytes, { includeEvidence: true, fetchedAt });
+          const match = dated.find((row) => row.code === sample.code && row.date === sample.date &&
+            row.dateEvidence.type !== 'inferred_from_fetch_time');
+          if (!match || match.shares !== sample.shares) fail('date_mismatch');
+        }
+      } catch (e) {
+        return { ok: false, reason: e.message };
+      }
+    }
     return { ok: true, bytes };
   } catch (e) {
     return { ok: false, reason: controller.signal.aborted ? 'timeout' : 'source_failure' };

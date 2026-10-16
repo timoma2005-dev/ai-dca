@@ -224,9 +224,14 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
   if (
     !x.dateEvidence ||
     x.dateEvidence.source !== 'szse_fund_report' ||
-    typeof x.dateEvidence.column !== 'string' ||
-    !/^(日期|报表日期|截止日期|报告日期|统计日期|数据日期)$/.test(x.dateEvidence.column) ||
-    !['iso_date', 'excel_date'].includes(x.dateEvidence.type)
+    !(
+      (typeof x.dateEvidence.column === 'string' &&
+        /^(日期|报表日期|截止日期|报告日期|统计日期|数据日期)$/.test(x.dateEvidence.column) &&
+        ['iso_date', 'excel_date'].includes(x.dateEvidence.type)) ||
+      (x.dateEvidence.column === null &&
+        x.dateEvidence.type === 'inferred_from_fetch_time' &&
+        typeof x.dateEvidence.inferredDate === 'string')
+    )
   )
     return false;
   if (

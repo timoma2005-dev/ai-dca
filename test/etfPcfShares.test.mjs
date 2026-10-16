@@ -24,11 +24,11 @@ export function syntheticParts({date='2026-10-12',code='159659',shares='1000',un
  ['xl/worksheets/sheet1.xml',`<worksheet><sheetData>${row(1,cell('A1','基金代码')+cell('B1',`基金份额(${unit})`)+cell('C1','日期'))}${row(2,cell('A2',shared?'0':code,shared?'s':'inlineStr')+cell('B2',shares)+cell('C2',date,dateType,dateType==='n'?'s="1"':''))}</sheetData></worksheet>`]
  ];
 }
-test('real current fixture: ZIP/CRC valid; missing as-of date refuses invented T-1',async()=>{
+test('real current fixture: ZIP/CRC valid; undated report requires a supported verified calendar',async()=>{
  const b=readFileSync(new URL('./fixtures/etf-pcf-events/szse-current-20261013.xlsx',import.meta.url));
  if(!supportsRawDeflate()){await assert.rejects(unzipXlsx(b),/deflate_raw_unavailable/);return;}
  assert.equal((await unzipXlsx(b)).has('xl/worksheets/sheet1.xml'),true);
- await assert.rejects(parseEtfPcfSharesXlsx(b),/missing_report_date/);
+ await assert.rejects(parseEtfPcfSharesXlsx(b, { fetchedAt: '2027-10-16T01:00:00.000Z' }),/missing_report_date/);
 });
 test('synthetic stored/deflate, shared strings, only target codes and exact 万份 conversion',async()=>{
  for(const method of [0,...(supportsRawDeflate()?[8]:[])]){
@@ -77,12 +77,55 @@ test('download abort/timeout and missing runtime capability degrade unknown',asy
  const original=globalThis.DecompressionStream;globalThis.DecompressionStream=undefined;try{assert.equal(supportsRawDeflate(),false);await assert.rejects(unzipXlsx(zip(syntheticParts(),{method:8})),/deflate_raw_unavailable/);}finally{globalThis.DecompressionStream=original;}
  assert.throws(()=>historicalSharesUrl('2026-01-01','2026-10-01'));
 });
-test('strict thousands grouping and opt-in report date evidence, still rejects real undated fixture', async () => {
+test('strict thousands grouping and opt-in report date evidence, rejects inference outside verified calendar coverage', async () => {
   assert.equal(decimalShares('7,062,986,575', '份'), 7062986575);
   for (const value of ['70,62,986,575', '1,00', ',100', '1,000,', '1,000.1']) assert.throws(() => decimalShares(value, '份'));
   const [row] = await parseEtfPcfSharesXlsx(zip(syntheticParts({ shares: '1,000' })), { includeEvidence: true });
   assert.deepEqual(row.dateEvidence, { source: 'szse_fund_report', column: '日期', type: 'iso_date' });
   assert.equal(row.shares, 1000);
   const bytes = readFileSync(new URL('./fixtures/etf-pcf-events/szse-current-20261013.xlsx', import.meta.url));
-  await assert.rejects(parseEtfPcfSharesXlsx(bytes, { includeEvidence: true }), /missing_report_date/);
+  await assert.rejects(parseEtfPcfSharesXlsx(bytes, { includeEvidence: true, fetchedAt: '2027-10-16T01:00:00.000Z' }), /missing_report_date/);
+});
+
+function undatedParts() {
+  const parts = syntheticParts({ code: '159501', shares: '7,077,986,575' });
+  parts[4][1] = parts[4][1].replace('基金份额(份)', '当前规模(份)').replace(cell('C1', '日期'), cell('C1', '上市日期'));
+  return parts;
+}
+test('new current-size template infers the prior verified session using Shanghai fetch date', async () => {
+  for (const [fetchedAt, date] of [
+    ['2026-10-16T01:00:00.000Z', '2026-10-15'],
+    ['2026-10-18T01:00:00.000Z', '2026-10-16'],
+    ['2026-10-08T01:00:00.000Z', '2026-09-30'],
+    ['2026-10-15T16:00:00.000Z', '2026-10-15']
+  ]) {
+    const [record] = await parseEtfPcfSharesXlsx(zip(undatedParts()), { fetchedAt, includeEvidence: true });
+    assert.equal(record.date, date);
+    assert.equal(record.shares, 7077986575);
+    assert.deepEqual(record.dateEvidence, { source: 'szse_fund_report', column: null, type: 'inferred_from_fetch_time', inferredDate: date });
+  }
+  await assert.rejects(parseEtfPcfSharesXlsx(zip(undatedParts()), { fetchedAt: '2027-10-16T01:00:00.000Z' }), /missing_report_date/);
+  const parts = undatedParts();
+  parts[4][1] = parts[4][1].replace('当前规模(份)', '基金份额(份)');
+  await assert.rejects(parseEtfPcfSharesXlsx(zip(parts)), /missing_report_date/);
+});
+test('undated download requires dated historical sample matching both date and exact shares', async () => {
+  for (const [date, shares, ok] of [
+    ['2026-10-15', '7077986575', true],
+    ['2026-10-15', '7077986574', false],
+    ['2026-10-14', '7077986575', false]
+  ]) {
+    const urls = [];
+    const result = await fetchEtfPcfShares({ fetchedAt: '2026-10-16T01:00:00.000Z', fetchImpl: async (url) => {
+      urls.push(url);
+      return new Response(zip(urls.length === 1 ? undatedParts() : syntheticParts({ code: '159501', date, shares })));
+    } });
+    assert.equal(result.ok, ok);
+    if (!ok) assert.equal(result.reason, 'date_mismatch');
+    assert.equal(urls[1], historicalSharesUrl('2026-10-15', '2026-10-15'));
+    assert.equal(urls.length, 2);
+  }
+  let calls = 0;
+  assert.equal((await fetchEtfPcfShares({ fetchImpl: async () => { calls++; return new Response(zip(syntheticParts())); } })).ok, true);
+  assert.equal(calls, 1);
 });
