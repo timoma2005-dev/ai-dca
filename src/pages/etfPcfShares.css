@@ -1,3 +1,7 @@
+/* ============================================================
+   「份额新增」面板样式（全部限定在 .shares-panel 内）
+   布局切换以 panel 可用宽度为准：≥1200 宽表 / 640-1199 宽卡片 / <640 卡片。
+   ============================================================ */
 .shares-panel {
   --primary: #4f46e5;
   --primary-hover: #4338ca;
@@ -18,26 +22,28 @@
 
   --emerald-50: #ecfdf5;
   --emerald-100: #d1fae5;
+  --emerald-200: #a7f3d0;
   --emerald-500: #10b981;
   --emerald-600: #059669;
   --emerald-700: #047857;
 
   --rose-50: #fff1f2;
-  --rose-100: #ffe4e6;
+  --rose-200: #fecdd3;
   --rose-500: #f43f5e;
   --rose-600: #e11d48;
-  --rose-700: #be123c;
 
   --amber-50: #fffbeb;
   --amber-100: #fef3c7;
+  --amber-200: #fde68a;
   --amber-500: #f59e0b;
   --amber-600: #d97706;
   --amber-700: #b45309;
+  --amber-800: #92400e;
 
-  --blue-50: #eff6ff;
-  --blue-100: #dbeafe;
-  --blue-600: #2563eb;
-  --blue-700: #1d4ed8;
+  --sky-50: #f0f9ff;
+  --sky-200: #bae6fd;
+  --sky-500: #0ea5e9;
+  --sky-700: #0369a1;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -45,52 +51,61 @@
   --radius-pill: 9999px;
 
   --shadow-subtle: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
-  --shadow-card: 0 4px 6px -1px rgba(15, 23, 42, 0.04), 0 2px 4px -2px rgba(15, 23, 42, 0.03);
-  --shadow-hover: 0 10px 15px -3px rgba(15, 23, 42, 0.06), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+
+  container-type: inline-size;
+  container-name: shares-panel;
+
+  min-width: 0;
+  color: var(--slate-900);
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+.shares-panel * {
+  box-sizing: border-box;
+}
+.shares-panel button {
+  cursor: pointer;
+  font-family: inherit;
+}
+.shares-panel button:focus-visible,
+.shares-panel input:focus-visible,
+.shares-panel [tabindex='0']:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.shares-panel svg.is-open {
+  transform: rotate(180deg);
 }
 
-.shares-panel .freshness-hero-card {
-  background: #ffffff;
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-lg);
-  padding: 20px 24px;
-  margin-top: 20px;
-  margin-bottom: 24px;
-  box-shadow: var(--shadow-subtle);
-  position: relative;
-  overflow: hidden;
+/* ============================================================
+   1. 页面标题与数据口径副标题
+   ============================================================ */
+.shares-panel .shares-page-header {
+  margin: 20px 0 14px;
 }
-.shares-panel .freshness-hero-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #4f46e5 0%, #818cf8 50%, #c084fc 100%);
-}
-.shares-panel .freshness-grid {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 24px;
-  align-items: center;
-}
-@media (max-width: 900px) {
-  .shares-panel .freshness-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-}
-.shares-panel .freshness-primary-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.shares-panel .freshness-status-row {
+.shares-panel .shares-title-row {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+.shares-panel .shares-title-row h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--slate-900);
+}
+.shares-panel .shares-scope-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--primary-light);
+  color: var(--primary-hover);
+  border: 1px solid var(--primary-border);
+  white-space: nowrap;
 }
 .shares-panel .status-indicator-chip {
   display: inline-flex;
@@ -100,6 +115,7 @@
   font-weight: 600;
   padding: 3px 10px;
   border-radius: var(--radius-pill);
+  white-space: nowrap;
 }
 .shares-panel .status-indicator-chip.synced {
   background: var(--emerald-50);
@@ -110,11 +126,6 @@
   background: var(--amber-50);
   color: var(--amber-700);
   border: 1px solid var(--amber-100);
-}
-.shares-panel .status-indicator-chip.empty {
-  background: var(--slate-100);
-  color: var(--slate-600);
-  border: 1px solid var(--slate-200);
 }
 .shares-panel .status-dot {
   width: 7px;
@@ -129,146 +140,320 @@
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
 }
 
-.shares-panel .freshness-headline {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--slate-900);
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.shares-panel .freshness-sub-baseline {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--slate-500);
-}
-.shares-panel .freshness-meta-details {
-  font-size: 12px;
-  color: var(--slate-500);
+/* 桌面：数据口径 Pill 行 */
+.shares-panel .shares-pill-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
   align-items: center;
-  margin-top: 4px;
+  gap: 6px 8px;
+  margin-top: 10px;
+  font-size: 12px;
 }
-.shares-panel .freshness-meta-item {
+.shares-panel .pill-row-label {
+  font-weight: 600;
+  color: var(--slate-700);
+  white-space: nowrap;
+}
+.shares-panel .method-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  color: var(--slate-500);
+  white-space: nowrap;
 }
-.shares-panel .freshness-meta-item svg {
-  width: 14px;
-  height: 14px;
+.shares-panel .method-pill-key {
   color: var(--slate-400);
+}
+.shares-panel .method-pill strong {
+  font-weight: 600;
+  color: var(--slate-800);
+  font-variant-numeric: tabular-nums;
 }
 
-/* 右侧快速 KPI 胶囊卡片 */
-.shares-panel .kpi-stat-cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+/* 卡片布局：数据口径折叠栏 */
+.shares-panel .methodology-bar {
+  margin-top: 10px;
+  background: rgba(238, 242, 255, 0.6);
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
 }
-@media (max-width: 600px) {
-  .shares-panel .kpi-stat-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .shares-panel .kpi-stat-cards .kpi-stat-box:last-child {
-    grid-column: span 2;
-  }
+.shares-panel .methodology-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-hover);
 }
-.shares-panel .kpi-stat-box {
-  background: var(--slate-50);
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
+.shares-panel .methodology-toggle svg {
+  transition: transform 0.2s ease;
+}
+.shares-panel .methodology-list {
+  list-style: none;
+  margin: 6px 0 2px;
+  padding: 6px 0 0;
+  border-top: 1px solid rgba(199, 210, 254, 0.7);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  transition: all 0.2s ease;
-}
-.shares-panel .kpi-stat-box:hover {
-  background: #ffffff;
-  border-color: var(--primary-border);
-  box-shadow: var(--shadow-subtle);
-}
-.shares-panel .kpi-label {
+  gap: 4px;
   font-size: 11px;
-  color: var(--slate-500);
-  font-weight: 500;
+  color: var(--slate-600);
 }
-.shares-panel .kpi-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--slate-900);
+.shares-panel .methodology-list li {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
-.shares-panel .kpi-unit {
+.shares-panel .methodology-list strong {
+  color: var(--primary-hover);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.shares-panel .methodology-list span {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.shares-panel .shares-caption {
+  margin: 8px 0 0;
   font-size: 11px;
-  font-weight: 500;
-  color: var(--slate-500);
-}
-.shares-panel .kpi-caption {
-  font-size: 10px;
   color: var(--slate-400);
-  margin-top: 1px;
+  overflow-wrap: anywhere;
 }
 
 /* ============================================================
-       6. 列表上方工具栏 (Toolbar): 筛选过滤、搜索、视图切换
-       ============================================================ */
+   2. 顶部 3 统计卡片
+   ============================================================ */
+.shares-panel .shares-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.shares-panel .stat-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-subtle);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.shares-panel .stat-card.amber {
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.55), #ffffff 60%);
+  border-color: var(--amber-100);
+}
+.shares-panel .stat-card.emerald {
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.55), #ffffff 60%);
+  border-color: var(--emerald-100);
+}
+.shares-panel .stat-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--slate-500);
+  margin-bottom: 6px;
+}
+.shares-panel .stat-card-head svg {
+  color: var(--slate-400);
+  flex-shrink: 0;
+}
+.shares-panel .stat-card.amber .stat-card-head svg {
+  color: var(--amber-500);
+}
+.shares-panel .stat-card.emerald .stat-card-head svg {
+  color: var(--emerald-500);
+}
+.shares-panel .stat-card-body {
+  display: flex;
+  align-items: baseline;
+  gap: 5px 6px;
+  flex-wrap: wrap;
+}
+.shares-panel .stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--slate-900);
+  font-variant-numeric: tabular-nums;
+}
+.shares-panel .stat-card.amber .stat-value {
+  color: var(--amber-600);
+}
+.shares-panel .stat-card.emerald .stat-value {
+  color: var(--emerald-600);
+}
+.shares-panel .stat-unit {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--slate-500);
+}
+.shares-panel .stat-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.shares-panel .stat-badge {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.shares-panel .stat-badge.sz {
+  background: var(--emerald-50);
+  color: var(--emerald-700);
+  border: 1px solid var(--emerald-100);
+}
+.shares-panel .stat-badge.sh {
+  background: var(--primary-light);
+  color: var(--primary-hover);
+  border: 1px solid var(--primary-border);
+}
+.shares-panel .stat-badge.amber-strong {
+  background: var(--amber-100);
+  color: var(--amber-800);
+}
+.shares-panel .stat-badge.amber-soft {
+  background: var(--amber-50);
+  color: var(--amber-700);
+  border: 1px solid var(--amber-100);
+}
+.shares-panel .stat-caption {
+  margin: 8px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--slate-100);
+  font-size: 11px;
+  color: var(--slate-400);
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   3. 数据滞后提醒横幅
+   ============================================================ */
+.shares-panel .stale-warning-banner {
+  background: var(--amber-50);
+  border: 1px solid var(--amber-100);
+  border-left: 4px solid var(--amber-500);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--amber-800);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.shares-panel .stale-warning-banner svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--amber-600);
+}
+.shares-panel .stale-warning-banner div {
+  min-width: 200px;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+.shares-panel .stale-warning-banner button {
+  border: 1px solid var(--amber-200);
+  background: #ffffff;
+  color: var(--amber-800);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+}
+.shares-panel .stale-warning-banner button:hover {
+  background: var(--amber-100);
+}
+
+/* ============================================================
+   4. 工具栏：筛选 Tabs + 搜索 + 计数
+   ============================================================ */
 .shares-panel .panel-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px 12px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 .shares-panel .filter-tab-group {
-  display: inline-flex;
-  background: #f1f5f9;
-  border-radius: 8px;
-  padding: 3px;
-  gap: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.shares-panel .filter-tab-group::-webkit-scrollbar {
+  display: none;
 }
 .shares-panel .filter-tab-btn {
-  background: transparent;
-  border: none;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--slate-600);
-  padding: 5px 12px;
-  border-radius: 6px;
-  cursor: pointer;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.15s ease;
+  white-space: nowrap;
+  border: 1px solid var(--slate-200);
+  background: #ffffff;
+  color: var(--slate-600);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .shares-panel .filter-tab-btn:hover {
   color: var(--slate-900);
+  background: var(--slate-50);
 }
 .shares-panel .filter-tab-btn.active {
-  background: #ffffff;
-  color: var(--primary);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 .shares-panel .filter-count-badge {
   font-size: 10px;
-  padding: 1px 5px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
   border-radius: var(--radius-pill);
-  background: var(--slate-200);
+  background: var(--slate-100);
   color: var(--slate-600);
 }
-.shares-panel .filter-tab-btn.active .filter-count-badge {
-  background: var(--primary-light);
-  color: var(--primary);
+.shares-panel .filter-count-badge.amber {
+  background: var(--amber-100);
+  color: var(--amber-800);
 }
-
+.shares-panel .filter-count-badge.emerald {
+  background: var(--emerald-100);
+  color: var(--emerald-700);
+}
+.shares-panel .filter-tab-btn.active .filter-count-badge,
+.shares-panel .filter-tab-btn.active .filter-count-badge.amber,
+.shares-panel .filter-tab-btn.active .filter-count-badge.emerald {
+  background: var(--primary-hover);
+  color: #ffffff;
+}
 .shares-panel .toolbar-actions {
   display: flex;
   align-items: center;
@@ -279,22 +464,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-}
-.shares-panel .search-box input {
-  background: #ffffff;
-  border: 1px solid var(--slate-200);
-  border-radius: 8px;
-  padding: 6px 12px 6px 30px;
-  font-size: 12px;
-  color: var(--slate-800);
-  outline: none;
-  width: 170px;
-  transition: all 0.2s;
-}
-.shares-panel .search-box input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-shadow);
-  width: 200px;
+  min-width: 0;
 }
 .shares-panel .search-box svg {
   position: absolute;
@@ -304,482 +474,64 @@
   color: var(--slate-400);
   pointer-events: none;
 }
-
-.shares-panel .view-mode-toggle {
-  display: inline-flex;
-  background: #f1f5f9;
-  border-radius: 8px;
-  padding: 2px;
-  gap: 2px;
-}
-.shares-panel .view-mode-btn {
-  border: none;
-  background: transparent;
-  padding: 6px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--slate-500);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-}
-.shares-panel .view-mode-btn:hover {
-  color: var(--slate-800);
-}
-.shares-panel .view-mode-btn.active {
+.shares-panel .search-box input {
   background: #ffffff;
-  color: var(--primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  padding: 6px 28px 6px 30px;
+  font-size: 12px;
+  color: var(--slate-800);
+  outline: none;
+  width: 190px;
+  min-width: 0;
+  transition: width 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.shares-panel .view-mode-btn svg {
-  width: 15px;
-  height: 15px;
+.shares-panel .search-box input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-shadow);
+}
+.shares-panel .search-clear {
+  position: absolute;
+  right: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--slate-400);
+  padding: 2px;
+  border-radius: 4px;
+  display: inline-flex;
+}
+.shares-panel .search-clear svg {
+  position: static;
+  width: 13px;
+  height: 13px;
+}
+.shares-panel .search-clear:hover {
+  color: var(--slate-700);
+}
+.shares-panel .filtered-count {
+  font-size: 12px;
+  color: var(--slate-400);
+  white-space: nowrap;
+}
+.shares-panel .filtered-count b {
+  color: var(--slate-700);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================
-       7. 列表卡片容器与全新设计规范
-       ============================================================ */
+   5. 主卡片容器与加载/异常/空状态
+   ============================================================ */
 .shares-panel .shares-main-card {
   background: #ffffff;
   border: 1px solid var(--slate-200);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-subtle);
   overflow: hidden;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+  min-width: 0;
 }
-
-/* 宽屏标准表格视图 (Desktop Table View) */
-.shares-panel .shares-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  text-align: left;
-}
-.shares-panel .shares-table th {
-  background: #f8fafc;
-  padding: 12px 16px;
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--slate-500);
-  border-bottom: 1px solid var(--slate-200);
-  white-space: nowrap;
-  user-select: none;
-}
-.shares-panel .shares-table th.text-right,
-.shares-panel .shares-table td.text-right {
-  text-align: right;
-}
-.shares-panel .shares-table th.text-center,
-.shares-panel .shares-table td.text-center {
-  text-align: center;
-}
-
-/* 优化后的表头样式：简短、带微标签与提示，永不挤压换行 */
-.shares-panel .th-with-help {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.shares-panel .th-tag {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--slate-400);
-  background: var(--slate-100);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-
-.shares-panel .shares-table tbody tr.shares-row {
-  border-bottom: 1px solid var(--slate-100);
-  transition: background-color 0.15s ease;
-  cursor: pointer;
-}
-.shares-panel .shares-table tbody tr.shares-row:hover {
-  background-color: #f8fafc;
-}
-.shares-panel .shares-table tbody tr.shares-row.expanded {
-  background-color: #f5f7ff;
-}
-.shares-panel .shares-table td {
-  padding: 14px 16px;
-  vertical-align: middle;
-  color: var(--slate-800);
-}
-
-/* 标的信息单元格 */
-.shares-panel .symbol-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.shares-panel .symbol-row-top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.shares-panel .symbol-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--slate-900);
-}
-.shares-panel .symbol-market-tag {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-.shares-panel .symbol-market-tag.sz {
-  background: #eef2ff;
-  color: #4f46e5;
-}
-.shares-panel .symbol-market-tag.sh {
-  background: #f1f5f9;
-  color: #64748b;
-}
-.shares-panel .symbol-name {
-  font-size: 12px;
-  color: var(--slate-600);
-  font-weight: 500;
-}
-
-/* 净变动与推算申购单元格 (合并精巧排版，解决重复列与挤压) */
-.shares-panel .delta-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-.shares-panel .delta-val {
-  font-size: 14px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.shares-panel .delta-val.pos {
-  color: var(--emerald-600);
-}
-.shares-panel .delta-val.neg {
-  color: var(--rose-600);
-}
-.shares-panel .delta-val.zero {
-  color: var(--slate-400);
-}
-.shares-panel .delta-sub-est {
-  font-size: 11px;
-  color: var(--slate-500);
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.shares-panel .delta-sub-est .est-badge {
-  font-size: 10px;
-  background: var(--slate-100);
-  color: var(--slate-600);
-  padding: 0 4px;
-  border-radius: 3px;
-}
-.shares-panel .shares-table td .est-badge {
-  font-size: 10px;
-  background: var(--slate-100);
-  color: var(--slate-600);
-  padding: 0 4px;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-
-/* 顶格状态微胶囊 (Status Pill) - 一眼可辨 */
-.shares-panel .ceiling-wrap {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-.shares-panel .ceiling-detail {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-.shares-panel .ceiling-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.shares-panel .ceiling-tag.at-limit {
-  background: #fef3c7;
-  color: #b45309;
-  border: 1px solid #fde68a;
-}
-.shares-panel .ceiling-tag.near-limit {
-  background: #fffbeb;
-  color: #d97706;
-  border: 1px solid #fef3c7;
-}
-.shares-panel .ceiling-tag.over-limit {
-  background: #e0e7ff;
-  color: #4338ca;
-  border: 1px solid #c7d2fe;
-}
-.shares-panel .ceiling-tag.unlimited {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #e2e8f0;
-}
-.shares-panel .ceiling-tag.outflow {
-  background: #ffe4e6;
-  color: #e11d48;
-  border: 1px solid #fecdd3;
-}
-.shares-panel .ceiling-tag.normal {
-  background: #f8fafc;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-}
-.shares-panel .ceiling-tag.pending {
-  background: #f1f5f9;
-  color: #94a3b8;
-  border: 1px dashed #cbd5e1;
-}
-.shares-panel .ceiling-bullet {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-/* 份额规模数值 */
-.shares-panel .shares-total-val {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--slate-800);
-  font-variant-numeric: tabular-nums;
-}
-.shares-panel .shares-date-hint {
-  font-size: 10px;
-  color: var(--slate-400);
-}
-
-/* 新增金额列状态：空态智能提示 (解决全 — 难看问题) */
-.shares-panel .amount-cell-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--slate-400);
-  background: var(--slate-100);
-  padding: 2px 7px;
-  border-radius: 4px;
-  border: 1px solid var(--slate-200);
-}
-.shares-panel .amount-cell-badge svg {
-  width: 12px;
-  height: 12px;
-  color: var(--slate-400);
-}
-
-/* 展开操作按钮 */
-.shares-panel .row-expand-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid var(--slate-200);
-  background: #ffffff;
-  color: var(--slate-700);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.shares-panel .row-expand-btn:hover {
-  background: var(--primary-light);
-  border-color: var(--primary-border);
-  color: var(--primary);
-}
-.shares-panel .row-expand-btn.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #ffffff;
-}
-.shares-panel .row-expand-btn svg {
-  width: 12px;
-  height: 12px;
-  transition: transform 0.2s ease;
-}
-.shares-panel .row-expand-btn.active svg {
-  transform: rotate(180deg);
-}
-
-/* ============================================================
-       8. 行展开详情抽屉 (Row Detail Accordion - P日/T日重构)
-       ============================================================ */
-.shares-panel .detail-drawer-tr {
-  background-color: #fafbfc;
-}
-.shares-panel .detail-drawer-td {
-  padding: 0 16px 20px !important;
-  border-bottom: 2px solid var(--primary-light);
-}
-.shares-panel .detail-drawer-content {
-  background: #ffffff;
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-md);
-  padding: 16px 20px;
-  margin-top: 8px;
-  box-shadow: var(--shadow-subtle);
-}
-.shares-panel .detail-drawer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--slate-100);
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.shares-panel .detail-drawer-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--slate-900);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.shares-panel .detail-source-badge {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--slate-500);
-  background: var(--slate-100);
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-/* 双栏分区：T 日申赎规则与限额 VS P 日前一交易日基准 */
-.shares-panel .pcf-sections-grid {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr;
-  gap: 18px;
-}
-@media (max-width: 820px) {
-  .shares-panel .pcf-sections-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.shares-panel .pcf-section-card {
-  background: var(--slate-50);
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius-sm);
-  padding: 14px;
-}
-.shares-panel .pcf-section-card.t-day {
-  border-top: 3px solid var(--primary);
-}
-.shares-panel .pcf-section-card.p-day {
-  border-top: 3px solid var(--slate-400);
-}
-.shares-panel .pcf-section-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--slate-800);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.shares-panel .pcf-date-pill {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: #ffffff;
-  border: 1px solid var(--slate-200);
-  color: var(--slate-600);
-}
-
-/* 紧凑规整的数据键值对清单 */
-.shares-panel .pcf-kv-list {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-.shares-panel .pcf-kv-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  padding: 4px 0;
-  border-bottom: 1px dashed #e2e8f0;
-}
-.shares-panel .pcf-kv-row:last-child {
-  border-bottom: none;
-}
-.shares-panel .pcf-kv-label {
-  color: var(--slate-500);
-}
-.shares-panel .pcf-kv-val {
-  font-weight: 600;
-  color: var(--slate-800);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.shares-panel .pcf-kv-val.highlight-green {
-  color: var(--emerald-600);
-}
-.shares-panel .pcf-kv-val.highlight-amber {
-  color: var(--amber-600);
-}
-
-/* ============================================================
-       9. 移动端优先的卡片看板视图 (Mobile Card Grid View)
-       ============================================================ */
-
-/* 移动端卡片核心指标三格排版 (Hero Numbers) */
-.shares-panel .card-kpi-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  background: var(--slate-50);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  border: 1px solid var(--slate-100);
-}
-.shares-panel .card-metric-col {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.shares-panel .card-metric-col.text-right {
-  text-align: right;
-}
-.shares-panel .card-metric-label {
-  font-size: 11px;
-  color: var(--slate-400);
-}
-.shares-panel .card-metric-val {
-  font-size: 15px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.shares-panel .card-metric-sub {
-  font-size: 10px;
-  color: var(--slate-500);
-}
-
-/* 移动端展开详情容器 */
-
-/* ============================================================
-       10. 各种异常与容错视图：空状态、加载中、读取失败、时效告警
-       ============================================================ */
 .shares-panel .state-view-wrapper {
-  padding: 40px 24px;
+  padding: 40px 20px;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -793,7 +545,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .shares-panel .state-icon-box.loading {
   background: var(--primary-light);
@@ -807,195 +559,38 @@
   background: var(--rose-50);
   color: var(--rose-600);
 }
+.shares-panel .state-icon-box svg {
+  width: 24px;
+  height: 24px;
+}
 .shares-panel .state-title {
   font-size: 16px;
   font-weight: 700;
   color: var(--slate-900);
-  margin-bottom: 6px;
+  margin: 0 0 6px;
 }
 .shares-panel .state-desc {
   font-size: 13px;
   color: var(--slate-500);
-  max-width: 460px;
+  max-width: 420px;
   line-height: 1.6;
-  margin-bottom: 20px;
+  margin: 0 0 18px;
 }
 .shares-panel .action-btn-primary {
   background: var(--primary);
   color: #ffffff;
   border: none;
-  padding: 8px 18px;
-  border-radius: 8px;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: background 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 .shares-panel .action-btn-primary:hover {
   background: var(--primary-hover);
-}
-
-/* 骨架屏动画 */
-.shares-panel .skeleton-box {
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-  background-size: 200% 100%;
-  animation: skeleton-pulse 1.5s infinite;
-  border-radius: 6px;
-}
-@keyframes skeleton-pulse {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-.shares-panel .skeleton-table-row {
-  display: flex;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid var(--slate-100);
-  align-items: center;
-}
-
-/* 滞后与部分数据警示横幅 (Alert Banner) */
-.shares-panel .stale-warning-banner {
-  background: #fffbeb;
-  border: 1px solid #fef3c7;
-  border-left: 4px solid var(--amber-500);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  color: #92400e;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.shares-panel .stale-warning-banner svg {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--amber-600);
-}
-
-/* ============================================================
-       11. 底部口径与金融工程注记 (Footer Footnotes)
-       ============================================================ */
-.shares-panel .panel-footer-notes {
-  border-top: 1px solid var(--slate-200);
-  padding-top: 20px;
-  margin-top: 20px;
-  font-size: 12px;
-  color: var(--slate-500);
-  line-height: 1.7;
-}
-.shares-panel .footer-note-list {
-  list-style-type: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.shares-panel .footer-note-item {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.shares-panel .footer-note-bullet {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--slate-400);
-  flex-shrink: 0;
-  transform: translateY(-2px);
-}
-
-/* ============================================================
-       12. 响应式规则 (Responsive Design Rules)
-       ============================================================ */
-
-/* 手动强制视图模式 */
-
-.shares-panel {
-  min-width: 0;
-  color: #0f172a;
-  line-height: 1.5;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-}
-.shares-panel * {
-  box-sizing: border-box;
-}
-.shares-panel button {
-  cursor: pointer;
-}
-.shares-panel button:focus-visible,
-.shares-panel input:focus-visible {
-  outline: 2px solid #4f46e5;
-  outline-offset: 3px;
-}
-.shares-panel .shares-primary {
-  color: var(--primary);
-}
-.shares-panel .shares-snapshot-caption {
-  color: var(--slate-400);
-  font-size: 11px;
-}
-.shares-panel .shares-mobile-kpis,
-.shares-panel .shares-mobile-amount,
-.shares-panel .shares-mobile-action {
-  display: none;
-}
-.shares-panel .shares-responsive-table {
-  overflow-x: auto;
-}
-.shares-panel .shares-amount-toggle {
-  font-size: 11px;
-  padding: 6px;
-  border: 1px solid var(--slate-200);
-  border-radius: 6px;
-  color: var(--slate-600);
-}
-.shares-panel .shares-skeleton {
-  width: 100%;
-  max-width: 900px;
-}
-.shares-panel .skeleton-box {
-  width: 22%;
-  height: 28px;
-}
-.shares-panel .shares-pipeline,
-.shares-panel .shares-formula {
-  background: var(--slate-50);
-  border: 1px solid var(--slate-200);
-  border-radius: 8px;
-  padding: 12px 18px;
-  font-size: 12px;
-  color: var(--slate-600);
-  text-align: left;
-  margin-bottom: 20px;
-}
-.shares-panel .shares-formula {
-  margin: 14px 0 0;
-  padding: 10px;
-  background: white;
-  font-size: 11px;
-  overflow-wrap: anywhere;
-}
-.shares-panel .shares-no-match,
-.shares-panel .shares-sse-detail {
-  text-align: center;
-  padding: 36px;
-  color: var(--slate-500);
-}
-.shares-panel .highlight-amber {
-  color: var(--amber-600);
-}
-.shares-panel .pcf-kv-val {
-  overflow-wrap: anywhere;
-  min-width: 0;
 }
 .shares-panel .shares-spin {
   animation: shares-spin 1s linear infinite;
@@ -1005,268 +600,824 @@
     transform: rotate(360deg);
   }
 }
-.shares-panel .force-cards .shares-table,
-.shares-panel .force-cards tbody {
-  display: block;
+
+/* 骨架屏 */
+.shares-panel .shares-skeleton {
+  width: 100%;
+  max-width: 720px;
+  padding: 4px 0 20px;
 }
-.shares-panel .force-cards thead,
-.shares-panel .force-cards .shares-desktop {
-  display: none;
+.shares-panel .skeleton-row {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
 }
-.shares-panel .force-cards .shares-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  margin: 16px;
-  border: 1px solid var(--slate-200);
-  border-radius: 12px;
-  padding: 16px;
+.shares-panel .skeleton-box {
+  flex: 1 1 0;
+  height: 22px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
 }
-.shares-panel .force-cards .shares-row td {
-  padding: 0;
-  border: 0;
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
-.shares-panel .force-cards .shares-mobile-kpis {
-  display: block;
-  grid-column: 1 / -1;
+
+/* 筛选无结果空状态 */
+.shares-panel .shares-empty {
+  padding: 48px 16px;
+  text-align: center;
+}
+.shares-panel .shares-empty-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--slate-100);
+  color: var(--slate-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 10px;
+}
+.shares-panel .shares-empty h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--slate-800);
+}
+.shares-panel .shares-empty p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--slate-400);
+}
+.shares-panel .shares-empty-reset {
   margin-top: 14px;
+  border: 1px solid var(--primary-border);
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
 }
-.shares-panel .force-cards .shares-actions {
-  grid-column: 1 / -1;
+.shares-panel .shares-empty-reset:hover {
+  background: #e0e7ff;
+}
+
+/* ============================================================
+   6. 桌面 10 列宽表
+   ============================================================ */
+.shares-panel .shares-table-wrap {
+  overflow-x: auto;
+}
+.shares-panel .shares-table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  text-align: left;
+}
+.shares-panel .shares-table th {
+  background: var(--slate-50);
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate-500);
+  border-bottom: 1px solid var(--slate-200);
+  white-space: nowrap;
+  user-select: none;
+}
+.shares-panel .shares-table th.num {
+  text-align: right;
+}
+.shares-panel .shares-table th.center {
+  text-align: center;
+}
+.shares-panel .th-sort {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.shares-panel .th-sort:hover {
+  color: var(--slate-900);
+}
+.shares-panel .shares-table th[aria-sort='none'] .th-sort::after {
+  content: '↕';
+  font-size: 10px;
+  color: var(--slate-300);
+}
+.shares-panel .shares-table th[aria-sort='ascending'] .th-sort::after {
+  content: '↑';
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.shares-panel .shares-table th[aria-sort='descending'] .th-sort::after {
+  content: '↓';
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.shares-panel .shares-table tbody tr.shares-row {
+  border-bottom: 1px solid var(--slate-100);
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+.shares-panel .shares-table tbody tr.shares-row:hover {
+  background-color: var(--slate-50);
+}
+.shares-panel .shares-table tbody tr.shares-row.expanded {
+  background-color: rgba(238, 242, 255, 0.45);
+}
+.shares-panel .shares-table tbody tr.shares-row td {
+  padding: 11px 14px;
+  vertical-align: middle;
+  color: var(--slate-800);
+  white-space: nowrap;
+}
+.shares-panel .shares-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.shares-panel .shares-table td.num.muted {
+  color: var(--slate-500);
+}
+.shares-panel .shares-table td.center {
+  text-align: center;
+}
+.shares-panel .shares-table td.cell-name {
+  font-weight: 600;
+  color: var(--slate-900);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shares-panel .shares-table td.limit-date {
+  color: var(--slate-500);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 深沪市场标签与代码 */
+.shares-panel .market-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.shares-panel .market-tag.sz {
+  background: var(--emerald-50);
+  color: var(--emerald-700);
+  border: 1px solid var(--emerald-200);
+}
+.shares-panel .market-tag.sh {
+  background: var(--primary-light);
+  color: var(--primary-hover);
+  border: 1px solid var(--primary-border);
+}
+.shares-panel .code-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--slate-800);
+}
+
+/* 数值颜色语义 */
+.shares-panel .tone-pos {
+  color: var(--emerald-600);
+}
+.shares-panel .tone-neg {
+  color: var(--rose-600);
+}
+.shares-panel .tone-zero {
+  color: var(--slate-400);
+}
+.shares-panel .tone-muted {
+  color: var(--slate-400);
+}
+
+/* 盘前净新增单元格与确定/估算徽标 */
+.shares-panel .creation-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.shares-panel .est-badge {
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* 顶格状态 Badge：amber 顶格/接近/超限、slate 正常/待确认、sky 不限、rose 净流出 */
+.shares-panel .ceiling-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.shares-panel .ceiling-badge.kind-at-limit,
+.shares-panel .ceiling-badge.kind-over-limit {
+  background: var(--amber-100);
+  color: var(--amber-800);
+  border-color: var(--amber-200);
+}
+.shares-panel .ceiling-badge.kind-near-limit {
+  background: var(--amber-50);
+  color: var(--amber-700);
+  border-color: var(--amber-200);
+}
+.shares-panel .ceiling-badge.kind-normal {
+  background: var(--slate-100);
+  color: var(--slate-600);
+  border-color: var(--slate-200);
+}
+.shares-panel .ceiling-badge.kind-pending {
+  background: var(--slate-50);
+  color: var(--slate-400);
+  border: 1px dashed var(--slate-300);
+}
+.shares-panel .ceiling-badge.kind-unlimited {
+  background: var(--sky-50);
+  color: var(--sky-700);
+  border-color: var(--sky-200);
+}
+.shares-panel .ceiling-badge.kind-outflow {
+  background: var(--rose-50);
+  color: var(--rose-600);
+  border-color: var(--rose-200);
+}
+.shares-panel .pulse-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ceiling-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ceiling-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* 行内详情展开按钮 */
+.shares-panel .row-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--slate-400);
+  padding: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.shares-panel .row-toggle:hover {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+.shares-panel .row-toggle.is-open {
+  color: var(--primary);
+}
+.shares-panel .row-toggle svg {
+  transition: transform 0.2s ease;
+}
+
+/* 行展开抽屉（宽表内嵌） */
+.shares-panel .detail-drawer-tr {
+  background-color: #fafbfc;
+}
+.shares-panel .detail-drawer-tr td {
+  padding: 0 16px 18px;
+  border-bottom: 2px solid var(--primary-light);
+  white-space: normal;
+  box-shadow: inset 4px 0 0 var(--primary);
+}
+
+/* ============================================================
+   7. PCF 详情内容（宽表抽屉与移动卡片共用）
+   ============================================================ */
+.shares-panel .detail-drawer-content {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  margin-top: 10px;
+  box-shadow: var(--shadow-subtle);
+  min-width: 0;
+}
+.shares-panel .detail-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--slate-100);
+}
+.shares-panel .detail-drawer-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--slate-900);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.shares-panel .detail-drawer-title svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.shares-panel .detail-source-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--slate-500);
+  background: var(--slate-100);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.shares-panel .detail-error-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.shares-panel .detail-error-box p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--slate-600);
+}
+.shares-panel .detail-drawer-content > p[role='status'] {
+  font-size: 12px;
+  color: var(--slate-500);
+}
+.shares-panel .shares-sse-detail {
+  text-align: center;
+  padding: 16px;
+  color: var(--slate-500);
+}
+.shares-panel .shares-sse-detail p {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+.shares-panel .pcf-sections-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.shares-panel .pcf-section-card {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  min-width: 0;
+}
+.shares-panel .pcf-section-card.t-day {
+  border-top: 3px solid var(--primary);
+}
+.shares-panel .pcf-section-card.p-day {
+  border-top: 3px solid var(--emerald-500);
+}
+.shares-panel .pcf-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--slate-800);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid var(--slate-100);
-  padding-top: 8px;
-  gap: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
 }
-.shares-panel .force-cards .shares-mobile-amount,
-.shares-panel .force-cards .shares-mobile-action {
-  display: inline;
+.shares-panel .pcf-date-pill {
   font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  color: var(--slate-600);
+  font-variant-numeric: tabular-nums;
+}
+.shares-panel .pcf-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.shares-panel .pcf-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.shares-panel .pcf-status-chip.ok {
+  background: var(--emerald-50);
+  color: var(--emerald-700);
+  border-color: var(--emerald-100);
+}
+.shares-panel .pcf-status-chip.blocked {
+  background: var(--amber-50);
+  color: var(--amber-700);
+  border-color: var(--amber-200);
+}
+.shares-panel .pcf-status-chip.unknown {
+  background: var(--slate-100);
+  color: var(--slate-600);
+  border-color: var(--slate-200);
+}
+.shares-panel .pcf-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.shares-panel .pcf-kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--slate-200);
+}
+.shares-panel .pcf-kv-row.emphasis {
+  background: var(--slate-50);
+  padding: 5px 8px;
+  border-radius: 6px;
+  border-bottom-color: transparent;
+}
+.shares-panel .pcf-kv-row:last-child {
+  border-bottom: none;
+}
+.shares-panel .pcf-kv-label {
   color: var(--slate-500);
+  flex-shrink: 0;
 }
-.shares-panel .force-cards .detail-drawer-tr,
-.shares-panel .force-cards .detail-drawer-td {
+.shares-panel .pcf-kv-val {
+  margin: 0;
+  font-weight: 600;
+  color: var(--slate-800);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.shares-panel .pcf-kv-row.emphasis .pcf-kv-val {
+  font-weight: 700;
+  color: var(--slate-900);
+}
+
+/* ============================================================
+   8. 移动卡片布局（<1200 panel 宽度）
+   ============================================================ */
+.shares-panel .shares-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+.shares-panel .shares-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  min-width: 0;
+}
+.shares-panel .shares-card.is-open {
+  border-color: var(--primary-border);
+  box-shadow: 0 0 0 3px rgba(238, 242, 255, 0.8);
+}
+.shares-panel .shares-card-head {
   display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 12px 14px;
 }
-.shares-panel .force-cards .card-metric-col {
+.shares-panel .card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.shares-panel .card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-900);
   min-width: 0;
   overflow-wrap: anywhere;
 }
-@media (max-width: 900px) {
-  .shares-panel .auto-responsive .shares-table,
-  .shares-panel .auto-responsive tbody {
-    display: block;
+.shares-panel .card-title-row .ceiling-badge {
+  margin-left: auto;
+}
+.shares-panel .card-kpi-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--slate-100);
+}
+.shares-panel .card-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.shares-panel .kpi-label {
+  font-size: 10px;
+  color: var(--slate-400);
+  white-space: nowrap;
+}
+.shares-panel .kpi-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--slate-800);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.shares-panel .card-kpi.primary .kpi-value,
+.shares-panel .card-kpi.primary .creation-cell {
+  font-size: 16px;
+}
+.shares-panel .card-foot-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--slate-100);
+  font-size: 11px;
+  color: var(--slate-500);
+  flex-wrap: wrap;
+}
+.shares-panel .card-limit {
+  min-width: 0;
+}
+.shares-panel .card-limit strong {
+  color: var(--slate-800);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.shares-panel .card-limit-date {
+  font-style: normal;
+  color: var(--slate-400);
+  font-size: 10px;
+}
+.shares-panel .card-toggle-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.shares-panel .card-toggle-hint svg {
+  transition: transform 0.2s ease;
+}
+.shares-panel .shares-card-drawer {
+  border-top: 1px solid var(--slate-200);
+  background: rgba(248, 250, 252, 0.85);
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.shares-panel .shares-card-drawer .detail-drawer-content {
+  margin-top: 0;
+}
+
+/* 申购上限使用率进度条 */
+.shares-panel .usage-meter {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.shares-panel .usage-meter-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--slate-500);
+  margin-bottom: 6px;
+}
+.shares-panel .usage-text {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.shares-panel .usage-text.hot {
+  color: var(--amber-600);
+}
+.shares-panel .usage-text.mid {
+  color: var(--primary);
+}
+.shares-panel .usage-text.cool {
+  color: var(--emerald-600);
+}
+.shares-panel .usage-text.neg {
+  color: var(--rose-600);
+}
+.shares-panel .usage-bar {
+  height: 6px;
+  background: var(--slate-100);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.shares-panel .usage-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transition: width 0.3s ease;
+}
+.shares-panel .usage-fill.hot {
+  background: var(--amber-500);
+}
+.shares-panel .usage-fill.mid {
+  background: var(--primary);
+}
+.shares-panel .usage-fill.cool {
+  background: var(--emerald-500);
+}
+.shares-panel .usage-fill.neg {
+  background: var(--rose-500);
+}
+
+/* ============================================================
+   9. 底部图例
+   ============================================================ */
+.shares-panel .panel-footer-notes {
+  border-top: 1px solid var(--slate-200);
+  padding-top: 12px;
+  font-size: 11px;
+  color: var(--slate-400);
+}
+.shares-panel .legend-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+}
+.shares-panel .legend-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.shares-panel .legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.shares-panel .legend-dot.amber {
+  background: var(--amber-500);
+}
+.shares-panel .legend-dot.emerald {
+  background: var(--emerald-500);
+}
+.shares-panel .legend-dot.sky {
+  background: var(--sky-500);
+}
+.shares-panel .legend-est {
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.shares-panel .legend-meta {
+  margin: 6px 0 0;
+}
+
+/* ============================================================
+   10. 容器查询：按 panel 可用宽度微调（布局切换由组件按同宽度驱动）
+   ============================================================ */
+@container shares-panel (max-width: 639px) {
+  .shares-panel .shares-title-row h2 {
+    font-size: 18px;
   }
-  .shares-panel .auto-responsive thead,
-  .shares-panel .auto-responsive .shares-desktop {
-    display: none;
+  .shares-panel .status-indicator-chip {
+    font-size: 11px;
   }
-  .shares-panel .auto-responsive .shares-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    margin: 12px;
-    border: 1px solid var(--slate-200);
-    border-radius: 12px;
-    padding: 12px;
+  .shares-panel .shares-stat-grid {
+    gap: 8px;
   }
-  .shares-panel .auto-responsive .shares-row td {
-    padding: 0;
-    border: 0;
+  .shares-panel .stat-card {
+    padding: 8px 10px;
   }
-  .shares-panel .auto-responsive .shares-mobile-kpis {
-    display: block;
-    grid-column: 1 / -1;
-    margin-top: 14px;
-  }
-  .shares-panel .auto-responsive .shares-actions {
-    grid-column: 1 / -1;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 6px;
-    border-top: 1px solid var(--slate-100);
-    padding-top: 8px;
-  }
-  .shares-panel .auto-responsive .shares-mobile-amount,
-  .shares-panel .auto-responsive .shares-mobile-action {
-    display: inline;
+  .shares-panel .stat-card-head {
     font-size: 10px;
-    color: var(--slate-500);
+    margin-bottom: 4px;
   }
-  .shares-panel .auto-responsive .detail-drawer-tr,
-  .shares-panel .auto-responsive .detail-drawer-td {
-    display: block;
+  .shares-panel .stat-value {
+    font-size: 18px;
   }
-  .shares-panel .card-metric-col {
-    min-width: 0;
-    overflow-wrap: anywhere;
+  .shares-panel .stat-unit {
+    font-size: 10px;
   }
-  .shares-panel .card-metric-val {
-    font-size: 13px;
+  .shares-panel .stat-badge {
+    font-size: 10px;
+    padding: 1px 5px;
   }
-  .shares-panel .card-kpi-row {
-    padding: 10px 6px;
-    gap: 6px;
+  .shares-panel .stat-caption {
+    font-size: 10px;
   }
-  .shares-panel .toolbar-actions,
   .shares-panel .search-box {
-    min-width: 0;
-    flex-wrap: wrap;
+    flex: 1 1 100%;
   }
   .shares-panel .search-box input {
-    min-width: 0;
-    width: 140px;
+    width: 100%;
   }
-  .shares-panel .freshness-headline {
-    flex-wrap: wrap;
+  .shares-panel .filter-tab-btn {
+    border-radius: var(--radius-pill);
   }
-  .shares-panel .detail-drawer-header,
-  .shares-panel .pcf-section-title {
-    flex-wrap: wrap;
+  .shares-panel .card-kpi-grid {
+    gap: 6px;
+  }
+  .shares-panel .card-kpi.primary .kpi-value,
+  .shares-panel .card-kpi.primary .creation-cell {
+    font-size: 15px;
   }
 }
+@container shares-panel (min-width: 640px) and (max-width: 1199px) {
+  .shares-panel .shares-card-list {
+    gap: 12px;
+    padding: 14px;
+  }
+  .shares-panel .shares-card-head {
+    padding: 14px 18px;
+  }
+  .shares-panel .kpi-value {
+    font-size: 14px;
+  }
+  .shares-panel .card-kpi.primary .kpi-value,
+  .shares-panel .card-kpi.primary .creation-cell {
+    font-size: 18px;
+  }
+  .shares-panel .card-name {
+    font-size: 14px;
+  }
+}
+@container shares-panel (min-width: 820px) {
+  .shares-panel .pcf-sections-grid {
+    grid-template-columns: 1.4fr 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .shares-panel * {
     animation: none !important;
     transition: none !important;
   }
-}
-.shares-panel .filter-tab-group {
-  max-width: 100%;
-  overflow-x: auto;
-}
-.shares-panel .filter-tab-btn {
-  flex-shrink: 0;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.shares-panel .card-metric-val.pos,
-.shares-panel .kpi-value.pos {
-  color: var(--emerald-600);
-}
-.shares-panel .card-metric-val.neg,
-.shares-panel .kpi-value.neg {
-  color: var(--rose-600);
-}
-.shares-panel .force-cards .shares-symbol,
-.shares-panel .force-cards .shares-ceiling {
-  min-width: 0;
-}
-@media (max-width: 900px) {
-  .shares-panel .auto-responsive .shares-symbol,
-  .shares-panel .auto-responsive .shares-ceiling {
-    min-width: 0;
-  }
-}
-
-.shares-panel .force-cards .symbol-code {
-  font-size: 16px;
-  font-weight: 800;
-}
-.shares-panel .force-cards .symbol-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--slate-700);
-}
-.shares-panel .force-cards .shares-row.expanded {
-  margin-bottom: 0;
-  border-bottom: 1px dashed var(--slate-200);
-  border-radius: 12px 12px 0 0;
-}
-.shares-panel .force-cards .detail-drawer-tr {
-  margin: 0 16px 16px;
-  border: 1px solid var(--slate-200);
-  border-top: 0;
-  border-radius: 0 0 12px 12px;
-  background: white;
-}
-.shares-panel .force-cards .detail-drawer-td {
-  padding: 12px;
-  border: 0;
-  background: transparent;
-}
-.shares-panel .force-cards .detail-drawer-content {
-  padding: 0;
-  margin: 0;
-  border: 0;
-  box-shadow: none;
-}
-@media (max-width: 900px) {
-  .shares-panel .auto-responsive .symbol-code {
-    font-size: 16px;
-    font-weight: 800;
-  }
-  .shares-panel .auto-responsive .symbol-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--slate-700);
-  }
-  .shares-panel .auto-responsive .shares-row.expanded {
-    margin-bottom: 0;
-    border-bottom: 1px dashed var(--slate-200);
-    border-radius: 12px 12px 0 0;
-  }
-  .shares-panel .auto-responsive .detail-drawer-tr {
-    margin: 0 12px 12px;
-    border: 1px solid var(--slate-200);
-    border-top: 0;
-    border-radius: 0 0 12px 12px;
-    background: white;
-  }
-  .shares-panel .auto-responsive .detail-drawer-td {
-    padding: 12px;
-    border: 0;
-    background: transparent;
-  }
-  .shares-panel .auto-responsive .detail-drawer-content {
-    padding: 0;
-    margin: 0;
-    border: 0;
-    box-shadow: none;
-  }
-}
-
-/* 份额新增：八列报表，窄屏在表格容器内横向滚动。 */
-.shares-panel .shares-section-heading {
-  margin: 24px 0 14px;
-}
-.shares-panel .shares-section-heading h2 {
-  margin: 0 0 6px;
-  font-size: 24px;
-  font-weight: 700;
-}
-.shares-panel .shares-section-heading p {
-  margin: 0;
-  color: var(--slate-500);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.shares-panel .shares-table {
-  min-width: 1040px;
-}
-.shares-panel .shares-table th {
-  background: #fff;
-}
-.shares-panel .shares-table td {
-  white-space: nowrap;
-}
-.shares-panel .shares-code-button {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-.shares-panel .shares-number {
-  font-variant-numeric: tabular-nums;
-}
-.shares-panel .shares-limit-date {
-  color: var(--slate-400);
-  font-size: 12px;
-}
-.shares-panel .detail-drawer-td {
-  white-space: normal !important;
 }

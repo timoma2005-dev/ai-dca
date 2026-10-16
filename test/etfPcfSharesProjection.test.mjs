@@ -49,7 +49,7 @@ test('schema rejects date/key/source/shape/math/time/price/identity corruption',
     (x) => (x.records[0] = {}),
     (x) => x.records[0].deltaShares++,
     (x) => (x.records[0].price = 2),
-    (x) => (x.records[0].limitDate = '2026-10-09'),
+    (x) => (x.records[0].limitDate = 'not-a-date'),
     (x) => (x.records[0].atLimit = false),
     (x) => (x.prevDate = '2026-10-08'),
     (x) => (x.dateEvidence = null),
@@ -62,6 +62,11 @@ test('schema rejects date/key/source/shape/math/time/price/identity corruption',
     assert.equal(validateSharesProjection(x, { now }), false);
   }
   assert.throws(() => sharesKey('x:latest'));
+  // f65b5ca7: limitDate may differ from projection date (e.g. backfill with
+  // limitDate=2026-10-16 on a 2026-10-15 projection); only malformed dates reject.
+  const x = syntheticProjection();
+  x.records[0].limitDate = '2026-10-09';
+  assert.equal(validateSharesProjection(x, { now }), true);
   assert.equal(
     validateSharesProjection(syntheticProjection(), { now: new Date('2026-11-13T01:03:20.000Z') }),
     false

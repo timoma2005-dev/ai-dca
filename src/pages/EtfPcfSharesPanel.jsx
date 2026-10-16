@@ -1,45 +1,39 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Search,
-  Clock,
-  CalendarDays,
   RefreshCw,
   AlertTriangle,
   Inbox,
-  CircleAlert
+  CircleAlert,
+  ChevronDown,
+  X,
+  Boxes,
+  TrendingUp
 } from 'lucide-react';
 import {
   sharesClient,
   shanghaiAccessDay,
-  creationLabel,
   snapshotLabel,
-  freshnessMessage,
-  sharesCeiling
+  freshnessMessage
 } from '../app/etfPcfSharesClient.js';
+import {
+  formatInt,
+  formatDeltaShares,
+  formatSharesCompact,
+  formatNetSumWan,
+  formatCreationCell,
+  limitText,
+  isCappedOrNear,
+  ceilingMeta,
+  sortRecords,
+  matchesSearch,
+  pillRows,
+  progressMeta,
+  summaryStats
+} from './etfPcfSharesView.js';
 import './etfPcfShares.css';
 import EtfPcfSharesDetail from './EtfPcfSharesDetail.jsx';
-const number = (n, digits = 2) =>
-  Number.isFinite(n) ? n.toLocaleString('zh-CN', { maximumFractionDigits: digits }) : '—';
-const wan = (n) => (Number.isFinite(n) ? number(n / 10000) : '—');
-const delta = (n) => Number.isFinite(n) ? n === 0 ? '0 份' : `${(n / 10000).toFixed(2)} 万份` : '—';
-const limit = (r) => r.totalLimitKind === 'unlimited' ? '不限'
-  : r.totalLimitKind === 'limited' && Number.isFinite(r.totalLimitShares)
-    ? r.totalLimitShares >= 100000000
-      ? `${(r.totalLimitShares / 100000000).toFixed(2)} 亿份`
-      : `${(r.totalLimitShares / 10000).toFixed(2)} 万份`
-    : '—';
-const sz = (r) => r.code.startsWith('159');
-const creation = (r) => {
-  if (!Number.isFinite(r.creationShares) || r.creationShares < 0) return '暂无数据';
-  return (
-    <>
-      {creationLabel(r)} 万{' '}
-      <span className="est-badge">{r.creationSharesKind === 'exact' ? '确定' : '估算'}</span>
-    </>
-  );
-};
-const ceiling = (r) => r.atLimit || (r.nearTotalLimit && r.utilization <= 1);
-const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero');
+
 const fetchedTime = (s) =>
   new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Asia/Shanghai',
@@ -51,6 +45,67 @@ const fetchedTime = (s) =>
     second: '2-digit',
     hourCycle: 'h23'
   }).format(new Date(s));
+
+const tone = (n) => (n === null || n === undefined ? 'muted' : n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero');
+const sz = (r) => r.code.startsWith('159');
+
+const FILTERS = [
+  ['all', '全部标的', () => true, ''],
+  ['ceiling', '顶格 / 接近', isCappedOrNear, 'amber'],
+  ['inflow', '份额净增', (r) => r.deltaShares > 0, 'emerald'],
+  ['szse', '深市', sz, 'slate'],
+  ['sse', '沪市', (r) => !sz(r), 'slate']
+];
+
+const TABLE_COLUMNS = [
+  { key: 'code', label: '代码', sort: 'code' },
+  { key: 'name', label: '名称' },
+  { key: 'delta', label: '份额增量', sort: 'deltaShares', align: 'num' },
+  { key: 'creation', label: '盘前净新增份额', sort: 'creationShares', align: 'num' },
+  { key: 'ceiling', label: '顶格状态', align: 'center' },
+  { key: 'shares', label: '本期总份额', sort: 'shares', align: 'num' },
+  { key: 'prev', label: '上期总份额', align: 'num' },
+  { key: 'limit', label: '累计申购上限', align: 'num' },
+  { key: 'limitDate', label: '限额日期', align: 'center' },
+  { key: 'toggle', label: '详情', align: 'center' }
+];
+
+function CeilingBadge({ record }) {
+  const meta = ceilingMeta(record);
+  return (
+    <span className={`ceiling-badge kind-${meta.kind}`}>
+      {meta.kind === 'at-limit' && <span className="pulse-dot" aria-hidden="true" />}
+      {meta.label}
+    </span>
+  );
+}
+
+function CreationCell({ record }) {
+  const cell = formatCreationCell(record);
+  return (
+    <span className={`creation-cell tone-${cell.tone}`}>
+      {cell.text}
+      {cell.kind && <span className="est-badge">{cell.kind === 'exact' ? '确定' : '估算'}</span>}
+    </span>
+  );
+}
+
+function UsageMeter({ record }) {
+  const meta = progressMeta(record);
+  if (!meta.drawable) return null;
+  return (
+    <div className="usage-meter">
+      <div className="usage-meter-head">
+        <span>申购上限使用率{record.limitDate ? `（${record.limitDate}）` : ''}</span>
+        <strong className={`usage-text ${meta.tone}`}>{meta.text}</strong>
+      </div>
+      <div className="usage-bar" aria-hidden="true">
+        <span className={`usage-fill ${meta.tone}`} style={{ width: `${meta.width}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export default function EtfPcfSharesPanel() {
   const [result, setResult] = useState({ state: 'loading' });
   const [retry, setRetry] = useState(0);
@@ -58,6 +113,32 @@ export default function EtfPcfSharesPanel() {
   const [day, setDay] = useState(() => shanghaiAccessDay());
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState({ key: null, dir: 'desc' });
+  const [methodOpen, setMethodOpen] = useState(false);
+  const [layout, setLayout] = useState('table');
+  const rootRef = useRef(null);
+
+  // 布局按 panel 自身可用宽度切换：<640 卡片、640-1199 宽卡片、≥1200 宽表。
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return undefined;
+    const apply = (width) => {
+      const next = width >= 1200 ? 'table' : width >= 640 ? 'wide' : 'compact';
+      setLayout((prev) => (prev === next ? prev : next));
+    };
+    apply(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') {
+      const onResize = () => apply(el.getBoundingClientRect().width);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) apply(entry.contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     const check = () => {
       if (document.visibilityState === 'visible') setDay(shanghaiAccessDay());
@@ -72,6 +153,7 @@ export default function EtfPcfSharesPanel() {
       window.removeEventListener('focus', check);
     };
   }, [day]);
+
   useEffect(() => {
     let active = true;
     const subscription = sharesClient.subscribe();
@@ -93,6 +175,7 @@ export default function EtfPcfSharesPanel() {
       subscription.release();
     };
   }, [retry, day]);
+
   useEffect(() => {
     if (!result.data) return;
     const expires = Date.parse(result.data.expiresAt);
@@ -116,97 +199,296 @@ export default function EtfPcfSharesPanel() {
     check();
     return () => clearTimeout(timer);
   }, [result.data, result.receivedAt, result.state]);
+
   const data = result.data;
   const records = data?.records || [];
   const freshness = data ? freshnessMessage(data, day) : '';
   const stale = result.state === 'stale' || Boolean(freshness);
-  const filters = [
-    ['all', '全部标的', () => true],
-    ['ceiling', '顶格 / 接近', ceiling],
-    ['inflow', '份额净增', (r) => r.deltaShares > 0],
-    ['szse', '深市已接入', sz],
-    ['sse', '沪市待接入', (r) => !sz(r)]
-  ];
-  const filtered = records
-    .filter(filters.find(([key]) => key === filter)[2])
-    .filter((r) => `${r.code} ${r.name}`.toLowerCase().includes(search.trim().toLowerCase()));
-  const verified = records.filter((r) => sz(r) && Number.isFinite(r.deltaShares));
-  const net = verified.length ? verified.reduce((sum, r) => sum + r.deltaShares, 0) : null;
+  const pills = data ? pillRows(data, records) : [];
+  const stats = summaryStats(records);
+  const activeFilter = FILTERS.find(([key]) => key === filter) || FILTERS[0];
+  const filtered = sortRecords(
+    records.filter(activeFilter[2]).filter((r) => matchesSearch(r, search)),
+    sort
+  );
+
   const retryRead = () => setRetry((v) => v + 1);
   const toggle = (r) =>
     setExpanded((old) => (old === `${data.date}:${r.code}` ? null : `${data.date}:${r.code}`));
-  return (
-    <div className="shares-panel">
-      <section className="freshness-hero-card">
-        <div className="freshness-grid">
-          <div className="freshness-primary-info">
-            <div className="freshness-status-row">
-              <span className={`status-indicator-chip ${data ? (stale ? 'stale' : 'synced') : 'empty'}`}>
-                <span className="status-dot" />
-                {data
-                  ? stale
-                    ? '数据滞后待确认'
-                    : '最新已核验报表'
-                  : result.state === 'loading'
-                    ? '正在读取份额快照'
-                    : result.state === 'error'
-                      ? '份额快照读取失败'
-                      : '暂无有效快照'}
-              </span>
-              <span>深交所 PCF 自动抓取链路</span>
-            </div>
-            <div className="freshness-headline">
-              份额统计基准日：<span className="shares-primary">{data?.date || '—'}</span>
-              <span className="freshness-sub-baseline">（对比上一交易日：{data?.prevDate || '—'}）</span>
-            </div>
-            <div className="freshness-meta-details">
-              <span className="freshness-meta-item">
-                <Clock />
-                源抓取时间：{data ? fetchedTime(data.fetchedAt) : '—'} (上海时间)
-              </span>
-              <span className="freshness-meta-item">
-                <CalendarDays />
-                获取发布日：{data?.availableOn || '—'}
-              </span>
-            </div>
-            {data && <p className="shares-snapshot-caption">{snapshotLabel(data)}</p>}
-          </div>
-          <div className="kpi-stat-cards">
-            {[
-              [
-                '监控标的总数',
-                data ? records.length : '—',
-                '只',
-                `深市 ${records.filter(sz).length} 只 + 沪市 ${records.filter((r) => !sz(r)).length} 只`
-              ],
-              [
-                '申购顶格 / 接近',
-                data ? records.filter(ceiling).length : '—',
-                '只',
-                records
-                  .filter(ceiling)
-                  .map((r) => `${r.code}(${r.atLimit ? '顶格' : `${Math.round(r.utilization * 100)}%`})`)
-                  .join(' ') || '暂无顶格 / 接近标的'
-              ],
-              [
-                '单日合计净流入',
-                net === null ? '—' : `${net > 0 ? '+' : ''}${wan(net)}`,
-                '万份',
-                `有效深市 ${verified.length} 只净增总和`
-              ]
-            ].map(([label, value, unit, caption], i) => (
-              <div className="kpi-stat-box" key={label}>
-                <span className="kpi-label">{label}</span>
-                <div className={`kpi-value ${i === 1 ? 'highlight-amber' : i === 2 ? tone(net) : ''}`}>
-                  {value}
-                  <span className="kpi-unit">{unit}</span>
-                </div>
-                <span className="kpi-caption">{data ? caption : '等待快照核验'}</span>
-              </div>
+  const onSort = (key) =>
+    setSort((old) =>
+      old.key === key ? { key, dir: old.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }
+    );
+  const resetFilters = () => {
+    setSearch('');
+    setFilter('all');
+  };
+
+  const tableView = (
+    <div className="shares-table-wrap" role="region" aria-label="份额新增宽表" tabIndex={0}>
+      <table className="shares-table">
+        <thead>
+          <tr>
+            {TABLE_COLUMNS.map((col) => (
+              <th
+                key={col.key}
+                scope="col"
+                className={col.align === 'num' ? 'num' : col.align === 'center' ? 'center' : ''}
+                aria-sort={
+                  col.sort
+                    ? sort.key === col.sort
+                      ? sort.dir === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                    : undefined
+                }
+              >
+                {col.sort ? (
+                  <button type="button" className={`th-sort ${col.align || ''}`} onClick={() => onSort(col.sort)}>
+                    {col.label}
+                  </button>
+                ) : (
+                  col.label
+                )}
+              </th>
             ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((r) => {
+            const open = expanded === `${data.date}:${r.code}`;
+            return (
+              <Fragment key={r.code}>
+                <tr className={`shares-row ${open ? 'expanded' : ''}`} onClick={() => toggle(r)}>
+                  <td>
+                    <span className={`market-tag ${sz(r) ? 'sz' : 'sh'}`}>{sz(r) ? '深' : '沪'}</span>
+                    <span className="code-mono">{r.code}</span>
+                  </td>
+                  <td className="cell-name">{r.name}</td>
+                  <td className="num">
+                    <span className={`tone-${tone(r.deltaShares)}`}>{formatDeltaShares(r.deltaShares)}</span>
+                  </td>
+                  <td className="num">
+                    <CreationCell record={r} />
+                  </td>
+                  <td className="center">
+                    <CeilingBadge record={r} />
+                  </td>
+                  <td className="num">{formatInt(r.shares)}</td>
+                  <td className="num muted">{formatInt(r.prevShares)}</td>
+                  <td className="num">{limitText(r)}</td>
+                  <td className="center limit-date">{r.limitDate || '—'}</td>
+                  <td className="center">
+                    <button
+                      type="button"
+                      id={`shares-toggle-${r.code}`}
+                      className={`row-toggle ${open ? 'is-open' : ''}`}
+                      aria-expanded={open}
+                      aria-controls={`shares-detail-${r.code}`}
+                      aria-label={`${open ? '收起' : '展开'} ${r.name}（${r.code}）PCF 详情`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggle(r);
+                      }}
+                    >
+                      <ChevronDown size={16} aria-hidden="true" />
+                    </button>
+                  </td>
+                </tr>
+                {open && (
+                  <tr className="detail-drawer-tr">
+                    <td colSpan={10} className="detail-drawer-td">
+                      <EtfPcfSharesDetail
+                        key={`${data.date}:${r.code}`}
+                        code={r.code}
+                        name={r.name}
+                        date={data.date}
+                        id={`shares-detail-${r.code}`}
+                        labelledBy={`shares-toggle-${r.code}`}
+                      />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const cardView = (
+    <div className="shares-card-list">
+      {filtered.map((r) => {
+        const open = expanded === `${data.date}:${r.code}`;
+        return (
+          <article className={`shares-card ${open ? 'is-open' : ''}`} key={r.code}>
+            <button
+              type="button"
+              id={`shares-toggle-${r.code}`}
+              className="shares-card-head"
+              aria-expanded={open}
+              aria-controls={`shares-detail-${r.code}`}
+              onClick={() => toggle(r)}
+            >
+              <span className="card-title-row">
+                <span className={`market-tag ${sz(r) ? 'sz' : 'sh'}`}>{sz(r) ? '深' : '沪'}</span>
+                <span className="code-mono">{r.code}</span>
+                <span className="card-name">{r.name}</span>
+                <CeilingBadge record={r} />
+              </span>
+              <span className="card-kpi-grid">
+                <span className="card-kpi primary">
+                  <span className="kpi-label">盘前净新增</span>
+                  <span className="kpi-value">
+                    <CreationCell record={r} />
+                  </span>
+                </span>
+                <span className="card-kpi">
+                  <span className="kpi-label">份额增量</span>
+                  <span className={`kpi-value tone-${tone(r.deltaShares)}`}>
+                    {formatDeltaShares(r.deltaShares)}
+                  </span>
+                </span>
+                <span className="card-kpi">
+                  <span className="kpi-label">本期总份额</span>
+                  <span className="kpi-value">{formatSharesCompact(r.shares)}</span>
+                </span>
+              </span>
+              <span className="card-foot-row">
+                <span className="card-limit">
+                  累计申购上限 <strong>{limitText(r)}</strong>
+                  {r.limitDate && <em className="card-limit-date">（{r.limitDate}）</em>}
+                </span>
+                <span className="card-toggle-hint">
+                  {open ? '收起清单' : 'PCF 详情'}
+                  <ChevronDown size={14} aria-hidden="true" className={open ? 'is-open' : ''} />
+                </span>
+              </span>
+            </button>
+            {open && (
+              <div
+                className="shares-card-drawer"
+                id={`shares-detail-${r.code}`}
+                role="region"
+                aria-labelledby={`shares-toggle-${r.code}`}
+              >
+                <UsageMeter record={r} />
+                <EtfPcfSharesDetail
+                  key={`${data.date}:${r.code}`}
+                  code={r.code}
+                  name={r.name}
+                  date={data.date}
+                />
+              </div>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div className="shares-panel" data-layout={layout} ref={rootRef}>
+      {data && (
+        <header className="shares-page-header">
+          <div className="shares-title-row">
+            <h2>ETF 申购赎回份额监控</h2>
+            <span className="shares-scope-badge">跨境/QDII 核心 {records.length} 只</span>
+            <span className={`status-indicator-chip ${stale ? 'stale' : 'synced'}`}>
+              <span className="status-dot" aria-hidden="true" />
+              {stale ? '数据滞后待确认' : '最新已核验报表'}
+            </span>
           </div>
-        </div>
-      </section>
+          {layout === 'table' ? (
+            <div className="shares-pill-row">
+              <span className="pill-row-label">数据口径</span>
+              {pills.map((p) => (
+                <span className="method-pill" key={p.key}>
+                  <span className="method-pill-key">{p.label}</span>
+                  <strong>{p.value}</strong>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="methodology-bar">
+              <button
+                type="button"
+                className="methodology-toggle"
+                aria-expanded={methodOpen}
+                aria-controls="shares-methodology"
+                onClick={() => setMethodOpen((v) => !v)}
+              >
+                数据口径与日期锚点
+                <ChevronDown size={14} aria-hidden="true" className={methodOpen ? 'is-open' : ''} />
+              </button>
+              {methodOpen && (
+                <ul className="methodology-list" id="shares-methodology">
+                  {pills.map((p) => (
+                    <li key={p.key}>
+                      <strong>{p.label}</strong>
+                      <span>{p.value}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <p className="shares-caption">
+            {snapshotLabel(data)} · 源抓取 {fetchedTime(data.fetchedAt)}（上海时间）
+          </p>
+        </header>
+      )}
+      {data && (
+        <section className="shares-stat-grid" aria-label="监控概览">
+          <article className="stat-card">
+            <div className="stat-card-head">
+              <span>监控标的总数</span>
+              <Boxes size={15} aria-hidden="true" />
+            </div>
+            <div className="stat-card-body">
+              <span className="stat-value">{records.length}</span>
+              <span className="stat-unit">只</span>
+              <span className="stat-badges">
+                <em className="stat-badge sz">深市 {stats.szCount}</em>
+                <em className="stat-badge sh">沪市 {stats.shCount}</em>
+              </span>
+            </div>
+            <p className="stat-caption">深市份额已接入 · 沪市待接入</p>
+          </article>
+          <article className="stat-card amber">
+            <div className="stat-card-head">
+              <span>申购顶格 / 接近</span>
+              <AlertTriangle size={15} aria-hidden="true" />
+            </div>
+            <div className="stat-card-body">
+              <span className="stat-value">{stats.cappedCount}</span>
+              <span className="stat-unit">只</span>
+              <span className="stat-badges">
+                <em className="stat-badge amber-strong">顶格 {stats.atLimitCount} 只</em>
+                <em className="stat-badge amber-soft">接近 {stats.nearCount} 只</em>
+              </span>
+            </div>
+            <p className="stat-caption">净增份额达到当日申购上限 90% 以上时计入</p>
+          </article>
+          <article className="stat-card emerald">
+            <div className="stat-card-head">
+              <span>合计净新增（盘前推导）</span>
+              <TrendingUp size={15} aria-hidden="true" />
+            </div>
+            <div className="stat-card-body">
+              <span className={`stat-value ${tone(stats.netSum)}`}>
+                {stats.netSum === null ? '—' : formatNetSumWan(stats.netSum)}
+              </span>
+              {stats.netSum !== null && <span className="stat-unit">万份</span>}
+            </div>
+            <p className="stat-caption">
+              有效深市样本 {stats.verifiedCount} 只 · 净流入 {stats.inflowCount}/{stats.verifiedCount}
+            </p>
+          </article>
+        </section>
+      )}
       {data && stale && (
         <div role="status" className="stale-warning-banner">
           <AlertTriangle size={18} />
@@ -226,38 +508,45 @@ export default function EtfPcfSharesPanel() {
       )}
       {data && (
         <div className="panel-toolbar">
-          <div className="filter-tab-group">
-            {filters.map(([key, label, match]) => (
+          <div className="filter-tab-group" role="group" aria-label="筛选">
+            {FILTERS.map(([key, label, match, badgeTone]) => (
               <button
                 key={key}
+                type="button"
                 className={`filter-tab-btn ${filter === key ? 'active' : ''}`}
                 aria-pressed={filter === key}
                 onClick={() => setFilter(key)}
               >
                 {label}
-                <span className="filter-count-badge">{records.filter(match).length}</span>
+                <span className={`filter-count-badge ${badgeTone}`}>{records.filter(match).length}</span>
               </button>
             ))}
           </div>
           <div className="toolbar-actions">
             <label className="search-box">
-              <Search />
+              <Search aria-hidden="true" />
               <input
                 aria-label="搜索代码或简称"
-                placeholder="搜索代码或简称..."
+                placeholder="搜索代码或名称，如 159501 / 纳指"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
+              {search && (
+                <button
+                  type="button"
+                  className="search-clear"
+                  aria-label="清空搜索"
+                  onClick={() => setSearch('')}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              )}
             </label>
-
+            <span className="filtered-count">
+              共 <b>{filtered.length}</b> 条
+            </span>
           </div>
         </div>
-      )}
-      {data && (
-        <header className="shares-section-heading">
-          <h2>份额新增</h2>
-          <p>份额统计截至 {data.date} · 限额来源 {records.find((r) => r.limitDate)?.limitDate || '—'} · 抓取时间 {fetchedTime(data.fetchedAt).replace(' ', 'T')}</p>
-        </header>
       )}
       <section className="shares-main-card">
         {!data && (
@@ -279,12 +568,13 @@ export default function EtfPcfSharesPanel() {
                   : '暂无已验证份额快照'}
             </h3>
             {result.state === 'loading' ? (
-              <div className="shares-skeleton">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="skeleton-table-row">
-                    {[1, 2, 3, 4].map((j) => (
-                      <div className="skeleton-box" key={j} />
-                    ))}
+              <div className="shares-skeleton" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div className="skeleton-row" key={i}>
+                    <span className="skeleton-box" />
+                    <span className="skeleton-box" />
+                    <span className="skeleton-box" />
+                    <span className="skeleton-box" />
                   </div>
                 ))}
               </div>
@@ -292,19 +582,11 @@ export default function EtfPcfSharesPanel() {
               <>
                 <p className="state-desc">
                   {result.state === 'error'
-                    ? '与网关服务通信异常或本地缓存校验失败。已自动终止脏数据渲染，以防止失真的份额差分影响管理员决策。'
+                    ? '网络异常或数据校验未通过，请稍后重试。'
                     : result.reason === 'missing_report_date'
                       ? '报表缺少数据日期，暂无法计算份额新增'
-                      : '系统按每个交易日 09:00（上海时间）自动运行深圳证券交易所官方 PCF 与份额报表流水线。当前暂无已入库的有效份额投影，数据清算完成后将自动呈现。'}
+                      : '当日份额报表尚未生成，数据就绪后会自动更新。'}
                 </p>
-                {result.state === 'empty' && (
-                  <div className="shares-pipeline">
-                    <strong>自动化流水线说明：</strong>
-                    <div>• 09:00 自动触发上交所/深交所 PCF 源 XLSX 下载</div>
-                    <div>• 09:01 严格比对相邻交易日日历，计算双日份额净差分</div>
-                    <div>• 09:02 验证 D 日累计申购限额并核定顶格置信度</div>
-                  </div>
-                )}
                 <button className="action-btn-primary" onClick={retryRead}>
                   <RefreshCw size={14} />
                   重试读取快照
@@ -313,83 +595,51 @@ export default function EtfPcfSharesPanel() {
             )}
           </div>
         )}
-        {data && (
-          <div className="shares-responsive-table">
-            <table className="shares-table">
-              <thead>
-                <tr>
-                  {['代码', '名称', '份额增量', '盘前净新增份额', '顶格状态', '本期总份额', '上期总份额', '累计申购上限', '限额日期'].map((label) => (
-                    <th key={label}>{label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => {
-                  const open = expanded === `${data.date}:${r.code}`;
-                  return (
-                    <Fragment key={r.code}>
-                      <tr className={`shares-row ${open ? 'expanded' : ''}`} onClick={() => toggle(r)}>
-                        <td>
-                          <button
-                            id={`shares-toggle-${r.code}`}
-                            className="shares-code-button"
-                            aria-expanded={open}
-                            aria-controls={`shares-detail-${r.code}`}
-                            onClick={(e) => { e.stopPropagation(); toggle(r); }}
-                          >{r.code} ({sz(r) ? '深' : '沪'})</button>
-                        </td>
-                        <td>{r.name}</td>
-                        <td className="shares-number">{delta(r.deltaShares)}</td>
-                        <td className="shares-number">{creation(r)}</td>
-                        <td><strong>{sz(r) ? sharesCeiling(r).label : r.totalLimitKind === 'unlimited' ? '累计不限' : '数据待确认'}</strong></td>
-                        <td className="shares-number">{number(r.shares, 0)}</td>
-                        <td className="shares-number">{number(r.prevShares, 0)}</td>
-                        <td className="shares-number">{limit(r)}</td>
-                        <td><span className="shares-limit-date">{r.limitDate || '—'}</span></td>
-                      </tr>
-                      {open && (
-                        <tr className="detail-drawer-tr">
-                          <td colSpan={9} className="detail-drawer-td">
-                            <EtfPcfSharesDetail
-                              key={`${data.date}:${r.code}`}
-                              code={r.code}
-                              name={r.name}
-                              date={data.date}
-                              id={`shares-detail-${r.code}`}
-                              labelledBy={`shares-toggle-${r.code}`}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-                {!filtered.length && (
-                  <tr>
-                    <td colSpan={9} className="shares-no-match">
-                      未找到符合条件的 ETF 标的
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-      <footer className="panel-footer-notes">
-        <ul className="footer-note-list">
-          {[
-            '盘前净新增份额口径：份额日报表是收盘后披露，净增份额=本期总份额-上期总份额，为盘前已知数。仅允许赎回时为 0（确定）；仅允许申购时净增即为申购量（确定）；申赎双向开放时净差分标注为「约」（因盘中实际申购与赎回可能互相抵消）。',
-            '顶格判定规范：净增份额精确等于数据日 PCF 累计申购限额时标为「顶格 (100%)」；达到上限 90% 以上标为「接近」；超过上限观测通常为大宗特批申购；累计不限标的免受配额约束。',
-            '新增金额设计决策 (v1)：深交所当前报表源缺少经过双重审计的 D 日每份人民币净值凭证。为恪守金融严谨性、拒绝以盘中 IOPV 凑数产生误导，本期新增金额暂留空，待官方净值流打通后自动解锁。'
-          ].map((text) => (
-            <li className="footer-note-item" key={text}>
-              <span className="footer-note-bullet" />
-              <span>{text}</span>
-            </li>
+        {data &&
+          (filtered.length ? (
+            layout === 'table' ? (
+              tableView
+            ) : (
+              cardView
+            )
+          ) : (
+            <div className="shares-empty">
+              <div className="shares-empty-icon">
+                <Inbox size={22} aria-hidden="true" />
+              </div>
+              <h3>未找到符合条件的 ETF 标的</h3>
+              <p>尝试其他代码或名称关键字，或清空当前筛选条件。</p>
+              <button type="button" className="shares-empty-reset" onClick={resetFilters}>
+                重置筛选条件
+              </button>
+            </div>
           ))}
-        </ul>
-      </footer>
+      </section>
+      {data && (
+        <footer className="panel-footer-notes">
+          <ul className="legend-list">
+            <li>
+              <span className="legend-dot amber" aria-hidden="true" />
+              顶格：净增份额等于当日累计申购上限
+            </li>
+            <li>
+              <span className="legend-dot emerald" aria-hidden="true" />
+              净增：本期份额较上期为正流入
+            </li>
+            <li>
+              <span className="legend-dot sky" aria-hidden="true" />
+              不限：管理人未设累计申购限额
+            </li>
+            <li>
+              <span className="legend-est" aria-hidden="true">
+                约
+              </span>
+              申赎双向开放时净增为估算值，单向开放为确定值
+            </li>
+          </ul>
+          <p className="legend-meta">数据每个交易日盘前自动推导更新 · 投资需谨慎</p>
+        </footer>
+      )}
     </div>
   );
 }
