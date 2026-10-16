@@ -89,7 +89,7 @@ const SIDEBAR_ICONS = {
   articles: BookOpen
 };
 
-const HASH_ROUTE_TABS = new Set(['tradePlans', 'holdings']);
+const HASH_ROUTE_TABS = new Set(['tradePlans', 'holdings', 'adminRadar']);
 const PRESERVED_QUERY_PARAMS_BY_TAB = {
   home: ['view', 'currency'],
   markets: ['view', 'symbol', 'compare', 'chartType', 'indicators', 'cnFundParam', 'chartRange', 'chartFrom', 'chartTo'],
@@ -209,19 +209,20 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     return () => window.removeEventListener(MOBILE_BOTTOM_SHEET_EVENT, handleMobileBottomSheet);
   }, []);
 
-  // Legacy ?tab=home / ?tab=dca 进来时，重写为 ?tab=tradePlans + hash，使二级 tab 能在 mount 时被选中。
+  // Legacy tab 重写为映射目标与 hash，并通知二级面板。
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const legacyHash = readLegacyHashFromLocation();
     if (!legacyHash) return;
     const params = new URLSearchParams(window.location.search);
-    params.set('tab', 'tradePlans');
+    const targetTab = LEGACY_TAB_REDIRECTS[params.get('tab')].tab;
+    params.set('tab', targetTab);
     const nextUrl = new URL(
       `${window.location.pathname}?${params.toString()}${legacyHash}`,
       window.location.href
     );
-    window.history.replaceState({ tab: 'tradePlans' }, '', nextUrl);
-    // 让 TradePlansExperience 读到新 hash。
+    window.history.replaceState({ tab: targetTab }, '', nextUrl);
+    // 让目标二级面板读到新 hash。
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   }, []);
 

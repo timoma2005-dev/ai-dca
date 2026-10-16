@@ -1,10 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import {
-  Monitor,
-  Table2,
-  LayoutGrid,
   Search,
-  ChevronDown,
   Clock,
   CalendarDays,
   RefreshCw,
@@ -15,7 +11,6 @@ import {
 import {
   sharesClient,
   shanghaiAccessDay,
-  creationLabel,
   snapshotLabel,
   freshnessMessage,
   sharesCeiling
@@ -25,11 +20,13 @@ import EtfPcfSharesDetail from './EtfPcfSharesDetail.jsx';
 const number = (n, digits = 2) =>
   Number.isFinite(n) ? n.toLocaleString('zh-CN', { maximumFractionDigits: digits }) : '—';
 const wan = (n) => (Number.isFinite(n) ? number(n / 10000) : '—');
-const delta = (n) =>
-  Number.isFinite(n)
-    ? `${n > 0 ? '+' : ''}${(n / 10000).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const delta = (n) => Number.isFinite(n) ? n === 0 ? '0 份' : `${(n / 10000).toFixed(2)} 万份` : '—';
+const limit = (r) => r.totalLimitKind === 'unlimited' ? '不限'
+  : r.totalLimitKind === 'limited' && Number.isFinite(r.totalLimitShares)
+    ? r.totalLimitShares >= 100000000
+      ? `${(r.totalLimitShares / 100000000).toFixed(2)} 亿份`
+      : `${(r.totalLimitShares / 10000).toFixed(2)} 万份`
     : '—';
-const total = (n) => (Number.isFinite(n) ? `${(n / 100000000).toFixed(2)} 亿` : '—');
 const sz = (r) => r.code.startsWith('159');
 const ceiling = (r) => r.atLimit || (r.nearTotalLimit && r.utilization <= 1);
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero');
@@ -44,42 +41,6 @@ const fetchedTime = (s) =>
     second: '2-digit',
     hourCycle: 'h23'
   }).format(new Date(s));
-function Ceiling({ row }) {
-  const badge = sharesCeiling(row);
-  const fmtWan = (v) => (Number.isSafeInteger(v) ? `${(v / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}万份` : '—');
-  const limitText = row.totalLimitKind === 'unlimited' ? '无' : row.totalLimitKind === 'limited' ? fmtWan(row.totalLimitShares) : '—';
-  const unitText = Number.isSafeInteger(row.creationUnitShares) ? fmtWan(row.creationUnitShares) : '—';
-  return (
-    <span className="ceiling-wrap">
-      <span className={`ceiling-tag ${badge.kind}`}>
-        <span className="ceiling-bullet" />
-        {badge.label}
-      </span>
-      <span className="ceiling-detail">
-        最小 {unitText} · 上限 {limitText}
-      </span>
-    </span>
-  );
-}
-function Creation({ row }) {
-  if (!Number.isFinite(row.creationShares) || row.creationShares < 0) return '暂无数据';
-  return (
-    <>
-      盘前净新增份额: <strong>{creationLabel(row)} 万</strong>{' '}
-      <span className="est-badge">{row.creationSharesKind === 'exact' ? '确定' : '估算'}</span>
-    </>
-  );
-}
-function Amount({ row }) {
-  return Number.isFinite(row.deltaAmountWan) ? (
-    number(row.deltaAmountWan)
-  ) : (
-    <span className="amount-cell-badge" title="D 日净值凭证暂缺，严禁使用盘中 IOPV 伪造">
-      <CircleAlert size={12} />
-      待官方净值
-    </span>
-  );
-}
 export default function EtfPcfSharesPanel() {
   const [result, setResult] = useState({ state: 'loading' });
   const [retry, setRetry] = useState(0);
@@ -87,8 +48,6 @@ export default function EtfPcfSharesPanel() {
   const [day, setDay] = useState(() => shanghaiAccessDay());
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [view, setView] = useState('auto');
-  const [showAmount, setShowAmount] = useState(false);
   useEffect(() => {
     const check = () => {
       if (document.visibilityState === 'visible') setDay(shanghaiAccessDay());
@@ -280,35 +239,17 @@ export default function EtfPcfSharesPanel() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
-            <div className="view-mode-toggle">
-              {[
-                ['auto', Monitor, '自适应布局'],
-                ['table', Table2, '宽屏表格视图'],
-                ['cards', LayoutGrid, '移动端卡片看板视图']
-              ].map(([key, Icon, label]) => (
-                <button
-                  key={key}
-                  title={label}
-                  aria-label={label}
-                  aria-pressed={view === key}
-                  className={`view-mode-btn ${view === key ? 'active' : ''}`}
-                  onClick={() => setView(key)}
-                >
-                  <Icon />
-                </button>
-              ))}
-            </div>
-            <button
-              className="shares-amount-toggle"
-              aria-pressed={showAmount}
-              onClick={() => setShowAmount((v) => !v)}
-            >
-              新增金额：{showAmount ? '显示传统列' : '智能折叠'}
-            </button>
+
           </div>
         </div>
       )}
-      <section className={`shares-main-card ${view === 'auto' ? 'auto-responsive' : `force-${view}`}`}>
+      {data && (
+        <header className="shares-section-heading">
+          <h2>份额新增</h2>
+          <p>份额统计截至 {data.date} · 限额来源 {records.find((r) => r.limitDate)?.limitDate || '—'} · 抓取时间 {fetchedTime(data.fetchedAt).replace(' ', 'T')}</p>
+        </header>
+      )}
+      <section className="shares-main-card">
         {!data && (
           <div className="state-view-wrapper" role={result.state === 'error' ? 'alert' : 'status'}>
             <div className={`state-icon-box ${result.state}`}>
@@ -367,21 +308,9 @@ export default function EtfPcfSharesPanel() {
             <table className="shares-table">
               <thead>
                 <tr>
-                  <th>代码 / 标的简称</th>
-                  <th className="text-right">
-                    <div className="th-with-help">
-                      净变动 · 盘前净新增份额 <span className="th-tag">万份</span>
-                    </div>
-                  </th>
-                  <th className="text-center">限额顶格状态</th>
-                  <th className="text-right">
-                    本期总份额 <span className="th-tag">{data.date.slice(5)}</span>
-                  </th>
-                  <th className="text-right">
-                    上期总份额 <span className="th-tag">{data.prevDate?.slice(5) || '—'}</span>
-                  </th>
-                  {showAmount && <th>新增金额估算</th>}
-                  <th>申赎明细</th>
+                  {['代码', '名称', '份额增量', '顶格状态', '本期总份额', '上期总份额', '累计申购上限', '限额日期'].map((label) => (
+                    <th key={label}>{label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -390,96 +319,26 @@ export default function EtfPcfSharesPanel() {
                   return (
                     <Fragment key={r.code}>
                       <tr className={`shares-row ${open ? 'expanded' : ''}`} onClick={() => toggle(r)}>
-                        <td className="shares-symbol">
-                          <div className="symbol-cell">
-                            <div className="symbol-row-top">
-                              <span className="symbol-code">{r.code}</span>
-                              <span className={`symbol-market-tag ${sz(r) ? 'sz' : 'sh'}`}>
-                                {sz(r) ? '深市' : '沪市'}
-                              </span>
-                            </div>
-                            <span className="symbol-name">{r.name}</span>
-                          </div>
-                        </td>
-                        <td className="text-right shares-desktop">
-                          <div className="delta-cell">
-                            <span className={`delta-val ${tone(r.deltaShares)}`}>{delta(r.deltaShares)}</span>
-                            <span className="delta-sub-est">
-                              {r.deltaShares === null ? '—' : <Creation row={r} />}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="text-center shares-ceiling">
-                          <Ceiling row={r} />
-                        </td>
-                        {[r.shares, r.prevShares].map((n, i) => (
-                          <td key={i} className="text-right shares-desktop">
-                            <span className="shares-total-val" title={`${number(n, 0)} 份`}>
-                              {total(n)}
-                            </span>
-                            <div className="shares-date-hint">{n === null ? '—' : `${wan(n)} 万份`}</div>
-                          </td>
-                        ))}
-                        {showAmount && (
-                          <td className="text-center shares-desktop">
-                            <Amount row={r} />
-                          </td>
-                        )}
-                        <td className="shares-mobile-kpis">
-                          <div className="card-kpi-row">
-                            <div className="card-metric-col">
-                              <span className="card-metric-label">净变动 (万份)</span>
-                              <span className={`card-metric-val ${tone(r.deltaShares)}`}>
-                                {delta(r.deltaShares)}
-                              </span>
-                              <span className="card-metric-sub">
-                                {r.deltaShares === null ? '未比对' : <Creation row={r} />}
-                              </span>
-                            </div>
-                            <div className="card-metric-col text-right">
-                              <span className="card-metric-label">本期规模 ({data.date.slice(5)})</span>
-                              <span className="card-metric-val">{total(r.shares)}</span>
-                              <span className="card-metric-sub">上期: {total(r.prevShares)}</span>
-                            </div>
-                            <div className="card-metric-col text-right">
-                              <span className="card-metric-label">限额约束</span>
-                              <span className="card-metric-val">
-                                {r.totalLimitKind === 'limited'
-                                  ? `${wan(r.totalLimitShares)} 万`
-                                  : r.totalLimitKind === 'unlimited'
-                                    ? '累计不限'
-                                    : '—'}
-                              </span>
-                              <span className="card-metric-sub">{sz(r) ? '申赎规则见明细' : '待接入'}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="shares-actions text-center">
-                          <span className="shares-mobile-amount">
-                            金额估算：
-                            <Amount row={r} />
-                          </span>
+                        <td>
                           <button
                             id={`shares-toggle-${r.code}`}
-                            className={`row-expand-btn ${open ? 'active' : ''}`}
+                            className="shares-code-button"
                             aria-expanded={open}
                             aria-controls={`shares-detail-${r.code}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggle(r);
-                            }}
-                          >
-                            <span className="shares-desktop">{open ? '收起' : '明细'}</span>
-                            <span className="shares-mobile-action">
-                              {open ? '收起 PCF 明细' : '展开 PCF 明细'}
-                            </span>
-                            <ChevronDown />
-                          </button>
+                            onClick={(e) => { e.stopPropagation(); toggle(r); }}
+                          >{r.code} ({sz(r) ? '深' : '沪'})</button>
                         </td>
+                        <td>{r.name}</td>
+                        <td className="shares-number">{delta(r.deltaShares)}</td>
+                        <td><strong>{sz(r) ? sharesCeiling(r).label : r.totalLimitKind === 'unlimited' ? '累计不限' : '数据待确认'}</strong></td>
+                        <td className="shares-number">{number(r.shares, 0)}</td>
+                        <td className="shares-number">{number(r.prevShares, 0)}</td>
+                        <td className="shares-number">{limit(r)}</td>
+                        <td><span className="shares-limit-date">{r.limitDate || '—'}</span></td>
                       </tr>
                       {open && (
                         <tr className="detail-drawer-tr">
-                          <td colSpan={showAmount ? 7 : 6} className="detail-drawer-td">
+                          <td colSpan={8} className="detail-drawer-td">
                             <EtfPcfSharesDetail
                               key={`${data.date}:${r.code}`}
                               code={r.code}
@@ -496,7 +355,7 @@ export default function EtfPcfSharesPanel() {
                 })}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={showAmount ? 7 : 6} className="shares-no-match">
+                    <td colSpan={8} className="shares-no-match">
                       未找到符合条件的 ETF 标的
                     </td>
                   </tr>

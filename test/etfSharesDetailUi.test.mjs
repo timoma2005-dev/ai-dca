@@ -1,3 +1,4 @@
+/* global HashChangeEvent, URL, console, dispatchEvent, document, history, innerWidth, process */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -8,19 +9,26 @@ import { syntheticProjection } from './helpers/etfPcfSharesFixture.mjs';
 test('份额详情手风琴：键盘展开、快照日期、取消、重试、空缓存及移动端布局', async (t) => {
   const data = syntheticProjection();
   data.expiresAt = new Date(Date.now() + 3600000).toISOString();
+  Object.assign(data.records[0], { shares: 7077986575, prevShares: 7072986575, deltaShares: 5000000, limitDate: '2026-10-16', totalLimitKind: 'limited', totalLimitShares: 100000000 });
+  Object.assign(data.records[1], { deltaShares: 0, totalLimitKind: 'limited', totalLimitShares: 5000000 });
+  Object.assign(data.records[2], { deltaShares: null, shares: null, prevShares: null, totalLimitKind: 'unknown', limitDate: null });
+  Object.assign(data.records.find((r) => !r.code.startsWith('159')), { totalLimitKind: 'limited', totalLimitShares: 10000000, atLimit: true, utilization: 1 });
   const bundle = await build({
     stdin: { contents: `import React from 'react';
       import { createRoot } from 'react-dom/client';
       import Panel from './src/pages/EtfPcfSharesPanel.jsx';
+      import Admin from './src/pages/AdminRadarExperience.jsx';
       import { sharesClient } from './src/app/etfPcfSharesClient.js';
       sharesClient.subscribe = () => ({ promise: Promise.resolve({state:'partial', data:${JSON.stringify(data)}, receivedAt:Date.now()}), release(){} });
-      createRoot(document.getElementById('root')).render(<Panel />);`, resolveDir: process.cwd(), loader: 'jsx' },
+      createRoot(document.getElementById('root')).render(location.search.includes('admin') ? <Admin session={{isAdmin:!location.search.includes('denied')}} /> : <Panel />);`, resolveDir: process.cwd(), loader: 'jsx' },
+    alias: { '@': process.cwd() + '/src' },
     bundle: true, write: false, outfile: 'app.js', format: 'esm', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' }
   });
   const server = createServer((req, res) => {
-    const file = bundle.outputFiles.find((f) => f.path.endsWith(req.url === '/app.css' ? '.css' : '.js'));
-    res.setHeader('Content-Type', req.url === '/' ? 'text/html' : req.url === '/app.css' ? 'text/css' : 'text/javascript');
-    res.end(req.url === '/' ? '<link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module" src="/app.js"></script>' : file.contents);
+    const pathname = new URL(req.url, 'http://localhost').pathname;
+    const file = bundle.outputFiles.find((f) => f.path.endsWith(pathname === '/app.css' ? '.css' : '.js'));
+    res.setHeader('Content-Type', pathname === '/' ? 'text/html' : pathname === '/app.css' ? 'text/css' : 'text/javascript');
+    res.end(pathname === '/' ? '<link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module" src="/app.js"></script>' : file.contents);
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => { server.closeAllConnections(); return new Promise((r) => server.close(r)); });
@@ -46,6 +54,16 @@ test('份额详情手风琴：键盘展开、快照日期、取消、重试、�
   const toggles = page.locator('button[aria-expanded]');
   await toggles.first().waitFor();
   assert.equal(requests.length, 0);
+  assert.deepEqual(await page.locator('thead th').allTextContents(), ['代码', '名称', '份额增量', '顶格状态', '本期总份额', '上期总份额', '累计申购上限', '限额日期']);
+  const cells = page.locator('tr.shares-row').first().locator('td');
+  assert.deepEqual((await cells.allTextContents()).slice(0, 3), [`${data.records[0].code} (深)`, data.records[0].name, '500.00 万份']);
+  assert.deepEqual((await cells.allTextContents()).slice(4), ['7,077,986,575', '7,072,986,575', '1.00 亿份', '2026-10-16']);
+  assert.equal(await page.locator('tr.shares-row').nth(1).locator('td').nth(2).textContent(), '0 份');
+  assert.equal(await page.locator('tr.shares-row').nth(1).locator('td').nth(6).textContent(), '500.00 万份');
+  assert.equal(await page.locator('tr.shares-row').nth(2).locator('td').nth(2).textContent(), '—');
+  const shRow = page.locator('tr.shares-row').filter({hasText: '(沪)'}).first();
+  assert.equal(await shRow.locator('td').nth(3).textContent(), '数据待确认');
+  assert.match(await page.locator('.shares-section-heading p').textContent(), /限额来源 2026-10-16 · 抓取时间 2026-10-13T09:03:20/);
   await toggles.first().focus(); await page.keyboard.press('Enter');
   await page.getByText('正在读取申赎信息…').waitFor();
   await page.waitForFunction(() => document.querySelector('[aria-expanded="true"]'));
@@ -62,7 +80,7 @@ test('份额详情手风琴：键盘展开、快照日期、取消、重试、�
   await page.getByText('1.5499', { exact: true }).waitFor();
   const region = page.getByRole('region');
   assert.equal(await region.getAttribute('aria-labelledby'), await toggles.first().getAttribute('id'));
-  assert.equal(await region.locator('h4').count(), 2);
+  assert.equal(await region.locator('.pcf-section-card').count(), 2);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 1280, height: 900 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -76,4 +94,23 @@ test('份额详情手风琴：键盘展开、快照日期、取消、重试、�
   await page.getByText('暂无该日期的申赎缓存数据，等待更新').waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.ok(requests.every((r) => r.method() === 'GET'));
+  await page.goto(`http://127.0.0.1:${server.address().port}/?admin`);
+  await page.getByRole('tab', {name:'套利雷达'}).waitFor();
+  await page.evaluate(() => {
+    history.replaceState(history.state, '', '#shares');
+    dispatchEvent(new HashChangeEvent('hashchange'));
+  });
+  await page.locator('#tab-shares[aria-selected="true"]').waitFor();
+  await page.goto(`http://127.0.0.1:${server.address().port}/?admin#shares`);
+  await page.getByRole('tab', {name:'份额新增'}).waitFor();
+  assert.equal(await page.getByRole('tab', {name:'份额新增'}).getAttribute('aria-selected'), 'true');
+  const historyLength = await page.evaluate(() => history.length);
+  await page.getByRole('tab', {name:'套利雷达'}).click();
+  assert.equal(new URL(page.url()).hash, '#radar');
+  await page.getByRole('tab', {name:'份额新增'}).click();
+  assert.equal(new URL(page.url()).hash, '#shares');
+  assert.equal(await page.evaluate(() => history.length), historyLength);
+  await page.goto(`http://127.0.0.1:${server.address().port}/?admin-denied#shares`);
+  await page.getByText('当前账号没有权限。请使用 lovexl 登录后访问。').waitFor();
+  assert.equal(await page.locator('table').count(), 0);
 });

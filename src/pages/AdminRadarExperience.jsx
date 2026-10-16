@@ -3,14 +3,19 @@
  * 数据来自 /api/notify/nasdaq-radar（工作日 21:35 计划计算后写入）
  * 改版后仅保留管理员门控与 Tab 挂载；面板实现见 src/pages/radar/*。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isAnalyticsAdmin } from '../app/analytics.js';
 import EtfPcfSharesPanel from './EtfPcfSharesPanel.jsx';
 import RadarPanel from './radar/RadarPanel.jsx';
 import { PageTabs } from '../components/experience-ui.jsx';
 
 export function AdminRadarExperience({ session }) {
-  const [activeTab, setActiveTab] = useState('radar');
+  const [activeTab, setActiveTab] = useState(() => typeof window !== 'undefined' && window.location.hash === '#shares' ? 'shares' : 'radar');
+  useEffect(() => {
+    const syncHash = () => setActiveTab(window.location.hash === '#shares' ? 'shares' : 'radar');
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
   if (!isAnalyticsAdmin(session)) {
     return <p className="p-5 text-sm text-slate-500">当前账号没有权限。请使用 lovexl 登录后访问。</p>;
   }
@@ -23,7 +28,10 @@ export function AdminRadarExperience({ session }) {
           { key: 'shares', label: '份额新增', href: '#shares' }
         ]}
         activeKey={activeTab}
-        onSelect={setActiveTab}
+        onSelect={(key) => {
+          setActiveTab(key);
+          window.history.replaceState(window.history.state, '', `#${key}`);
+        }}
       />
       <div role="tabpanel" id="panel-radar" aria-labelledby="tab-radar" hidden={activeTab !== 'radar'} tabIndex={0} className="mt-4">
         {activeTab === 'radar' && <RadarPanel session={session} />}

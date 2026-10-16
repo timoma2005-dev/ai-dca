@@ -1220,3 +1220,45 @@
     box-shadow: none;
   }
 }
+
+/* 份额新增：八列报表，窄屏在表格容器内横向滚动。 */
+.shares-panel .shares-section-heading {
+  margin: 24px 0 14px;
+}
+.shares-panel .shares-section-heading h2 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 700;
+}
+.shares-panel .shares-section-heading p {
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.shares-panel .shares-table {
+  min-width: 1040px;
+}
+.shares-panel .shares-table th {
+  background: #fff;
+}
+.shares-panel .shares-table td {
+  white-space: nowrap;
+}
+.shares-panel .shares-code-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.shares-panel .shares-number {
+  font-variant-numeric: tabular-nums;
+}
+.shares-panel .shares-limit-date {
+  color: var(--slate-400);
+  font-size: 12px;
+}
+.shares-panel .detail-drawer-td {
+  white-space: normal !important;
+}

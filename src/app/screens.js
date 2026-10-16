@@ -25,6 +25,7 @@ export const WORKSPACE_TAB_META = { ...PRIMARY_TAB_META };
 
 // 历史独立页继续映射到现有主 tab；home 已恢复为真实首页。
 export const LEGACY_TAB_REDIRECTS = {
+  shares: { tab: 'adminRadar', hash: '#shares' },
   dca: { tab: 'tradePlans', hash: '#dca' },
   quant: { tab: DEFAULT_WORKSPACE_TAB },
   'quant:v2': { tab: DEFAULT_WORKSPACE_TAB },
