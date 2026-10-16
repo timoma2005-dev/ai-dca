@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUp, Bell, BookOpen, FlaskConical, House, LineChart, ListChecks, Radar, Shuffle, Trash2, Wallet, Wrench, X } from 'lucide-react';
+import { ArrowLeft, ArrowUp, BarChart3, Bell, BookOpen, FlaskConical, House, LineChart, ListChecks, Radar, Shuffle, Trash2, Wallet, Wrench, X } from 'lucide-react';
 import { DEFAULT_WORKSPACE_TAB, LEGACY_TAB_REDIRECTS, WORKSPACE_TAB_META, createPageLinks, getPrimaryTabs, getAdminTabs, isWorkspaceGroup } from '../app/screens.js';
 import { ConsoleLayout } from '../components/console-layout.jsx';
 import { BrandPreviewBar } from '../components/brand-preview-bar.jsx';
@@ -29,6 +29,7 @@ const ArticlesExperience = lazy(() => import('./ArticlesExperience.jsx').then((m
 const DataRepairExperience = lazy(() => import('./DataRepairExperience.jsx').then((m) => ({ default: m.DataRepairExperience })));
 const AdminQuantExperience = lazy(() => import('./AdminQuantExperience.jsx').then((m) => ({ default: m.AdminQuantExperience })));
 const AdminRadarExperience = lazy(() => import('./AdminRadarExperience.jsx').then((m) => ({ default: m.AdminRadarExperience })));
+const EtfPcfSharesPanel = lazy(() => import('./EtfPcfSharesPanel.jsx'));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
 const ReleaseAnnouncementModal = lazy(() => import('../components/release-announcement-modal.jsx').then((m) => ({ default: m.ReleaseAnnouncementModal })));
 
@@ -68,6 +69,7 @@ const WORKSPACE_TITLES = {
   tradePlans: '交易计划中心',
   fundSwitch: '基金切换收益分析',
   markets: '行情中心',
+  shares: '份额新增',
   holdings: '持仓总览',
   notify: '通知设置',
   dataRepair: '数据诊断与修复',
@@ -81,6 +83,7 @@ const SIDEBAR_ICONS = {
   tradePlans: ListChecks,
   fundSwitch: Shuffle,
   markets: LineChart,
+  shares: BarChart3,
   holdings: Wallet,
   notify: Bell,
   dataRepair: Wrench,
@@ -607,6 +610,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         return <FundSwitchExperience {...sharedProps} />;
       case 'markets':
         return <MarketsExperience {...sharedProps} />;
+      case 'shares':
+        return <EtfPcfSharesPanel />;
       case 'notify':
         return <NotifyExperience {...sharedProps} />;
       case 'dataRepair':
@@ -614,7 +619,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
       case 'adminQuant':
         return isAdminUser ? <AdminQuantExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
       case 'adminRadar':
-        return isAdminUser ? <AdminRadarExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
+        return (isAdminUser || window.location.hash === '#shares') ? <AdminRadarExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
       case 'holdings':
         return <HoldingsExperience {...sharedProps} />;
       default:

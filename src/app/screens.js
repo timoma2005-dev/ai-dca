@@ -3,7 +3,7 @@ export const PROJECT_TITLE = '美股策略助手';
 
 // 主 tab 顺序与元数据：所有页面都通过 WorkspacePage（侧边栏 + ?tab=）展示。
 export const DEFAULT_WORKSPACE_TAB = 'home';
-export const PRIMARY_TAB_ORDER = ['home', 'markets', 'holdings', 'tradePlans', 'fundSwitch', 'notify', 'articles', 'dataRepair'];
+export const PRIMARY_TAB_ORDER = ['home', 'markets', 'shares', 'holdings', 'tradePlans', 'fundSwitch', 'notify', 'articles', 'dataRepair'];
 export const ADMIN_TAB_ORDER = ['adminQuant', 'adminRadar'];
 
 export const PRIMARY_TAB_META = {
@@ -12,6 +12,7 @@ export const PRIMARY_TAB_META = {
   tradePlans: { label: '交易计划', hrefKey: 'tradePlans' },
   fundSwitch: { label: '基金切换', hrefKey: 'fundSwitch' },
   markets: { label: '行情中心', hrefKey: 'markets' },
+  shares: { label: '份额新增', hrefKey: 'shares' },
   holdings: { label: '持仓总览', hrefKey: 'holdings' },
   newPlan: { label: '新建计划', hrefKey: 'newPlan' },
   notify: { label: '通知管理', hrefKey: 'notify' },
@@ -25,7 +26,6 @@ export const WORKSPACE_TAB_META = { ...PRIMARY_TAB_META };
 
 // 历史独立页继续映射到现有主 tab；home 已恢复为真实首页。
 export const LEGACY_TAB_REDIRECTS = {
-  shares: { tab: 'adminRadar', hash: '#shares' },
   dca: { tab: 'tradePlans', hash: '#dca' },
   quant: { tab: DEFAULT_WORKSPACE_TAB },
   'quant:v2': { tab: DEFAULT_WORKSPACE_TAB },
@@ -44,6 +44,7 @@ export function createPageLinks({ inPagesDir = false } = {}) {
     dca: `${homeHref}?tab=tradePlans#dca`,
     fundSwitch: `${homeHref}?tab=fundSwitch`,
     markets: `${homeHref}?tab=markets`,
+    shares: `${homeHref}?tab=shares`,
     holdings: `${homeHref}?tab=holdings`,
     newPlan: `${homeHref}?tab=newPlan`,
     notify: `${homeHref}?tab=notify`,
