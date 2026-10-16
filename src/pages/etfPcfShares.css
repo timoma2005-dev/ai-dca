@@ -479,6 +479,14 @@
   padding: 0 4px;
   border-radius: 3px;
 }
+.shares-panel .shares-table td .est-badge {
+  font-size: 10px;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
 
 /* 顶格状态微胶囊 (Status Pill) - 一眼可辨 */
 .shares-panel .ceiling-wrap {

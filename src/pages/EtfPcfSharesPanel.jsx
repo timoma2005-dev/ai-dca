@@ -11,6 +11,7 @@ import {
 import {
   sharesClient,
   shanghaiAccessDay,
+  creationLabel,
   snapshotLabel,
   freshnessMessage,
   sharesCeiling
@@ -28,6 +29,15 @@ const limit = (r) => r.totalLimitKind === 'unlimited' ? '不限'
       : `${(r.totalLimitShares / 10000).toFixed(2)} 万份`
     : '—';
 const sz = (r) => r.code.startsWith('159');
+const creation = (r) => {
+  if (!Number.isFinite(r.creationShares) || r.creationShares < 0) return '暂无数据';
+  return (
+    <>
+      {creationLabel(r)} 万{' '}
+      <span className="est-badge">{r.creationSharesKind === 'exact' ? '确定' : '估算'}</span>
+    </>
+  );
+};
 const ceiling = (r) => r.atLimit || (r.nearTotalLimit && r.utilization <= 1);
 const tone = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero');
 const fetchedTime = (s) =>
@@ -308,7 +318,7 @@ export default function EtfPcfSharesPanel() {
             <table className="shares-table">
               <thead>
                 <tr>
-                  {['代码', '名称', '份额增量', '顶格状态', '本期总份额', '上期总份额', '累计申购上限', '限额日期'].map((label) => (
+                  {['代码', '名称', '份额增量', '盘前净新增份额', '顶格状态', '本期总份额', '上期总份额', '累计申购上限', '限额日期'].map((label) => (
                     <th key={label}>{label}</th>
                   ))}
                 </tr>
@@ -330,6 +340,7 @@ export default function EtfPcfSharesPanel() {
                         </td>
                         <td>{r.name}</td>
                         <td className="shares-number">{delta(r.deltaShares)}</td>
+                        <td className="shares-number">{creation(r)}</td>
                         <td><strong>{sz(r) ? sharesCeiling(r).label : r.totalLimitKind === 'unlimited' ? '累计不限' : '数据待确认'}</strong></td>
                         <td className="shares-number">{number(r.shares, 0)}</td>
                         <td className="shares-number">{number(r.prevShares, 0)}</td>
@@ -338,7 +349,7 @@ export default function EtfPcfSharesPanel() {
                       </tr>
                       {open && (
                         <tr className="detail-drawer-tr">
-                          <td colSpan={8} className="detail-drawer-td">
+                          <td colSpan={9} className="detail-drawer-td">
                             <EtfPcfSharesDetail
                               key={`${data.date}:${r.code}`}
                               code={r.code}
@@ -355,7 +366,7 @@ export default function EtfPcfSharesPanel() {
                 })}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={8} className="shares-no-match">
+                    <td colSpan={9} className="shares-no-match">
                       未找到符合条件的 ETF 标的
                     </td>
                   </tr>

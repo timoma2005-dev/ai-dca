@@ -54,15 +54,16 @@ test('份额详情手风琴：键盘展开、快照日期、取消、重试、�
   const toggles = page.locator('button[aria-expanded]');
   await toggles.first().waitFor();
   assert.equal(requests.length, 0);
-  assert.deepEqual(await page.locator('thead th').allTextContents(), ['代码', '名称', '份额增量', '顶格状态', '本期总份额', '上期总份额', '累计申购上限', '限额日期']);
+  assert.deepEqual(await page.locator('thead th').allTextContents(), ['代码', '名称', '份额增量', '盘前净新增份额', '顶格状态', '本期总份额', '上期总份额', '累计申购上限', '限额日期']);
   const cells = page.locator('tr.shares-row').first().locator('td');
   assert.deepEqual((await cells.allTextContents()).slice(0, 3), [`${data.records[0].code} (深)`, data.records[0].name, '500.00 万份']);
-  assert.deepEqual((await cells.allTextContents()).slice(4), ['7,077,986,575', '7,072,986,575', '1.00 亿份', '2026-10-16']);
+  assert.equal(await cells.nth(3).textContent(), '暂无数据');
+  assert.deepEqual((await cells.allTextContents()).slice(5), ['7,077,986,575', '7,072,986,575', '1.00 亿份', '2026-10-16']);
   assert.equal(await page.locator('tr.shares-row').nth(1).locator('td').nth(2).textContent(), '0 份');
-  assert.equal(await page.locator('tr.shares-row').nth(1).locator('td').nth(6).textContent(), '500.00 万份');
+  assert.equal(await page.locator('tr.shares-row').nth(1).locator('td').nth(7).textContent(), '500.00 万份');
   assert.equal(await page.locator('tr.shares-row').nth(2).locator('td').nth(2).textContent(), '—');
   const shRow = page.locator('tr.shares-row').filter({hasText: '(沪)'}).first();
-  assert.equal(await shRow.locator('td').nth(3).textContent(), '数据待确认');
+  assert.equal(await shRow.locator('td').nth(4).textContent(), '数据待确认');
   assert.match(await page.locator('.shares-section-heading p').textContent(), /限额来源 2026-10-16 · 抓取时间 2026-10-13T09:03:20/);
   await toggles.first().focus(); await page.keyboard.press('Enter');
   await page.getByText('正在读取申赎信息…').waitFor();
@@ -111,6 +112,7 @@ test('份额详情手风琴：键盘展开、快照日期、取消、重试、�
   assert.equal(new URL(page.url()).hash, '#shares');
   assert.equal(await page.evaluate(() => history.length), historyLength);
   await page.goto(`http://127.0.0.1:${server.address().port}/?admin-denied#shares`);
-  await page.getByText('当前账号没有权限。请使用 lovexl 登录后访问。').waitFor();
-  assert.equal(await page.locator('table').count(), 0);
+  // admin 门控已移除（e08bd42a）：非管理员也能看份额 tab
+  await page.getByRole('tab', {name:'份额新增'}).waitFor();
+  assert.equal(await page.locator('table').count(), 1);
 });
