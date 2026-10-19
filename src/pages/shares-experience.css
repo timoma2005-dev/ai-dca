@@ -635,8 +635,9 @@
 }
 .shares-panel .symbol-name {
   display: block;
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 12px;
+  line-height: 1.5;
   color: var(--slate-500);
   overflow-wrap: anywhere;
 }
