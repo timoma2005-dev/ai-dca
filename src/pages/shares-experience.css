@@ -852,6 +852,14 @@
   color: var(--slate-400);
   white-space: nowrap;
 }
+.shares-panel .source-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+.shares-panel .source-link:hover {
+  text-decoration: underline;
+}
 .shares-panel .drawer-state {
   margin: 6px 0;
   font-size: 13px;

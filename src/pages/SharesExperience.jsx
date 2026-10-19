@@ -318,7 +318,28 @@ function PcfDetailDrawer({ code, name, date, id, labelledBy }) {
         <span className="drawer-title">
           {name}（{code}）PCF 申赎清单
         </span>
-        <span className="drawer-source">数据源：{sse ? '上交所官方 PCF' : '深交所官方 PCF'}</span>
+        <span className="drawer-source">
+          数据源：
+          {sse ? (
+            <a
+              href={`https://query.sse.com.cn/commonQuery.do?isPagination=false&FUNDID2=${code}&sqlId=COMMON_SSE_CP_JJLB_ETFJJGK_GGSGSHQD_JBXX_C`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="source-link"
+            >
+              上交所官方 PCF ↗
+            </a>
+          ) : (
+            <a
+              href={`https://reportdocs.static.szse.cn/files/text/etf/ETF${code}${date.replace(/-/g, '')}.txt`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="source-link"
+            >
+              深交所官方 PCF ↗
+            </a>
+          )}
+        </span>
       </div>
       {result.state === 'loading' && (
         <p className="drawer-state" role="status">
