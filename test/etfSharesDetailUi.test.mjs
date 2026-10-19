@@ -13,6 +13,12 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   Object.assign(data.records[0], { creationShares: 10000000, creationSharesKind: 'estimate' });
   Object.assign(data.records[1], { creationShares: 9500000, creationSharesKind: 'exact' });
   Object.assign(data.records[2], { creationShares: 12500000, creationSharesKind: 'estimate', limitDate: '2026-10-16' });
+  // 513100 给限额数据，验证沪市标签按真实限额展示（不再是"沪市待接入"）。
+  Object.assign(data.records.find((r) => r.code === '513100'), {
+    totalLimitKind: 'limited',
+    totalLimitShares: 2500000,
+    limitDate: '2026-10-16'
+  });
   Object.assign(data.records[3], { creationShares: -1000000, creationSharesKind: 'estimate' });
   Object.assign(data.records[6], {
     shares: 20010000000,
@@ -149,8 +155,9 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   assert.equal(await row('159941').locator('.delta-val').textContent(), '0.00'); // 零值灰显
   assert.equal(await row('159941').locator('.delta-bar').count(), 0); // 零不画填充
   const sse = row('513100');
-  assert.equal(await sse.locator('.ceiling-tag').textContent(), '沪市待接入');
-  assert.equal(await sse.locator('.util-sse-pending').count(), 1);
+  assert.equal(await sse.locator('.ceiling-tag').textContent(), '上限 250万份');
+  assert.equal(await sse.locator('.util-sse-pending').count(), 0);
+  assert.equal(await sse.locator('.util-sub').textContent(), '当日上限 250 万份 · 限 10-16');
   assert.equal(await sse.locator('.delta-val').textContent(), '—');
   assert.equal(await sse.locator('.delta-sub').textContent(), '未比对');
   assert.equal(await sse.locator('.total-val').textContent(), '—');

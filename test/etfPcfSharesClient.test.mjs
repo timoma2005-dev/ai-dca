@@ -299,7 +299,20 @@ test('decision pills cover exact, near, over, outflow, unlimited and missing wit
   );
   assert.deepEqual(sharesCeiling(rows.find((r) => r.code.startsWith('513'))), {
     kind: 'pending',
-    label: '沪市待接入'
+    label: '数据待确认'
+  });
+  // 沪市有限额数据时按真实限额展示，不再是"沪市待接入"。
+  assert.deepEqual(
+    sharesCeiling({ code: '513100', totalLimitKind: 'limited', totalLimitShares: 2500000 }),
+    { kind: 'sse-limited', label: '上限 250万份' }
+  );
+  assert.deepEqual(
+    sharesCeiling({ code: '513390', totalLimitKind: 'limited', totalLimitShares: 120000000 }),
+    { kind: 'sse-limited', label: '上限 1.20亿份' }
+  );
+  assert.deepEqual(sharesCeiling({ code: '513300', totalLimitKind: 'unlimited' }), {
+    kind: 'unlimited',
+    label: '累计不限'
   });
   assert.equal(
     sharesCeiling({ ...rows[0], deltaShares: null, atLimit: null, high52w: 123 }).label,

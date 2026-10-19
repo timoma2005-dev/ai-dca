@@ -139,18 +139,16 @@ function UtilizationCell({ row, snapshotDate }) {
   const meta = sharesCeiling(row);
   const sse = !isSz(row);
   let sub = null;
-  if (!sse) {
-    if (row.totalLimitKind === 'limited' && Number.isFinite(row.totalLimitShares)) {
-      sub = `当日上限 ${formatWan(row.totalLimitShares)}`;
-      if (row.limitDate && row.limitDate !== snapshotDate) sub += ` · 限 ${row.limitDate.slice(5)}`;
-    } else if (row.totalLimitKind === 'unlimited') {
-      sub = '无累计申购限额';
-    }
+  if (row.totalLimitKind === 'limited' && Number.isFinite(row.totalLimitShares)) {
+    sub = `当日上限 ${formatWan(row.totalLimitShares)}`;
+    if (row.limitDate && row.limitDate !== snapshotDate) sub += ` · 限 ${row.limitDate.slice(5)}`;
+  } else if (row.totalLimitKind === 'unlimited') {
+    sub = '无累计申购限额';
   }
   return (
     <div className="util-block">
       <span
-        className={`ceiling-tag kind-${meta.kind}${sse ? ' util-sse-pending' : ''}`}
+        className={`ceiling-tag kind-${meta.kind}${sse && meta.kind === 'pending' ? ' util-sse-pending' : ''}`}
         title={sse ? undefined : limitLabel(row)}
       >
         <span className="tag-dot" aria-hidden="true" />

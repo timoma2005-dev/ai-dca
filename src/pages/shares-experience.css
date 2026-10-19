@@ -740,7 +740,8 @@
   color: var(--rose-600);
 }
 .shares-panel .ceiling-tag.kind-unlimited,
-.shares-panel .ceiling-tag.kind-pending {
+.shares-panel .ceiling-tag.kind-pending,
+.shares-panel .ceiling-tag.kind-sse-limited {
   background: var(--slate-100);
   color: var(--slate-500);
 }
