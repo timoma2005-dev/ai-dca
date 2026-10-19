@@ -29,7 +29,7 @@ const ArticlesExperience = lazy(() => import('./ArticlesExperience.jsx').then((m
 const DataRepairExperience = lazy(() => import('./DataRepairExperience.jsx').then((m) => ({ default: m.DataRepairExperience })));
 const AdminQuantExperience = lazy(() => import('./AdminQuantExperience.jsx').then((m) => ({ default: m.AdminQuantExperience })));
 const AdminRadarExperience = lazy(() => import('./AdminRadarExperience.jsx').then((m) => ({ default: m.AdminRadarExperience })));
-const EtfPcfSharesPanel = lazy(() => import('./EtfPcfSharesPanel.jsx'));
+const SharesExperience = lazy(() => import('./SharesExperience.jsx'));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
 const ReleaseAnnouncementModal = lazy(() => import('../components/release-announcement-modal.jsx').then((m) => ({ default: m.ReleaseAnnouncementModal })));
 
@@ -611,7 +611,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
       case 'markets':
         return <MarketsExperience {...sharedProps} />;
       case 'shares':
-        return <EtfPcfSharesPanel />;
+        return <SharesExperience />;
       case 'notify':
         return <NotifyExperience {...sharedProps} />;
       case 'dataRepair':

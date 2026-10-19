@@ -61,6 +61,9 @@ test('radar page only grants non-admin access to the shares subtab', () => {
   assert.equal(denied('shares', null, () => false), false);
   assert.equal(denied('radar', null, () => false), true);
   assert.equal(denied('radar', {}, () => true), false);
+  // 雷达 #shares 子 tab 直接挂载新组件，权限与 hash 逻辑保持不变。
+  assert.match(radarSource, /import SharesExperience from '\.\/SharesExperience\.jsx';/);
+  assert.match(radarSource, /\{activeTab === 'shares' && <SharesExperience \/>\}/);
 });
 
 test('workspace renders public legacy shares while retaining the radar admin guard', () => {
@@ -70,5 +73,7 @@ test('workspace renders public legacy shares while retaining the radar admin gua
   assert.equal(allowed(false, { location: { hash: '#radar' } }), false);
   assert.equal(allowed(false, { location: { hash: '' } }), false);
   assert.equal(allowed(true, { location: { hash: '#radar' } }), true);
-  assert.match(source, /case 'shares':\s*return <EtfPcfSharesPanel \/>;/);
+  // shares 主 tab 懒加载新组件，保留 lazy 路径与公共访问逻辑。
+  assert.match(source, /const SharesExperience = lazy\(\(\) => import\('\.\/SharesExperience\.jsx'\)\);/);
+  assert.match(source, /case 'shares':\s*return <SharesExperience \/>;/);
 });

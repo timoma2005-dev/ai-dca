@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react';
 import { isAnalyticsAdmin } from '../app/analytics.js';
-import EtfPcfSharesPanel from './EtfPcfSharesPanel.jsx';
+import SharesExperience from './SharesExperience.jsx';
 import RadarPanel from './radar/RadarPanel.jsx';
 import { PageTabs } from '../components/experience-ui.jsx';
 
@@ -37,7 +37,7 @@ export function AdminRadarExperience({ session }) {
         {activeTab === 'radar' && <RadarPanel session={session} />}
       </div>
       <div role="tabpanel" id="panel-shares" aria-labelledby="tab-shares" hidden={activeTab !== 'shares'} tabIndex={0} className="mt-4">
-        {activeTab === 'shares' && <EtfPcfSharesPanel />}
+        {activeTab === 'shares' && <SharesExperience />}
       </div>
     </div>
   );
