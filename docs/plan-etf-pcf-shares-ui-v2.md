@@ -4,7 +4,7 @@
 >
 > 以下正文是 dudu 2026-10-19 给出的规格，标题称「当前已实现状态」，但实测当前仓库（cn 分支，HEAD c929a632，10-17 上线）实现的是**另一套设计**：`src/pages/EtfPcfSharesPanel.jsx` + `src/pages/etfPcfShares.css`（+ `EtfPcfSharesDetail.jsx`）。`SharesExperience.jsx` / `shares-experience.css` 在全仓任何分支都不存在（git log --all 无记录）。因此本文应视为 **v2 重写目标**，而非现状描述。下一个 CLI 动手前先与 dudu 确认：是按本文重写，还是继续在现有 `EtfPcfSharesPanel` 上迭代。
 >
-> 实测与本文的主要差异（均已读代码确认）：
+> 实测与本文的主要差异（2026-10-19 已按「直接替换」实现，分支 `feat/shares-experience-v3`，commit `34f89aad`，实现时逐项核对代码确认；浏览器验收 3/3 通过，截图已发 dudu）：
 > 1. 文件与组件：实际 `EtfPcfSharesPanel.jsx`（645 行）+ `etfPcfShares.css`（1423 行）+ `EtfPcfSharesDetail.jsx`（116 行）；数据层是 `src/app/etfPcfSharesClient.js`（`sharesClient.subscribe()`），不是 `etfPcfShares.js` 的 `sharesSnapshotStore`。
 > 2. 挂载：`?tab=shares` 在 `WorkspacePage.jsx:613` 确实直接挂载份额页（组件是 `EtfPcfSharesPanel`）；雷达页 `#shares` 子 tab 挂载同一组件；10-16 已取消份额 tab 的 admin 拦截（套利雷达 tab 仍拦截）。
 > 3. 表格：实际 10 列（代码 / 名称 / 份额增量 / 盘前净新增份额 / 顶格状态 / 本期总份额 / 上期总份额 / 累计申购上限 / 限额日期 / 详情），不是本文的 5 列。
