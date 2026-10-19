@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Bell, BookOpen, House, LineChart, ListChecks, MoreHorizontal, Shuffle, Wallet } from 'lucide-react';
+import { Bell, BookOpen, ChevronRight, House, LineChart, ListChecks, MoreHorizontal, Shuffle, UserRound, Wallet, X } from 'lucide-react';
 import { splitMobileBottomNavItems } from './mobile-bottom-nav-config.js';
+import { setMobileBottomSheetOpen } from '../app/mobileBottomSheet.js';
 
 const ITEM_ICONS = {
   home: House,
@@ -30,7 +31,45 @@ function MobileNavItem({ item, active, onSelect }) {
   );
 }
 
-export function MobileBottomNav({ activeKey = '', visibleTabs = null, onSelectTab, hidden = false }) {
+function MoreListRow({ item, active, unreadCount = 0, onSelect }) {
+  const Icon = ITEM_ICONS[item.key];
+  if (!Icon) return null;
+  const showUnread = item.key === 'notify' && unreadCount > 0;
+  return (
+    <button
+      key={item.key}
+      type="button"
+      className="mobile-more__row"
+      data-active={active || undefined}
+      aria-current={active ? 'page' : undefined}
+      onClick={() => onSelect?.(item.key)}
+    >
+      <span className={`mobile-more__icon${item.primary ? ' mobile-more__icon--primary' : ''}`} aria-hidden="true">
+        <Icon className="mobile-more__icon-svg" strokeWidth={1.9} />
+        {showUnread ? <span className="mobile-more__unread-dot" /> : null}
+      </span>
+      <span className="mobile-more__text">
+        <span className="mobile-more__title-row">
+          <span className="mobile-more__title">{item.label}</span>
+          {item.badge ? <span className="mobile-more__pill mobile-more__pill--indigo">{item.badge}</span> : null}
+          {showUnread ? <span className="mobile-more__pill mobile-more__pill--slate">{unreadCount}条未读</span> : null}
+        </span>
+        {item.subtitle ? <span className="mobile-more__subtitle">{item.subtitle}</span> : null}
+      </span>
+      <ChevronRight className="mobile-more__arrow" aria-hidden="true" />
+    </button>
+  );
+}
+
+export function MobileBottomNav({
+  activeKey = '',
+  visibleTabs = null,
+  onSelectTab,
+  onOpenAccount,
+  accountSubtitle,
+  unreadCount = 0,
+  hidden = false,
+}) {
   const [{ directItems, overflowItems }, setItems] = useState(() => splitMobileBottomNavItems(visibleTabs));
   const [moreOpen, setMoreOpen] = useState(false);
   const overflowActive = overflowItems.some((item) => item.key === activeKey);
@@ -56,6 +95,14 @@ export function MobileBottomNav({ activeKey = '', visibleTabs = null, onSelectTa
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [moreOpen]);
 
+  useEffect(() => {
+    if (moreOpen) {
+      setMobileBottomSheetOpen('mobile-nav-more', true);
+      return () => setMobileBottomSheetOpen('mobile-nav-more', false);
+    }
+    return undefined;
+  }, [moreOpen]);
+
   if (hidden || (directItems.length === 0 && overflowItems.length === 0)) return null;
 
   function selectOverflowTab(key) {
@@ -63,9 +110,16 @@ export function MobileBottomNav({ activeKey = '', visibleTabs = null, onSelectTa
     onSelectTab?.(key);
   }
 
+  function selectAccount() {
+    setMoreOpen(false);
+    onOpenAccount?.();
+  }
+
+  const showAccountRow = typeof onOpenAccount === 'function';
+
   return (
     <>
-      {moreOpen && overflowItems.length > 0 ? (
+      {moreOpen ? (
         <>
           <button
             type="button"
@@ -75,32 +129,54 @@ export function MobileBottomNav({ activeKey = '', visibleTabs = null, onSelectTa
           />
           <div
             id="mobile-bottom-nav-more"
-            className="fixed inset-x-3 bottom-[calc(70px+env(safe-area-inset-bottom))] z-[96] grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-900/20 sm:hidden"
-            role="menu"
+            className="mobile-more"
+            role="dialog"
+            aria-modal="false"
             aria-label="更多页面"
           >
-            {overflowItems.map((item) => {
-              const Icon = ITEM_ICONS[item.key];
-              const active = item.key === activeKey;
-              if (!Icon) return null;
-              return (
-                <button
+            <div className="mobile-more__header">
+              <span className="mobile-more__header-title">更多</span>
+              <button
+                type="button"
+                className="mobile-more__close"
+                aria-label="关闭更多导航"
+                onClick={() => setMoreOpen(false)}
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="mobile-more__list" role="list">
+              {overflowItems.map((item) => (
+                <MoreListRow
                   key={item.key}
-                  type="button"
-                  role="menuitem"
-                  className={`flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                    active
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'bg-slate-50 text-slate-700 active:bg-slate-100'
-                  }`}
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => selectOverflowTab(item.key)}
-                >
-                  <Icon className="h-5 w-5 shrink-0" strokeWidth={active ? 2 : 1.8} aria-hidden="true" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
+                  item={item}
+                  active={item.key === activeKey}
+                  unreadCount={unreadCount}
+                  onSelect={selectOverflowTab}
+                />
+              ))}
+              {showAccountRow ? (
+                <>
+                  <div className="mobile-more__divider" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="mobile-more__row"
+                    onClick={selectAccount}
+                  >
+                    <span className="mobile-more__icon" aria-hidden="true">
+                      <UserRound className="mobile-more__icon-svg" strokeWidth={1.9} />
+                    </span>
+                    <span className="mobile-more__text">
+                      <span className="mobile-more__title-row">
+                        <span className="mobile-more__title">账号</span>
+                      </span>
+                      <span className="mobile-more__subtitle">{accountSubtitle || '登录账号，管理云端同步'}</span>
+                    </span>
+                    <ChevronRight className="mobile-more__arrow" aria-hidden="true" />
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </>
       ) : null}
@@ -114,7 +190,7 @@ export function MobileBottomNav({ activeKey = '', visibleTabs = null, onSelectTa
             onSelect={onSelectTab}
           />
         ))}
-        {overflowItems.length > 0 ? (
+        {overflowItems.length > 0 || showAccountRow ? (
           <button
             type="button"
             className="mobile-bottom-nav__item"
@@ -125,7 +201,7 @@ export function MobileBottomNav({ activeKey = '', visibleTabs = null, onSelectTa
             onClick={() => setMoreOpen((open) => !open)}
           >
             <MoreHorizontal className="mobile-bottom-nav__icon" strokeWidth={overflowActive ? 2 : 1.8} aria-hidden="true" />
-            <span>…</span>
+            <span>更多</span>
           </button>
         ) : null}
       </nav>

@@ -1,33 +1,12 @@
-import { AlertCircle, Coffee, LineChart, Menu, UserRound } from 'lucide-react';
-import { Suspense, lazy, useEffect, useState } from 'react';
-import { ACCOUNT_AUTH_OPEN_EVENT } from '../app/accountAuthEvents.js';
+import { AlertCircle, Coffee, LineChart, Menu } from 'lucide-react';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import { NotifyPopover } from './notify-popover.jsx';
 import './brand-preview-bar.css';
 import './header-actions.css';
 
-const AccountMenu = lazy(() => import('./account-menu.jsx').then((mod) => ({ default: mod.AccountMenu })));
-
-function AccountMenuFallback() {
-  return (
-    <button type="button" aria-label="账户" className="app-header__utility" disabled>
-      <UserRound className="h-[18px] w-[18px]" aria-hidden="true" />
-    </button>
-  );
-}
-
 export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, onShowDisclaimer, onOpenNav }) {
-  const [accountMenuMounted, setAccountMenuMounted] = useState(false);
   const handleCoffeeClick = onBuyMeCoffee || onJoinGroup;
   useNotifyUnreadCount();
-
-  useEffect(() => {
-    function handleOpenAccountAuth() {
-      setAccountMenuMounted(true);
-    }
-    window.addEventListener(ACCOUNT_AUTH_OPEN_EVENT, handleOpenAccountAuth);
-    return () => window.removeEventListener(ACCOUNT_AUTH_OPEN_EVENT, handleOpenAccountAuth);
-  }, []);
 
   return (
     <header className="app-header brand-preview-bar" data-testid="brand-preview-bar">
@@ -75,15 +54,6 @@ export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, 
           <div className="hidden md:block">
             <NotifyPopover />
           </div>
-          {accountMenuMounted ? (
-            <Suspense fallback={<AccountMenuFallback />}>
-              <AccountMenu initialOpen />
-            </Suspense>
-          ) : (
-            <button type="button" aria-label="账户" onClick={() => setAccountMenuMounted(true)} className="app-header__utility">
-              <UserRound className="h-[18px] w-[18px]" aria-hidden="true" />
-            </button>
-          )}
           {onOpenNav ? (
             <button type="button" className="app-header__menu-button" aria-label="打开导航" onClick={onOpenNav}>
               <Menu className="h-5 w-5" strokeWidth={1.9} aria-hidden="true" />

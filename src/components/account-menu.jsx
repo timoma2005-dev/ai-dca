@@ -90,7 +90,7 @@ function formatAuthError(err, action = 'login') {
   return message || `${label}失败，请稍后重试。`;
 }
 
-export function AccountMenu({ initialOpen = false }) {
+export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose, hideTrigger = false }) {
   const [initialAuthIntent] = useState(() => consumeAccountAuthIntent());
   const [session, setSession] = useState(() => loadCloudSession());
   const [meta, setMeta] = useState(() => loadLocalCloudSyncMeta());
@@ -108,6 +108,15 @@ export function AccountMenu({ initialOpen = false }) {
   const [conflictPassword, setConflictPassword] = useState('');
   const [manualSyncPassword, setManualSyncPassword] = useState('');
   const [open, setOpen] = useState(initialOpen || Boolean(initialAuthIntent));
+  const isControlled = controlledOpen !== undefined;
+  const effectiveOpen = isControlled ? controlledOpen : open;
+  const closeMenu = useCallback(() => {
+    if (isControlled) {
+      onClose?.();
+    } else {
+      closeMenu();
+    }
+  }, [isControlled, onClose]);
   const [authMode, setAuthMode] = useState(initialAuthIntent ? (initialAuthIntent.mode === 'login' ? 'login' : 'register') : 'login');
   const dropdownRef = useRef(null);
   // envelope 项数刷新的最新请求序号：会话切换或连续刷新时，旧请求的返回不允许覆盖新结果。
@@ -135,7 +144,7 @@ export function AccountMenu({ initialOpen = false }) {
 
   useEffect(() => {
     let cancelled = false;
-    if (!open || !session?.accessToken) {
+    if (!effectiveOpen || !session?.accessToken) {
       if (!session?.accessToken) setBackupVersions([]);
       return undefined;
     }
@@ -151,17 +160,17 @@ export function AccountMenu({ initialOpen = false }) {
         if (!cancelled) setVersionsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [open, session?.accessToken]);
+  }, [effectiveOpen, session?.accessToken]);
 
   // 菜单打开时也走同一 envelope 刷新入口：页面加载后即使尚未触发任何同步事件，也能显示服务端真实项数。
   useEffect(() => {
-    if (!open || !session?.accessToken) {
+    if (!effectiveOpen || !session?.accessToken) {
       if (!session?.accessToken) setPreviewKeyCount(0);
       return undefined;
     }
     refreshEnvelopeKeyCount();
     return undefined;
-  }, [open, session?.accessToken, refreshEnvelopeKeyCount]);
+  }, [effectiveOpen, session?.accessToken, refreshEnvelopeKeyCount]);
 
   useEffect(() => {
     function refreshLocalState(event) {
@@ -222,6 +231,7 @@ export function AccountMenu({ initialOpen = false }) {
   }, [refreshEnvelopeKeyCount]);
 
   useEffect(() => {
+    if (isControlled) return undefined;
     function handleOpenAuth(event) {
       const mode = event?.detail?.mode === 'login' ? 'login' : 'register';
       setAuthMode(mode);
@@ -229,17 +239,17 @@ export function AccountMenu({ initialOpen = false }) {
     }
     window.addEventListener(ACCOUNT_AUTH_OPEN_EVENT, handleOpenAuth);
     return () => window.removeEventListener(ACCOUNT_AUTH_OPEN_EVENT, handleOpenAuth);
-  }, []);
+  }, [isControlled]);
 
   useEffect(() => {
-    if (!open || typeof document === 'undefined') return undefined;
+    if (!effectiveOpen || typeof document === 'undefined') return undefined;
     const isDropdown = Boolean(session?.accessToken);
     const prev = document.body.style.overflow;
     if (!isDropdown) document.body.style.overflow = 'hidden';
-    function onKey(event) { if (event.key === 'Escape') setOpen(false); }
+    function onKey(event) { if (event.key === 'Escape') closeMenu(); }
     function onClickOutside(event) {
       if (!isDropdown) return;
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setOpen(false);
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) closeMenu();
     }
     window.addEventListener('keydown', onKey);
     if (isDropdown) document.addEventListener('mousedown', onClickOutside);
@@ -248,7 +258,7 @@ export function AccountMenu({ initialOpen = false }) {
       window.removeEventListener('keydown', onKey);
       if (isDropdown) document.removeEventListener('mousedown', onClickOutside);
     };
-  }, [open, session?.accessToken]);
+  }, [effectiveOpen, session?.accessToken]);
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -275,7 +285,7 @@ export function AccountMenu({ initialOpen = false }) {
         description: '云端数据正在后台同步，可在账户菜单查看进度。',
         tone: 'emerald'
       });
-      setOpen(false);
+      closeMenu();
     } catch (err) {
       // 只有认证本身的失败才显示为登录失败；云端迁移/同步失败由
       // cloud-sync 事件另行展示，绝不冒充密码错误。
@@ -630,6 +640,7 @@ export function AccountMenu({ initialOpen = false }) {
 
   return (
     <div className="relative ml-auto" ref={dropdownRef}>
+      {hideTrigger ? null : (
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -649,8 +660,9 @@ export function AccountMenu({ initialOpen = false }) {
         </span>
         <span className="hidden max-w-[7rem] truncate sm:inline">{loggedIn ? session.username : '登录'}</span>
       </button>
+      )}
 
-      {open && loggedIn ? (
+      {effectiveOpen && loggedIn ? (
         <div
           role="dialog"
           aria-modal="false"
@@ -717,7 +729,7 @@ export function AccountMenu({ initialOpen = false }) {
                   </div>
                   <PrivacyNotice compact />
                   {renderSyncError()}
-                  <button type="button" className={cx(subtleButtonClass, 'w-full justify-center')} onClick={() => { handleLogout(); setOpen(false); }}>
+                  <button type="button" className={cx(subtleButtonClass, 'w-full justify-center')} onClick={() => { handleLogout(); closeMenu(); }}>
                     <LogOut className="h-4 w-4" />
                     退出登录
                   </button>
@@ -725,10 +737,10 @@ export function AccountMenu({ initialOpen = false }) {
         </div>
       ) : null}
 
-      {open && !loggedIn && typeof document !== "undefined" ? createPortal((
+      {effectiveOpen && !loggedIn && typeof document !== "undefined" ? createPortal((
         <div
           className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-900/60 p-0 sm:items-center sm:p-4"
-          onClick={() => setOpen(false)}
+          onClick={() => closeMenu()}
         >
           <div
             role="dialog"
@@ -744,7 +756,7 @@ export function AccountMenu({ initialOpen = false }) {
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => closeMenu()}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 aria-label="关闭"
               >

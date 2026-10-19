@@ -8,11 +8,17 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const componentSource = fs.readFileSync(path.resolve(testDir, '../src/components/brand-preview-bar.jsx'), 'utf8');
 const notifySource = fs.readFileSync(path.resolve(testDir, '../src/components/notify-popover.jsx'), 'utf8');
 
-test('mobile header exposes test-style notification, account, and navigation actions', () => {
+test('mobile header exposes test-style notification and navigation actions (account moved to more sheet)', () => {
   assert.match(componentSource, /<NotifyPopover\s*\/>/);
-  assert.match(componentSource, /aria-label="账户"/);
+  assert.doesNotMatch(componentSource, /aria-label="账户"/);
   assert.match(componentSource, /className="app-header__menu-button"/);
   assert.match(componentSource, /onClick=\{onOpenNav\}/);
+});
+
+test('mobile bottom nav more sheet exposes account entry', () => {
+  const navSource = fs.readFileSync(path.resolve(testDir, '../src/components/mobile-bottom-nav.jsx'), 'utf8');
+  assert.match(navSource, /onOpenAccount/);
+  assert.match(navSource, /账号/);
 });
 
 test('notification popover loads records and keeps links inside cn notification tab', () => {

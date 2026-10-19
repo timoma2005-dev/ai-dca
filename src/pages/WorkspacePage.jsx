@@ -15,6 +15,8 @@ import { isAnalyticsAdmin, trackPageEngagement, trackPageView, trackSessionHeart
 import { saveWorkspaceReturn } from '../app/workspaceReturn.js';
 import { CONVERSION_PROMPT_EVENT } from '../app/conversionPrompts.js';
 import { ConversionPromptCard } from '../components/conversion-prompt-card.jsx';
+import { ACCOUNT_AUTH_OPEN_EVENT } from '../app/accountAuthEvents.js';
+import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
 // 各主 tab 使用 React.lazy 按需加载，在 Vite 中会被拆成独立 chunk。
@@ -32,6 +34,7 @@ const AdminRadarExperience = lazy(() => import('./AdminRadarExperience.jsx').the
 const SharesExperience = lazy(() => import('./SharesExperience.jsx'));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
 const ReleaseAnnouncementModal = lazy(() => import('../components/release-announcement-modal.jsx').then((m) => ({ default: m.ReleaseAnnouncementModal })));
+const AccountMenu = lazy(() => import('../components/account-menu.jsx').then((m) => ({ default: m.AccountMenu })));
 
 
 function readPreferredWorkspaceTab(fallbackTab = DEFAULT_WORKSPACE_TAB) {
@@ -196,6 +199,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [cloudSession, setCloudSession] = useState(() => loadCloudSession());
   const [conversionPrompt, setConversionPrompt] = useState(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const unreadCount = useNotifyUnreadCount();
   // 仅用于在 hash 变化时触发本组件重渲染，使子面板读到新 hash；值本身无需读取。
   const [, setActiveHash] = useState(() => (typeof window === 'undefined' ? '' : window.location.hash || ''));
   const [currentScenarioKey, setCurrentScenarioKey] = useState(() => readWorkspacePrefs().scenario);
@@ -236,6 +241,14 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     }
     window.addEventListener(CONVERSION_PROMPT_EVENT, handleConversionPrompt);
     return () => window.removeEventListener(CONVERSION_PROMPT_EVENT, handleConversionPrompt);
+  }, []);
+
+  useEffect(() => {
+    function handleOpenAccountAuth() {
+      setAccountMenuOpen(true);
+    }
+    window.addEventListener(ACCOUNT_AUTH_OPEN_EVENT, handleOpenAccountAuth);
+    return () => window.removeEventListener(ACCOUNT_AUTH_OPEN_EVENT, handleOpenAccountAuth);
   }, []);
 
   useEffect(() => {
@@ -684,7 +697,17 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         hidden={mobileBottomSheetHidden}
         visibleTabs={currentScenario.visibleTabs}
         onSelectTab={handleSelectTab}
+        onOpenAccount={() => setAccountMenuOpen(true)}
+        accountSubtitle={cloudSession?.accessToken ? '管理账号、云端备份与同步' : '登录账号，管理云端同步'}
+        unreadCount={unreadCount}
       />
+      <Suspense fallback={null}>
+        <AccountMenu
+          open={accountMenuOpen}
+          onClose={() => setAccountMenuOpen(false)}
+          hideTrigger
+        />
+      </Suspense>
       {(tabHistory.length > 0 || showScrollTop) ? (
         <div className="fixed bottom-[calc(52px+env(safe-area-inset-bottom)+1.5rem)] right-4 z-40 flex flex-col gap-2 sm:bottom-8 sm:right-6" aria-label="页面快捷操作">
           {tabHistory.length > 0 ? (
