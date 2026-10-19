@@ -527,7 +527,7 @@
   border-collapse: collapse;
 }
 .shares-panel .shares-table thead th {
-  padding: 10px 14px;
+  padding: 10px 20px;
   background: var(--slate-50);
   border-bottom: 1px solid var(--slate-200);
   text-align: left;
@@ -576,7 +576,7 @@
   color: var(--primary);
 }
 .shares-panel .shares-table td {
-  padding: 14px 14px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--slate-100);
   vertical-align: middle;
 }
