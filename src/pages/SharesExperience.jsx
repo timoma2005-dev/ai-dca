@@ -138,11 +138,26 @@ function DeltaSharesCell({ row, maxAbsDelta }) {
 function UtilizationCell({ row, snapshotDate }) {
   const meta = sharesCeiling(row);
   const sse = !isSz(row);
+  // 生效限额：净申购上限优先（角标"净"），否则累计申购上限（角标"累计"）。
+  const effKind = row.effLimitKind || row.totalLimitKind;
+  const effShares = Number.isFinite(row.effLimitShares) ? row.effLimitShares : row.totalLimitShares;
+  const srcBadge = row.limitSource === 'net' ? '净' : row.limitSource === 'total' ? '累计' : null;
   let sub = null;
-  if (row.totalLimitKind === 'limited' && Number.isFinite(row.totalLimitShares)) {
-    sub = `当日上限 ${formatWan(row.totalLimitShares)}`;
-    if (row.limitDate && row.limitDate !== snapshotDate) sub += ` · 限 ${row.limitDate.slice(5)}`;
-  } else if (row.totalLimitKind === 'unlimited') {
+  if (effKind === 'limited' && Number.isFinite(effShares)) {
+    sub = (
+      <>
+        {srcBadge && <span className="limit-src-badge">{srcBadge}</span>}
+        {`当日上限 ${formatWan(effShares)}`}
+      </>
+    );
+    if (row.limitDate && row.limitDate !== snapshotDate) {
+      sub = (
+        <>
+          {sub} · 限 {row.limitDate.slice(5)}
+        </>
+      );
+    }
+  } else if (effKind === 'unlimited') {
     sub = '无累计申购限额';
   }
   return (

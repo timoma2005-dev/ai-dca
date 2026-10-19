@@ -134,7 +134,15 @@ export function buildSharesProjection({
     const total = kind === 'limited' && integer(limit.shares) ? limit.shares : null;
     const limitEntry = hasSharesSource && limits.find((r) => r.code === code && r.date === date);
     const creationUnit = integer(limitEntry?.creationUnitShares) ? limitEntry.creationUnitShares : null;
-    const usable = deltaShares !== null && total > 0;
+    // 净申购上限：基本没人赎回，净申购上限约等于当日申购上限，优先使用。
+    const netLimit = limitEntry?.net;
+    const netKind = ['limited', 'unlimited', 'unknown'].includes(netLimit?.kind) ? netLimit.kind : 'unknown';
+    const netShares = netKind === 'limited' && integer(netLimit.shares) ? netLimit.shares : null;
+    // 生效限额：净申购上限优先（基本没人赎回，约等于当日申购上限），没有则用累计申购上限。
+    const effKind = netKind === 'limited' ? 'limited' : netKind === 'unlimited' ? 'unlimited' : kind;
+    const effShares = netKind === 'limited' ? netShares : netKind === 'unlimited' ? null : total;
+    const limitSource = netKind === 'limited' || netKind === 'unlimited' ? 'net' : kind === 'limited' || kind === 'unlimited' ? 'total' : null;
+    const usable = deltaShares !== null && effShares > 0;
     // 申赎状态透传到 record，供前端表格直接展示"暂停申购"等状态，无需额外请求。
     const creationStatusNorm = normalizeCreationStatus(creationStatus[code]);
     const reasons = ['missing_dated_nav'];
@@ -160,13 +168,19 @@ export function buildSharesProjection({
       priceEvidence: null,
       totalLimitKind: kind,
       totalLimitShares: total,
+      netLimitKind: netKind,
+      netLimitShares: netShares,
+      // 生效限额（净优先）及来源角标：net=净申购上限，total=累计申购上限。
+      effLimitKind: effKind,
+      effLimitShares: effShares,
+      limitSource,
       limitDate: limit ? date : null,
       creationUnitShares: creationUnit,
       subscriptionAllowed: creationStatusNorm.subscriptionAllowed,
       redemptionAllowed: creationStatusNorm.redemptionAllowed,
-      utilization: usable ? deltaShares / total : null,
-      atLimit: usable ? deltaShares === total : null,
-      nearTotalLimit: usable ? deltaShares >= 0 && deltaShares / total >= 0.9 : null,
+      utilization: usable ? deltaShares / effShares : null,
+      atLimit: usable ? deltaShares === effShares : null,
+      nearTotalLimit: usable ? deltaShares >= 0 && deltaShares / effShares >= 0.9 : null,
       status: shares !== null && deltaShares !== null ? 'complete' : 'partial',
       reasons
     };

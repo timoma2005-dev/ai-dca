@@ -13,10 +13,23 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   Object.assign(data.records[0], { creationShares: 10000000, creationSharesKind: 'estimate' });
   Object.assign(data.records[1], { creationShares: 9500000, creationSharesKind: 'exact' });
   Object.assign(data.records[2], { creationShares: 12500000, creationSharesKind: 'estimate', limitDate: '2026-10-16' });
+  // 159501 给净申购上限（与累计相同，保持顶格100%），验证角标显示"净"且优先使用净限额。
+  Object.assign(data.records.find((r) => r.code === '159501'), {
+    netLimitKind: 'limited',
+    netLimitShares: 10000000,
+    effLimitKind: 'limited',
+    effLimitShares: 10000000,
+    limitSource: 'net'
+  });
   // 513100 给限额数据，验证沪市标签按真实限额展示（不再是"沪市待接入"）。
   Object.assign(data.records.find((r) => r.code === '513100'), {
     totalLimitKind: 'limited',
     totalLimitShares: 2500000,
+    netLimitKind: 'unknown',
+    netLimitShares: null,
+    effLimitKind: 'limited',
+    effLimitShares: 2500000,
+    limitSource: 'total',
     limitDate: '2026-10-16'
   });
   Object.assign(data.records[3], { creationShares: -1000000, creationSharesKind: 'estimate' });
@@ -137,14 +150,16 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   assert.equal(await r0.locator('.delta-val').textContent(), '+1,000.00');
   assert.equal(await r0.locator('.delta-sub').textContent(), '估算申购 约 1,000 万份');
   assert.equal(await r0.locator('.ceiling-tag').textContent(), '顶格 100%');
-  assert.match(await r0.locator('.util-sub').textContent(), /当日上限 1,000 万份/);
+  assert.match(await r0.locator('.util-sub').textContent(), /净当日上限 1,000 万份/);
+  assert.equal(await r0.locator('.limit-src-badge').textContent(), '净');
   assert.equal(await r0.locator('.total-val').textContent(), '200.10 亿');
   assert.equal(await r0.locator('.total-prev').textContent(), '上期 200.00 亿');
   const fillWidth = async () => r0.locator('.delta-fill').evaluate((el) => Math.round(el.getBoundingClientRect().width));
   assert.equal(await r0.locator('.delta-bar').evaluate((el) => Math.round(el.getBoundingClientRect().width)), 140);
   assert.equal(await fillWidth(), 112); // 10,000,000 / 全表最大 12,500,000 = 80%
   assert.equal(await row('159513').locator('.ceiling-tag').textContent(), '超限 125%');
-  assert.equal(await row('159513').locator('.util-sub').textContent(), '当日上限 1,000 万份 · 限 10-16');
+  assert.equal(await row('159513').locator('.util-sub').textContent(), '累计当日上限 1,000 万份 · 限 10-16');
+  assert.equal(await row('159513').locator('.limit-src-badge').textContent(), '累计');
   assert.equal(await row('159632').locator('.delta-val').textContent(), '-100.00');
   assert.equal(await row('159632').locator('.ceiling-tag').textContent(), '净流出');
   assert.equal(await row('159632').locator('.delta-sub').count(), 0); // 负值申购数不渲染
@@ -157,7 +172,8 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   const sse = row('513100');
   assert.equal(await sse.locator('.ceiling-tag').textContent(), '有限额');
   assert.equal(await sse.locator('.util-sse-pending').count(), 0);
-  assert.equal(await sse.locator('.util-sub').textContent(), '当日上限 250 万份 · 限 10-16');
+  assert.equal(await sse.locator('.util-sub').textContent(), '累计当日上限 250 万份 · 限 10-16');
+  assert.equal(await sse.locator('.limit-src-badge').textContent(), '累计');
   assert.equal(await sse.locator('.delta-val').textContent(), '—');
   assert.equal(await sse.locator('.delta-sub').textContent(), '未比对');
   assert.equal(await sse.locator('.total-val').textContent(), '—');
