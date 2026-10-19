@@ -155,7 +155,7 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   assert.equal(await row('159941').locator('.delta-val').textContent(), '0.00'); // 零值灰显
   assert.equal(await row('159941').locator('.delta-bar').count(), 0); // 零不画填充
   const sse = row('513100');
-  assert.equal(await sse.locator('.ceiling-tag').textContent(), '上限 250万份');
+  assert.equal(await sse.locator('.ceiling-tag').textContent(), '有限额');
   assert.equal(await sse.locator('.util-sse-pending').count(), 0);
   assert.equal(await sse.locator('.util-sub').textContent(), '当日上限 250 万份 · 限 10-16');
   assert.equal(await sse.locator('.delta-val').textContent(), '—');
