@@ -142,8 +142,8 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   assert.equal(await chip159501.locator('.limit-change.up').textContent(), '新增 1.1倍');
   const chip159509 = page.locator('.alert-chip', { hasText: '159509' });
   assert.equal(await chip159509.locator('.limit-change.down').textContent(), '减少至 0.9倍');
-  const chip159696 = page.locator('.alert-chip', { hasText: '159696' });
-  assert.equal(await chip159696.locator('.limit-change.flat').textContent(), '持平');
+  // 159696 持平：不高亮，胶囊不渲染
+  assert.equal(await page.locator('.alert-chip', { hasText: '159696' }).count(), 0);
   // 单行信息栏：状态 chip、基准日/对比、抓取时间（上海时区）、三个统计与刷新按钮。
   assert.match(await page.locator('.status-chip.stale').textContent(), /数据滞后待确认/);
   assert.match(await page.locator('.head-date').textContent(), /份额基准日 2026-10-12 · 对比 2026-10-09 · 限额基准日 2026-10-16/);
