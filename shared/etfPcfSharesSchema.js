@@ -139,9 +139,17 @@ export function buildSharesProjection({
     const netKind = ['limited', 'unlimited', 'unknown'].includes(netLimit?.kind) ? netLimit.kind : 'unknown';
     const netShares = netKind === 'limited' && integer(netLimit.shares) ? netLimit.shares : null;
     // 生效限额：净申购上限优先（基本没人赎回，约等于当日申购上限），没有则用累计申购上限。
-    const effKind = netKind === 'limited' ? 'limited' : netKind === 'unlimited' ? 'unlimited' : kind;
-    const effShares = netKind === 'limited' ? netShares : netKind === 'unlimited' ? null : total;
-    const limitSource = netKind === 'limited' || netKind === 'unlimited' ? 'net' : kind === 'limited' || kind === 'unlimited' ? 'total' : null;
+    // net=limited 用净；net=unlimited/unknown 时回退到累计。
+    let effKind, effShares, limitSource;
+    if (netKind === 'limited') {
+      effKind = 'limited'; effShares = netShares; limitSource = 'net';
+    } else if (kind === 'limited') {
+      effKind = 'limited'; effShares = total; limitSource = 'total';
+    } else if (kind === 'unlimited') {
+      effKind = 'unlimited'; effShares = null; limitSource = 'total';
+    } else {
+      effKind = 'unknown'; effShares = null; limitSource = null;
+    }
     const usable = deltaShares !== null && effShares > 0;
     // 申赎状态透传到 record，供前端表格直接展示"暂停申购"等状态，无需额外请求。
     const creationStatusNorm = normalizeCreationStatus(creationStatus[code]);
