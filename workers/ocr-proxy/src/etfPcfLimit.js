@@ -12,7 +12,7 @@ import { mapLimit } from './fundLimit.js';
 const ETF_PCF_SCHEMA_VERSION = 1;
 const ETF_PCF_SOURCE = 'szse_pcf';
 const ETF_PCF_SOURCE_URL_BASE = 'https://reportdocs.static.szse.cn/files/text/etf/';
-const ETF_PCF_TTL_SECONDS = 24 * 3600;
+const ETF_PCF_TTL_SECONDS = 400 * 86400;
 const ETF_PCF_TTL_MS = ETF_PCF_TTL_SECONDS * 1000;
 const ETF_PCF_FETCH_TIMEOUT_MS = 5000;
 const ETF_PCF_MAX_BYTES = 1024 * 1024; // 1 MiB
