@@ -4,7 +4,7 @@
  * src/app/etfPcfDetailClient.js 的同一缓存；上一交易日推导用 shared/etfPcfSharesSchema。
  * §9 否决项已落实：无 KPI 磁贴、无限额利用率进度条、无 ▲▼、无金额估算列、无手动视图切换。
  */
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Search, RefreshCw, AlertTriangle, Inbox, CircleAlert, ChevronDown, X } from 'lucide-react';
 import {
   sharesClient,
@@ -202,7 +202,7 @@ function TotalSharesCell({ row }) {
 // 告警条内的限额环比标签：只请求 row.limitDate 的上一交易日历史限额，与行内抽屉共用
 // pcfDetailClient 的缓存与 inflight 去重；读不到或口径不符时静默不渲染，不轮询、不换日期兜底。
 // 告警胶囊：只在限额有变化（新增/减少）时渲染，持平的不高亮。
-function AlertChip({ row, calendar, onSelect }) {
+function AlertChip({ row, calendar, onSelect, onChange }) {
   const [change, setChange] = useState(null);
   const prevLimitDate = previousSession(row.limitDate, calendar);
   const effKind = row.effLimitKind || (row.netLimitKind === 'limited' ? 'limited' : row.totalLimitKind);
@@ -245,6 +245,12 @@ function AlertChip({ row, calendar, onSelect }) {
       request.release();
     };
   }, [row.code, prevLimitDate, comparable, effShares]);
+  // 上报变化状态给父组件（用于表格高亮）
+  useEffect(() => {
+    if (onChange) {
+      onChange(row.code, change && change.dir !== 'flat');
+    }
+  }, [row.code, change, onChange]);
   // 持平或无数据的不渲染
   if (!change || change.dir === 'flat') return null;
   let label = null;
@@ -475,6 +481,16 @@ function SharesPanel() {
     return k === 'limited';
   };
   const alertRows = records.filter(hasEffLimit);
+  // 限额有变化的 code 集合（AlertChip 异步上报），表格高亮与告警条共用。
+  const [changedCodes, setChangedCodes] = useState(() => new Set());
+  const reportChange = useCallback((code, hasChange) => {
+    setChangedCodes((prev) => {
+      const next = new Set(prev);
+      if (hasChange) next.add(code);
+      else next.delete(code);
+      return next;
+    });
+  }, []);
   const szVerified = records.filter((r) => isSz(r) && Number.isFinite(r.deltaShares));
   const netSum = szVerified.length ? szVerified.reduce((sum, r) => sum + r.deltaShares, 0) : null;
   // 限额基准日：取各行 limitDate 的最大值（最新），与份额基准日区分展示。
@@ -588,6 +604,7 @@ function SharesPanel() {
                 row={r}
                 calendar={data.calendar}
                 onSelect={() => setFilterKey('ceiling')}
+                onChange={reportChange}
               />
             ))}
           </div>
@@ -718,11 +735,12 @@ function SharesPanel() {
               <tbody>
                 {filtered.map((r) => {
                   const open = expandedKey === `${data.date}:${r.code}`;
-                  const ceiling = isCeilingRow(r);
+                  // 高亮跟随告警条：限额有变化的才高亮
+                  const highlighted = changedCodes.has(r.code);
                   return (
                     <Fragment key={r.code}>
                       <tr
-                        className={`shares-row${ceiling ? ' alert-row' : ''}${open ? ' is-open' : ''}`}
+                        className={`shares-row${highlighted ? ' alert-row' : ''}${open ? ' is-open' : ''}`}
                         onClick={() => toggle(r)}
                       >
                         <td className="sh-symbol">
