@@ -218,13 +218,12 @@ function pcfValue(label, value) {
   return value; // 未知状态不推断
 }
 
-// 行内展开明细：非底部 Sheet/Dialog，无遮罩与焦点锁；沪市本地短路不订阅。
+// 行内展开明细：非底部 Sheet/Dialog，无遮罩与焦点锁。
 function PcfDetailDrawer({ code, name, date, id, labelledBy }) {
   const sse = !isSzCode(code);
   const [result, setResult] = useState({ state: 'loading' });
   const [retryCount, setRetryCount] = useState(0);
   useEffect(() => {
-    if (sse) return undefined;
     let active = true;
     setResult({ state: 'loading' });
     const request = pcfDetailClient.subscribe(code, date);
@@ -236,16 +235,8 @@ function PcfDetailDrawer({ code, name, date, id, labelledBy }) {
       request.release();
     };
     // retryCount 仅用于错误重试时强制重新订阅，不参与请求参数。
-  }, [code, date, retryCount, sse]);
+  }, [code, date, retryCount]);
   const region = { id, role: 'region', 'aria-labelledby': labelledBy };
-  if (sse) {
-    return (
-      <div {...region} className="drawer-content sse-detail">
-        <p className="sse-title">沪市 PCF 清单暂未接入</p>
-        <p className="sse-desc">该标的为上交所 ETF，报表通道升级后开放申赎清单，此处不发起请求。</p>
-      </div>
-    );
-  }
   const sections = result.state === 'ready' ? pcfDetailSections(result.data) : null;
   const tDay = sections?.[1];
   const pDay = sections?.[0];
@@ -265,7 +256,7 @@ function PcfDetailDrawer({ code, name, date, id, labelledBy }) {
         <span className="drawer-title">
           {name}（{code}）PCF 申赎清单
         </span>
-        <span className="drawer-source">数据源：深交所官方 PCF</span>
+        <span className="drawer-source">数据源：{sse ? '上交所官方 PCF' : '深交所官方 PCF'}</span>
       </div>
       {result.state === 'loading' && (
         <p className="drawer-state" role="status">

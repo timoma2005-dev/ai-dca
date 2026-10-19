@@ -6,7 +6,7 @@ import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
 import { syntheticProjection } from './helpers/etfPcfSharesFixture.mjs';
 
-test('份额面板整体替换：信息栏、告警条限额环比三态、五列表格、三态排序、抽屉 10+3、请求拆分、沪市短路、移动卡片、admin 挂载', async (t) => {
+test('份额面板整体替换：信息栏、告警条限额环比三态、五列表格、三态排序、抽屉 10+3、请求拆分、沪市明细、移动卡片、admin 挂载', async (t) => {
   // ---- fixture：3 只告警（顶格/接近/顶格），限额环比分别 up/down/flat；限额日期 2026-10-12 → 上一交易日 2026-10-09 ----
   const data = syntheticProjection();
   data.expiresAt = new Date(Date.now() + 3600000).toISOString();
@@ -84,11 +84,13 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
     if (mode === 'error') { await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); return; }
     if (mode === 'empty') { await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ reason: 'cache_miss' }) }); return; }
     const historical = date === '2026-10-09' && Object.hasOwn(historyLimit, code);
+    const sse = code.startsWith('513');
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-      code, date, source: 'szse_pcf',
+      code, date, source: sse ? 'sse_pcf' : 'szse_pcf',
       prevDayDate: '2026-10-08', prevDayNav: 1.5499, prevDayUnitNav: 100, prevDayCashDifference: 5388,
+      ...(sse ? { nav: 2.3456, navPerCreationUnit: 234560, tradingDay: '20261019', creationRedemption: '申购和赎回皆允许' } : {}),
       estimatedCashDifference: 4275.36, cashSubstitutionRatioLimitPct: 100, iopvRequired: true,
-      subscriptionAllowed: true, redemptionAllowed: false, creationRedemptionUnitShares: 1000000,
+      subscriptionAllowed: true, redemptionAllowed: sse ? true : false, creationRedemptionUnitShares: 1000000,
       totalSubscribeLimitShares: historical ? historyLimit[code] : 5000000, totalSubscribeLimitKind: 'limited',
       totalRedeemLimitShares: null, netSubscribeLimitShares: null, netRedeemLimitShares: null
     }) });
@@ -202,13 +204,15 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   await page.getByRole('button', { name: '重试读取', exact: true }).click();
   await page.getByText('暂无该日期的申赎缓存数据，等待更新').waitFor();
   await page.locator('#shares-toggle-159632').click();
-  // 沪市筛选 + 本地短路：展开沪市行不产生任何详情请求。
+  // 沪市筛选：展开沪市行发起详情请求，渲染上交所 PCF 数据。
   await page.getByRole('button', { name: '沪市 5' }).click();
   assert.equal(await page.locator('tr.shares-row').count(), 5);
   const beforeSse = requests.length;
   await page.locator('tr.shares-row').first().locator('.detail-btn').click();
-  await page.getByText('沪市 PCF 清单暂未接入').waitFor();
-  assert.equal(requests.length, beforeSse);
+  await page.getByText('上交所官方 PCF').waitFor();
+  assert.equal(requests.length, beforeSse + 1);
+  const sseQuery = new URL(requests[requests.length - 1].url()).searchParams;
+  assert.ok(sseQuery.get('code').startsWith('513'));
   await page.locator('tr.shares-row').first().locator('.detail-btn').click();
   await page.getByRole('button', { name: '全部 13' }).click();
   // 三态排序：默认 → 降序 → 升序 → 默认恢复；缺失置底、同值按代码稳定排序。
