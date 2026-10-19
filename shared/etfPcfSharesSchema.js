@@ -283,10 +283,12 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
       (r.creationSharesKind === 'exact' && r.creationShares !== 0 && r.creationShares !== r.deltaShares)
     )
       return false;
+    // 513（沪市）暂无上一期份额来源：prevShares/deltaShares 必须为 null；
+    // shares 允许为已验证的整数（沪市份额源已于 2026-10-19 接入），由上方的
+    // integer(r.shares) 统一校验。
     if (
       r.code.startsWith('513') &&
-      (r.shares !== null ||
-        r.prevShares !== null ||
+      (r.prevShares !== null ||
         r.deltaShares !== null)
     )
       return false;
