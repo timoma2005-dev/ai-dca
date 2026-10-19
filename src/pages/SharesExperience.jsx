@@ -138,10 +138,26 @@ function DeltaSharesCell({ row, maxAbsDelta }) {
 function UtilizationCell({ row, snapshotDate }) {
   const meta = sharesCeiling(row);
   const sse = !isSz(row);
-  // 生效限额：净申购上限优先（角标"净"），否则累计申购上限（角标"累计"）。
-  const effKind = row.effLimitKind || row.totalLimitKind;
-  const effShares = Number.isFinite(row.effLimitShares) ? row.effLimitShares : row.totalLimitShares;
-  const srcBadge = row.limitSource === 'net' ? '净' : row.limitSource === 'total' ? '累计' : null;
+  // 生效限额：净申购上限优先（角标"净"），没有净限额时回退到累计（角标"累计"）。
+  // 优先用 KV 预计算的 eff* 字段，没有则实时从 net/total 推导。
+  let effKind, effShares, srcBadge;
+  if (row.effLimitKind) {
+    effKind = row.effLimitKind;
+    effShares = row.effLimitShares;
+    srcBadge = row.limitSource === 'net' ? '净' : row.limitSource === 'total' ? '累计' : null;
+  } else {
+    const netKind = row.netLimitKind;
+    const totalKind = row.totalLimitKind;
+    if (netKind === 'limited' && Number.isFinite(row.netLimitShares)) {
+      effKind = 'limited'; effShares = row.netLimitShares; srcBadge = '净';
+    } else if (totalKind === 'limited' && Number.isFinite(row.totalLimitShares)) {
+      effKind = 'limited'; effShares = row.totalLimitShares; srcBadge = '累计';
+    } else if (totalKind === 'unlimited') {
+      effKind = 'unlimited'; effShares = null; srcBadge = null;
+    } else {
+      effKind = 'unknown'; effShares = null; srcBadge = null;
+    }
+  }
   let sub = null;
   if (effKind === 'limited' && Number.isFinite(effShares)) {
     sub = (

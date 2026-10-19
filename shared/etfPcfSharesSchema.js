@@ -340,12 +340,12 @@ export function validateSharesProjection(x, { date = x?.date, now = new Date() }
       return false;
     const usable =
       r.deltaShares !== null &&
-      r.totalLimitKind === 'limited' &&
-      r.totalLimitShares > 0 &&
+      r.effLimitKind === 'limited' &&
+      r.effLimitShares > 0 &&
       r.limitDate !== null;
     if (
-      r.utilization !== (usable ? r.deltaShares / r.totalLimitShares : null) ||
-      r.atLimit !== (usable ? r.deltaShares === r.totalLimitShares : null) ||
+      r.utilization !== (usable ? r.deltaShares / r.effLimitShares : null) ||
+      r.atLimit !== (usable ? r.deltaShares === r.effLimitShares : null) ||
       r.nearTotalLimit !== (usable ? r.deltaShares >= 0 && r.utilization >= 0.9 : null)
     )
       return false;
