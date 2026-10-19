@@ -204,8 +204,14 @@ function TotalSharesCell({ row }) {
 function LimitChangeTag({ row, calendar }) {
   const [change, setChange] = useState(null);
   const prevLimitDate = previousSession(row.limitDate, calendar);
-  const comparable =
-    row.totalLimitKind === 'limited' && Number.isSafeInteger(row.totalLimitShares) && row.totalLimitShares >= 0;
+  // 用生效限额（净优先）做对比
+  const effKind = row.effLimitKind || (row.netLimitKind === 'limited' ? 'limited' : row.totalLimitKind);
+  const effShares = row.effLimitKind
+    ? row.effLimitShares
+    : row.netLimitKind === 'limited'
+      ? row.netLimitShares
+      : row.totalLimitShares;
+  const comparable = effKind === 'limited' && Number.isSafeInteger(effShares) && effShares >= 0;
   useEffect(() => {
     setChange(null);
     if (!prevLimitDate || !comparable) return undefined;
@@ -214,28 +220,40 @@ function LimitChangeTag({ row, calendar }) {
     request.promise.then((value) => {
       if (!active || value.state !== 'ready') return;
       const p = value.data;
-      if (
-        p.totalSubscribeLimitKind !== 'limited' ||
-        !Number.isSafeInteger(p.totalSubscribeLimitShares) ||
-        p.totalSubscribeLimitShares < 0
-      )
+      // 取上一期的生效限额（净优先）
+      let prevEff = null;
+      if (p.netSubscribeLimitKind === 'limited' && Number.isSafeInteger(p.netSubscribeLimitShares)) {
+        prevEff = p.netSubscribeLimitShares;
+      } else if (p.totalSubscribeLimitKind === 'limited' && Number.isSafeInteger(p.totalSubscribeLimitShares)) {
+        prevEff = p.totalSubscribeLimitShares;
+      }
+      if (prevEff === null || prevEff < 0) return;
+      if (prevEff === 0) {
+        // 上期无限制，本期有限制：视为新增
+        setChange({ dir: 'up', multiple: null, isNew: true });
         return;
-      const diff = row.totalLimitShares - p.totalSubscribeLimitShares;
-      setChange({ dir: diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat', amount: Math.abs(diff) });
+      }
+      const multiple = effShares / prevEff;
+      if (Math.abs(multiple - 1) < 0.001) {
+        setChange({ dir: 'flat' });
+      } else if (multiple > 1) {
+        setChange({ dir: 'up', multiple });
+      } else {
+        setChange({ dir: 'down', multiple });
+      }
     });
     return () => {
       active = false;
       request.release();
     };
-    // 依赖仅为原始值：排序/搜索/缩放不会重建订阅。
-  }, [row.code, prevLimitDate, comparable, row.totalLimitShares]);
+  }, [row.code, prevLimitDate, comparable, effShares]);
   if (!change) return null;
-  if (change.dir === 'flat') return <span className="limit-change flat">限额持平</span>;
-  return (
-    <span className={`limit-change ${change.dir}`}>
-      {change.dir === 'up' ? '限额↑' : '限额↓'} {zh(change.amount / 10000, { maximumFractionDigits: 2 })} 万份
-    </span>
-  );
+  if (change.dir === 'flat') return <span className="limit-change flat">持平</span>;
+  if (change.isNew) return <span className="limit-change up">新增限额</span>;
+  const m = change.multiple;
+  const mStr = m >= 10 ? Math.round(m).toString() : m.toFixed(1).replace(/\.0$/, '');
+  if (change.dir === 'up') return <span className="limit-change up">新增 {mStr}倍</span>;
+  return <span className="limit-change down">减少至 {mStr}倍</span>;
 }
 
 const PCF_ALLOWED_LABELS = ['申购的允许情况', '赎回的允许情况'];
@@ -415,7 +433,12 @@ function SharesPanel() {
   const records = data?.records || [];
   const freshness = data ? freshnessMessage(data, day) : '';
   const isStale = result.state === 'stale' || Boolean(freshness);
-  const alertRows = records.filter(isCeilingRow);
+  // 今日需关注：有生效限额的行（用于对比上一限额日的限额变化），不再按顶格筛选。
+  const hasEffLimit = (r) => {
+    const k = r.effLimitKind || (r.netLimitKind === 'limited' ? 'limited' : r.totalLimitKind);
+    return k === 'limited';
+  };
+  const alertRows = records.filter(hasEffLimit);
   const szVerified = records.filter((r) => isSz(r) && Number.isFinite(r.deltaShares));
   const netSum = szVerified.length ? szVerified.reduce((sum, r) => sum + r.deltaShares, 0) : null;
   // 限额基准日：取各行 limitDate 的最大值（最新），与份额基准日区分展示。
@@ -493,9 +516,9 @@ function SharesPanel() {
             </span>
             <span
               className={`head-stat${alertRows.length ? ' warn' : ''}`}
-              title={alertRows.map((r) => `${r.code} ${sharesCeiling(r).label}`).join(' · ') || '暂无顶格/接近标的'}
+              title={alertRows.map((r) => `${r.code} ${r.name}`).join(' · ') || '暂无有限额标的'}
             >
-              <span className="head-label">顶格/接近</span>
+              <span className="head-label">有限额</span>
               <b>{alertRows.length}</b>
               <small>只</small>
             </span>
@@ -524,7 +547,6 @@ function SharesPanel() {
           </span>
           <div className="alert-chips">
             {alertRows.map((r) => {
-              const meta = sharesCeiling(r);
               return (
                 <button
                   key={r.code}
@@ -535,9 +557,6 @@ function SharesPanel() {
                 >
                   <b className="alert-chip-code">{r.code}</b>
                   <span className="alert-chip-name">{r.name}</span>
-                  <span className={`alert-chip-status ${meta.kind}`}>
-                    {meta.kind === 'at-limit' ? '顶格' : '接近'}
-                  </span>
                   <LimitChangeTag row={r} calendar={data.calendar} />
                 </button>
               );

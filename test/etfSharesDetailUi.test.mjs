@@ -44,6 +44,21 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   });
   // 无告警变体：验证「无告警首屏零 PCF 请求」（over-limit 不并入告警）。
   const calm = structuredClone(data);
+  // calm 模式：所有记录无生效限额，告警条不显示
+  for (const r of calm.records) {
+    Object.assign(r, {
+      totalLimitKind: 'unlimited',
+      totalLimitShares: null,
+      netLimitKind: 'unknown',
+      netLimitShares: null,
+      effLimitKind: 'unlimited',
+      effLimitShares: null,
+      limitSource: null,
+      utilization: null,
+      atLimit: null,
+      nearTotalLimit: null
+    });
+  }
   for (const [i, delta] of [
     [0, 5000000],
     [1, 6000000],
@@ -52,9 +67,6 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
     Object.assign(calm.records[i], {
       shares: 20000000000 + delta,
       deltaShares: delta,
-      utilization: delta / 10000000,
-      atLimit: false,
-      nearTotalLimit: false
     });
   }
   const bundle = await build({
@@ -119,23 +131,28 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   await page.locator('.shares-row').first().waitFor();
   const row = (code) => page.locator('tr.shares-row').filter({ hasText: code });
   const codes = () => page.locator('tr.shares-row .symbol-code').allTextContents();
-  // 首屏仅 3 只告警标的的历史限额请求（严格取 limitDate 的上一交易日），无当前详情请求。
+  // 首屏有生效限额的标的都会请求上一交易日限额（严格取 limitDate 的上一交易日），无当前详情请求。
   await page.waitForTimeout(50);
-  assert.deepEqual(requests.map((r) => new URL(r.url()).searchParams.get('code')).sort(), ['159501', '159509', '159696']);
+  assert.deepEqual(requests.map((r) => new URL(r.url()).searchParams.get('code')).sort(), ['159501', '159509', '159632', '159696', '159941']);
   assert.ok(requests.every((r) => new URL(r.url()).searchParams.get('date') === '2026-10-09'));
   assert.ok(requests.every((r) => r.method() === 'GET'));
-  // 限额环比三态：up/down/flat；口径不符（非 limited/非整数）静默不渲染。
-  assert.equal(await page.locator('.limit-change.up').textContent(), '限额↑ 100 万份');
-  assert.equal(await page.locator('.limit-change.down').textContent(), '限额↓ 100 万份');
-  assert.equal(await page.locator('.limit-change.flat').textContent(), '限额持平');
+  // 限额环比三态：up/down/flat（倍数）；口径不符（非 limited/非整数）静默不渲染。
+  // 159501: 900万→1000万 = 新增 1.1倍；159509: 1100万→1000万 = 减少至 0.9倍；159696: 持平
+  const chip159501 = page.locator('.alert-chip', { hasText: '159501' });
+  assert.equal(await chip159501.locator('.limit-change.up').textContent(), '新增 1.1倍');
+  const chip159509 = page.locator('.alert-chip', { hasText: '159509' });
+  assert.equal(await chip159509.locator('.limit-change.down').textContent(), '减少至 0.9倍');
+  const chip159696 = page.locator('.alert-chip', { hasText: '159696' });
+  assert.equal(await chip159696.locator('.limit-change.flat').textContent(), '持平');
   // 单行信息栏：状态 chip、基准日/对比、抓取时间（上海时区）、三个统计与刷新按钮。
   assert.match(await page.locator('.status-chip.stale').textContent(), /数据滞后待确认/);
   assert.match(await page.locator('.head-date').textContent(), /份额基准日 2026-10-12 · 对比 2026-10-09 · 限额基准日 2026-10-16/);
   assert.match(await page.locator('.head-meta').textContent(), /抓取 2026-10-13 09:03:20/);
-  assert.deepEqual(await page.locator('.head-stat b').allTextContents(), ['+4,300', '3', '13']);
-  // 告警条：3 个胶囊（over-limit 不并入），点击胶囊切换到「顶格 / 接近」筛选。
+  assert.deepEqual(await page.locator('.head-stat b').allTextContents(), ['+4,300', '7', '13']);
+  // 告警条：有生效限额的胶囊（不再按顶格筛选），点击胶囊切换到「顶格 / 接近」筛选。
   assert.equal(await page.locator('.alert-strip').count(), 1);
-  assert.deepEqual(await page.locator('.alert-chip-status').allTextContents(), ['顶格', '接近', '顶格']);
+  // alert-chip-status 已移除，胶囊只显示限额变化（LimitChangeTag）
+  assert.equal(await page.locator('.alert-chip-status').count(), 0);
   assert.equal(await page.locator('.stale-banner').count(), 1);
   assert.match(await page.locator('.stale-banner').textContent(), /更新及时性待确认/);
   // 五列表格与 §9 否决项：无 KPI 磁贴、无利用率进度条、无 ▲▼、无金额列。
@@ -184,8 +201,9 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   await toggles.first().focus();
   await page.keyboard.press('Enter');
   await page.getByText('正在读取申赎信息…').waitFor();
-  assert.equal(requests.length, 4);
-  const detailQuery = new URL(requests[3].url()).searchParams;
+  // 5 只有限额的标的各 1 个历史限额请求 + 1 个当前详情请求
+  assert.equal(requests.length, 6);
+  const detailQuery = new URL(requests[5].url()).searchParams;
   assert.equal(detailQuery.get('code'), '159501');
   assert.equal(detailQuery.get('date'), data.date);
   await toggles.first().click();
@@ -196,7 +214,8 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   mode = 'ready';
   await toggles.first().click();
   await page.getByText('1.5499', { exact: true }).waitFor();
-  assert.equal(requests.length, 5);
+  // 5 个历史限额 + 1 个当前详情 + 1 个抽屉明细 = 7
+  assert.equal(requests.length, 7);
   const region = page.locator(`#shares-detail-159501`);
   assert.equal(await region.getAttribute('role'), 'region');
   assert.equal(await region.getAttribute('aria-labelledby'), await toggles.first().getAttribute('id'));
@@ -209,11 +228,11 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   await toggles.first().click();
   await toggles.first().click();
   await page.getByText('1.5499', { exact: true }).waitFor();
-  assert.equal(requests.length, 5);
+  assert.equal(requests.length, 7);
   // 单展开手风琴：展开第二只时第一只自动收起。
   await page.locator('#shares-toggle-159509').click();
   await page.waitForFunction(() => document.querySelectorAll('.detail-btn[aria-expanded="true"]').length === 1);
-  assert.equal(requests.length, 6);
+  assert.equal(requests.length, 8);
   // 错误态不自动重试；显式重试后 404 cache_miss 展示为无数据。
   await page.locator('#shares-toggle-159509').click();
   mode = 'error';
