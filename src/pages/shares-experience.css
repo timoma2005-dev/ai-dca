@@ -122,7 +122,6 @@
 .shares-panel .head-date {
   font-size: 13px;
   color: var(--slate-600);
-  white-space: nowrap;
 }
 .shares-panel .head-date b {
   color: var(--primary);

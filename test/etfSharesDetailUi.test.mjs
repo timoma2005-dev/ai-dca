@@ -109,7 +109,7 @@ test('份额面板整体替换：信息栏、告警条限额环比三态、五�
   assert.equal(await page.locator('.limit-change.flat').textContent(), '限额持平');
   // 单行信息栏：状态 chip、基准日/对比、抓取时间（上海时区）、三个统计与刷新按钮。
   assert.match(await page.locator('.status-chip.stale').textContent(), /数据滞后待确认/);
-  assert.match(await page.locator('.head-date').textContent(), /基准日 2026-10-12 · 对比 2026-10-09/);
+  assert.match(await page.locator('.head-date').textContent(), /份额基准日 2026-10-12 · 对比 2026-10-09 · 限额基准日 2026-10-16/);
   assert.match(await page.locator('.head-meta').textContent(), /抓取 2026-10-13 09:03:20/);
   assert.deepEqual(await page.locator('.head-stat b').allTextContents(), ['+4,300', '3', '13']);
   // 告警条：3 个胶囊（over-limit 不并入），点击胶囊切换到「顶格 / 接近」筛选。

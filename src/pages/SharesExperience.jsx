@@ -398,6 +398,11 @@ function SharesPanel() {
   const alertRows = records.filter(isCeilingRow);
   const szVerified = records.filter((r) => isSz(r) && Number.isFinite(r.deltaShares));
   const netSum = szVerified.length ? szVerified.reduce((sum, r) => sum + r.deltaShares, 0) : null;
+  // 限额基准日：取各行 limitDate 的最大值（最新），与份额基准日区分展示。
+  const limitBaseline = records.reduce(
+    (max, r) => (r.limitDate && (!max || r.limitDate > max) ? r.limitDate : max),
+    null
+  );
   const szCount = records.filter(isSz).length;
   // 净增对比条分母固定为完整快照有效 delta 的 max(1, abs)：筛选、搜索、排序不改变尺度。
   const maxAbsDelta = records.reduce(
@@ -445,8 +450,13 @@ function SharesPanel() {
               {isStale ? '数据滞后待确认' : '最新已核验'}
             </span>
             <span className="head-date">
-              基准日 <b>{data.date}</b>
+              份额基准日 <b>{data.date}</b>
               <span className="head-prev"> · 对比 {data.prevDate || '—'}</span>
+              {limitBaseline && limitBaseline !== data.date && (
+                <span className="head-prev">
+                  {' '}· 限额基准日 <b>{limitBaseline}</b>
+                </span>
+              )}
             </span>
             <span className="head-meta" title={headTitle}>
               抓取 {fetchedTime(data.fetchedAt)}
@@ -690,7 +700,7 @@ function SharesPanel() {
                               key={`${data.date}:${r.code}`}
                               code={r.code}
                               name={r.name}
-                              date={data.date}
+                              date={r.limitDate || data.date}
                               id={`shares-detail-${r.code}`}
                               labelledBy={`shares-toggle-${r.code}`}
                             />
