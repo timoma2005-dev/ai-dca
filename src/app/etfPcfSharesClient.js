@@ -183,8 +183,8 @@ export function freshnessMessage(data, accessDay = shanghaiAccessDay()) {
 // Compact presentation for the shares decision cards; legacy labels stay unchanged.
 export function sharesCeiling(r) {
   if (!r.code.startsWith('159')) {
-    // 沪市：无 delta，不做利用率百分比；快照无申赎状态，标签只做中性提示，
-    // 不突出限额数字（暂停时限额数字会误导），详情抽屉里有完整申赎状态。
+    // 沪市：无 delta，不做利用率百分比；优先展示申赎状态（暂停优先于限额数字）。
+    if (r.subscriptionAllowed === false) return { kind: 'paused', label: '暂停申购' };
     if (r.totalLimitKind === 'unlimited') return { kind: 'unlimited', label: '累计不限' };
     if (r.totalLimitKind === 'limited' && Number.isFinite(r.totalLimitShares)) {
       return { kind: 'sse-limited', label: '有限额' };

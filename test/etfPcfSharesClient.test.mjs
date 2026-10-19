@@ -301,6 +301,11 @@ test('decision pills cover exact, near, over, outflow, unlimited and missing wit
     kind: 'pending',
     label: '数据待确认'
   });
+  // 沪市：暂停优先于限额数字展示。
+  assert.deepEqual(
+    sharesCeiling({ code: '513100', subscriptionAllowed: false, totalLimitKind: 'limited', totalLimitShares: 2500000 }),
+    { kind: 'paused', label: '暂停申购' }
+  );
   // 沪市有限额数据时标签中性提示"有限额"，不突出数字（快照无申赎状态，暂停时数字会误导）。
   assert.deepEqual(
     sharesCeiling({ code: '513100', totalLimitKind: 'limited', totalLimitShares: 2500000 }),

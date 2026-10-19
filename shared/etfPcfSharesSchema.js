@@ -135,6 +135,8 @@ export function buildSharesProjection({
     const limitEntry = hasSharesSource && limits.find((r) => r.code === code && r.date === date);
     const creationUnit = integer(limitEntry?.creationUnitShares) ? limitEntry.creationUnitShares : null;
     const usable = deltaShares !== null && total > 0;
+    // 申赎状态透传到 record，供前端表格直接展示"暂停申购"等状态，无需额外请求。
+    const creationStatusNorm = normalizeCreationStatus(creationStatus[code]);
     const reasons = ['missing_dated_nav'];
     if (shares === null) reasons.push('missing_shares');
     if (deltaShares === null)
@@ -160,6 +162,8 @@ export function buildSharesProjection({
       totalLimitShares: total,
       limitDate: limit ? date : null,
       creationUnitShares: creationUnit,
+      subscriptionAllowed: creationStatusNorm.subscriptionAllowed,
+      redemptionAllowed: creationStatusNorm.redemptionAllowed,
       utilization: usable ? deltaShares / total : null,
       atLimit: usable ? deltaShares === total : null,
       nearTotalLimit: usable ? deltaShares >= 0 && deltaShares / total >= 0.9 : null,

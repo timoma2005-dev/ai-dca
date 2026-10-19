@@ -745,6 +745,11 @@
   background: var(--slate-100);
   color: var(--slate-500);
 }
+.shares-panel .ceiling-tag.kind-paused {
+  background: var(--amber-50);
+  border: 1px solid var(--amber-100);
+  color: var(--amber-700);
+}
 .shares-panel .util-sse-pending {
   cursor: help;
 }
