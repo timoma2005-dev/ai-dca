@@ -182,16 +182,18 @@ export function freshnessMessage(data, accessDay = shanghaiAccessDay()) {
 
 // Compact presentation for the shares decision cards; legacy labels stay unchanged.
 export function sharesCeiling(r) {
+  // 生效限额：净优先，没有则回退累计（与 UtilizationCell 一致）。
+  const effKind = r.effLimitKind || (r.netLimitKind === 'limited' ? 'limited' : r.totalLimitKind);
   if (!r.code.startsWith('159')) {
     // 沪市：无 delta，不做利用率百分比；优先展示申赎状态（暂停优先于限额数字）。
     if (r.subscriptionAllowed === false) return { kind: 'paused', label: '暂停申购' };
-    if (r.totalLimitKind === 'unlimited') return { kind: 'unlimited', label: '累计不限' };
-    if (r.totalLimitKind === 'limited' && Number.isFinite(r.totalLimitShares)) {
+    if (effKind === 'unlimited') return { kind: 'unlimited', label: '累计不限' };
+    if (effKind === 'limited') {
       return { kind: 'sse-limited', label: '有限额' };
     }
     return { kind: 'pending', label: '数据待确认' };
   }
-  if (r.totalLimitKind === 'unlimited') return { kind: 'unlimited', label: '累计不限' };
+  if (effKind === 'unlimited') return { kind: 'unlimited', label: '累计不限' };
   if (r.deltaShares === null || r.atLimit === null) return { kind: 'pending', label: '数据待确认' };
   if (r.deltaShares < 0) return { kind: 'outflow', label: '净流出' };
   const percent = Math.round(r.utilization * 100);
