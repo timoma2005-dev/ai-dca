@@ -32,6 +32,8 @@ const FIXTURE_BYTES = new Uint8Array(
   readFileSync(path.join(__dirname, 'fixtures/etf-pcf/ETF15994120261013.gbk.txt'))
 );
 // 上海 2026-10-13 10:00：date=2026-10-13 合法且非未来。
+// Independent contract: production KV retention is 400 days.
+const CACHE_TTL_SECONDS = 400 * 86400;
 const NOW = new Date('2026-10-13T02:00:00.000Z');
 
 beforeEach(() => {
@@ -103,7 +105,7 @@ function makeCachedData(overrides = {}) {
     warnings: [],
     sourceUrl: 'https://reportdocs.static.szse.cn/files/text/etf/ETF15994120261013.txt',
     fetchedAt: '2026-10-13T01:00:00.000Z',
-    expiresAt: '2026-10-14T01:00:00.000Z',
+    expiresAt: new Date(Date.parse('2026-10-13T01:00:00.000Z') + CACHE_TTL_SECONDS * 1000).toISOString(),
     ...overrides
   };
 }
@@ -638,7 +640,7 @@ test('缓存读取：过期/未来时间/身份不符/损坏 JSON/source/schema 
   const cases = [
     { overrides: { expiresAt: '2026-10-13T01:30:00.000Z' }, reason: 'expired' },
     { overrides: { fetchedAt: '2026-10-13T03:00:00.000Z' }, reason: 'future_fetched_at' },
-    { overrides: { expiresAt: '2026-10-14T03:00:00.000Z' }, reason: 'ttl_anomaly' },
+    { overrides: { expiresAt: new Date(Date.parse('2026-10-13T01:00:00.000Z') + CACHE_TTL_SECONDS * 1000 + 60001).toISOString() }, reason: 'ttl_anomaly' },
     { overrides: { expiresAt: '2026-10-13T01:00:00.000Z' }, reason: 'expiry_range' },
     { overrides: { code: '159001' }, reason: 'identity' },
     { overrides: { date: '2026-10-12' }, reason: 'identity' },
@@ -728,12 +730,12 @@ test('fetchEtfPcfLimit：默认缓存优先，forceRefresh 才绕过缓存抓取
   assert.equal(fetchFn.calls.length, 1);
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:159941:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, 86400);
+  assert.equal(kv.putCalls[0].options.expirationTtl, CACHE_TTL_SECONDS);
   const persisted = JSON.parse(kv.putCalls[0].value);
   assert.equal(persisted.code, '159941');
   assert.equal(persisted.date, '2026-10-13');
   assert.equal(persisted.fetchedAt, '2026-10-13T02:00:00.000Z');
-  assert.equal(persisted.expiresAt, '2026-10-14T02:00:00.000Z');
+  assert.equal(persisted.expiresAt, new Date(+NOW + CACHE_TTL_SECONDS * 1000).toISOString());
   assert.equal('cached' in persisted, false); // cached 标记不进持久化
   assert.equal(persisted.netSubscribeLimitShares, 1300000);
   assert.equal(persisted.netRedeemLimitShares, 1000000000);
@@ -889,7 +891,7 @@ test('历史八只真实 CSV 净申购值：次日归档和完整当日缓存均
     clearEtfPcfRuntimeStateForTests();
     // 当日完整缓存为派生测试对象，不声称恢复了真实原文或采集时间。
     const full = {...data, rawFields: {}, fetchedAt: NOW.toISOString(),
-      expiresAt: new Date(+NOW + 86400000).toISOString(), sourceUrl: buildEtfPcfSourceUrl(code, data.date)};
+      expiresAt: new Date(+NOW + CACHE_TTL_SECONDS * 1000).toISOString(), sourceUrl: buildEtfPcfSourceUrl(code, data.date)};
     kv.store.set(buildEtfPcfCacheKey(code, data.date), JSON.stringify(full));
     const today = await readEtfPcfLimitCache({code, date: data.date, env: {FUND_LIMIT_KV: kv}, now: NOW});
     assert.equal(today.data.netSubscribeLimitShares, shares);
@@ -1068,7 +1070,7 @@ test('历史 inflight 合并、成功重校验调用 now、不同日期不串 ke
   assert.equal(kv.putCalls.length, 1);
 });
 
-test('cron 单标的当日刷新不修改历史永久 key，TTL 保持 86400', async () => {
+test('cron 单标的当日刷新不修改历史永久 key，TTL 保持 400 天', async () => {
   const history = historyFixture('159941', '2025-10-13');
   const key = buildEtfPcfCacheKey(history.code, history.date);
   const original = JSON.stringify(history);
@@ -1079,7 +1081,7 @@ test('cron 单标的当日刷新不修改历史永久 key，TTL 保持 86400', a
   assert.equal(kv.expirations.has(key), false);
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:159941:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, 86400);
+  assert.equal(kv.putCalls[0].options.expirationTtl, CACHE_TTL_SECONDS);
 });
 
 test('P 日真实数值与原始净值精度，T 日现金不串段', () => {

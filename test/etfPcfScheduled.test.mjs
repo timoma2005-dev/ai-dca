@@ -22,6 +22,8 @@ import {
   refreshSsePcfLimitCache
 } from '../workers/ocr-proxy/src/ssePcfLimit.js';
 
+// Independent SZSE PCF retention contract; SSE/universe TTLs are separate.
+const CACHE_TTL_SECONDS = 400 * 86400;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_BYTES = new Uint8Array(
   readFileSync(path.join(__dirname, 'fixtures/etf-pcf/ETF15994120261013.gbk.txt'))
@@ -269,13 +271,13 @@ test('全量刷新：1000 探测 + 600 项名单，两阶段顺序、并发 ≤5
   const resultPuts = kv.putCalls.filter((p) => p.key.startsWith('etf-pcf:'));
   assert.equal(resultPuts.length, 600);
   for (const put of resultPuts) {
-    assert.equal(put.options.expirationTtl, 86400);
+    assert.equal(put.options.expirationTtl, CACHE_TTL_SECONDS);
     assert.match(put.key, /^etf-pcf:159\d{3}:20261013$/);
     const data = JSON.parse(put.value);
     assert.equal(data.date, DATE_KEY);
     assert.equal(data.code, put.key.split(':')[1]);
     assert.equal(data.fetchedAt, new Date(SCHEDULED_MS).toISOString());
-    assert.equal(data.expiresAt, new Date(SCHEDULED_MS + 86400 * 1000).toISOString());
+    assert.equal(data.expiresAt, new Date(SCHEDULED_MS + CACHE_TTL_SECONDS * 1000).toISOString());
     assert.equal(data.netSubscribeLimitShares, 1300000);
     assert.equal(data.fundName, '纳指ETF广发');
   }
@@ -773,5 +775,5 @@ test('onSuccess exceptions cannot change PCF success/TTL; failed PCF puts are no
  const kv=new FakeKV(),mock=createPipelineMock({exists:new Set(['159941','159659'])});const collected=[];
  kv.putImpl=async(key,value)=>{if(key.includes('159659'))throw Error('synthetic failed put');kv.store.set(key,value);};
  const r=await refreshEtfPcfLimitCache({env:{FUND_LIMIT_KV:kv},date:DATE_KEY,codes:['159941','159659'],now:new Date(SCHEDULED_MS),fetchImpl:mock.fetchImpl,onSuccess:data=>{collected.push(data);throw Error('synthetic callback');}});
- assert.equal(r.stats.success,1);assert.equal(r.stats.kvWriteFailed,1);assert.equal(collected.length,1);assert.equal(collected[0].code,'159941');assert.equal(kv.putCalls.find(p=>p.key.includes('159941')).options.expirationTtl,86400);
+ assert.equal(r.stats.success,1);assert.equal(r.stats.kvWriteFailed,1);assert.equal(collected.length,1);assert.equal(collected[0].code,'159941');assert.equal(kv.putCalls.find(p=>p.key.includes('159941')).options.expirationTtl,CACHE_TTL_SECONDS);
 });

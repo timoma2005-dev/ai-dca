@@ -12,6 +12,8 @@ import { handleEtfPcfLimit } from '../workers/ocr-proxy/src/etfPcfRoutes.js';
 import { clearEtfPcfRuntimeStateForTests } from '../workers/ocr-proxy/src/etfPcfLimit.js';
 import { SSE_PCF_CODES, clearSsePcfRuntimeStateForTests } from '../workers/ocr-proxy/src/ssePcfLimit.js';
 
+// Independent SZSE PCF retention contract; SSE/universe TTLs are separate.
+const CACHE_TTL_SECONDS = 400 * 86400;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_BYTES = new Uint8Array(
   readFileSync(path.join(__dirname, 'fixtures/etf-pcf/ETF15994120261013.gbk.txt'))
@@ -298,7 +300,7 @@ test('GET 显式 date 命中对应缓存，KV 服务异常返回 503', async (t)
 
 // ─── POST：单 code 手动刷新 ───────────────────────────────────────
 
-test('POST 成功抓取解析并写入精确 key（TTL 86400）后返回 200', async (t) => {
+test('POST 成功抓取解析并写入精确 key（TTL 400 天）后返回 200', async (t) => {
   const kv = new FakeKV();
   const { fetchMock, response } = postRoute(t, { FUND_LIMIT_KV: kv }, { code: '159941', date: '2026-10-13' });
   const result = await response;
@@ -312,7 +314,7 @@ test('POST 成功抓取解析并写入精确 key（TTL 86400）后返回 200', a
   assert.equal(fetchMock.mock.calls[0].arguments[0], 'https://reportdocs.static.szse.cn/files/text/etf/ETF15994120261013.txt');
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:159941:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, 86400);
+  assert.equal(kv.putCalls[0].options.expirationTtl, CACHE_TTL_SECONDS);
 });
 
 test('POST date 省略默认上海当天', async (t) => {

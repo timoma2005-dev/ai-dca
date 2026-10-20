@@ -12,6 +12,8 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Independent SZSE PCF retention contract; SSE/universe TTLs are separate.
+const CACHE_TTL_SECONDS = 400 * 86400;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HARNESS_DIR = path.join(__dirname, 'fixtures/etf-pcf/runtime-harness');
 const CONFIG_PATH = path.join(HARNESS_DIR, 'wrangler.toml');
@@ -165,7 +167,7 @@ test('本地 workerd（2026-03-26 兼容日期）GBK 解码、KV 写入与 sched
   assert.equal(cached.netSubscribeLimitShares, 1300000);
   assert.equal(cached.netRedeemLimitShares, 1000000000);
   assert.equal(cached.fetchedAt, '2026-10-13T01:30:00.000Z');
-  assert.equal(cached.expiresAt, '2026-10-14T01:30:00.000Z');
+  assert.equal(cached.expiresAt, new Date(Date.parse(cached.fetchedAt) + CACHE_TTL_SECONDS * 1000).toISOString());
 
   // 3) scheduled 模拟：time 参数按毫秒透传给 controller.scheduledTime。
   const cronQuery = encodeURIComponent('0 1 * * *');

@@ -5,6 +5,7 @@ import { eventKey, runEtfPcfEvents } from '../workers/ocr-proxy/src/etfPcfEvents
 import { buildEtfPcfCacheKey, parseEtfPcf } from '../workers/ocr-proxy/src/etfPcfLimit.js';
 import { sharesKey, validateSharesProjection } from '../workers/ocr-proxy/src/etfPcfSharesProjection.js';
 
+const CACHE_TTL_SECONDS = 400 * 86400;
 const today = '2026-10-14';
 const at = '2026-10-14T01:00:00.000Z';
 const code = '159941';
@@ -21,7 +22,7 @@ function pcf(date = today, overrides = {}) {
   return {
     ...parseEtfPcf(source, { code, date }),
     fetchedAt,
-    expiresAt: new Date(Date.parse(fetchedAt) + 86400000).toISOString(),
+    expiresAt: new Date(Date.parse(fetchedAt) + CACHE_TTL_SECONDS * 1000).toISOString(),
     totalSubscribeLimitKind: 'limited',
     totalSubscribeLimitShares: 10000000,
     subscriptionAllowed: true,
