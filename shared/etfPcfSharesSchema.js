@@ -40,11 +40,11 @@ const NAMES = [
   '纳指ETF汇添富',
   '纳指ETF易方达',
   '纳指ETF广发',
-  '纳斯达克100ETF国泰',
   '纳指ETF国泰',
-  '纳指ETF广发',
-  '纳斯达克100ETF华夏',
-  '纳指ETF华宝'
+  '纳指ETF华泰柏瑞',
+  '纳斯达克ETF华夏',
+  '纳指100ETF博时',
+  '纳指ETF富国'
 ];
 export const TTL = 30 * 86400000;
 export const SOURCE = 'szse_pcf_shares_projection';
@@ -110,6 +110,36 @@ function creationFromStatus(status, deltaShares) {
   }
   return { creationShares: null, creationSharesKind: null };
 }
+// 限额环比：before/after 归一化后分类为 tightened / relaxed / unchanged / incomparable。
+function normLimit(x) {
+  const kind = ['limited', 'unlimited', 'unknown'].includes(x?.kind) ? x.kind : 'unknown';
+  return { kind, shares: kind === 'limited' && integer(x.shares) ? x.shares : null };
+}
+export function classifyLimitChange(beforeRaw, afterRaw) {
+  const before = normLimit(beforeRaw),
+    after = normLimit(afterRaw);
+  const out = (change, ratio = null) => ({ before, after, change, ratio });
+  if (before.kind === 'unknown' || after.kind === 'unknown') return out('incomparable');
+  if ((before.kind === 'limited' && before.shares === null) || (after.kind === 'limited' && after.shares === null))
+    return out('incomparable');
+  if (before.kind === 'unlimited' && after.kind === 'unlimited') return out('unchanged');
+  if (before.kind === 'unlimited') return out('tightened');
+  if (after.kind === 'unlimited') return out('relaxed');
+  if (before.shares === after.shares) return out('unchanged', 1);
+  const ratio = before.shares > 0 ? after.shares / before.shares : null;
+  return out(after.shares < before.shares ? 'tightened' : 'relaxed', ratio);
+}
+export function overallLimitChange(changes) {
+  if (!changes) return 'incomparable';
+  const kinds = Object.values(changes).map((c) => c.change);
+  const t = kinds.includes('tightened'),
+    r = kinds.includes('relaxed');
+  if (t && r) return 'mixed';
+  if (t) return 'tightened';
+  if (r) return 'relaxed';
+  if (kinds.every((k) => k === 'incomparable')) return 'incomparable';
+  return 'unchanged';
+}
 export function buildSharesProjection({
   date,
   records,
@@ -119,13 +149,18 @@ export function buildSharesProjection({
   projectedAt = new Date().toISOString(),
   dateEvidence,
   calendar = null,
+  // 上一限额日（上一交易日）的限额，用于计算 limitChanges；同 limits 结构：
+  // { code, date, total, net, accountTotal, accountNet }。
+  prevLimits = [],
+  prevLimitDate = null,
   // 限额日期：默认与快照日期相同；按 dudu 10-16 口径，限额应走快照产出当日的最新 PCF，
   // 调用方可传入与 date 不同的 limitDate（如今日）。
   limitDate = date
 }) {
   const previous = previousSession(date, calendar);
   const rows = TARGET_CODES.map((code, index) => {
-    const hasSharesSource = code.startsWith('159');
+    // 159 份额来自深交所基金规模报表，513 份额来自上交所 ETF 规模接口（sse_etf_scale）。
+    const hasSharesSource = true;
     const cur = hasSharesSource && records.find((r) => r.code === code && r.date === date);
     const old = previous && records.find((r) => r.code === code && r.date === previous);
     const shares = integer(cur?.shares) ? cur.shares : null;
@@ -133,7 +168,6 @@ export function buildSharesProjection({
     const delta = prevShares === null ? null : shares - prevShares;
     const deltaShares = Number.isSafeInteger(delta) ? delta : null;
     // 限额：159 从深交所 PCF，513 从上交所 PCF（datedLimits 已按限额日期准备好，两者都有）。
-    // 份额只走 159（深交所行情报告），513 无份额源，shares/delta 保持 null。
     const limit = limits.find((r) => r.code === code && r.date === limitDate)?.total;
     const kind = ['limited', 'unlimited', 'unknown'].includes(limit?.kind) ? limit.kind : 'unknown';
     const total = kind === 'limited' && integer(limit.shares) ? limit.shares : null;
@@ -155,6 +189,20 @@ export function buildSharesProjection({
     } else {
       effKind = 'unknown'; effShares = null; limitSource = null;
     }
+    const prevEntry = prevLimitDate
+      ? prevLimits.find((r) => r.code === code && r.date === prevLimitDate)
+      : null;
+    const accountTotal = normLimit(limitEntry?.accountTotal),
+      accountNet = normLimit(limitEntry?.accountNet);
+    const limitChanges =
+      prevEntry && limitEntry
+        ? {
+            total: classifyLimitChange(prevEntry.total, limitEntry.total),
+            net: classifyLimitChange(prevEntry.net, limitEntry.net),
+            accountTotal: classifyLimitChange(prevEntry.accountTotal, limitEntry.accountTotal),
+            accountNet: classifyLimitChange(prevEntry.accountNet, limitEntry.accountNet)
+          }
+        : null;
     const usable = deltaShares !== null && effShares > 0;
     // 申赎状态透传到 record，供前端表格直接展示"暂停申购"等状态，无需额外请求。
     const creationStatusNorm = normalizeCreationStatus(creationStatus[code]);
@@ -188,6 +236,13 @@ export function buildSharesProjection({
       effLimitShares: effShares,
       limitSource,
       limitDate: limit ? limitDate : null,
+      accountTotalLimitKind: accountTotal.kind,
+      accountTotalLimitShares: accountTotal.shares,
+      accountNetLimitKind: accountNet.kind,
+      accountNetLimitShares: accountNet.shares,
+      prevLimitDate: limitChanges ? prevLimitDate : null,
+      limitChanges,
+      limitChange: overallLimitChange(limitChanges),
       creationUnitShares: creationUnit,
       subscriptionAllowed: creationStatusNorm.subscriptionAllowed,
       redemptionAllowed: creationStatusNorm.redemptionAllowed,
@@ -209,6 +264,19 @@ export function buildSharesProjection({
     expiresAt: new Date(Date.parse(fetchedAt) + TTL).toISOString(),
     availableOn: shanghaiDateKey(new Date(fetchedAt)),
     status: rows.every((r) => r.status === 'complete') ? 'complete' : 'partial',
+    limitDate,
+    prevLimitDate: rows.some((r) => r.prevLimitDate) ? prevLimitDate : null,
+    limitSummary: {
+      tightened: rows.filter((r) => r.limitChange === 'tightened').map((r) => r.code),
+      relaxed: rows.filter((r) => r.limitChange === 'relaxed').map((r) => r.code),
+      mixed: rows.filter((r) => r.limitChange === 'mixed').map((r) => r.code),
+      unchanged: rows.filter((r) => r.limitChange === 'unchanged').map((r) => r.code),
+      incomparable: rows.filter((r) => r.limitChange === 'incomparable').map((r) => r.code)
+    },
+    inputSources: [
+      'szse_fund_report',
+      ...(rows.some((r) => r.code.startsWith('5') && r.shares !== null) ? ['sse_etf_scale'] : [])
+    ],
     records: rows,
     dateEvidence,
     calendar

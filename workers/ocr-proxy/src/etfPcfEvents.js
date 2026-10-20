@@ -19,6 +19,7 @@ import {
   CURRENT_SHARES_URL,
   historicalSharesUrl,
   fetchEtfPcfShares,
+  fetchSseEtfShares,
   parseEtfPcfSharesXlsx
 } from './etfPcfShares.js';
 const EVENT_CODES = TARGET_CODES.filter((code) => code.startsWith('159'));
@@ -412,6 +413,7 @@ async function runStage({
   pcfs = [],
   pcfData = pcfs,
   sharesFetch = defaultSharesFetch,
+  sseSharesFetch = fetchSseEtfShares,
   deadlineMs = 20000,
   tradingCalendar = undefined
 }) {
@@ -644,6 +646,26 @@ async function runStage({
       console.log('etf_pcf_events_limits_snapshot_skipped', JSON.stringify({ date, reason: 'empty_current' }));
     }
     setPhase('shares');
+    // 513 份额：上交所 ETF 规模接口，取 T-1、T-2 两个交易日，与深交所下载并行。
+    const sseShareDates = [];
+    if (previous) {
+      sseShareDates.push(previous);
+      const prev2 = previousSession(previous, calendar);
+      if (prev2) sseShareDates.push(prev2);
+    }
+    const sseSharesPromise = Promise.all(
+      sseShareDates.map((d) =>
+        sseSharesFetch({
+          date: d,
+          timeoutMs: Math.max(1000, Math.min(8000, deadline - Date.now() - 2000))
+        }).catch(() => ({ ok: false, reason: 'source_failure' }))
+      )
+    ).then((rs) => {
+      const failures = rs.filter((r) => !r.ok).map((r) => r.reason);
+      if (failures.length)
+        console.warn('sse_shares_fetch_failed', JSON.stringify({ dates: sseShareDates, failures }));
+      return rs.flatMap((r) => (r.ok ? r.records : []));
+    });
     let records = [...cachedShares];
     let sharesReason = 'missing_shares';
     const projectionBatches = [];
@@ -834,6 +856,68 @@ async function runStage({
     // Independent sidecar after all original event writes; never downloads or mutates logs.
     setPhase('projection');
     const projectionResults = [];
+    const sseShares = await Promise.race([
+      sseSharesPromise,
+      new Promise((resolve) => setTimeout(() => resolve([]), Math.max(1, deadline - Date.now() - 3000)))
+    ]);
+    // 当日与上一交易日的限额（含单账户限额），用于 limitChanges 环比。
+    const limitDayCache = new Map();
+    const readLimitDay = async (limitDay) => {
+      if (!limitDay) return [];
+      if (limitDayCache.has(limitDay)) return limitDayCache.get(limitDay);
+      const isToday = limitDay === date;
+      const rows = await mapLimit(TARGET_CODES, 6, async (code) => {
+        const sse = code.startsWith('5');
+        try {
+          const raw = await read(
+            sse ? buildSsePcfCacheKey(code, limitDay) : buildEtfPcfCacheKey(code, limitDay),
+            'projection'
+          );
+          if (!raw) return null;
+          const cached = parse(raw);
+          const at = new Date();
+          const ok = sse
+            ? validateSsePcfCachedData(cached, { code, date: limitDay, now: at }).ok
+            : (isToday ? validateEtfPcfCachedData : validateEtfPcfHistoryData)(cached, {
+                code,
+                date: limitDay,
+                now: at
+              }).ok;
+          if (!ok) return null;
+          return {
+            code,
+            date: limitDay,
+            ...normalizeCreationStatus(cached),
+            net: { kind: cached.netSubscribeLimitKind, shares: cached.netSubscribeLimitShares },
+            total: { kind: cached.totalSubscribeLimitKind, shares: cached.totalSubscribeLimitShares },
+            accountNet: { kind: cached.accountNetSubscribeLimitKind, shares: cached.accountNetSubscribeLimitShares },
+            accountTotal: {
+              kind: cached.accountTotalSubscribeLimitKind,
+              shares: cached.accountTotalSubscribeLimitShares
+            },
+            creationUnitShares: Number.isSafeInteger(cached.creationRedemptionUnitShares)
+              ? cached.creationRedemptionUnitShares
+              : null
+          };
+        } catch (e) {
+          if (e?.message === 'timeout') throw e;
+          return null;
+        }
+      });
+      const out = rows.filter(Boolean);
+      limitDayCache.set(limitDay, out);
+      return out;
+    };
+    let todayLimits = [],
+      prevDayLimits = [];
+    try {
+      if (projectionBatches.length) {
+        todayLimits = await readLimitDay(date);
+        prevDayLimits = await readLimitDay(previous);
+      }
+    } catch (e) {
+      console.warn('shares_projection_limit_read_failed', e?.message);
+    }
     for (const batch of projectionBatches) {
       for (const d of [...new Set(batch.records.map((r) => r.date))]
         .filter((d) => isWellFormedEtfPcfDateKey(d) && d <= date && d >= day(date, -10))
@@ -848,6 +932,7 @@ async function runStage({
           const datedLimits = new Map(
             (d === date ? current : history.get(d)?.records || []).map((r) => [r.code, r])
           );
+          for (const row2 of todayLimits) datedLimits.set(row2.code, row2);
           for (const code of TARGET_CODES) {
             const existing = datedLimits.get(code);
             if (existing?.subscriptionAllowed != null && known(existing.total)) continue;            const sse = code.startsWith('513');
@@ -880,8 +965,14 @@ async function runStage({
           );
           const data = buildSharesProjection({
             date: d,
-            records: [...records.filter((r) => r.date !== d), ...batch.records.filter((r) => r.date === d)],
-            limits: [...datedLimits.values()],            creationStatus,
+            records: [
+              ...records.filter((r) => r.date !== d),
+              ...batch.records.filter((r) => r.date === d),
+              ...sseShares
+            ],
+            limits: [...datedLimits.values()],
+            prevLimits: prevDayLimits,
+            prevLimitDate: previous,            creationStatus,
             fetchedAt: batch.fetchedAt,
             dateEvidence: row?.dateEvidence,
             calendar,

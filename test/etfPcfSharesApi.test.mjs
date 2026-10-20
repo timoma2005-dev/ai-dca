@@ -31,7 +31,7 @@ test('read-only API all branches: complete/partial/zero/missing/corrupt/invalid/
     ['etf-pcf-shares:latest', JSON.stringify(pointer)]
   ]);
   const env = {
-    FUND_LIMIT_KV: {
+    ETF_NAME_LOOKUP: 'off', FUND_LIMIT_KV: {
       get: async (key) => {
         gets.push(key);
         return store.get(key) ?? null;
@@ -86,7 +86,7 @@ test('read-only API all branches: complete/partial/zero/missing/corrupt/invalid/
     await call('', 204, 'OPTIONS');
     await call('', 503, 'GET', {});
     await call('', 503, 'GET', {
-      FUND_LIMIT_KV: {
+      ETF_NAME_LOOKUP: 'off', FUND_LIMIT_KV: {
         get: () => {
           throw Error('read');
         }
@@ -145,7 +145,7 @@ test('PCF snapshot metadata uses validated cached dates and leaves share measure
   ]);
   let fault = false;
   const env = {
-    FUND_LIMIT_KV: {
+    ETF_NAME_LOOKUP: 'off', FUND_LIMIT_KV: {
       get: async (key) => {
         if (fault && key === currentKey) throw Error('pcf read unavailable');
         return values.get(key) ?? null;
@@ -197,7 +197,7 @@ test('Worker dispatch uses the read-only shares route including OPTIONS no-store
     key: sharesKey(data.date)
   };
   const env = {
-    FUND_LIMIT_KV: { get: async (key) => JSON.stringify(key.endsWith('latest') ? pointer : data) }
+    ETF_NAME_LOOKUP: 'off', FUND_LIMIT_KV: { get: async (key) => JSON.stringify(key.endsWith('latest') ? pointer : data) }
   };
   for (const method of ['GET', 'OPTIONS', 'POST']) {
     const response = await worker.fetch(new Request('https://test/api/etf-pcf-shares', { method }), env, {});

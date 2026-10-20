@@ -276,7 +276,7 @@ test('13 ETFs: normalized PCF creation status, signed estimates, and honest SSE 
   for (const [i, r] of x.records.slice(8).entries()) {
     assert.equal(
       r.name,
-      ['纳斯达克100ETF国泰', '纳指ETF国泰', '纳指ETF广发', '纳斯达克100ETF华夏', '纳指ETF华宝'][i]
+      ['纳指ETF国泰', '纳指ETF华泰柏瑞', '纳斯达克ETF华夏', '纳指100ETF博时', '纳指ETF富国'][i]
     );
     assert.equal(r.status, 'partial');
     assert.ok(r.reasons.includes('missing_shares'));

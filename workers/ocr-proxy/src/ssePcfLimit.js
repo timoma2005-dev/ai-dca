@@ -204,15 +204,17 @@ export function parseSsePcfJsonp(text) {
 
 // ─── 字段映射 ─────────────────────────────────────────────────────
 
-// 6 个映射到结构化字段的份额上限（累计/净/单账户累计，申与赎各一组）。
-// SSE 的单账户净限额（NET_*_PER_ACCT）不在 plan 映射表内，不映射、不臆造。
+// 8 个映射到结构化字段的份额上限（累计/净/单账户累计/单账户净，申与赎各一组）。
+// SSE 的单账户净限额（NET_*_PER_ACCT）上游已提供，与累计限额同样映射。
 const SSE_PCF_LIMIT_FIELD_MAP = [
   ['CREATION_LIMIT', 'totalSubscribeLimitShares', 'totalSubscribeLimitKind'],
   ['NET_CREATION_LIMIT', 'netSubscribeLimitShares', 'netSubscribeLimitKind'],
   ['CREATION_LIMIT_PER_ACCT', 'accountTotalSubscribeLimitShares', 'accountTotalSubscribeLimitKind'],
   ['REDEMPTION_LIMIT', 'totalRedeemLimitShares', 'totalRedeemLimitKind'],
   ['NET_REDEMPTION_LIMIT', 'netRedeemLimitShares', 'netRedeemLimitKind'],
-  ['REDEMPTION_LIMIT_PER_ACCT', 'accountTotalRedeemLimitShares', 'accountTotalRedeemLimitKind']
+  ['REDEMPTION_LIMIT_PER_ACCT', 'accountTotalRedeemLimitShares', 'accountTotalRedeemLimitKind'],
+  ['NET_CREATION_LIMIT_PER_ACCT', 'accountNetSubscribeLimitShares', 'accountNetSubscribeLimitKind'],
+  ['NET_REDEMPTION_LIMIT_PER_ACCT', 'accountNetRedeemLimitShares', 'accountNetRedeemLimitKind']
 ];
 
 // 「申购和赎回皆允许」→ true/true；「仅允许赎回」→ false/true；
@@ -334,7 +336,7 @@ export function mapSsePcfFields(row, { code, now } = {}) {
     }, warnings)
   };
 
-  // 6 组映射上限：缺字段 null + unknown + warning；损坏值拒绝整条解析。
+  // 8 组映射上限：缺字段 null + unknown + warning；损坏值拒绝整条解析。
   for (const [sourceKey, sharesKey, kindKey] of SSE_PCF_LIMIT_FIELD_MAP) {
     let parsed;
     if (!Object.prototype.hasOwnProperty.call(row, sourceKey)) {
@@ -349,13 +351,6 @@ export function mapSsePcfFields(row, { code, now } = {}) {
     result[sharesKey] = parsed.shares;
     result[kindKey] = parsed.kind;
   }
-  // SSE 映射表不提供单账户净申赎限额：固定 null + unknown，不臆造数值。
-  result.accountNetSubscribeLimitShares = null;
-  result.accountNetSubscribeLimitKind = 'unknown';
-  result.accountNetRedeemLimitShares = null;
-  result.accountNetRedeemLimitKind = 'unknown';
-  warnings.push('上游未提供单账户净限额字段：NET_CREATION_LIMIT_PER_ACCT');
-  warnings.push('上游未提供单账户净限额字段：NET_REDEMPTION_LIMIT_PER_ACCT');
 
   // 申赎状态：已知短语映射布尔；未知状态 null/null + warning，保留原文（不等于关闭）。
   result.creationRedemption = null;

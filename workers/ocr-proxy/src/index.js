@@ -21,7 +21,8 @@ import { HOLDINGS_PROMPT_VERSION, PROMPT_VERSION } from './geminiPrompt.js';
 import { isTradingDayShanghai } from '../../../shared/etfPcfTradingCalendar.js';
 
 const FUND_LIMIT_CRON = '0 12 * * *';
-const ETF_PCF_DAILY_CRONS = new Set(['0 1 * * *', '0 1 * * 1-5']);
+// 30 1 * * 1-5：北京时间 09:30 补跑，覆盖 09:00 时交易所数据尚未就绪的情况。
+const ETF_PCF_DAILY_CRONS = new Set(['0 1 * * *', '0 1 * * 1-5', '30 1 * * 1-5']);
 
 export function resolveEtfPcfDailyTrigger({ cron, scheduledTime } = {}) {
   if (!ETF_PCF_DAILY_CRONS.has(cron)) {

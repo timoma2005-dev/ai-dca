@@ -176,6 +176,10 @@ function createCombinedMock(
       calls.push({ seq, url: u, method: 'GET', market: 'shares', init });
       return { status: 404 };
     }
+    if (u.includes('sqlId=COMMON_SSE_ZQPZ_ETFZL_XXPL_ETFGM_SEARCH_L')) {
+      calls.push({ seq, url: u, method: 'GET', market: 'sse_shares', init });
+      return { status: 404, body: null };
+    }
     if (u.startsWith(SSE_URL_PREFIX)) {
       const code = u.slice(SSE_URL_PREFIX.length).split('&')[0];
       activeSse += 1;
@@ -548,7 +552,9 @@ test('新 cron 0 1 * * * 经 index 分发：先上交所 5 只刷新，再深交
   assert.equal(sharesCalls.length, 2);
   assert.equal(new URL(sharesCalls[1].url).searchParams.get('txtEnd'), DATE_KEY);
   assert.ok(Math.max(...szseCalls.map((c) => c.seq)) < Math.min(...sharesCalls.map((c) => c.seq)));
-  assert.equal(mock.calls.length, 1008);
+  // +2：上交所 ETF 规模接口取 T-1/T-2 两日 513 份额。
+  assert.equal(mock.calls.filter((c) => c.market === 'sse_shares').length, 2);
+  assert.equal(mock.calls.length, 1010);
   assert.ok(kv.store.has('etf-pcf:159941:20261013'));
   assert.ok(kv.store.has(ETF_PCF_UNIVERSE_KEY));
 

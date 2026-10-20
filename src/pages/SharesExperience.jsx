@@ -18,6 +18,7 @@ import {
 } from '../app/etfPcfSharesClient.js';
 import { pcfDetailClient, pcfDetailSections, formatPcfShares } from '../app/etfPcfDetailClient.js';
 import './shares-experience.css';
+import SharesBoard from './SharesBoard.jsx';
 
 const zh = (n, options) => n.toLocaleString('zh-CN', options);
 const isSzCode = (code) => code.startsWith('159');
@@ -810,6 +811,9 @@ function SharesPanel() {
   );
 }
 
+// 旧版表格面板保留导出，便于对照与回退；页面默认渲染看板视图（SharesBoard）。
+export { SharesPanel as LegacySharesPanel, PcfDetailDrawer };
+
 export default function SharesExperience() {
-  return <SharesPanel />;
+  return <SharesBoard DetailDrawer={PcfDetailDrawer} />;
 }

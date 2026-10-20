@@ -439,3 +439,55 @@ export async function fetchEtfPcfShares({
     signal?.removeEventListener('abort', abort);
   }
 }
+
+// 上交所 ETF 规模接口：513 系列每日份额（TOT_VOL 单位万份）。需要 Referer；SEC_CODE 参数过滤无效，本地按 codes 过滤。
+const SSE_SHARES_URL_BASE =
+  'https://query.sse.com.cn/commonQuery.do?isPagination=true&pageHelp.pageSize=2000&pageHelp.pageNo=1&sqlId=COMMON_SSE_ZQPZ_ETFZL_XXPL_ETFGM_SEARCH_L&STAT_DATE=';
+export async function fetchSseEtfShares({ date, fetchImpl = fetch, timeoutMs = 6000, signal, codes = TARGET_CODES } = {}) {
+  if (!isWellFormedEtfPcfDateKey(date)) return { ok: false, reason: 'invalid_date' };
+  if (signal?.aborted) return { ok: false, reason: 'timeout' };
+  const controller = new AbortController(),
+    abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(abort, timeoutMs);
+  try {
+    const resp = await fetchImpl(SSE_SHARES_URL_BASE + date, {
+      signal: controller.signal,
+      headers: { Referer: 'https://www.sse.com.cn/', 'User-Agent': 'Mozilla/5.0' }
+    });
+    if (resp.status !== 200) {
+      await resp.body?.cancel();
+      return { ok: false, reason: 'http_' + resp.status };
+    }
+    const text = await resp.text();
+    if (text.length > 2 * MAX) return { ok: false, reason: 'download_limit' };
+    const json = JSON.parse(text);
+    if (!Array.isArray(json?.result)) return { ok: false, reason: 'sse_shape' };
+    const records = [];
+    for (const row of json.result) {
+      const code = String(row?.SEC_CODE || '');
+      if (!codes.includes(code) || !code.startsWith('5')) continue;
+      if (row.STAT_DATE !== date) continue;
+      let shares;
+      try {
+        shares = decimalShares(String(row.TOT_VOL).trim(), '万份');
+      } catch {
+        continue;
+      }
+      records.push({
+        code,
+        date,
+        shares,
+        unit: '万份',
+        name: typeof row.SEC_NAME === 'string' && row.SEC_NAME ? row.SEC_NAME : code,
+        source: 'sse_etf_scale'
+      });
+    }
+    return { ok: true, date, records };
+  } catch {
+    return { ok: false, reason: controller.signal.aborted ? 'timeout' : 'source_failure' };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
+}
