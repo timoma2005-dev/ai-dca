@@ -281,19 +281,27 @@ class ProductSnapshotService(MarketDataService):
                 return normalized
             if kind not in {"otc", "qdii"}:
                 return metric
+            # 场外/QDII 一律查一次净值历史再决定是否覆盖（nav_history 内部有 30 分钟
+            # 缓存，调用代价可控）。此前仅在 latestNav 缺失时才拉取：fund_quote 里一旦
+            # 留有旧净值（迁移回填行必然如此）就永远不再刷新，晚间 OTC 任务把接口
+            # 回显的旧值再写回 fund_quote，形成"旧值回写旧值"的回声循环——
+            # 2026-09-10 起全部场外基金净值冻结一个多月即由此而来。
             rows = []
-            if explicit_kind_hints.get(code) in {"otc", "qdii"} or not metric.get("latestNav"):
-                try:
-                    rows = list((self.nav_history(code, 45) or {}).get("items") or [])
-                except Exception:
-                    rows = []
+            try:
+                rows = list((self.nav_history(code, 45) or {}).get("items") or [])
+            except Exception:
+                rows = []
             normalized = dict(metric)
             if rows:
-                normalized["latestNav"] = rows[-1].get("nav")
-                normalized["latestNavDate"] = rows[-1].get("date")
-                if len(rows) > 1:
-                    normalized["previousNav"] = rows[-2].get("nav")
-                    normalized["previousNavDate"] = rows[-2].get("date")
+                latest_date = str(rows[-1].get("date") or "")
+                current_date = str(normalized.get("latestNavDate") or "")
+                # 只在历史更新（或本地缺失）时覆盖，避免上游延迟时旧缓存倒灌。
+                if not normalized.get("latestNav") or (latest_date and (not current_date or latest_date > current_date)):
+                    normalized["latestNav"] = rows[-1].get("nav")
+                    normalized["latestNavDate"] = latest_date
+                    if len(rows) > 1:
+                        normalized["previousNav"] = rows[-2].get("nav")
+                        normalized["previousNavDate"] = rows[-2].get("date")
             return _apply_non_exchange_fund_kind(normalized, kind)
 
         products = self._product_map()

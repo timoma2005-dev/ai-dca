@@ -177,7 +177,11 @@ class AggregateServiceTest(unittest.TestCase):
         tz = ZoneInfo("Asia/Shanghai")
         self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 14, 10, 0, tzinfo=tz)), 2)
         self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 14, 12, 0, tzinfo=tz)), 59 * 60)
-        self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 18, 15, 1, tzinfo=tz)), 66 * 3600 + 28 * 60)
+        # 下午窗口延至 15:35（写端 15:31 前仍发布收盘快照），周五 15:01/15:34:59 仍返回 2s 短 TTL。
+        self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 18, 15, 1, tzinfo=tz)), 2)
+        self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 18, 15, 34, 59, tzinfo=tz)), 2)
+        # 15:35 起闭市，长 TTL 指向下一交易日（周一）09:29。
+        self.assertEqual(quote_snapshot_cache_ttl(datetime(2026, 9, 18, 15, 35, tzinfo=tz)), 65 * 3600 + 54 * 60)
 
     def test_intraday_reads_through_storage_contract(self) -> None:
         store = RecordingStore([
@@ -452,10 +456,30 @@ class AggregateServiceTest(unittest.TestCase):
             return None
 
         self.service.fund_metric = stale_metric
-        self.service.nav_histories = lambda *_args, **_kwargs: self.fail("cached NAV should not require a live refresh")
+
+        # NAV 防冻结：自动推断的 OTC/QDII 即使已有缓存净值也必须查一次净值历史
+        # （nav_histories 按 code 有 30 分钟缓存），否则快照里留有旧净值就永远不刷新；
+        # 但历史日期不严格更新时不覆盖，同日修订/延迟旧值不能倒灌缓存。
+        nav_history_calls: list[list[str]] = []
+
+        def stale_nav_histories(codes: list[str], _days: int = 45) -> list[dict]:
+            nav_history_calls.append(list(codes))
+            return [
+                {
+                    "code": "539001",
+                    "ok": True,
+                    "data": {"items": [
+                        {"nav": 3.3805, "date": "2026-09-16"},
+                        {"nav": 9.9999, "date": "2026-09-17"},
+                    ]},
+                }
+            ]
+
+        self.service.nav_histories = stale_nav_histories
 
         items = self.service.fund_metrics(["539001"])
 
+        self.assertEqual(nav_history_calls, [["539001"]])
         self.assertEqual(len(items), 1)
         item = items[0]
         self.assertTrue(item["ok"])

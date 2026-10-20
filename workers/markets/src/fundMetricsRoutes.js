@@ -388,17 +388,33 @@ function mergeKlinePayloadsWithR2(cached, fresh, { market, tf, limit = 1000, ses
   return klinePayloadForSession(payload, market, tf, sessionMode);
 }
 
-async function readCachedFundMetric(env, cacheKey, fundKind = '', exchangeOverride = null) {
-  const cached = await kvGetJson(env, cacheKey).catch(() => null);
-  if (!cached || !cached.code) return null;
+// 场内缓存只接受经验证的行情来源（雪球/腾讯），其他来源一律拒绝；
+// readCachedFundMetric 与批量 kvCached 快路径共用同一套校验。
+const CACHED_EXCHANGE_QUOTE_SOURCES = new Set(['xueqiu-quote', 'tencent-quote']);
+
+function isUsableCachedFundMetric(cached, expectedCode, exchange) {
+  if (!cached || typeof cached !== 'object') return false;
+  const code = String(cached.code || '').trim();
+  // 缓存条目的 code 必须与请求 code/目标 key 一致，防止串代码读写。
+  if (!code || code !== String(expectedCode || '').trim()) return false;
   const hasNav = Number(cached.latestNav) > 0;
   const hasPrice = Number(cached.price) > 0;
-  if (!hasNav && !hasPrice) return null;
-  const code = String(cached.code || '').trim();
-  const exchange = typeof exchangeOverride === 'boolean' ? exchangeOverride : isExchangeTradedFund(code);
-  if (exchange && String(cached.source || '').trim() !== 'xueqiu-quote') {
-    return null;
+  if (!hasNav && !hasPrice) return false;
+  if (exchange && !CACHED_EXCHANGE_QUOTE_SOURCES.has(String(cached.source || '').trim())) {
+    return false;
   }
+  return true;
+}
+
+async function readCachedFundMetric(env, cacheKey, fundKind = '', exchangeOverride = null) {
+  const cached = await kvGetJson(env, cacheKey).catch(() => null);
+  const keyCode = String(cacheKey || '').startsWith('fund-metrics:')
+    ? String(cacheKey).slice('fund-metrics:'.length).trim()
+    : '';
+  if (!keyCode) return null;
+  const exchange = typeof exchangeOverride === 'boolean' ? exchangeOverride : isExchangeTradedFund(keyCode);
+  if (!isUsableCachedFundMetric(cached, keyCode, exchange)) return null;
+  const code = keyCode;
   let quote = cached;
   if (!exchange && !cached.fundKind && !cached.fundType) {
     const meta = await fetchDanjuanFundMetaWithCache(env, code).catch(() => null);
@@ -446,6 +462,59 @@ async function fetchExchangeQuote(code, env) {
   }
 }
 
+// fundmobapi 兜底：场内 quote（腾讯主源/雪球兜底）缺 IOPV/NAV 时，用天天基金
+// 移动端接口的 ZJL（折价率）和 NAV 按标准字段补强。
+// ZJL 为负表示溢价，premium = -ZJL。
+const FUNDMOB_API_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
+const FUNDMOB_UA = 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+
+// 空值解析：null/undefined/空串/纯空白/'--' 视为缺失；合法 '0' 保留为零。
+// 直接 Number(value) 会把 null/'' 变成伪造的 0，必须先排除。
+function parseOptionalNumber(value) {
+  if (value == null) return null;
+  const raw = typeof value === 'string' ? value.trim() : value;
+  if (raw === '' || raw === '--') return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function fetchFundMobPremium(code) {
+  try {
+    const params = new URLSearchParams({
+      pageIndex: '1',
+      pageSize: '10',
+      plat: 'Android',
+      appType: 'ttjj',
+      product: 'EFund',
+      Version: '1',
+      deviceid: 'ai-dca-markets-worker',
+      Fcodes: code,
+    });
+    const resp = await fetch(`${FUNDMOB_API_URL}?${params}`, {
+      headers: {
+        'user-agent': FUNDMOB_UA,
+        'referer': 'https://fund.eastmoney.com/',
+        'accept': 'application/json, text/plain, */*',
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    const payload = await resp.json().catch(() => null);
+    if (!payload || payload.Success === false || !Array.isArray(payload.Datas)) return null;
+    const item = payload.Datas.find((d) => String(d?.FCODE || '').trim() === String(code).trim());
+    if (!item) return null;
+    const zjl = parseOptionalNumber(item.ZJL);
+    const nav = parseOptionalNumber(item.NAV);
+    return {
+      vendorPremiumPercent: zjl == null ? null : Math.round(-zjl * 100) / 100,
+      latestNav: nav != null && nav > 0 ? Math.round(nav * 10000) / 10000 : null,
+      navDate: String(item.HQDATE || '').trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchFreshFundMetric(env, code, cachePolicy, fundKind = '', exchangeOverride = null) {
   const cacheKey = 'fund-metrics:' + code;
   const exchange = typeof exchangeOverride === 'boolean' ? exchangeOverride : isExchangeTradedFund(code);
@@ -453,6 +522,33 @@ async function fetchFreshFundMetric(env, code, cachePolicy, fundKind = '', excha
     let quote = exchange
       ? await fetchExchangeQuote(code, env)
       : await fetchDanjuanFundNav(code);
+    // fundmobapi 兜底：场内 quote 缺有效 IOPV 或 NAV 时补强。合并必须写入标准字段
+    // （latestNav/latestNavDate/premiumPercent）——normalizeFundMetricFromQuote 只
+    // 消费标准字段，上游原始字段名（unit_nav/premium_rate）不会被读取。
+    if (exchange) {
+      const validIopv = parseOptionalNumber(quote?.iopv);
+      const validNav = parseOptionalNumber(quote?.latestNav);
+      const hasValidIopv = validIopv != null && validIopv > 0;
+      const hasValidNav = validNav != null && validNav > 0;
+      if (!hasValidIopv || !hasValidNav) {
+        const fundmob = await fetchFundMobPremium(code).catch(() => null);
+        if (fundmob) {
+          const merged = { ...quote };
+          // 原有效 NAV 优先；采用 fundmob NAV 时日期与采用的 NAV 对应。
+          if (!hasValidNav && fundmob.latestNav != null) {
+            merged.latestNav = fundmob.latestNav;
+            merged.latestNavDate = fundmob.navDate;
+          }
+          // 有有效 IOPV 时保留价格/IOPV 计算链路；仅在无 IOPV 且原溢价缺失时，
+          // 才用 fundmob 的 -ZJL 补 premiumPercent（原有效溢价优先）。
+          const explicitPremium = parseOptionalNumber(quote?.premiumPercent);
+          if (!hasValidIopv && explicitPremium == null && fundmob.vendorPremiumPercent != null) {
+            merged.premiumPercent = fundmob.vendorPremiumPercent;
+          }
+          quote = merged;
+        }
+      }
+    }
     if (!exchange) {
       const meta = await fetchDanjuanFundMetaWithCache(env, code).catch(() => null);
       if (meta) quote = { ...quote, ...meta };
@@ -561,7 +657,7 @@ export async function handleFundMetrics(env, body = {}, params = new URLSearchPa
     const { code, cacheKey, exchange, requestedKind, codeShouldReadCache, codeCachePolicy } = plan;
     if (codeShouldReadCache) {
       const cachedKvItem = kvCached[cacheKey];
-      if (cachedKvItem && (Number(cachedKvItem.price) > 0 || Number(cachedKvItem.latestNav) > 0)) {
+      if (isUsableCachedFundMetric(cachedKvItem, code, exchange)) {
         return normalizeFundMetricFromQuote(code, cachedKvItem, {
           cached: true,
           cachePolicy: cachedKvItem.cachePolicy || 'kv',
