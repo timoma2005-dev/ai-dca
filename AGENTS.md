@@ -1,5 +1,8 @@
 # AI DCA Agent Notes
 
+> 发布/改线上前必读：docs/ops/线上开发规范.md。线上有 HOTFIX.json(source_synced=false) 时禁止从仓库发布覆盖。
+
+
 ## 行情接口边界
 
 - 列表页只能请求列表所需的轻量数据：`/quotes`、必要的列表增强接口，以及已缓存的小元数据。
