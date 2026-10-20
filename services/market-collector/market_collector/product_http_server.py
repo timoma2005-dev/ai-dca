@@ -11,6 +11,8 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from . import cf_ip_selection
+
 from .aggregates import MarketDataService
 from .http_server import MarketQuotesRequest, build_handler
 from .storage import build_store
@@ -156,7 +158,7 @@ def _market_quotes_request_from_config(config_path: str) -> MarketQuotesRequest:
                 "user-agent": "ai-dca-market-collector/1.0",
             })
             with _MARKET_QUOTES_REQUEST_SLOTS:
-                with urlopen(upstream_request, timeout=timeout_sec) as response:
+                with cf_ip_selection.open_url(upstream_request, timeout=timeout_sec) as response:
                     result = json.loads(response.read().decode("utf-8"))
             quote_map = result.get("quotes") if isinstance(result, dict) else None
             if isinstance(quote_map, dict):

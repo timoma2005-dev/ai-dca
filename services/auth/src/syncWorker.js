@@ -1,9 +1,15 @@
 import { openDb, closeDb } from './db.js';
 import { claimPendingEvents, markEventDone, markEventFailed, markEventDead } from './outbox.js';
+import { createCfWorkerTransport } from './cfIpSelection.js';
 
 const POLL_INTERVAL_MS = 5000;
 const CLAIM_LIMIT = 20;
 const FETCH_TIMEOUT_MS = 15000;
+
+// CF Worker IPv4 selection transport. CF_UPSTREAM_IP_SELECTION_ENABLED defaults
+// to off, in which case prepare/fetch fall straight through to the original
+// global fetch and behavior is identical to before this module existed.
+const cfTransport = createCfWorkerTransport({ env: process.env });
 
 function syncUrl() {
   return (
@@ -29,7 +35,10 @@ async function postEvent(event) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(syncUrl(), {
+    // Selection, the single IP-switch retry and the request itself all run
+    // inside the same 15s AbortController budget; the outbox retry/dead-letter
+    // semantics below are unchanged.
+    const res = await cfTransport.fetch(syncUrl(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -51,6 +60,15 @@ async function postEvent(event) {
 export async function processOnce(db) {
   const events = claimPendingEvents(db, CLAIM_LIMIT);
   if (events.length === 0) return { processed: 0, failed: 0, dead: 0 };
+
+  // Select the CF IP once before the first request of a non-empty batch (idle
+  // batches never probe). Selection problems degrade to plain DNS and must
+  // never block the batch.
+  try {
+    await cfTransport.prepare([syncUrl()]);
+  } catch (err) {
+    console.error('[sync-worker] cf ip selection prepare error:', err?.message || err);
+  }
 
   let failed = 0;
   let dead = 0;
@@ -135,6 +153,7 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   const shutdown = async () => {
     console.log('[sync-worker] shutting down, finishing current batch');
     await worker.stop();
+    cfTransport.close();
     closeDb(db);
     process.exit(0);
   };

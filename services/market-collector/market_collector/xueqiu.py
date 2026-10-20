@@ -12,6 +12,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from . import cf_ip_selection
+
 XUEQIU_STOCK_HOST = "https://stock.xueqiu.com"
 XUEQIU_WEB_HOST = "https://xueqiu.com"
 DEFAULT_XUEQIU_WORKER_URL = "https://api.freebacktrack.tech/api/markets"
@@ -88,11 +90,11 @@ def _xueqiu_headers(cookie: str, referer_symbol: str = "") -> dict[str, str]:
     }
 
 
-def default_fetch_json(url: str, headers: dict[str, str], timeout_sec: float) -> dict[str, Any]:
+def default_fetch_json(url: str, headers: dict[str, str], timeout_sec: float, *, _opener=None) -> dict[str, Any]:
     """Fetch one JSON endpoint while sharing the collector's upstream slots."""
     request = urllib.request.Request(url, method="GET", headers=headers)
     with _XUEQIU_REQUEST_SLOTS:
-        with urllib.request.urlopen(request, timeout=timeout_sec) as response:
+        with (_opener or urllib.request.urlopen)(request, timeout=timeout_sec) as response:
             raw = response.read()
     try:
         payload = json.loads(raw.decode("utf-8", "replace"))
@@ -231,7 +233,11 @@ def _fetch_worker_payload(
         params["raw"] = "1"
     url = _build_url(worker_url, f"xueqiu-fund-data/{urllib.parse.quote(code)}", params)
     try:
-        payload = fetch_json(url, {"accept": "application/json", "user-agent": "market-collector/1"}, timeout_sec)
+        headers = {"accept": "application/json", "user-agent": "market-collector/1"}
+        if fetch_json is default_fetch_json:
+            payload = default_fetch_json(url, headers, timeout_sec, _opener=cf_ip_selection.open_url)
+        else:
+            payload = fetch_json(url, headers, timeout_sec)
     except Exception as exc:
         raise XueqiuUpstreamError(f"xueqiu worker request failed: {_safe_error(exc)}") from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), dict):

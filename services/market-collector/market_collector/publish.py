@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable
+
+
+from . import cf_ip_selection
 
 
 class Publisher:
@@ -40,7 +44,7 @@ class ReplicatingPublisher(Publisher):
         token_env: str,
         outbox_dir: str,
         timeout_sec: float = 15.0,
-        opener: OpenUrl = urllib.request.urlopen,
+        opener: OpenUrl | None = None,
     ) -> None:
         self.files = FilePublisher(output_dir)
         self.worker_url = worker_url.rstrip("/")
@@ -48,7 +52,8 @@ class ReplicatingPublisher(Publisher):
         self.outbox_dir = Path(outbox_dir)
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
         self.timeout_sec = timeout_sec
-        self.opener = opener
+        self.opener = opener or cf_ip_selection.open_url
+        self._prepared_deadline = None
 
     def _post(self, envelope: dict[str, Any]) -> None:
         token = os.environ.get(self.token_env, "").strip()
@@ -65,7 +70,13 @@ class ReplicatingPublisher(Publisher):
                 "user-agent": "curl/8.4.0",
             },
         )
-        with self.opener(request, timeout=self.timeout_sec) as response:
+        timeout = self.timeout_sec
+        if self._prepared_deadline is not None:
+            timeout = min(timeout, self._prepared_deadline - time.monotonic())
+            self._prepared_deadline = None
+            if timeout <= 0:
+                raise TimeoutError("publisher preparation exhausted request budget")
+        with self.opener(request, timeout=timeout) as response:
             status = int(getattr(response, "status", 200))
             if status < 200 or status >= 300:
                 raise RuntimeError(f"collector ingest HTTP {status}")
@@ -98,13 +109,18 @@ class ReplicatingPublisher(Publisher):
         if latest_payload.get("datasets"):
             envelope["datasets"] = latest_payload["datasets"]
         try:
+            if self.opener is cf_ip_selection.open_url:
+                self._prepared_deadline = time.monotonic() + self.timeout_sec
+                cf_ip_selection.prepare(self.worker_url, timeout=self.timeout_sec)
             self._flush_outbox()
             self._post(envelope)
         except Exception:
             self._spool(envelope)
+        finally:
+            self._prepared_deadline = None
 
 
-def build_publisher(config: dict[str, Any]) -> Publisher:
+def build_publisher(config: dict[str, Any], *, opener: OpenUrl | None = None) -> Publisher:
     publisher = config.get("publisher") or {}
     backend = str(publisher.get("backend") or "file").strip().lower()
     if backend == "file":
@@ -119,5 +135,6 @@ def build_publisher(config: dict[str, Any]) -> Publisher:
             token_env=str(publisher.get("token_env") or "MARKET_COLLECTOR_TOKEN"),
             outbox_dir=str(publisher.get("outbox_dir") or (Path(str(config["output_dir"])).parent / "publish-outbox")),
             timeout_sec=float(publisher.get("timeout_sec") or 15),
+            opener=opener or cf_ip_selection.open_url,
         )
     raise ValueError(f"unsupported publisher backend: {backend}")

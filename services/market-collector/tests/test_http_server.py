@@ -325,7 +325,7 @@ class HttpServerTest(unittest.TestCase):
             "VOO": {"symbol": "VOO", "changePercent": 0.2, "premiumPercent": 0.8},
         }}).encode("utf-8"))
 
-        with patch("market_collector.product_http_server.urlopen", return_value=response) as open_worker:
+        with patch("market_collector.product_http_server.cf_ip_selection.open_url", return_value=response) as open_worker:
             quotes = _market_quotes_request_from_config(str(config_path))(["QQQ", "VOO"])
 
         self.assertEqual(quotes["QQQ"]["changePercent"], 0.5)

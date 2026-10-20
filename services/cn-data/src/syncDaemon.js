@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { openDb, closeDb } from './db.js';
 import { claimPendingEvents, markEventDone, markEventFailed, markEventDead } from './outbox.js';
+import { createCfWorkerTransport } from './cfIpSelection.js';
 
 const routes = {
   notify: ['SYNC_DAEMON_NOTIFY_URL', '/api/notify/internal/sync-rules'],
@@ -28,15 +29,32 @@ export function parseRetryAfterMs(value) {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : 0;
 }
-export async function processOnce(db, { config = daemonConfig(), fetchImpl = fetch, timeoutMs = 15000 } = {}) {
+// CF Worker IPv4 selection transport (docs/plan-cf-ip-selection.md).
+// CF_UPSTREAM_IP_SELECTION_ENABLED defaults to off: prepare and fetch then
+// resolve no candidates, probe nothing and delegate straight to the original
+// global fetch, so the daemon behaves exactly as before this module existed.
+const cfTransport = createCfWorkerTransport({ env: process.env });
+export async function processOnce(db, { config = daemonConfig(), fetchImpl, timeoutMs = 15000, cfTransport: transport = cfTransport } = {}) {
   const events = claimPendingEvents(db);
   let failed = 0;
   let dead = 0;
+  // The default client is the selection wrapper; an injected fetchImpl owns
+  // the batch alone and must never trigger hidden probing. prepare warms one
+  // selection round per origin of this batch's actual targets (three targets
+  // on one origin probe only once) and never blocks or fails the batch.
+  const send = fetchImpl ?? ((url, init) => transport.fetch(url, init));
+  if (events.length > 0 && !fetchImpl) {
+    try {
+      await transport.prepare([...new Set(events.map((event) => event.target))].map((target) => config.urls[target]));
+    } catch (error) {
+      console.error('[sync-daemon] cf ip selection prepare error:', error?.message || error);
+    }
+  }
   for (const event of events) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetchImpl(config.urls[event.target], {
+      const res = await send(config.urls[event.target], {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.token}` },
         body: JSON.stringify({ eventId: event.event_id, eventType: event.event_type, payload: event.payload }),
@@ -65,14 +83,14 @@ export async function processOnce(db, { config = daemonConfig(), fetchImpl = fet
   }
   return { processed: events.length, failed, dead };
 }
-export function startSyncDaemon(db, { config = daemonConfig(), fetchImpl = fetch } = {}) {
+export function startSyncDaemon(db, { config = daemonConfig(), fetchImpl, cfTransport: transport = cfTransport } = {}) {
   let stopped = false;
   let inFlight;
   let timer;
   const tick = async () => {
     if (stopped) return;
     try {
-      inFlight = processOnce(db, { config, fetchImpl });
+      inFlight = processOnce(db, { config, fetchImpl, cfTransport: transport });
       await inFlight;
     } catch (error) {
       console.error('[sync-daemon] batch failed:', error.message);
@@ -93,7 +111,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const db = openDb();
   const daemon = startSyncDaemon(db, { config });
   console.log('[sync-daemon] started');
-  const shutdown = async () => { await daemon.stop(); closeDb(db); };
+  const shutdown = async () => { await daemon.stop(); cfTransport.close(); closeDb(db); };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
 }
