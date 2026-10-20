@@ -58,3 +58,4 @@ services/market-collector/market_collector.bak-*/
 services/market-collector/config.json
 services/etf-mirror/*.db
 services/etf-mirror/*.bak-*
+*.bak-*
