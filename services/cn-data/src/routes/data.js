@@ -162,8 +162,8 @@ export async function handleDataRoute(db, method, url, body, headers = {}) {
         VALUES (?, 'user-kv', ?, ?, 1, ?, ?)
         ON CONFLICT(owner_user_id, record_type, record_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`)
         .run(owner, key, payload, now, now);
-      return db.prepare(`SELECT payload FROM notify_user_records
-        WHERE owner_user_id = ? AND record_type = 'user-kv' AND record_id = ?`).get(owner, key);
+      return db.prepare(`SELECT ? AS user_id, 'switch-config' AS config_key, ? AS client_id, payload FROM notify_user_records
+        WHERE owner_user_id = ? AND record_type = 'user-kv' AND record_id = ?`).get(user, clientId, owner, key);
     });
     return { body: { ok: true, clientId, config: row.payload } };
   }
