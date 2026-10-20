@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, BookOpen, ChevronRight, House, LineChart, ListChecks, MoreHorizontal, Shuffle, UserRound, Wallet, X } from 'lucide-react';
+import { BarChart3, Bell, BookOpen, ChevronRight, FlaskConical, House, LineChart, ListChecks, MoreHorizontal, Radar, Shuffle, UserRound, Wallet, X } from 'lucide-react';
 import { splitMobileBottomNavItems } from './mobile-bottom-nav-config.js';
 
 const ITEM_ICONS = {
@@ -7,9 +7,12 @@ const ITEM_ICONS = {
   markets: LineChart,
   holdings: Wallet,
   tradePlans: ListChecks,
+  shares: BarChart3,
   fundSwitch: Shuffle,
   notify: Bell,
   articles: BookOpen,
+  adminQuant: FlaskConical,
+  adminRadar: Radar,
 };
 
 function MobileNavItem({ item, active, onSelect }) {
@@ -68,14 +71,17 @@ export function MobileBottomNav({
   accountSubtitle,
   unreadCount = 0,
   hidden = false,
+  isAdmin = false,
 }) {
-  const [{ directItems, overflowItems }, setItems] = useState(() => splitMobileBottomNavItems(visibleTabs));
+  const [{ directItems, overflowItems }, setItems] = useState(() =>
+    splitMobileBottomNavItems(visibleTabs, undefined, isAdmin),
+  );
   const [moreOpen, setMoreOpen] = useState(false);
   const overflowActive = overflowItems.some((item) => item.key === activeKey);
 
   useEffect(() => {
-    setItems(splitMobileBottomNavItems(visibleTabs));
-  }, [visibleTabs]);
+    setItems(splitMobileBottomNavItems(visibleTabs, undefined, isAdmin));
+  }, [visibleTabs, isAdmin]);
 
   useEffect(() => {
     if (hidden) setMoreOpen(false);

@@ -699,6 +699,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         onOpenAccount={() => setAccountMenuOpen(true)}
         accountSubtitle={cloudSession?.accessToken ? '管理账号、云端备份与同步' : '登录账号，管理云端同步'}
         unreadCount={unreadCount}
+        isAdmin={isAdminUser}
       />
       <Suspense fallback={null}>
         <AccountMenu
