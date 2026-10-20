@@ -616,26 +616,27 @@ class MarketDataService:
             for code in codes
         }
 
-        def load_navs() -> dict[str, list[dict[str, Any]]]:
+        def load_navs(nav_codes: list[str]) -> dict[str, list[dict[str, Any]]]:
             result: dict[str, list[dict[str, Any]]] = {}
-            missing = [
-                code for code in codes
-                if explicit_kind_hints.get(code) in {"otc", "qdii"}
-                or not (metrics.get(code) or {}).get("latestNav")
-            ]
-            if not missing:
+            if not nav_codes:
                 return result
-            for item in self.nav_histories(missing, 45):
+            for item in self.nav_histories(nav_codes, 45):
                 payload = item.get("data") if item.get("ok") else None
                 result[item["code"]] = list((payload or {}).get("items") or [])
             return result
 
+        # 场外/QDII（含自动推断，不要求显式 kind）一律查一次净值历史，后面仅在历史
+        # 更新时覆盖。此前只有「显式 kind」或「latestNav 缺失」才拉取：快照里一旦
+        # 留有旧净值就永远不再刷新，晚间 OTC 任务把接口回显的旧值再写回 fund_quote /
+        # latest.json，形成旧值回写旧值的回声循环——2026-09-10 起全部场外基金净值
+        # 冻结一个多月即由此而来。nav_histories 按 code 有 30 分钟缓存，代价可控。
         missing_nav_codes = [
             code for code in codes
             if explicit_kind_hints.get(code) in {"otc", "qdii"}
+            or kind_hints.get(code) in {"otc", "qdii"}
             or not (metrics.get(code) or {}).get("latestNav")
         ]
-        navs = load_navs() if missing_nav_codes else {}
+        navs = load_navs(missing_nav_codes)
         output: list[dict[str, Any]] = []
         for code in codes:
             metric = metrics.get(code)
@@ -657,11 +658,15 @@ class MarketDataService:
             metric = dict(metric)
             if rows:
                 latest = rows[-1]
-                metric["latestNav"] = latest["nav"]
-                metric["latestNavDate"] = latest["date"]
-                if len(rows) > 1:
-                    metric["previousNav"] = rows[-2]["nav"]
-                    metric["previousNavDate"] = rows[-2]["date"]
+                latest_date = str(latest.get("date") or "")
+                current_date = str(metric.get("latestNavDate") or "")
+                # 只在历史更新（或本地缺失）时覆盖，避免上游延迟时旧缓存倒灌。
+                if not metric.get("latestNav") or (latest_date and (not current_date or latest_date > current_date)):
+                    metric["latestNav"] = latest["nav"]
+                    metric["latestNavDate"] = latest["date"]
+                    if len(rows) > 1:
+                        metric["previousNav"] = rows[-2]["nav"]
+                        metric["previousNavDate"] = rows[-2]["date"]
             if hint in {"otc", "qdii"}:
                 metric = _apply_non_exchange_fund_kind(metric, hint)
             output.append(metric)

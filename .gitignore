@@ -44,3 +44,25 @@ data/quant/
 
 # Analytics one-time exports (produced by scripts/analyze-analytics.mjs)
 analytics-export/
+
+# CN host runtime artifacts (host-local, never committed)
+*.pid
+*.orig
+._*
+data/
+services/market-collector/.venv/
+services/market-collector/data/
+services/market-collector/backtest/
+services/market-collector/.backup-*/
+services/market-collector/market_collector.bak-*/
+services/market-collector/config.json
+services/etf-mirror/*.db
+services/etf-mirror/*.bak-*
+*.bak-*
+services/market-collector/patch-backups/
+static-*.log
+vite-preview-*.log
+static-5000-https-server.py
+static-80-server.py
+*.log
+*.bak.*

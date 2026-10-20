@@ -42,7 +42,10 @@ def is_trading_day(value: datetime) -> bool:
 
 QUOTE_REFRESH_WINDOWS = (
     (day_time(9, 29), day_time(11, 30)),
-    (day_time(12, 59), day_time(15, 0)),
+    # 下午窗口延续到 15:35：写端 classify_session 的交易时段到 15:31 才结束，
+    # 15:00-15:31 仍在发布收盘价快照；API 必须保持 2s 刷新直到收盘快照落地，
+    # 否则收盘后会永久冻结在 15:00 前的盘中价（整晚读不到真实收盘价）。
+    (day_time(12, 59), day_time(15, 35)),
 )
 
 
@@ -50,8 +53,11 @@ def quote_snapshot_cache_ttl(value: datetime | None = None) -> int:
     """Return the local quote-map TTL for the current A-share session.
 
     The map refreshes every two seconds from one minute before each continuous
-    trading session. During closed periods it remains valid until one minute
-    before the next session, including weekends and configured holidays.
+    trading session until a few minutes after the writer's trading session ends
+    (writer publishes closing snapshots until 15:31, so the afternoon window
+    runs to 15:35 to capture the true close). During closed periods it remains
+    valid until one minute before the next session, including weekends and
+    configured holidays.
     """
     current = shanghai_datetime(value or datetime.now(timezone.utc))
     clock = current.time().replace(tzinfo=None)

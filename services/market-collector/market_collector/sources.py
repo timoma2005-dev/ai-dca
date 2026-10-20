@@ -5,10 +5,11 @@ import json
 import math
 import re
 import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
+
+from .netutil import fetch_url as _netutil_fetch_url
 
 TENCENT_QUOTE_URL = "https://qt.gtimg.cn/"
 # 2026-09-22：push2delay（延迟镜像）对所有客户端不可达（urllib/curl、多网络实测），
@@ -74,15 +75,16 @@ def eastmoney_secid(symbol: str) -> str:
 
 
 def default_fetch_bytes(url: str, timeout_sec: float) -> bytes:
-    request = urllib.request.Request(
+    # 走 netutil 传输层：直连优先，东财/蛋卷被 RST 时经轮换出口代理重试。
+    # 此前这里用裸 urllib，东财 IP 级封锁期间 iopv 线程持续失败且无代理兜底。
+    return _netutil_fetch_url(
         url,
+        timeout_sec,
         headers={
             "user-agent": "Mozilla/5.0",
             "referer": "https://quote.eastmoney.com/",
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout_sec) as response:
-        return response.read()
 
 
 def decode_tencent_payload(raw: bytes) -> str:
@@ -116,6 +118,19 @@ def parse_tencent_quote_text(text: str, captured_at: str) -> dict[str, dict[str,
         turnover_rate = to_float(fields[38]) if len(fields) > 38 else None
         # field[40] 状态位："S"=停牌(Suspend)，空=正常交易
         status_flag = str(fields[40]).strip() if len(fields) > 40 else ""
+
+        # 买卖五档（fields[9]/[10] 买一 … fields[17]/[18] 买五，fields[19]/[20] 卖一 …
+        # fields[27]/[28] 卖五）。量为手，换算成股。共享给本机 paper_trade，
+        # 让全机只有 collector 一个进程直连腾讯行情。
+        def depth_level(idx_price: int, idx_vol: int) -> list[Any] | None:
+            level_price = to_positive_float(fields[idx_price]) if idx_price < len(fields) else None
+            level_volume = to_float(fields[idx_vol]) if idx_vol < len(fields) else None
+            if level_price is None or level_volume is None or level_volume <= 0:
+                return None
+            return [level_price, int(level_volume * 100)]
+
+        bids = [level for i in range(5) if (level := depth_level(9 + i * 2, 10 + i * 2))]
+        asks = [level for i in range(5) if (level := depth_level(19 + i * 2, 20 + i * 2))]
         rows[code] = {
             "symbol": code,
             "name": fields[1] or code,
@@ -130,6 +145,8 @@ def parse_tencent_quote_text(text: str, captured_at: str) -> dict[str, dict[str,
             "turnover": turnover,
             "turnover_rate": round4(turnover_rate),
             "suspended": status_flag == "S",
+            "bids": bids,
+            "asks": asks,
             "source": "tencent_batch",
             "received_at": captured_at,
             "source_as_of": normalize_source_as_of(fields[30] if len(fields) > 30 else None, captured_at),

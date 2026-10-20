@@ -35,7 +35,6 @@ import argparse
 import json
 import math
 import os
-import re
 import threading
 import time
 import urllib.parse
@@ -47,7 +46,7 @@ from typing import Any
 
 from .calendar_cn import SHANGHAI, is_trading_day
 from .netutil import fetch_url
-from .sources import EASTMONEY_ULIST_URL, eastmoney_secid, to_float, to_positive_float
+from .sources import EASTMONEY_ULIST_URL, eastmoney_secid, fetch_tencent_quotes, parse_tencent_quote_text, to_positive_float
 
 SYMBOLS = ("159696", "159659", "513300", "159660", "513870", "159632")
 SYMBOL_NAMES = {
@@ -73,12 +72,13 @@ PORTFOLIO_SPECS: tuple[dict[str, Any], ...] = (
 )
 
 
-def tencent_symbol(code: str) -> str:
-    """腾讯行情代码：沪市（51/52 开头）加 sh 前缀，深市加 sz。"""
-    return ("sh" if code.startswith(("51", "52")) else "sz") + code
+# 共享行情快照：collector 高频线程每秒写 data/tick-snapshot.json（价格+五档+IOPV）。
+# paper_trade 优先读共享快照；缺失/过期时才限频直抓兜底——全机只有 collector
+# 一个进程每秒直连腾讯/东财，消除重复打点与上游限流风险。
+SNAPSHOT_FRESH_SEC = 10.0
+FALLBACK_FETCH_MIN_INTERVAL_SEC = 5.0
 
-
-TENCENT_URL = "https://qt.gtimg.cn/q=" + ",".join(tencent_symbol(s) for s in SYMBOLS)
+_direct_fetch_state = {"last_ts": 0.0, "last_result": {}}
 
 TRADING_WINDOWS = (
     (day_time(9, 30), day_time(11, 30)),
@@ -114,39 +114,70 @@ def in_trading_hours(value: datetime | None = None) -> bool:
 # 行情解析
 # ---------------------------------------------------------------------------
 
-def parse_tencent_depth(text: str) -> dict[str, dict[str, Any]]:
-    """解析腾讯行情中的买卖五档。
+def read_shared_tick_snapshot(path: Path) -> dict[str, dict[str, Any]] | None:
+    """读 collector 共享 tick 快照；文件缺失、过期或无可用价格时返回 None。
 
-    fields[9]/[10] 起为买一价/量 … fields[17]/[18] 买五价/量，
-    fields[19]/[20] 起为卖一价/量 … fields[27]/[28] 卖五价/量。
-    量单位为手，统一换算成股。
+    快照由 core 高频线程每秒原子写入，价格/五档来自腾讯批量行情，
+    IOPV 来自东财缓存（5s 刷新），与本机其它消费方看到的数据完全一致。
+    """
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    captured = str(payload.get("captured_at") or "")
+    try:
+        captured_dt = datetime.fromisoformat(captured.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if (datetime.now(timezone.utc) - captured_dt).total_seconds() > SNAPSHOT_FRESH_SEC:
+        return None
+    symbols = payload.get("symbols") or {}
+    snapshot: dict[str, dict[str, Any]] = {}
+    for symbol in SYMBOLS:
+        row = symbols.get(symbol) or {}
+        price = to_positive_float(row.get("price"))
+        iopv = to_positive_float(row.get("iopv"))
+        premium = row.get("premiumPercent")
+        if premium is None and price and iopv:
+            premium = round((price - iopv) / iopv * 100, 4)
+        snapshot[symbol] = {
+            "symbol": symbol,
+            "captured_at": captured,
+            "price": price,
+            "iopv": iopv,
+            "premium": premium,
+            "premium_source": "iopv" if premium is not None else None,
+            "bids": row.get("bids") or [],
+            "asks": row.get("asks") or [],
+            "suspended": bool(row.get("suspended")),
+        }
+    if not any(entry.get("price") is not None for entry in snapshot.values()):
+        return None
+    return snapshot
+
+
+def parse_tencent_depth(text: str) -> dict[str, dict[str, Any]]:
+    """兼容旧解析入口：腾讯行情买卖五档，仅保留 SYMBOLS 内代码。
+
+    字段索引（fields[9]/[10] 买一 … fields[27]/[28] 卖五）与量单位手转股的
+    解析逻辑统一在 sources.parse_tencent_quote_text 维护，本函数只做旧契约
+    适配：公共解析器输出的 [price, shares] 盘口转换为 (price, shares) tuple，
+    过短的残档记录直接过滤。内部行情已走共享快照/公共抓取，本入口仅供
+    测试与外部调用方保留。
     """
     rows: dict[str, dict[str, Any]] = {}
-    pattern = re.compile(r'v_([^=]+)="([^"]*)";?')
-    for key, payload in pattern.findall(text or ""):
-        fields = str(payload).split("~")
-        if len(fields) < 29:
-            continue
-        code = "".join(ch for ch in str(fields[2] or key) if ch.isdigit())[-6:]
+    quotes = parse_tencent_quote_text(text, shanghai_now().isoformat())
+    for code, quote in quotes.items():
         if code not in SYMBOLS:
             continue
-        price = to_positive_float(fields[3])
-
-        def level(idx_price: int, idx_vol: int) -> tuple[float, int] | None:
-            p = to_positive_float(fields[idx_price]) if idx_price < len(fields) else None
-            v = to_float(fields[idx_vol]) if idx_vol < len(fields) else None
-            if p is None or v is None or v <= 0:
-                return None
-            return (p, int(v * 100))
-
-        bids = [lv for i in range(5) if (lv := level(9 + i * 2, 10 + i * 2))]
-        asks = [lv for i in range(5) if (lv := level(19 + i * 2, 20 + i * 2))]
+        bids = [tuple(level[:2]) for level in quote.get("bids") or [] if len(level) >= 2]
+        asks = [tuple(level[:2]) for level in quote.get("asks") or [] if len(level) >= 2]
         rows[code] = {
             "symbol": code,
-            "price": price,
+            "price": quote.get("price"),
             "bids": bids,  # 买盘：买一→买五，[(price, shares)]
             "asks": asks,  # 卖盘：卖一→卖五，[(price, shares)]
-            "suspended": str(fields[40]).strip() == "S" if len(fields) > 40 else False,
+            "suspended": bool(quote.get("suspended")),
         }
     return rows
 
@@ -167,14 +198,34 @@ def parse_eastmoney_iopv(payload: dict) -> dict[str, float]:
     return result
 
 
-def fetch_market_snapshot(timeout_sec: float = 5.0) -> dict[str, dict[str, Any]]:
-    """抓一轮行情：腾讯价格+盘口，东财 IOPV，计算溢价。"""
+def fetch_market_snapshot(
+    timeout_sec: float = 5.0,
+    snapshot_path: Path | None = None,
+) -> dict[str, dict[str, Any]]:
+    """取一轮行情：优先读 collector 共享快照；缺失/过期时限频直抓兜底。"""
+    if snapshot_path is not None:
+        shared = read_shared_tick_snapshot(snapshot_path)
+        if shared is not None:
+            return shared
+    # 兜底直抓（collector 停机/重启窗口）：进程内全局限频，
+    # 防止恢复期重新对腾讯/东财高频打点。
+    now_ts = time.time()
+    if now_ts - _direct_fetch_state["last_ts"] < FALLBACK_FETCH_MIN_INTERVAL_SEC:
+        return dict(_direct_fetch_state["last_result"])
+    snapshot = _fetch_market_snapshot_direct(timeout_sec)
+    _direct_fetch_state["last_ts"] = time.time()
+    _direct_fetch_state["last_result"] = snapshot
+    return snapshot
+
+
+def _fetch_market_snapshot_direct(timeout_sec: float = 5.0) -> dict[str, dict[str, Any]]:
+    """直连兜底：腾讯价格+五档（复用 sources 共用解析），东财 IOPV，计算溢价。"""
     captured = shanghai_now().isoformat()
+    quotes: dict[str, dict[str, Any]] = {}
     try:
-        raw = fetch_url(TENCENT_URL, timeout_sec)
-        depth = parse_tencent_depth(raw.decode("utf-8", "replace"))
+        quotes = fetch_tencent_quotes(list(SYMBOLS), timeout_sec)
     except Exception:
-        depth = {}
+        quotes = {}
     iopv_map: dict[str, float] = {}
     try:
         params = urllib.parse.urlencode({
@@ -189,7 +240,7 @@ def fetch_market_snapshot(timeout_sec: float = 5.0) -> dict[str, dict[str, Any]]
         pass
     snapshot: dict[str, dict[str, Any]] = {}
     for symbol in SYMBOLS:
-        row = depth.get(symbol, {})
+        row = quotes.get(symbol) or {}
         price = row.get("price")
         iopv = iopv_map.get(symbol)
         premium = None
@@ -202,9 +253,9 @@ def fetch_market_snapshot(timeout_sec: float = 5.0) -> dict[str, dict[str, Any]]
             "iopv": iopv,
             "premium": premium,
             "premium_source": "iopv" if premium is not None else None,
-            "bids": row.get("bids", []),
-            "asks": row.get("asks", []),
-            "suspended": row.get("suspended", False),
+            "bids": row.get("bids") or [],
+            "asks": row.get("asks") or [],
+            "suspended": bool(row.get("suspended", False)),
         }
     return snapshot
 
@@ -1042,11 +1093,13 @@ def serve_http(engine: PaperEngine, host: str = HTTP_HOST, port: int = HTTP_PORT
 
 def run_forever(root: str, data_dir: str | None = None) -> None:
     data_path = Path(data_dir) if data_dir else Path(root) / "data" / "paper-trade"
+    # collector 共享 tick 快照与 paper-trade 数据目录同级（都在 data/ 下）。
+    snapshot_path = data_path.parent / "tick-snapshot.json"
     engine = PaperEngine(data_path)
     engine.load_trades()
     http_thread = threading.Thread(target=serve_http, args=(engine,), daemon=True)
     http_thread.start()
-    print("[paper-trade] started, waiting for trading hours", flush=True)
+    print(f"[paper-trade] started, waiting for trading hours (shared snapshot: {snapshot_path})", flush=True)
     last_offhours_fetch = 0.0
     while True:
         try:
@@ -1056,7 +1109,7 @@ def run_forever(root: str, data_dir: str | None = None) -> None:
                 if now_ts - last_offhours_fetch >= OFFHOURS_SNAPSHOT_SEC:
                     last_offhours_fetch = now_ts
                     try:
-                        snapshot = fetch_market_snapshot()
+                        snapshot = fetch_market_snapshot(snapshot_path=snapshot_path)
                     except Exception as exc:
                         print(f"[paper-trade] off-hours fetch failed: {exc}", flush=True)
                         snapshot = None
@@ -1070,7 +1123,7 @@ def run_forever(root: str, data_dir: str | None = None) -> None:
             tick_start = time.monotonic()
             now_ts = time.time()
             try:
-                snapshot = fetch_market_snapshot()
+                snapshot = fetch_market_snapshot(snapshot_path=snapshot_path)
             except Exception as exc:
                 print(f"[paper-trade] fetch failed: {exc}", flush=True)
                 time.sleep(1)

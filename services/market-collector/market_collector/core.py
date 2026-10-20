@@ -928,7 +928,50 @@ class MarketCollector:
             })
         if not rows:
             return 0
+        self._write_tick_snapshot(collected_at, rows, price_map)
         return self._upsert_quotes_fast(rows)
+
+    def _write_tick_snapshot(
+        self,
+        captured_at: str,
+        rows: list[dict[str, Any]],
+        price_map: dict[str, dict[str, Any]],
+    ) -> None:
+        """把本轮高频行情原子写到 data/tick-snapshot.json，供本机 paper_trade 共享。
+
+        全机只有 collector 一个进程直连腾讯/东财：paper_trade 读这份快照
+        获取价格 + 五档 + IOPV，不再每秒各自打点，降低上游限流风险。
+        """
+        output_dir = str(self.config.get("output_dir") or "").strip()
+        if not output_dir:
+            return
+        symbols_payload: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            code = str(row.get("code") or "")
+            depth = price_map.get(code) or {}
+            symbols_payload[code] = {
+                "price": row.get("price"),
+                "iopv": row.get("iopv"),
+                "premiumPercent": row.get("premiumPercent"),
+                "previousClose": row.get("previousClose"),
+                "changePercent": row.get("changePercent"),
+                "volume": row.get("volume"),
+                "turnover": row.get("turnover"),
+                "suspended": bool(row.get("suspended")),
+                "bids": depth.get("bids") or [],
+                "asks": depth.get("asks") or [],
+            }
+        try:
+            atomic_write_json(
+                Path(output_dir).parent / "tick-snapshot.json",
+                {
+                    "kind": "tick-snapshot",
+                    "captured_at": captured_at,
+                    "symbols": symbols_payload,
+                },
+            )
+        except Exception as exc:
+            print(f"[tick-snapshot] write failed: {exc}", flush=True)
 
     def _upsert_quotes_fast(self, rows: list[dict[str, Any]]) -> int:
         """高频写入：完全独立于 fund_store，直接从 config 读 TiDB target 建连接。
@@ -1012,7 +1055,8 @@ ON DUPLICATE KEY UPDATE name=VALUES(name),price=VALUES(price),latest_nav=VALUES(
                     pass
 
     def _iopv_loop(self) -> None:
-        """低频线程主循环：交易时段每 5s 刷新 iopv 缓存；抓取失败退避到 15s。"""
+        """低频线程主循环：交易时段每 5s 刷新 iopv 缓存；连续失败指数退避。"""
+        fail_streak = 0
         while not self._high_freq_stop.is_set():
             now = datetime.now(timezone.utc)
             if classify_session(now) == "trading":
@@ -1021,9 +1065,13 @@ ON DUPLICATE KEY UPDATE name=VALUES(name),price=VALUES(price),latest_nav=VALUES(
                     refreshed = self._refresh_iopv_cache()
                 except Exception as exc:
                     print(f"[high-freq] iopv loop error: {exc}", flush=True)
-                # 出口代理坏分钟里拉长重试间隔，降低对轮换出口 IP 池的打点压力。
-                self._high_freq_stop.wait(5.0 if refreshed else 15.0)
+                # 连续失败时按 15→30→60s 指数退避（封顶 60s）：上游已拒绝连接时
+                # 固定 15s 硬重试只会加重封锁，也让轮换出口 IP 池有喘息窗口。
+                fail_streak = 0 if refreshed else fail_streak + 1
+                wait_sec = 5.0 if refreshed else min(15.0 * (2 ** (fail_streak - 1)), 60.0)
+                self._high_freq_stop.wait(wait_sec)
             else:
+                fail_streak = 0
                 self._high_freq_stop.wait(5.0)
 
     def _quote_loop(self) -> None:
