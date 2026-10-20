@@ -851,19 +851,18 @@ async function runStage({
           for (const code of TARGET_CODES) {
             const existing = datedLimits.get(code);
             if (existing?.subscriptionAllowed != null && known(existing.total)) continue;            const sse = code.startsWith('513');
-            const raw = await read(sse ? buildSsePcfCacheKey(code, d) : buildEtfPcfCacheKey(code, d), 'projection');
+            // 限额取快照产出当日（date）的最新 PCF，而非快照日期（d）的
+            const raw = await read(sse ? buildSsePcfCacheKey(code, date) : buildEtfPcfCacheKey(code, date), 'projection');
             if (!raw) continue;
             try {
               const cached = parse(raw);
               const validate = sse
                 ? validateSsePcfCachedData
-                : d < date
-                  ? validateEtfPcfHistoryData
-                  : validateEtfPcfCachedData;
-              if (validate(cached, { code, date: d, now: new Date(scheduledTime) }).ok) {
+                : validateEtfPcfCachedData;
+              if (validate(cached, { code, date, now: new Date(scheduledTime) }).ok) {
                 datedLimits.set(code, {
                   code,
-                  date: d,
+                  date,
                   ...normalizeCreationStatus(cached),
                   net: { kind: cached.netSubscribeLimitKind, shares: cached.netSubscribeLimitShares },
                   total: { kind: cached.totalSubscribeLimitKind, shares: cached.totalSubscribeLimitShares },
@@ -885,7 +884,9 @@ async function runStage({
             limits: [...datedLimits.values()],            creationStatus,
             fetchedAt: batch.fetchedAt,
             dateEvidence: row?.dateEvidence,
-            calendar
+            calendar,
+            // 限额走快照产出当日的最新 PCF（date 是 cron 运行日，如今日）
+            limitDate: date
           });
           projectionResults.push(
             await persistSharesProjection(kv, data, { deadlineAt: deadline, signal: controller.signal })

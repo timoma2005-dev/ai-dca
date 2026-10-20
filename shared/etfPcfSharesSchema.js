@@ -118,7 +118,10 @@ export function buildSharesProjection({
   fetchedAt,
   projectedAt = new Date().toISOString(),
   dateEvidence,
-  calendar = null
+  calendar = null,
+  // 限额日期：默认与快照日期相同；按 dudu 10-16 口径，限额应走快照产出当日的最新 PCF，
+  // 调用方可传入与 date 不同的 limitDate（如今日）。
+  limitDate = date
 }) {
   const previous = previousSession(date, calendar);
   const rows = TARGET_CODES.map((code, index) => {
@@ -129,10 +132,10 @@ export function buildSharesProjection({
     const prevShares = shares !== null && integer(old?.shares) && old.unit === cur.unit ? old.shares : null;
     const delta = prevShares === null ? null : shares - prevShares;
     const deltaShares = Number.isSafeInteger(delta) ? delta : null;
-    const limit = hasSharesSource && limits.find((r) => r.code === code && r.date === date)?.total;
+    const limit = hasSharesSource && limits.find((r) => r.code === code && r.date === limitDate)?.total;
     const kind = ['limited', 'unlimited', 'unknown'].includes(limit?.kind) ? limit.kind : 'unknown';
     const total = kind === 'limited' && integer(limit.shares) ? limit.shares : null;
-    const limitEntry = hasSharesSource && limits.find((r) => r.code === code && r.date === date);
+    const limitEntry = hasSharesSource && limits.find((r) => r.code === code && r.date === limitDate);
     const creationUnit = integer(limitEntry?.creationUnitShares) ? limitEntry.creationUnitShares : null;
     // 净申购上限：基本没人赎回，净申购上限约等于当日申购上限，优先使用。
     const netLimit = limitEntry?.net;
@@ -182,7 +185,7 @@ export function buildSharesProjection({
       effLimitKind: effKind,
       effLimitShares: effShares,
       limitSource,
-      limitDate: limit ? date : null,
+      limitDate: limit ? limitDate : null,
       creationUnitShares: creationUnit,
       subscriptionAllowed: creationStatusNorm.subscriptionAllowed,
       redemptionAllowed: creationStatusNorm.redemptionAllowed,
