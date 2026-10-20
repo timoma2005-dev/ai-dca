@@ -3,6 +3,7 @@
 # 栅栏：工作区必须干净、HEAD 必须已 push 到 origin（git merge-base --is-ancestor HEAD origin/<branch>）。
 # 用法：bash scripts/cn-frontend/release.sh
 set -euo pipefail
+exec 9>/tmp/cn-frontend-release.lock; flock -n 9 || { echo "[release] 另一个发布正在进行" >&2; exit 3; }
 REPO=${REPO:-/root/ai-dca}
 RELEASES=${RELEASES:-/var/www/ai-dca-cn-releases}
 LIVE=${LIVE:-/var/www/ai-dca-cn}
