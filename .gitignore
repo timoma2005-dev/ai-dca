@@ -65,3 +65,4 @@ vite-preview-*.log
 static-5000-https-server.py
 static-80-server.py
 *.log
+*.bak.*
