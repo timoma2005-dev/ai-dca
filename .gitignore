@@ -59,3 +59,9 @@ services/market-collector/config.json
 services/etf-mirror/*.db
 services/etf-mirror/*.bak-*
 *.bak-*
+services/market-collector/patch-backups/
+static-*.log
+vite-preview-*.log
+static-5000-https-server.py
+static-80-server.py
+*.log
