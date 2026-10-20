@@ -17,7 +17,7 @@ function pcf(){const text=new TextDecoder('gbk').decode(readFileSync(new URL('./
 const limits=(d,records)=>({schemaVersion:1,source:'szse_pcf',date:d,fetchedAt:at,records:records.map(r=>({date:d,...r}))});
 const seed=(kv,s,type='limits')=>kv.store.set(eventKey(s.date,type),JSON.stringify(s));
 const failShares=async()=>({ok:false,reason:'source_failure'});
-function stage(kv,extra={}){return runEtfPcfEvents({env:{FUND_LIMIT_KV:kv},scheduledTime:Date.parse(at),detectedAt:at,pcfs:[pcf()],sharesFetch:failShares,...extra});}
+function stage(kv,extra={}){return runEtfPcfEvents({env:{FUND_LIMIT_KV:kv},scheduledTime:Date.parse(at),detectedAt:at,pcfs:[pcf()],sharesFetch:failShares,sseSharesFetch:async()=>({ok:false,reason:'test_disabled'}),...extra});}
 test('known 159659 2026-09-21 total 2m → 10m ratio=5; net unlimited unchanged',()=>{
  const r=relax(l(2000000),l(10000000),{date:'2026-09-21',prev_date:'2026-09-18'});assert.equal(r.event.ratio,5);
  assert.equal(relax(unlimited,unlimited,{basis:'net'}).event,null);
