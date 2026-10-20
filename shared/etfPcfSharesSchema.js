@@ -132,10 +132,12 @@ export function buildSharesProjection({
     const prevShares = shares !== null && integer(old?.shares) && old.unit === cur.unit ? old.shares : null;
     const delta = prevShares === null ? null : shares - prevShares;
     const deltaShares = Number.isSafeInteger(delta) ? delta : null;
-    const limit = hasSharesSource && limits.find((r) => r.code === code && r.date === limitDate)?.total;
+    // 限额：159 从深交所 PCF，513 从上交所 PCF（datedLimits 已按限额日期准备好，两者都有）。
+    // 份额只走 159（深交所行情报告），513 无份额源，shares/delta 保持 null。
+    const limit = limits.find((r) => r.code === code && r.date === limitDate)?.total;
     const kind = ['limited', 'unlimited', 'unknown'].includes(limit?.kind) ? limit.kind : 'unknown';
     const total = kind === 'limited' && integer(limit.shares) ? limit.shares : null;
-    const limitEntry = hasSharesSource && limits.find((r) => r.code === code && r.date === limitDate);
+    const limitEntry = limits.find((r) => r.code === code && r.date === limitDate);
     const creationUnit = integer(limitEntry?.creationUnitShares) ? limitEntry.creationUnitShares : null;
     // 净申购上限：基本没人赎回，净申购上限约等于当日申购上限，优先使用。
     const netLimit = limitEntry?.net;
