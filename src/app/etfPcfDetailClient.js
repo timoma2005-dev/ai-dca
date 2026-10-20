@@ -80,6 +80,24 @@ export function pcfDetailSections(p) {
   const allowed = (value) =>
     typeof value === 'boolean' ? (value ? '允许' : '不允许') : sse ? p.creationRedemption || '—' : '—';
   const limit = (value, empty) => (value === null ? empty : formatPcfShares(value));
+  // 单账户限额（SSE/SZSE PCF 新增字段）：逐项独立判断，prefix+Kind/Shares 均缺失时不加行；
+  // Shares null 或 kind unlimited 记「不设上限」，有限数字（含 0）走 formatPcfShares，其余记「—」。
+  const accountLimit = (prefix) => {
+    const shares = p[`${prefix}Shares`];
+    const kind = p[`${prefix}Kind`];
+    if (shares === undefined && kind === undefined) return null;
+    if (shares === null || kind === 'unlimited') return '不设上限';
+    return Number.isFinite(shares) ? formatPcfShares(shares) : '—';
+  };
+  const accountLimitRows = [
+    ['accountTotalSubscribeLimit', '单账户累计申购上限'],
+    ['accountTotalRedeemLimit', '单账户累计赎回上限'],
+    ['accountNetSubscribeLimit', '单账户净申购上限'],
+    ['accountNetRedeemLimit', '单账户净赎回上限']
+  ].flatMap(([prefix, label]) => {
+    const value = accountLimit(prefix);
+    return value === null ? [] : [[label, value]];
+  });
   return [
     {
       date: p.prevDayDate || '—',
@@ -109,7 +127,8 @@ export function pcfDetailSections(p) {
         ['当日累计申购上限', limit(p.totalSubscribeLimitShares, '无')],
         ['当日累计赎回上限', limit(p.totalRedeemLimitShares, '无')],
         ['当日净申购上限', limit(p.netSubscribeLimitShares, '不设上限')],
-        ['当日净赎回上限', limit(p.netRedeemLimitShares, '不设上限')]
+        ['当日净赎回上限', limit(p.netRedeemLimitShares, '不设上限')],
+        ...accountLimitRows
       ]
     }
   ];

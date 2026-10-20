@@ -181,24 +181,49 @@ export function freshnessMessage(data, accessDay = shanghaiAccessDay()) {
 }
 
 // Compact presentation for the shares decision cards; legacy labels stay unchanged.
+// 沪深统一口径：暂停申购最优先，其余按生效限额（净优先）+ 利用率分支判断。
+const missingValue = (v) => v === null || v === undefined;
 export function sharesCeiling(r) {
+  // 仅显式 false 判暂停（159/513 同口径）；缺失/未知状态不推断。
+  if (r.subscriptionAllowed === false) return { kind: 'paused', label: '暂停申购' };
   // 生效限额：净优先，没有则回退累计（与 UtilizationCell 一致）。
   const effKind = r.effLimitKind || (r.netLimitKind === 'limited' ? 'limited' : r.totalLimitKind);
-  if (!r.code.startsWith('159')) {
-    // 沪市：无 delta，不做利用率百分比；优先展示申赎状态（暂停优先于限额数字）。
-    if (r.subscriptionAllowed === false) return { kind: 'paused', label: '暂停申购' };
-    if (effKind === 'unlimited') return { kind: 'unlimited', label: '累计不限' };
-    if (effKind === 'limited') {
-      return { kind: 'sse-limited', label: '有限额' };
-    }
-    return { kind: 'pending', label: '数据待确认' };
-  }
   if (effKind === 'unlimited') return { kind: 'unlimited', label: '累计不限' };
-  if (r.deltaShares === null || r.atLimit === null) return { kind: 'pending', label: '数据待确认' };
+  if (missingValue(r.deltaShares) || missingValue(r.atLimit) || missingValue(r.utilization))
+    return { kind: 'pending', label: '数据待确认' };
   if (r.deltaShares < 0) return { kind: 'outflow', label: '净流出' };
   const percent = Math.round(r.utilization * 100);
   if (r.atLimit) return { kind: 'at-limit', label: '顶格 100%' };
   if (r.utilization > 1) return { kind: 'over-limit', label: `超限 ${percent}%` };
   if (r.nearTotalLimit) return { kind: 'near-limit', label: `接近 ${percent}%` };
   return { kind: 'normal', label: `未顶格 ${percent}%` };
+}
+
+// 倍数文案统一格式：≥10 取整，其余保留 1 位小数并去掉尾随 .0。
+function formatLimitMultiple(m) {
+  return m >= 10 ? Math.round(m).toString() : m.toFixed(1).replace(/\.0$/, '');
+}
+
+// 限额环比标签（纯函数）：worker 对比上一限额日 PCF 后预计算 limitChanges，
+// 按 limitSource 选中 net/total 项，不重算分类、不发请求；旧快照无字段时返回 null。
+// tone 语义：down=收紧/新增限额，up=放宽/取消限额，flat=生效项持平但其它限额有变（mixed）。
+export function chipForLimitChange(row) {
+  const entry = row?.limitChanges?.[row.limitSource === 'net' ? 'net' : 'total'];
+  if (!entry || typeof entry !== 'object') return null;
+  if (entry.change === 'tightened' || entry.change === 'relaxed') {
+    if (Number.isFinite(entry.ratio)) {
+      const multiple = formatLimitMultiple(entry.ratio);
+      return entry.change === 'tightened'
+        ? { label: `减少至 ${multiple}倍`, tone: 'down' }
+        : { label: `新增 ${multiple}倍`, tone: 'up' };
+    }
+    // 上一期为不限/无记录：有限限额记「新增限额」，放开记「取消限额」。
+    if (entry.ratio === null)
+      return entry.change === 'tightened'
+        ? { label: '新增限额', tone: 'down' }
+        : { label: '取消限额', tone: 'up' };
+    return null; // undefined/NaN/Infinity 不冒充有效倍数
+  }
+  if (entry.change === 'unchanged' && row.limitChange === 'mixed') return { label: '限额有变', tone: 'flat' };
+  return null;
 }

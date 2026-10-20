@@ -87,6 +87,81 @@ test('两市场字段映射、原始净值精度、允许情况与上限单位',
   assert.equal(sse[1].rows[5][1], '暂停申赎');
 });
 
+test('单账户限额四字段逐项独立追加；数值/0/null/unlimited/unknown 格式；旧 payload 保持 10+3 行', () => {
+  const base = { ...payload, prevDayDate: '2026-10-09' };
+  // 旧 payload：无任何 account* 字段时 T 日保持 10 行、P 日 3 行，顺序不变。
+  const legacy = pcfDetailSections(base);
+  assert.equal(legacy[1].rows.length, 10);
+  assert.equal(legacy[0].rows.length, 3);
+  assert.equal(legacy[1].rows[9][0], '当日净赎回上限');
+  // 四个单账户字段逐项独立出现，互不连带：只给一项只在末尾追加对应一行。
+  assert.deepEqual(
+    pcfDetailSections({
+      ...base,
+      accountTotalSubscribeLimitShares: 1000000,
+      accountTotalSubscribeLimitKind: 'limited'
+    })[1].rows.slice(-1),
+    [['单账户累计申购上限', '100.00万份']]
+  );
+  assert.deepEqual(
+    pcfDetailSections({
+      ...base,
+      accountTotalRedeemLimitShares: 0,
+      accountTotalRedeemLimitKind: 'limited'
+    })[1].rows.slice(-1),
+    [['单账户累计赎回上限', '0份']]
+  );
+  assert.deepEqual(
+    pcfDetailSections({
+      ...base,
+      accountNetSubscribeLimitShares: null,
+      accountNetSubscribeLimitKind: 'unlimited'
+    })[1].rows.slice(-1),
+    [['单账户净申购上限', '不设上限']]
+  );
+  // Shares null 或 kind unlimited 都记「不设上限」；kind 缺失而 shares 缺失（数值缺失）记「—」。
+  assert.deepEqual(
+    pcfDetailSections({
+      ...base,
+      accountNetRedeemLimitShares: null,
+      accountNetRedeemLimitKind: 'unknown'
+    })[1].rows.slice(-1),
+    [['单账户净赎回上限', '不设上限']]
+  );
+  assert.deepEqual(
+    pcfDetailSections({ ...base, accountNetRedeemLimitKind: 'unknown' })[1].rows.slice(-1),
+    [['单账户净赎回上限', '—']]
+  );
+  assert.deepEqual(
+    pcfDetailSections({ ...base, accountTotalSubscribeLimitKind: 'limited' })[1].rows.slice(-1),
+    [['单账户累计申购上限', '—']]
+  );
+  // 四项齐全：T 日 14 行（10 + 4），追加行顺序固定，P 日 3 行不变。
+  const full = pcfDetailSections({
+    ...base,
+    accountTotalSubscribeLimitShares: 1000000,
+    accountTotalSubscribeLimitKind: 'limited',
+    accountTotalRedeemLimitShares: 0,
+    accountTotalRedeemLimitKind: 'limited',
+    accountNetSubscribeLimitShares: null,
+    accountNetSubscribeLimitKind: 'unlimited',
+    accountNetRedeemLimitShares: null,
+    accountNetRedeemLimitKind: 'unknown'
+  });
+  assert.equal(full[1].rows.length, 14);
+  assert.equal(full[0].rows.length, 3);
+  assert.deepEqual(
+    full[1].rows.slice(10).map((r) => [r[0], r[1]]),
+    [
+      ['单账户累计申购上限', '100.00万份'],
+      ['单账户累计赎回上限', '0份'],
+      ['单账户净申购上限', '不设上限'],
+      ['单账户净赎回上限', '不设上限']
+    ]
+  );
+  assert.deepEqual(full[1].rows.slice(0, 10), legacy[1].rows);
+});
+
  test('同周期 effect 卸载重挂复用 inflight', async () => {
   let calls = 0, resolve;
   const client = createPcfDetailClient({ fetchImpl: () => { calls++; return new Promise((r) => { resolve = r; }); } });

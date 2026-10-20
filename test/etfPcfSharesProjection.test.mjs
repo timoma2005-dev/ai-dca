@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { syntheticProjection, calendar } from './helpers/etfPcfSharesFixture.mjs';
+import { syntheticProjection, sseDeltaProjection, calendar } from './helpers/etfPcfSharesFixture.mjs';
 import {
   validateSharesProjection,
   buildSharesProjection,
@@ -25,6 +25,50 @@ test('synthetic exact/near/over/negative/zero/unlimited and partial, v1 NAV is a
   assert.ok(data.records.every((r) => r.deltaAmountWan === null));
   assert.equal(validateSharesProjection(syntheticProjection({ partial: true }), { now }), true);
 });
+test('513 legal prevShares/delta/status/utilization passes; legacy snapshots keep passing; passthrough fields optional', () => {
+  // 新快照：513 携带非空 prevShares/deltaShares 与一致的 status/utilization 口径，整体通过共享校验。
+  const data = sseDeltaProjection();
+  const sse = data.records.find((r) => r.code === '513100');
+  assert.equal(sse.prevShares, 29990000000);
+  assert.equal(sse.deltaShares, 10000000);
+  assert.equal(sse.status, 'complete');
+  assert.equal(validateSharesProjection(data, { now }), true);
+  // 旧快照（513 prevShares/deltaShares 均为 null）继续通过。
+  assert.equal(validateSharesProjection(syntheticProjection(), { now }), true);
+  // 透传新字段可缺失：完全去掉环比字段的旧形态同样通过，不因缺少新字段被拒绝。
+  const legacy = structuredClone(data);
+  for (const r of legacy.records) {
+    delete r.limitChange;
+    delete r.limitChanges;
+    delete r.prevLimitDate;
+  }
+  delete legacy.limitDate;
+  delete legacy.prevLimitDate;
+  delete legacy.limitSummary;
+  assert.equal(validateSharesProjection(legacy, { now }), true);
+});
+
+test('513 delta/date/utilization/status inconsistencies reject under the unified 159 checks', () => {
+  for (const mutate of [
+    (r) => {
+      r.deltaShares += 1;
+    },
+    (r) => {
+      r.prevDate = '2026-10-08';
+    },
+    (r) => {
+      r.utilization = 0.9;
+    },
+    (r) => {
+      r.status = 'partial';
+    }
+  ]) {
+    const x = sseDeltaProjection();
+    mutate(x.records.find((r) => r.code === '513100'));
+    assert.equal(validateSharesProjection(x, { now }), false);
+  }
+});
+
 test('no calendar means no claimed adjacent-session delta; holiday sequence and malformed calendars', () => {
   assert.equal(previousSession('2026-10-12', calendar), '2026-10-09');
   assert.equal(previousSession('2026-10-12', null), null);
@@ -236,11 +280,12 @@ test('13 ETFs: normalized PCF creation status, signed estimates, and honest SSE 
     );
     assert.equal(r.status, 'partial');
     assert.ok(r.reasons.includes('missing_shares'));
+    // 7908fc3d 后 513 限额走上交所 PCF：注入的 513100 限额生效，其余 513 无限额。
     assert.deepEqual(
       [r.shares, r.prevShares, r.deltaShares, r.totalLimitShares, r.limitDate],
-      [null, null, null, null, null]
+      [null, null, null, i === 0 ? 100 : null, i === 0 ? '2026-10-12' : null]
     );
-    assert.equal(r.totalLimitKind, 'unknown');
+    assert.equal(r.totalLimitKind, i === 0 ? 'limited' : 'unknown');
     assert.equal(r.creationShares, i === 0 ? 0 : null);
     assert.equal(r.creationSharesKind, i === 0 ? 'exact' : null);
   }

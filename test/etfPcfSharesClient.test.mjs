@@ -9,7 +9,7 @@ import {
   freshnessMessage,
   validateSharesProjection
 } from '../src/app/etfPcfSharesClient.js';
-import { syntheticProjection } from './helpers/etfPcfSharesFixture.mjs';
+import { syntheticProjection, sseDeltaProjection } from './helpers/etfPcfSharesFixture.mjs';
 import { confirmedSharesCalendar } from '../shared/etfPcfTradingCalendar.js';
 const base = Date.parse('2026-10-13T01:03:20.000Z');
 const response = (data) => new Response(JSON.stringify(data));
@@ -290,7 +290,7 @@ test('PCF period dates follow trading sessions across a weekend; unsupported map
   assert.match(freshnessMessage(data, '2026-10-14'), /数据滞后/);
 });
 
-test('decision pills cover exact, near, over, outflow, unlimited and missing without quote fallbacks', async () => {
+test('decision pills cover exact, near, over, outflow, unlimited, paused and missing without quote fallbacks', async () => {
   const { sharesCeiling } = await import('../src/app/etfPcfSharesClient.js');
   const rows = syntheticProjection().records;
   assert.deepEqual(
@@ -301,32 +301,219 @@ test('decision pills cover exact, near, over, outflow, unlimited and missing wit
     kind: 'pending',
     label: '数据待确认'
   });
-  // 沪市：暂停优先于限额数字展示。
-  assert.deepEqual(
-    sharesCeiling({ code: '513100', subscriptionAllowed: false, totalLimitKind: 'limited', totalLimitShares: 2500000 }),
-    { kind: 'paused', label: '暂停申购' }
-  );
-  // 沪市有限额数据时标签中性提示"有限额"，不突出数字（快照无申赎状态，暂停时数字会误导）。
-  assert.deepEqual(
-    sharesCeiling({ code: '513100', totalLimitKind: 'limited', totalLimitShares: 2500000 }),
-    { kind: 'sse-limited', label: '有限额' }
-  );
-  assert.deepEqual(
-    sharesCeiling({ code: '513390', totalLimitKind: 'limited', totalLimitShares: 120000000 }),
-    { kind: 'sse-limited', label: '有限额' }
-  );
+  // 沪市有限额但缺 delta：沪深统一口径下不做利用率推断，显示数据待确认（sse-limited 已删除）。
+  assert.deepEqual(sharesCeiling({ code: '513100', totalLimitKind: 'limited', totalLimitShares: 2500000 }), {
+    kind: 'pending',
+    label: '数据待确认'
+  });
+  assert.deepEqual(sharesCeiling({ code: '513390', totalLimitKind: 'limited', totalLimitShares: 120000000 }), {
+    kind: 'pending',
+    label: '数据待确认'
+  });
   assert.deepEqual(sharesCeiling({ code: '513300', totalLimitKind: 'unlimited' }), {
     kind: 'unlimited',
     label: '累计不限'
   });
-  assert.equal(
-    sharesCeiling({ ...rows[0], deltaShares: null, atLimit: null, high52w: 123 }).label,
-    '数据待确认'
+  // 513 与 159 同一口径的利用率分支：顶格/接近/正常/超限/净流出。
+  const sseRow = {
+    code: '513100',
+    effLimitKind: 'limited',
+    effLimitShares: 5000000,
+    limitSource: 'total',
+    totalLimitKind: 'limited',
+    totalLimitShares: 5000000
+  };
+  assert.deepEqual(
+    sharesCeiling({ ...sseRow, deltaShares: 5000000, utilization: 1, atLimit: true, nearTotalLimit: true }),
+    { kind: 'at-limit', label: '顶格 100%' }
   );
+  assert.deepEqual(
+    sharesCeiling({ ...sseRow, deltaShares: 4500000, utilization: 0.9, atLimit: false, nearTotalLimit: true }),
+    { kind: 'near-limit', label: '接近 90%' }
+  );
+  assert.deepEqual(
+    sharesCeiling({ ...sseRow, deltaShares: 1000000, utilization: 0.2, atLimit: false, nearTotalLimit: false }),
+    { kind: 'normal', label: '未顶格 20%' }
+  );
+  assert.deepEqual(
+    sharesCeiling({ ...sseRow, deltaShares: 6000000, utilization: 1.2, atLimit: false, nearTotalLimit: true }),
+    { kind: 'over-limit', label: '超限 120%' }
+  );
+  assert.deepEqual(
+    sharesCeiling({ ...sseRow, deltaShares: -100, utilization: -0.02, atLimit: false, nearTotalLimit: false }),
+    { kind: 'outflow', label: '净流出' }
+  );
+  // 暂停申购沪深同口径且最优先：压过顶格与累计不限。
+  assert.deepEqual(
+    sharesCeiling({
+      code: '513100',
+      subscriptionAllowed: false,
+      totalLimitKind: 'limited',
+      totalLimitShares: 2500000
+    }),
+    { kind: 'paused', label: '暂停申购' }
+  );
+  assert.deepEqual(
+    sharesCeiling({ ...rows[0], subscriptionAllowed: false, deltaShares: 10000000, atLimit: true, utilization: 1 }),
+    { kind: 'paused', label: '暂停申购' }
+  );
+  assert.deepEqual(
+    sharesCeiling({
+      ...rows[0],
+      subscriptionAllowed: false,
+      effLimitKind: 'unlimited',
+      effLimitShares: null,
+      totalLimitKind: 'unlimited',
+      totalLimitShares: null,
+      utilization: null,
+      atLimit: null
+    }),
+    { kind: 'paused', label: '暂停申购' }
+  );
+  // subscriptionAllowed 缺失/未知不推断暂停。
+  assert.deepEqual(sharesCeiling({ ...rows[0], subscriptionAllowed: null }), { kind: 'at-limit', label: '顶格 100%' });
+  assert.deepEqual(sharesCeiling({ ...rows[0], subscriptionAllowed: undefined }), {
+    kind: 'at-limit',
+    label: '顶格 100%'
+  });
+  // delta/atLimit/utilization 任一缺失（null 或 undefined）都转数据待确认。
+  for (const missing of [
+    { deltaShares: null },
+    { deltaShares: undefined },
+    { atLimit: null },
+    { atLimit: undefined },
+    { utilization: null },
+    { utilization: undefined }
+  ])
+    assert.deepEqual(sharesCeiling({ ...rows[0], ...missing }), { kind: 'pending', label: '数据待确认' });
+  assert.equal(sharesCeiling({ ...rows[0], deltaShares: null, atLimit: null, high52w: 123 }).label, '数据待确认');
   assert.equal(
     sharesCeiling({ ...rows[0], atLimit: false, nearTotalLimit: false, utilization: 0.5 }).label,
     '未顶格 50%'
   );
   assert.equal(creationLabel({ creationShares: null, deltaShares: 10000 }), '暂无');
   assert.ok(rows.every((r) => r.deltaAmountWan === null));
+});
+
+test('chipForLimitChange maps worker limit-change entries via limitSource without recomputation', async () => {
+  const { chipForLimitChange } = await import('../src/app/etfPcfSharesClient.js');
+  const entry = (change, ratio) => ({ change, ratio });
+  // tightened/relaxed ×（有限倍数/无倍数）四种文案 + mixed 持平的「限额有变」。
+  assert.deepEqual(
+    chipForLimitChange({ limitChange: 'tightened', limitSource: 'total', limitChanges: { total: entry('tightened', 0.9) } }),
+    { label: '减少至 0.9倍', tone: 'down' }
+  );
+  assert.deepEqual(
+    chipForLimitChange({ limitChange: 'relaxed', limitSource: 'net', limitChanges: { net: entry('relaxed', 2.5) } }),
+    { label: '新增 2.5倍', tone: 'up' }
+  );
+  assert.deepEqual(chipForLimitChange({ limitSource: 'total', limitChanges: { total: entry('tightened', null) } }), {
+    label: '新增限额',
+    tone: 'down'
+  });
+  assert.deepEqual(chipForLimitChange({ limitSource: 'total', limitChanges: { total: entry('relaxed', null) } }), {
+    label: '取消限额',
+    tone: 'up'
+  });
+  assert.deepEqual(
+    chipForLimitChange({
+      limitChange: 'mixed',
+      limitSource: 'total',
+      limitChanges: { total: entry('unchanged', 1), net: entry('tightened', 0.4) }
+    }),
+    { label: '限额有变', tone: 'flat' }
+  );
+  // 倍数格式：0 有效、≥10 取整、1 位小数并去尾零。
+  assert.deepEqual(
+    chipForLimitChange({ limitChange: 'tightened', limitSource: 'total', limitChanges: { total: entry('tightened', 0) } }),
+    { label: '减少至 0倍', tone: 'down' }
+  );
+  assert.deepEqual(
+    chipForLimitChange({ limitChange: 'relaxed', limitSource: 'total', limitChanges: { total: entry('relaxed', 1) } }),
+    { label: '新增 1倍', tone: 'up' }
+  );
+  assert.deepEqual(
+    chipForLimitChange({ limitChange: 'relaxed', limitSource: 'total', limitChanges: { total: entry('relaxed', 1.1) } }),
+    { label: '新增 1.1倍', tone: 'up' }
+  );
+  assert.deepEqual(
+    chipForLimitChange({ limitChange: 'relaxed', limitSource: 'total', limitChanges: { total: entry('relaxed', 10) } }),
+    { label: '新增 10倍', tone: 'up' }
+  );
+  // net/total 按 limitSource 选中；账户项（accountTotal/accountNet）不冒充生效项。
+  const both = {
+    limitChange: 'relaxed',
+    limitSource: 'net',
+    limitChanges: {
+      net: entry('relaxed', 2.5),
+      total: entry('tightened', 0.5),
+      accountTotal: entry('tightened', 0.1),
+      accountNet: entry('relaxed', 9)
+    }
+  };
+  assert.deepEqual(chipForLimitChange(both), { label: '新增 2.5倍', tone: 'up' });
+  assert.deepEqual(chipForLimitChange({ ...both, limitSource: 'total' }), { label: '减少至 0.5倍', tone: 'down' });
+  assert.deepEqual(chipForLimitChange({ ...both, limitSource: null }), { label: '减少至 0.5倍', tone: 'down' });
+  assert.equal(
+    chipForLimitChange({
+      limitSource: 'total',
+      limitChanges: { accountTotal: entry('tightened', 0.5), accountNet: entry('relaxed', 2) }
+    }),
+    null
+  );
+  // 防御：row/limitChanges/选中项缺失、未知 change、非法倍数都返回 null，不冒充有效文案。
+  assert.equal(chipForLimitChange(null), null);
+  assert.equal(chipForLimitChange({}), null);
+  assert.equal(chipForLimitChange({ limitSource: 'total' }), null);
+  assert.equal(chipForLimitChange({ limitChanges: null }), null);
+  assert.equal(
+    chipForLimitChange({ limitSource: 'net', limitChanges: { total: entry('tightened', 0.9) } }),
+    null
+  );
+  assert.equal(chipForLimitChange({ limitSource: 'total', limitChanges: { total: null } }), null);
+  assert.equal(chipForLimitChange({ limitSource: 'total', limitChanges: { total: entry('unchanged', 1) } }), null);
+  assert.equal(
+    chipForLimitChange({ limitChange: 'mixed', limitSource: 'total', limitChanges: { total: entry('incomparable', null) } }),
+    null
+  );
+  assert.equal(
+    chipForLimitChange({ limitChange: 'tightened', limitSource: 'total', limitChanges: { total: entry('nonsense', 2) } }),
+    null
+  );
+  for (const bad of [undefined, NaN, Infinity, -Infinity, '2'])
+    assert.equal(
+      chipForLimitChange({ limitChange: 'tightened', limitSource: 'total', limitChanges: { total: entry('tightened', bad) } }),
+      null
+    );
+});
+
+test('real client accepts 513 non-null delta responses and preserves new fields through network and cache', async () => {
+  let clock = base,
+    calls = 0;
+  const data = sseDeltaProjection();
+  const values = new Map();
+  const storage = () => ({ getItem: (k) => values.get(k), setItem: (k, v) => values.set(k, v) });
+  const fetchImpl = async () => {
+    calls++;
+    return response(data);
+  };
+  const client = createSharesClient({ fetchImpl, now: () => clock, storage });
+  const value = await client.subscribe().promise;
+  assert.equal(value.state, 'partial');
+  const sse = value.data.records.find((r) => r.code === '513100');
+  assert.equal(sse.prevShares, 29990000000);
+  assert.equal(sse.deltaShares, 10000000);
+  assert.equal(sse.status, 'complete');
+  // 新字段随响应透传：顶层限额日期与记录级环比结论原样可达 UI。
+  assert.equal(value.data.limitDate, '2026-10-13');
+  assert.equal(value.data.prevLimitDate, '2026-10-09');
+  assert.equal(sse.limitChange, 'tightened');
+  assert.equal(sse.limitChanges.total.ratio, 0.5);
+  assert.equal(sse.limitChanges.net.change, 'unchanged');
+  assert.equal(sse.limitChanges.accountNet, null);
+  // 新字段经本地缓存（JSON 往返）原样保留，命中缓存不再发起网络请求。
+  const second = createSharesClient({ fetchImpl, now: () => clock, storage });
+  const cached = await second.subscribe().promise;
+  assert.equal(calls, 1);
+  assert.deepEqual(cached.data, data);
 });

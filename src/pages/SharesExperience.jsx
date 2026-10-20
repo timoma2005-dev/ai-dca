@@ -1,22 +1,22 @@
 /**
  * 「份额新增」页面（tab=shares）整体替换版。
- * 数据层只读：快照消费 src/app/etfPcfSharesClient.js，PCF 明细/历史限额共用
- * src/app/etfPcfDetailClient.js 的同一缓存；上一交易日推导用 shared/etfPcfSharesSchema。
+ * 数据层只读：快照消费 src/app/etfPcfSharesClient.js；限额环比结论与沪市份额由快照自带
+ * （worker 预计算透传），PCF 明细仅在展开抽屉时经 src/app/etfPcfDetailClient.js 按需订阅。
  * §9 否决项已落实：无 KPI 磁贴、无限额利用率进度条、无 ▲▼、无金额估算列、无手动视图切换。
  */
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Search, RefreshCw, AlertTriangle, Inbox, CircleAlert, ChevronDown, X } from 'lucide-react';
 import {
   sharesClient,
   shanghaiAccessDay,
   sharesCeiling,
+  chipForLimitChange,
   creationLabel,
   limitLabel,
   snapshotLabel,
   freshnessMessage
 } from '../app/etfPcfSharesClient.js';
-import { pcfDetailClient, pcfDetailSections } from '../app/etfPcfDetailClient.js';
-import { previousSession } from '../../shared/etfPcfSharesSchema.js';
+import { pcfDetailClient, pcfDetailSections, formatPcfShares } from '../app/etfPcfDetailClient.js';
 import './shares-experience.css';
 
 const zh = (n, options) => n.toLocaleString('zh-CN', options);
@@ -199,70 +199,11 @@ function TotalSharesCell({ row }) {
   );
 }
 
-// 告警条内的限额环比标签：只请求 row.limitDate 的上一交易日历史限额，与行内抽屉共用
-// pcfDetailClient 的缓存与 inflight 去重；读不到或口径不符时静默不渲染，不轮询、不换日期兜底。
-// 告警胶囊：只在限额有变化（新增/减少）时渲染，持平的不高亮。
-function AlertChip({ row, calendar, onSelect, onChange }) {
-  const [change, setChange] = useState(null);
-  const prevLimitDate = previousSession(row.limitDate, calendar);
-  const effKind = row.effLimitKind || (row.netLimitKind === 'limited' ? 'limited' : row.totalLimitKind);
-  const effShares = row.effLimitKind
-    ? row.effLimitShares
-    : row.netLimitKind === 'limited'
-      ? row.netLimitShares
-      : row.totalLimitShares;
-  const comparable = effKind === 'limited' && Number.isSafeInteger(effShares) && effShares >= 0;
-  useEffect(() => {
-    setChange(null);
-    if (!prevLimitDate || !comparable) return undefined;
-    let active = true;
-    const request = pcfDetailClient.subscribe(row.code, prevLimitDate);
-    request.promise.then((value) => {
-      if (!active || value.state !== 'ready') return;
-      const p = value.data;
-      let prevEff = null;
-      if (p.netSubscribeLimitKind === 'limited' && Number.isSafeInteger(p.netSubscribeLimitShares)) {
-        prevEff = p.netSubscribeLimitShares;
-      } else if (p.totalSubscribeLimitKind === 'limited' && Number.isSafeInteger(p.totalSubscribeLimitShares)) {
-        prevEff = p.totalSubscribeLimitShares;
-      }
-      if (prevEff === null || prevEff < 0) return;
-      if (prevEff === 0) {
-        setChange({ dir: 'up', isNew: true });
-        return;
-      }
-      const multiple = effShares / prevEff;
-      if (Math.abs(multiple - 1) < 0.001) {
-        setChange({ dir: 'flat' });
-      } else if (multiple > 1) {
-        setChange({ dir: 'up', multiple });
-      } else {
-        setChange({ dir: 'down', multiple });
-      }
-    });
-    return () => {
-      active = false;
-      request.release();
-    };
-  }, [row.code, prevLimitDate, comparable, effShares]);
-  // 上报变化状态给父组件（用于表格高亮）
-  useEffect(() => {
-    if (onChange) {
-      onChange(row.code, change && change.dir !== 'flat');
-    }
-  }, [row.code, change, onChange]);
-  // 持平或无数据的不渲染
-  if (!change || change.dir === 'flat') return null;
-  let label = null;
-  if (change.isNew) {
-    label = <span className="limit-change up">新增限额</span>;
-  } else {
-    const m = change.multiple;
-    const mStr = m >= 10 ? Math.round(m).toString() : m.toFixed(1).replace(/\.0$/, '');
-    label = change.dir === 'up'
-      ? <span className="limit-change up">新增 {mStr}倍</span>
-      : <span className="limit-change down">减少至 {mStr}倍</span>;
-  }
+// 告警条内的限额环比标签：快照自带的 limitChanges 结论直接渲染（chipForLimitChange 纯函数），
+// 不请求上一限额日历史、不重算分类；旧快照无字段时 chip 为 null，胶囊不渲染。
+function AlertChip({ row, onSelect }) {
+  const chip = chipForLimitChange(row);
+  if (!chip) return null;
   return (
     <button
       type="button"
@@ -272,7 +213,7 @@ function AlertChip({ row, calendar, onSelect, onChange }) {
     >
       <b className="alert-chip-code">{row.code}</b>
       <span className="alert-chip-name">{row.name}</span>
-      {label}
+      <span className={`limit-change ${chip.tone}`}>{chip.label}</span>
     </button>
   );
 }
@@ -286,8 +227,32 @@ function pcfValue(label, value) {
   return value; // 未知状态不推断
 }
 
+// 抽屉「限额环比」固定四行：累计/净/单账户累计/单账户净申购，键与 worker 透传的 limitChanges 对齐。
+const LIMIT_COMPARE_ROWS = [
+  ['total', '累计申购'],
+  ['net', '净申购'],
+  ['accountTotal', '单账户累计申购'],
+  ['accountNet', '单账户净申购']
+];
+
+// 环比单侧取值：limited 显示份额（formatPcfShares），unlimited 显示「不设上限」，其余为 —。
+function limitCompareValue(side) {
+  if (!side || typeof side !== 'object') return '—';
+  if (side.kind === 'unlimited') return '不设上限';
+  if (side.kind === 'limited' && Number.isFinite(side.shares)) return formatPcfShares(side.shares);
+  return '—';
+}
+
+// 抽屉条目变化标签：tightened/relaxed 与告警胶囊共用同一映射（chipForLimitChange），
+// unchanged/incomparable 为环比小节专属文案；条目缺失或非法倍数不渲染标签。
+function limitChangeTag(entry) {
+  if (entry?.change === 'unchanged') return { label: '持平', tone: 'flat' };
+  if (entry?.change === 'incomparable') return { label: '不可比', tone: 'flat' };
+  return chipForLimitChange({ limitChanges: { total: entry }, limitSource: 'total' });
+}
+
 // 行内展开明细：非底部 Sheet/Dialog，无遮罩与焦点锁。
-function PcfDetailDrawer({ code, name, date, id, labelledBy }) {
+function PcfDetailDrawer({ row, code, name, date, id, labelledBy }) {
   const sse = !isSzCode(code);
   const [result, setResult] = useState({ state: 'loading' });
   const [retryCount, setRetryCount] = useState(0);
@@ -347,6 +312,33 @@ function PcfDetailDrawer({ code, name, date, id, labelledBy }) {
           )}
         </span>
       </div>
+      {row?.limitChanges != null && (
+        <section className="pcf-card limit-compare" aria-label="限额环比">
+          <header className="pcf-card-head">
+            <span className="pcf-card-title">限额环比</span>
+            <span className="pcf-date-pill">
+              {row.prevLimitDate || '—'} → {row.limitDate || '—'}
+            </span>
+          </header>
+          <dl className="pcf-kv-list">
+            {LIMIT_COMPARE_ROWS.map(([key, label]) => {
+              const entry = row.limitChanges[key];
+              const tag = entry ? limitChangeTag(entry) : null;
+              return (
+                <div className="pcf-kv-row" key={label}>
+                  <dt className="pcf-kv-label">{label}</dt>
+                  <dd className="pcf-kv-val">
+                    <span>
+                      {entry ? `${limitCompareValue(entry.before)} → ${limitCompareValue(entry.after)}` : '— → —'}
+                    </span>
+                    {tag && <span className={`limit-change ${tag.tone}`}>{tag.label}</span>}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </section>
+      )}
       {result.state === 'loading' && (
         <p className="drawer-state" role="status">
           正在读取申赎信息…
@@ -475,29 +467,24 @@ function SharesPanel() {
   const records = data?.records || [];
   const freshness = data ? freshnessMessage(data, day) : '';
   const isStale = result.state === 'stale' || Boolean(freshness);
-  // 今日需关注：有生效限额的行（用于对比上一限额日的限额变化），不再按顶格筛选。
+  // 有限额统计：生效限额 limited 的行（净优先口径），与告警候选无关。
   const hasEffLimit = (r) => {
     const k = r.effLimitKind || (r.netLimitKind === 'limited' ? 'limited' : r.totalLimitKind);
     return k === 'limited';
   };
-  const alertRows = records.filter(hasEffLimit);
-  // 限额有变化的 code 集合（AlertChip 异步上报），表格高亮与告警条共用。
-  const [changedCodes, setChangedCodes] = useState(() => new Set());
-  const reportChange = useCallback((code, hasChange) => {
-    setChangedCodes((prev) => {
-      const next = new Set(prev);
-      if (hasChange) next.add(code);
-      else next.delete(code);
-      return next;
-    });
-  }, []);
-  const szVerified = records.filter((r) => isSz(r) && Number.isFinite(r.deltaShares));
-  const netSum = szVerified.length ? szVerified.reduce((sum, r) => sum + r.deltaShares, 0) : null;
-  // 限额基准日：取各行 limitDate 的最大值（最新），与份额基准日区分展示。
-  const limitBaseline = records.reduce(
-    (max, r) => (r.limitDate && (!max || r.limitDate > max) ? r.limitDate : max),
-    null
-  );
+  const limitedRows = records.filter(hasEffLimit);
+  // 限额环比告警：worker 预计算的变化行（tightened/relaxed/mixed），高亮与胶囊候选同源派生；
+  // 纯账户项变化或生效项持平的行仍高亮，但可能没有胶囊文案。
+  const alertRows = records.filter((r) => ['tightened', 'relaxed', 'mixed'].includes(r.limitChange));
+  const changedCodes = new Set(alertRows.map((r) => r.code));
+  const chipRows = alertRows.filter((r) => chipForLimitChange(r));
+  // 净流入：沪深全量按有效 delta 汇总（负值参与净额），缺失 delta 的行不计入 N。
+  const verified = records.filter((r) => Number.isFinite(r.deltaShares));
+  const netSum = verified.length ? verified.reduce((sum, r) => sum + r.deltaShares, 0) : null;
+  // 限额基准日：优先顶层 limitDate，旧快照回退各行 limitDate 最大值（最新）。
+  const limitBaseline =
+    data?.limitDate ||
+    records.reduce((max, r) => (r.limitDate && (!max || r.limitDate > max) ? r.limitDate : max), null);
   const szCount = records.filter(isSz).length;
   // 净增对比条分母固定为完整快照有效 delta 的 max(1, abs)：筛选、搜索、排序不改变尺度。
   const maxAbsDelta = records.reduce(
@@ -516,8 +503,11 @@ function SharesPanel() {
         data.pcfSnapshot?.source === 'szse_pcf'
           ? `PCF 快照日：${data.pcfSnapshot.date}（深市 ${data.pcfSnapshot.codes.length} 只）`
           : 'PCF 快照：暂无',
-        '各行申购限额以行内限额日期为准'
-      ].join('\n')
+        '各行申购限额以行内限额日期为准',
+        data.prevLimitDate ? `上一限额日：${data.prevLimitDate}` : null
+      ]
+        .filter(Boolean)
+        .join('\n')
     : '';
   const staleText = freshness
     ? `${freshness}${result.state === 'stale' ? '，本地缓存待重新确认' : ''}`
@@ -560,18 +550,18 @@ function SharesPanel() {
           <div className="head-stats">
             <span
               className={`head-stat ${netSum === null ? '' : netSum > 0 ? 'pos' : netSum < 0 ? 'neg' : 'zero'}`}
-              title={`深市 ${szVerified.length} 只有效净增合计（负值参与净额）`}
+              title={`全部 ${records.length} 只中 ${verified.length} 只有效净增合计（负值参与净额）`}
             >
               <span className="head-label">净流入</span>
               <b>{netSum === null ? '—' : `${netSum > 0 ? '+' : ''}${zh(netSum / 10000, { maximumFractionDigits: 2 })}`}</b>
               <small>万份</small>
             </span>
             <span
-              className={`head-stat${alertRows.length ? ' warn' : ''}`}
-              title={alertRows.map((r) => `${r.code} ${r.name}`).join(' · ') || '暂无有限额标的'}
+              className={`head-stat${limitedRows.length ? ' warn' : ''}`}
+              title={limitedRows.map((r) => `${r.code} ${r.name}`).join(' · ') || '暂无有限额标的'}
             >
               <span className="head-label">有限额</span>
-              <b>{alertRows.length}</b>
+              <b>{limitedRows.length}</b>
               <small>只</small>
             </span>
             <span className="head-stat" title={`深市 ${szCount} · 沪市 ${records.length - szCount}`}>
@@ -591,21 +581,15 @@ function SharesPanel() {
           </div>
         </header>
       )}
-      {data && alertRows.length > 0 && (
+      {data && chipRows.length > 0 && (
         <section className="alert-strip" aria-label="今日需关注">
           <span className="alert-title">
             <AlertTriangle size={16} aria-hidden="true" />
             今日需关注
           </span>
           <div className="alert-chips">
-            {alertRows.map((r) => (
-              <AlertChip
-                key={r.code}
-                row={r}
-                calendar={data.calendar}
-                onSelect={() => setFilterKey('ceiling')}
-                onChange={reportChange}
-              />
+            {chipRows.map((r) => (
+              <AlertChip key={r.code} row={r} onSelect={() => setFilterKey('ceiling')} />
             ))}
           </div>
         </section>
@@ -784,6 +768,7 @@ function SharesPanel() {
                           <td colSpan={5} className="drawer-cell">
                             <PcfDetailDrawer
                               key={`${data.date}:${r.code}`}
+                              row={r}
                               code={r.code}
                               name={r.name}
                               date={r.limitDate || data.date}
@@ -816,7 +801,7 @@ function SharesPanel() {
                 PCF 推导，申赎双向开放时为估算、仅申购开放时为确定值。
               </li>
               <li>顶格 = 净增份额恰好等于当日累计申购上限；接近 = 达到上限 90% 及以上；超过上限为观测口径，单独展示、不计入告警。</li>
-              <li>沪市（513 开头）份额与 PCF 报表源暂未接入；因缺少 D 日官方净值凭证，不提供「新增金额估算」，也不使用盘中 IOPV 兜底。</li>
+              <li>沪市（513 开头）份额已接入上交所 ETF 规模数据，申赎规则取自上交所 PCF；因缺少 D 日官方净值凭证，不提供「新增金额估算」，也不使用盘中 IOPV 兜底。</li>
             </ul>
           </details>
         </footer>
