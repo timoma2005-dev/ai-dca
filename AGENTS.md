@@ -1,6 +1,8 @@
 # AI DCA Agent Notes
 
-> 发布/改线上前必读：docs/ops/线上开发规范.md。线上有 HOTFIX.json(source_synced=false) 时禁止从仓库发布覆盖。
+> **强制栅栏（CN 线上）**：只允许修改本仓库 ai-dca 源码；禁止直接修改 /var/www/ai-dca-cn*、发布目录、react-assets 等任何构建产出物。
+> 改动流程：改源码 → commit → push origin → `bash scripts/cn-frontend/release.sh`（工作区不干净或未 push 会被拒）；回滚 `bash scripts/cn-frontend/rollback.sh <时间戳>`。
+> 发布目录带 MANIFEST.sha256，守护进程 ai-dca-frontend-guard 每 60 秒校验，被改动会自动回滚；Claude Code 钩子 .claude/settings.json 会直接拦截对产出物的编辑。详见 docs/ops/线上开发规范.md。
 
 
 ## 行情接口边界
