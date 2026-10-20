@@ -22,6 +22,13 @@ export default defineConfig({
       }
     }
   },
+  // 线上：vite preview 只听 127.0.0.1:4173，由 nginx 转发（见 deploy/cn、scripts/cn-frontend）
+  preview: {
+    host: '127.0.0.1',
+    port: 4173,
+    strictPort: true,
+    allowedHosts: ['fast.freebacktrack.tech', 'cn.freebacktrack.tech', 'localhost', '127.0.0.1'],
+  },
   build: {
     outDir: process.env.VITE_OUT_DIR || 'frontend-dist',
     emptyOutDir: true,
