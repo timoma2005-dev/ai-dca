@@ -1,28 +1,3 @@
-.app-header__menu-button {
-  display: none;
-  width: 36px;
-  min-height: 34px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: #475569;
-  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
-}
-
-.app-header__menu-button:hover {
-  border-color: rgba(148, 163, 184, 0.24);
-  background: rgba(148, 163, 184, 0.12);
-  color: #0f172a;
-}
-
-.app-header__menu-button:focus-visible {
-  outline: 2px solid #4f46e5;
-  outline-offset: 2px;
-}
-
 .app-header__badge {
   position: absolute;
   top: 1px;
@@ -65,9 +40,5 @@
 
   .app-header__actions {
     gap: 1px;
-  }
-
-  .app-header__menu-button {
-    display: inline-flex;
   }
 }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Bell, BookOpen, ChevronRight, House, LineChart, ListChecks, MoreHorizontal, Shuffle, UserRound, Wallet, X } from 'lucide-react';
 import { splitMobileBottomNavItems } from './mobile-bottom-nav-config.js';
-import { setMobileBottomSheetOpen } from '../app/mobileBottomSheet.js';
 
 const ITEM_ICONS = {
   home: House,
@@ -95,13 +94,9 @@ export function MobileBottomNav({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [moreOpen]);
 
-  useEffect(() => {
-    if (moreOpen) {
-      setMobileBottomSheetOpen('mobile-nav-more', true);
-      return () => setMobileBottomSheetOpen('mobile-nav-more', false);
-    }
-    return undefined;
-  }, [moreOpen]);
+  // 「更多」是锚定在底部导航上方的小 popover，不是从底部展开的全局 sheet，
+  // 不登记全局 bottom sheet 隐藏状态；登记会经 hidden 回传形成自关闭反馈环。
+  // 真正从底部展开的 Dialog/Sheet 仍须按 AGENTS.md 登记。
 
   if (hidden || (directItems.length === 0 && overflowItems.length === 0)) return null;
 

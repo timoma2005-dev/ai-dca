@@ -8,10 +8,10 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const componentSource = fs.readFileSync(path.resolve(testDir, '../src/components/brand-preview-bar.jsx'), 'utf8');
 
 test('brand preview bar preserves existing public props and callbacks', () => {
-  for (const prop of ['currentPageLabel', 'onJoinGroup', 'onShowDisclaimer', 'onOpenNav']) {
+  for (const prop of ['currentPageLabel', 'onJoinGroup', 'onShowDisclaimer']) {
     assert.match(componentSource, new RegExp(`\\b${prop}\\b`));
   }
-  assert.match(componentSource, /onClick=\{onOpenNav\}/);
+  assert.doesNotMatch(componentSource, /onOpenNav/);
 });
 
 test('brand preview bar uses cn dependencies and does not import test-only header features', () => {
@@ -21,7 +21,7 @@ test('brand preview bar uses cn dependencies and does not import test-only heade
   }
 });
 
-test('brand preview bar no longer hosts the account button (moved to mobile more sheet)', () => {
-  assert.doesNotMatch(componentSource, /aria-label="账户"/);
+test('brand preview bar hosts the account trigger without mounting a local account menu', () => {
+  assert.match(componentSource, /aria-label="账户"/);
   assert.doesNotMatch(componentSource, /account-menu/);
 });

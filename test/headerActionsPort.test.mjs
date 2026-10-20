@@ -8,11 +8,23 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const componentSource = fs.readFileSync(path.resolve(testDir, '../src/components/brand-preview-bar.jsx'), 'utf8');
 const notifySource = fs.readFileSync(path.resolve(testDir, '../src/components/notify-popover.jsx'), 'utf8');
 
-test('mobile header exposes test-style notification and navigation actions (account moved to more sheet)', () => {
+test('mobile header exposes notification and account actions without hamburger nav button', () => {
   assert.match(componentSource, /<NotifyPopover\s*\/>/);
-  assert.doesNotMatch(componentSource, /aria-label="账户"/);
-  assert.match(componentSource, /className="app-header__menu-button"/);
-  assert.match(componentSource, /onClick=\{onOpenNav\}/);
+  assert.match(componentSource, /aria-label="账户"/);
+  assert.match(componentSource, /className="app-header__utility"/);
+  assert.match(componentSource, /dispatchEvent\(new CustomEvent\(ACCOUNT_AUTH_OPEN_EVENT\)\)/);
+  assert.doesNotMatch(componentSource, /app-header__menu-button/);
+  assert.doesNotMatch(componentSource, /aria-label="打开导航"/);
+  assert.doesNotMatch(componentSource, /onOpenNav/);
+  assert.doesNotMatch(componentSource, /account-menu/);
+});
+
+test('workspace page owns the single controlled account menu wired to the account event', () => {
+  const workspaceSource = fs.readFileSync(path.resolve(testDir, '../src/pages/WorkspacePage.jsx'), 'utf8');
+  assert.match(workspaceSource, /ACCOUNT_AUTH_OPEN_EVENT/);
+  assert.match(workspaceSource, /window\.addEventListener\(ACCOUNT_AUTH_OPEN_EVENT/);
+  assert.match(workspaceSource, /<AccountMenu[\s\S]*?open=\{accountMenuOpen\}/);
+  assert.match(workspaceSource, /onClose=\{\(\) => setAccountMenuOpen\(false\)\}/);
 });
 
 test('mobile bottom nav more sheet exposes account entry', () => {

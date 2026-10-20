@@ -651,7 +651,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
             onSwitch={handleScenarioSwitch}
           />
         }
-        onOpenNav={() => window.dispatchEvent(new CustomEvent('console:open-mobile-nav'))}
         onBuyMeCoffee={() => setShowQrModal(true)}
         onShowDisclaimer={() => setShowDisclaimer(true)}
       />

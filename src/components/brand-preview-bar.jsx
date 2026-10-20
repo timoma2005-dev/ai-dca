@@ -1,10 +1,11 @@
-import { AlertCircle, Coffee, LineChart, Menu } from 'lucide-react';
+import { AlertCircle, Coffee, LineChart, UserRound } from 'lucide-react';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
+import { ACCOUNT_AUTH_OPEN_EVENT } from '../app/accountAuthEvents.js';
 import { NotifyPopover } from './notify-popover.jsx';
 import './brand-preview-bar.css';
 import './header-actions.css';
 
-export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, onShowDisclaimer, onOpenNav }) {
+export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, onShowDisclaimer }) {
   const handleCoffeeClick = onBuyMeCoffee || onJoinGroup;
   useNotifyUnreadCount();
 
@@ -54,11 +55,14 @@ export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, 
           <div className="hidden md:block">
             <NotifyPopover />
           </div>
-          {onOpenNav ? (
-            <button type="button" className="app-header__menu-button" aria-label="打开导航" onClick={onOpenNav}>
-              <Menu className="h-5 w-5" strokeWidth={1.9} aria-hidden="true" />
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="app-header__utility"
+            aria-label="账户"
+            onClick={() => window.dispatchEvent(new CustomEvent(ACCOUNT_AUTH_OPEN_EVENT))}
+          >
+            <UserRound className="h-[18px] w-[18px]" aria-hidden="true" />
+          </button>
         </div>
       </div>
     </header>
