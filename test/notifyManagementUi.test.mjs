@@ -43,6 +43,12 @@ test('sync, test, and history refresh actions stay available without opening det
   assert.match(historySource, /最近：/);
 });
 
+test('channel test buttons stay clickable before the channel is configured', () => {
+  assert.match(configSource, /onClick=\{handleTestBarkNotify\} disabled=\{isTestingBarkNotify \|\| !hasBarkInput\}/);
+  assert.doesNotMatch(configSource, /handleTestBarkNotify\} disabled=\{[^}]*!barkEnabled/);
+  assert.doesNotMatch(configSource, /handleTestServerChan3Notify\} disabled=\{[^}]*!serverChan3Enabled/);
+});
+
 test('test dialog auto-selects a valid rule and documents every delivery channel', () => {
   assert.match(testDialogSource, /setSelectedId\(currentRules\[0\]\?\.id \|\| ''\)/);
   assert.match(testDialogSource, /role="radiogroup" aria-label="测试规则"/);
