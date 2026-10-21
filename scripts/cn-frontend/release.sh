@@ -20,7 +20,9 @@ if ! git merge-base --is-ancestor HEAD "origin/$BRANCH" 2>/dev/null; then
 
 TS=$(date +%Y%m%d%H%M%S); OUT="$RELEASES/$TS"; PREV=$(readlink -f "$LIVE")
 echo "[release] build -> $OUT (commit $(git rev-parse --short HEAD))"
-VITE_API_ORIGIN=${VITE_API_ORIGIN:-https://api.freebacktrack.tech} VITE_OUT_DIR="$OUT" npx vite build >/tmp/cn-frontend-build.log 2>&1 || { tail -30 /tmp/cn-frontend-build.log; exit 1; }
+# API 指向走当前访问的 URL（同源相对路径，由站点 nginx 按路径分流到 CN 后台/CF 上游）；
+# 不再写死 api.freebacktrack.tech。需要覆盖时外部传 VITE_API_ORIGIN 即可。
+VITE_API_ORIGIN=${VITE_API_ORIGIN:-} VITE_OUT_DIR="$OUT" npx vite build >/tmp/cn-frontend-build.log 2>&1 || { tail -30 /tmp/cn-frontend-build.log; exit 1; }
 cat > "$OUT/RELEASE.json" <<J
 {"release":"$TS","commit":"$(git rev-parse HEAD)","branch":"$BRANCH","source":"scripts/cn-frontend/release.sh","previous":"$PREV"}
 J
