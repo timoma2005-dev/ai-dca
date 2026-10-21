@@ -43,6 +43,8 @@ export function resolveEtfPcfDailyTrigger({ cron, scheduledTime } = {}) {
 const ETF_PCF_SSE_STAGE_DEADLINE_MS = 60 * 1000;
 
 // 北京时间 09:00 顺序执行 SSE → SZSE → events，各阶段异常隔离。
+// 份额投影阶段：默认 20s 在 cron 里经常跑不到 projection（历史读取+两所份额下载），放宽到 120s。
+const ETF_PCF_EVENTS_STAGE_DEADLINE_MS = 120 * 1000;
 export async function runEtfPcfDailyRefresh({
   env,
   scheduledTime,
@@ -79,7 +81,7 @@ export async function runEtfPcfDailyRefresh({
     console.log('[etf-pcf] scheduled stage crashed: ' + ((e && e.message) || e));
   }
   let events;
-  try { events = await eventsRefresh({ env, pcfs: pcfs.map(({ code, date }) => ({ code, date })), pcfData: pcfs, scheduledTime }); } catch (_e) { events = { ok: false, reason: 'events_stage_error' }; }
+  try { events = await eventsRefresh({ env, pcfs: pcfs.map(({ code, date }) => ({ code, date })), pcfData: pcfs, scheduledTime, deadlineMs: ETF_PCF_EVENTS_STAGE_DEADLINE_MS }); } catch (_e) { events = { ok: false, reason: 'events_stage_error' }; }
   // PCF 限额放开信号推送：检测到 5x/10x/unlimited 事件后发送通知
   let pcfSignal = null;
   if (events?.ok && Array.isArray(events.detectedEvents) && events.detectedEvents.length > 0) {
