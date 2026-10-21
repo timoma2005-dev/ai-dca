@@ -802,11 +802,11 @@ export function NotifyExperience({ embedded = false }) {
       setIsSyncingRules(false);
     }
   }
-  async function handleSendTestNotify(ruleType, ruleId) {
+  async function handleSendTestNotify(ruleType, ruleId, ruleLabel) {
     const startedAt = Date.now();
     trackFeatureEvent('notify', 'test_rule_start', { ...notifyMeta(), ruleType, ruleId });
     try {
-      await sendNotifyTest({ ruleType, ruleId, title: '测试通知', body: `这是一条来自"${ruleType}"的测试通知` });
+      await sendNotifyTest({ ruleType, ruleId, title: '测试通知', body: ruleLabel ? `这是「${ruleLabel}」的测试通知` : `这是一条来自"${ruleType}"的测试通知` });
       showActionToast('测试通知已发送');
       trackActionResult('notify', 'test_rule', 'success', { ...notifyMeta(), ruleType, ruleId, durationMs: Date.now() - startedAt });
     } catch (error) {
@@ -925,6 +925,7 @@ export function NotifyExperience({ embedded = false }) {
         tradePlans={tradePlans}
         dcaPlans={dcaPlans}
         holdingsRule={holdingsRule}
+        switchConfig={switchConfig}
         onSendTest={handleSendTestNotify}
       />
     </div>

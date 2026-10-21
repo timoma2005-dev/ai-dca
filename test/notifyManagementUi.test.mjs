@@ -12,6 +12,7 @@ const rulesSource = readSource('src/pages/NotifyRulesCard.jsx');
 const actionsSource = readSource('src/pages/NotifySyncAndTestCard.jsx');
 const historySource = readSource('src/pages/NotifyHistoryCard.jsx');
 const testDialogSource = readSource('src/pages/NotifyTestDialog.jsx');
+const experienceSource = readSource('src/pages/NotifyExperience.jsx');
 
 test('notification channel management exposes a status-first channel picker', () => {
   assert.match(configSource, /const channelCards = platformTabs\.map/);
@@ -55,4 +56,28 @@ test('test dialog auto-selects a valid rule and documents every delivery channel
   assert.match(testDialogSource, /Bark、Server酱³、Email 和可用的 PC 浏览器通知/);
   assert.match(testDialogSource, /event\.key === 'Escape'/);
   assert.match(testDialogSource, /event\.target === event\.currentTarget/);
+});
+
+test('test dialog includes enabled switch rules with the advanced rules wording', () => {
+  assert.match(testDialogSource, /switch: \{/);
+  assert.match(testDialogSource, /label: '切换规则'/);
+  assert.match(testDialogSource, /description: '基金切换提醒'/);
+  assert.match(testDialogSource, /icon: Shuffle/);
+  assert.match(testDialogSource, /rules: switchConfig\?\.enabled/);
+  assert.ok(testDialogSource.includes('Array.isArray(switchConfig?.rules) ? switchConfig.rules : []'));
+  assert.ok(testDialogSource.includes('.filter((rule) => (rule?.benchmarkCodes?.length || rule?.enabledCodes?.length))'));
+  assert.ok(testDialogSource.includes('rule.enabled !== false'));
+  assert.ok(testDialogSource.includes('.filter((rule) => rule.enabled)'));
+  assert.ok(testDialogSource.includes('id: rule.id || `switch-${index}`'));
+  assert.ok(testDialogSource.includes('label: rule.name || `切换规则 ${index + 1}`'));
+  assert.ok(testDialogSource.includes('detail: `持仓基准 ${rule.benchmarkCodes?.length || 0} 只 · 候选 ${rule.enabledCodes?.length || 0} 只`'));
+  assert.match(testDialogSource, /type: 'switch'/);
+});
+
+test('test delivery receives switch configuration and the selected rule label', () => {
+  assert.match(experienceSource, /<NotifyTestDialog\b[\s\S]*?switchConfig=\{switchConfig\}[\s\S]*?onSendTest=\{handleSendTestNotify\}/);
+  assert.ok(testDialogSource.includes('currentRules.find((rule) => rule.id === selectedId)'));
+  assert.ok(testDialogSource.includes('onSendTest?.(selectedType, selectedId, currentRule?.label)'));
+  assert.match(experienceSource, /handleSendTestNotify\(ruleType, ruleId, ruleLabel\)/);
+  assert.ok(experienceSource.includes('body: ruleLabel ? `这是「${ruleLabel}」的测试通知` : `这是一条来自"${ruleType}"的测试通知`'));
 });

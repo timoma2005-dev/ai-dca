@@ -1,4 +1,4 @@
-import { Bell, Calendar, CheckCircle2, Send, TrendingUp, Wallet, X } from 'lucide-react';
+import { Bell, Calendar, CheckCircle2, Send, Shuffle, TrendingUp, Wallet, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { cx, primaryButtonClass, secondaryButtonClass } from '../components/experience-ui.jsx';
 
@@ -17,6 +17,7 @@ export function NotifyTestDialog({
   tradePlans = [],
   dcaPlans = [],
   holdingsRule,
+  switchConfig,
   onSendTest
 }) {
   const [selectedType, setSelectedType] = useState('price-alert');
@@ -59,6 +60,23 @@ export function NotifyTestDialog({
         .filter((plan) => plan.notify?.enabled)
         .map((plan) => ({ id: plan.id, label: plan.name || plan.symbol, detail: plan.schedule || plan.symbol || '定投计划', type: 'dca' }))
     },
+    switch: {
+      label: '切换规则',
+      description: '基金切换提醒',
+      icon: Shuffle,
+      rules: switchConfig?.enabled
+        ? (Array.isArray(switchConfig?.rules) ? switchConfig.rules : [])
+          .filter((rule) => (rule?.benchmarkCodes?.length || rule?.enabledCodes?.length))
+          .map((rule, index) => ({
+            id: rule.id || `switch-${index}`,
+            label: rule.name || `切换规则 ${index + 1}`,
+            detail: `持仓基准 ${rule.benchmarkCodes?.length || 0} 只 · 候选 ${rule.enabledCodes?.length || 0} 只`,
+            type: 'switch',
+            enabled: rule.enabled !== false
+          }))
+          .filter((rule) => rule.enabled)
+        : []
+    },
     holdings: {
       label: '持仓收益',
       description: '每日组合收益',
@@ -67,7 +85,7 @@ export function NotifyTestDialog({
         ? [{ id: 'holdings-daily', label: '持仓当日收益', detail: '全仓加权收益率', type: 'holdings' }]
         : []
     }
-  }), [marketAlerts, holdingAlerts, tradePlans, dcaPlans, holdingsRule?.enabled]);
+  }), [marketAlerts, holdingAlerts, tradePlans, dcaPlans, holdingsRule?.enabled, switchConfig]);
 
   const availableTypes = useMemo(
     () => Object.entries(ruleOptions).filter(([, option]) => option.rules.length > 0),
@@ -104,7 +122,8 @@ export function NotifyTestDialog({
     if (!selectedId || sending) return;
     setSending(true);
     try {
-      await onSendTest?.(selectedType, selectedId);
+      const currentRule = currentRules.find((rule) => rule.id === selectedId);
+      await onSendTest?.(selectedType, selectedId, currentRule?.label);
       onClose?.();
     } finally {
       setSending(false);
