@@ -50,6 +50,8 @@ export function normalizeSettings(settings = {}) {
       notifyGroupId: normalizeNotifyGroupId(client?.notifyGroupId || id) || id,
       clientSecretHash: String(client?.clientSecretHash || '').trim(),
       barkDeviceKey: String(client?.barkDeviceKey || '').trim(),
+      barkEnabled: client?.barkEnabled !== false,
+      serverChan3Enabled: client?.serverChan3Enabled !== false,
       serverChan3: normalizeServerChan3Config(client?.serverChan3 || {}),
       email: normalizeEmailConfig(client?.email || {}),
       payload: normalizeNotifyPayload(client?.payload || {}),
@@ -132,7 +134,7 @@ async function ensureLegacyAuthenticatedClient(request, settings, options, clien
   return { didUpdate: true, clientId, deviceClientId: clientId, clientRecord: getClientRecord(next, clientId, label), settings: next };
 }
 
-export async function ensureAuthenticatedAccountClient(request, settings, options = {}) {
+export async function ensureAuthenticatedAccountClient(request, settings) {
   const userId = normalizeNotifyUserId(request.headers.get(VERIFIED_NOTIFY_USER_ID_HEADER));
   const username = normalizeNotifyAccountUsername(request.headers.get(VERIFIED_NOTIFY_USERNAME_HEADER));
   if (!userId || !username) throw new NotifyClientError('请先登录账户后配置通知。', 401, 'AUTH_REQUIRED');

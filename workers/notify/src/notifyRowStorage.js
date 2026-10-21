@@ -36,7 +36,7 @@ function parsePayload(value, fallback = {}) {
   try {
     const parsed = JSON.parse(String(value || ''));
     return parsed && typeof parsed === 'object' ? parsed : fallback;
-  } catch (_error) {
+  } catch {
     return fallback;
   }
 }
@@ -44,7 +44,7 @@ function parsePayload(value, fallback = {}) {
 function serializePayload(value) {
   try {
     return JSON.stringify(value ?? {});
-  } catch (_error) {
+  } catch {
     return '{}';
   }
 }
@@ -166,11 +166,13 @@ function buildRowsFromSettings(settings = {}, { insertOnly = false } = {}) {
     // 每个通道单独一行，避免 email/bark/serverchan3 的并发更新互相覆盖。
     add(owner, 'client-channel', clientFeatureId(clientId, 'bark'), {
       clientId,
-      barkDeviceKey: normalizeText(client?.barkDeviceKey, 240)
+      barkDeviceKey: normalizeText(client?.barkDeviceKey, 240),
+      enabled: client?.barkEnabled !== false
     });
     add(owner, 'client-channel', clientFeatureId(clientId, 'serverchan3'), {
       clientId,
-      serverChan3: client?.serverChan3 || {}
+      serverChan3: client?.serverChan3 || {},
+      enabled: client?.serverChan3Enabled !== false
     });
     add(owner, 'client-channel', clientFeatureId(clientId, 'email'), {
       clientId,
@@ -298,7 +300,7 @@ function createWriteStatement(db, row, { insertOnly = false, now = nowIso() } = 
       (owner_user_id, record_type, record_id, payload, revision, created_at, updated_at)
       VALUES (?, ?, ?, ?, 1, ?, ?)
       ON CONFLICT(owner_user_id, record_type, record_id) DO UPDATE SET
-        payload = excluded.payload,
+        payload = ${row.type === 'client-channel' && /::(bark|serverchan3)$/.test(row.id) ? `json_patch(${TABLE_NAME}.payload, excluded.payload)` : 'excluded.payload'},
         revision = ${TABLE_NAME}.revision + 1,
         updated_at = excluded.updated_at${timestampGuard}`;
   return db.prepare(sql).bind(
@@ -373,8 +375,8 @@ function applyRowToSettings(settings, row) {
     const { clientId, feature } = splitClientFeatureId(id);
     const client = ensureClient(settings, payload?.clientId || clientId);
     if (!client) return;
-    if (feature === 'bark') client.barkDeviceKey = normalizeText(payload?.barkDeviceKey, 240);
-    if (feature === 'serverchan3') client.serverChan3 = payload?.serverChan3 || {};
+    if (feature === 'bark') { client.barkDeviceKey = normalizeText(payload?.barkDeviceKey, 240); client.barkEnabled = payload?.enabled !== false; }
+    if (feature === 'serverchan3') { client.serverChan3 = payload?.serverChan3 || {}; client.serverChan3Enabled = payload?.enabled !== false; }
     if (feature === 'email') client.email = payload?.email || {};
     return;
   }
@@ -647,7 +649,7 @@ export async function writeDurableUserJson(env, key, value) {
         updatedAt: nowIso()
       }));
     }
-  } catch (_error) {
+  } catch {
     // D1 是主存储，KV 索引失败不阻断 CRUD。
   }
   return true;

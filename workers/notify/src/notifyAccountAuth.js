@@ -2,6 +2,8 @@ export const VERIFIED_NOTIFY_USER_ID_HEADER = 'x-notify-verified-user-id';
 export const VERIFIED_NOTIFY_USERNAME_HEADER = 'x-notify-verified-username';
 
 const PROTECTED_NOTIFY_ROUTES = new Set([
+  'POST /api/notify/channels/bark/enable', 'POST /api/notify/channels/bark/disable',
+  'POST /api/notify/channels/serverchan3/enable', 'POST /api/notify/channels/serverchan3/disable',
   'GET /api/notify/email/status', 'POST /api/notify/email/send-code', 'POST /api/notify/email/verify',
   'POST /api/notify/email/save', 'POST /api/notify/email/disable', 'POST /api/notify/email/enable',
   'POST /api/notify/ws/register', 'POST /api/notify/ws/unregister',

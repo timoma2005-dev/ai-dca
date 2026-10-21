@@ -57,7 +57,9 @@ export async function readAccountResourceNotifySettings(env, userId) {
         meta = value;
       } else if (id === 'channel:bark') {
         settings.barkDeviceKey = text(value.barkDeviceKey, 512);
+        settings.barkEnabled = value.enabled !== false;
       } else if (id === 'channel:serverchan3') {
+        settings.serverChan3Enabled = value.enabled !== false;
         settings.serverChan3 = {
           uid: text(value.serverChan3Uid || value.serverChan3?.uid, 240),
           sendKey: text(value.serverChan3SendKey || value.serverChan3?.sendKey, 512)
@@ -79,8 +81,8 @@ export function mergeAccountResourceNotifySettings(base = {}, resource = null) {
   return {
     ...base,
     ...resource.meta,
-    ...(channels.has('channel:bark') ? { barkDeviceKey: text(settings.barkDeviceKey || '', 512) } : {}),
-    ...(channels.has('channel:serverchan3') ? { serverChan3: settings.serverChan3 && typeof settings.serverChan3 === 'object' ? settings.serverChan3 : {} } : {}),
+    ...(channels.has('channel:bark') ? { barkDeviceKey: text(settings.barkDeviceKey || '', 512), barkEnabled: settings.barkEnabled !== false } : {}),
+    ...(channels.has('channel:serverchan3') ? { serverChan3: settings.serverChan3 && typeof settings.serverChan3 === 'object' ? settings.serverChan3 : {}, serverChan3Enabled: settings.serverChan3Enabled !== false } : {}),
     ...(channels.has('channel:email') ? { email: settings.email && typeof settings.email === 'object' ? settings.email : {} } : {})
   };
 }

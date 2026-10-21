@@ -1,4 +1,5 @@
 import notifyWorker from './index.js';
+import { handleAccountChannelToggle } from './accountChannelToggleRoute.js';
 import { jsonResponse, readOrigin } from './notifyHttp.js';
 import { authenticateNotifyAccountRequest, NotifyAccountAuthError, requiresNotifyAccountAuth } from './notifyAccountAuth.js';
 import { handleFastSync } from './notifySyncRoute.js';
@@ -69,6 +70,7 @@ export default {
     const origin = readOrigin(request);
     try {
       const authenticatedRequest = await authenticateNotifyAccountRequest(request, env); const url = new URL(authenticatedRequest.url); const method = authenticatedRequest.method;
+      if (method === 'POST' && /^\/api\/notify\/channels\/(bark|serverchan3)\/(enable|disable)$/.test(url.pathname)) return await handleAccountChannelToggle(authenticatedRequest, env);
       if (method === 'GET' && url.pathname.startsWith('/api/notify/status')) return await handleAccountStatus(authenticatedRequest, env);
       if (method === 'GET' && url.pathname === '/api/notify/events') return await handleAccountEvents(authenticatedRequest, env);
       if (method === 'POST' && url.pathname === '/api/notify/email/send-code') { const queuedRequest = authenticatedRequest.clone(); return await deferAccountOperation(queuedRequest, env, ctx, () => handleFastEmailRoute(queuedRequest.clone(), env, url.pathname), { type: 'notify-email-code' }); }
