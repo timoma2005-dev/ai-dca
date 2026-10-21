@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Clock3, Inbox, Loader2, RefreshCw, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleSlash, Clock3, Inbox, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { cx } from '../components/experience-ui.jsx';
 import { NotifyEventDetailDialog } from './NotifyEventDetailDialog.jsx';
@@ -143,6 +143,7 @@ export function NotifyHistoryCard({
           const status = String(event?.status || '');
           const delivered = status === 'delivered';
           const failed = status === 'failed';
+          const skipped = status === 'skipped';
           const key = `${event?.id || ''}-${event?.createdAt || ''}-${index}`;
 
           return (
@@ -153,9 +154,9 @@ export function NotifyHistoryCard({
                 {event?.summary || event?.body || event?.title || '—'}
               </span>
               <div>{renderEventChannels(event)}</div>
-              <span className={cx('inline-flex w-fit items-center gap-1.5 font-medium', delivered ? 'text-emerald-600' : failed ? 'text-rose-600' : 'text-amber-600')}>
-                {delivered ? <CheckCircle2 className="h-4 w-4" /> : failed ? <XCircle className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
-                <span>{delivered ? '发送成功' : failed ? '发送失败' : '处理中'}</span>
+              <span className={cx('inline-flex w-fit items-center gap-1.5 font-medium', delivered ? 'text-emerald-600' : failed ? 'text-rose-600' : skipped ? 'text-slate-500' : 'text-amber-600')}>
+                {delivered ? <CheckCircle2 className="h-4 w-4" /> : failed ? <XCircle className="h-4 w-4" /> : skipped ? <CircleSlash className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
+                <span>{delivered ? '发送成功' : failed ? '发送失败' : skipped ? '已跳过' : '处理中'}</span>
               </span>
               <button
                 type="button"

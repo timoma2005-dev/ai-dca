@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock3, Copy, Info, XCircle } from 'lucide-react';
+import { CheckCircle2, CircleSlash, Clock3, Copy, Info, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { cx } from '../components/experience-ui.jsx';
 import {
@@ -62,7 +62,9 @@ export function NotifyEventDetailDialog({ open, onClose, event }) {
   const status = String(event?.status || '');
   const delivered = status === 'delivered';
   const failed = status === 'failed';
+  const skipped = status === 'skipped';
   const channels = Array.isArray(event?.channels) ? event.channels : [];
+  const skippedDetail = skipped ? String((channels.find((ch) => ch.status === 'skipped') || {}).detail || '') : '';
 
   function handleCopyJson() {
     try {
@@ -118,6 +120,11 @@ export function NotifyEventDetailDialog({ open, onClose, event }) {
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 font-semibold text-xs">
                   <XCircle className="h-3.5 w-3.5" />
                   <span>发送失败</span>
+                </span>
+              ) : skipped ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 font-semibold text-xs">
+                  <CircleSlash className="h-3.5 w-3.5" />
+                  <span>{skippedDetail ? `已跳过（${skippedDetail}）` : '已跳过'}</span>
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-semibold text-xs">

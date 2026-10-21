@@ -126,3 +126,11 @@ test('settings reject invalid Bark before writes and allow unrelated saves and r
   await save({ barkDeviceKey: 'Device_key-123' });
   assert.deepEqual(writes[2], ['notify/client-config', 'channel:bark', { barkDeviceKey: 'Device_key-123' }]);
 });
+
+test('skipped events are labelled as skipped, not queued or processing', () => {
+  const dialogSource = readSource('src/pages/NotifyEventDetailDialog.jsx');
+  assert.match(historySource, /status === 'skipped'/);
+  assert.match(historySource, /skipped \? '已跳过' : '处理中'/);
+  assert.match(dialogSource, /status === 'skipped'/);
+  assert.match(dialogSource, /已跳过（\$\{skippedDetail\}）/);
+});
