@@ -19,6 +19,15 @@ export function parseBarkInput(input = '') {
   return value;
 }
 
+export function normalizeBarkDeviceKey(input = '') {
+  try {
+    const key = parseBarkInput(input);
+    return /^[A-Za-z0-9_-]{8,128}$/.test(key) ? key : '';
+  } catch {
+    return '';
+  }
+}
+
 export function parseNotifyInput(input = '', platform = 'ios') {
   return parseBarkInput(input);
 }

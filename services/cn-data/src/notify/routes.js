@@ -528,7 +528,7 @@ export async function handleNotifyRoute(db, method, url, body, headers) {
       return { status: 200, body: { ok: true, summary }, headers: baseHeaders };
     } catch (error) { return fail(error); }
   }
-  const channelMatch = path.match(/^\/api\/notify\/(bark|serverchan3)\/(status|enable|disable)$/);
+  const channelMatch = path.match(/^\/api\/notify\/(?:channels\/)?(bark|serverchan3)\/(status|enable|disable)$/);
   if (channelMatch) {
     const [, channel, action] = channelMatch;
     if (method !== (action === 'status' ? 'GET' : 'POST')) return { status: 405, body: { message: 'Method not allowed' }, headers: baseHeaders };

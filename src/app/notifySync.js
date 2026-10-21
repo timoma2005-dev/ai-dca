@@ -1,3 +1,4 @@
+import { normalizeBarkDeviceKey } from './notifyParsers.js';
 import { readDcaList, readDcaState } from './dca.js';
 import { readPlanList } from './plan.js';
 import { readSellPlanList } from './sellPlans.js';
@@ -523,6 +524,9 @@ async function deleteNotifyChannel(itemId, emptyItem) {
 
 export async function saveNotifySettings(payload = {}) {
   const input = payload && typeof payload === 'object' ? payload : {};
+  if (Object.prototype.hasOwnProperty.call(input, 'barkDeviceKey') && String(input.barkDeviceKey ?? '').trim() && !normalizeBarkDeviceKey(input.barkDeviceKey)) {
+    throw new Error('Bark 链接或 Device Key 格式不正确，请粘贴 Bark 应用里的完整链接或 Device Key');
+  }
   const storedConfig = readNotifyClientConfig();
   const current = Object.keys(input).some((key) => key === 'serverChan3' && input.serverChan3 && !input.serverChan3.sendKey)
     ? await readAccountNotifyResource()
@@ -624,19 +628,19 @@ export function enableNotifyEmail() {
 }
 
 export function disableNotifyBark() {
-  return requestNotify('/bark/disable', { method: 'POST' });
+  return requestNotify('/channels/bark/disable', { method: 'POST' });
 }
 
 export function enableNotifyBark() {
-  return requestNotify('/bark/enable', { method: 'POST' });
+  return requestNotify('/channels/bark/enable', { method: 'POST' });
 }
 
 export function disableNotifyServerChan3() {
-  return requestNotify('/serverchan3/disable', { method: 'POST' });
+  return requestNotify('/channels/serverchan3/disable', { method: 'POST' });
 }
 
 export function enableNotifyServerChan3() {
-  return requestNotify('/serverchan3/enable', { method: 'POST' });
+  return requestNotify('/channels/serverchan3/enable', { method: 'POST' });
 }
 
 export function sendEmailNotifyTest() {

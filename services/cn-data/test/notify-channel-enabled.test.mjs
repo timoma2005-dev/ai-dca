@@ -176,3 +176,24 @@ test('authenticated management routes, status semantics and settings preserve di
     }
   }
 });
+
+test('new and legacy channel routes share channel and action semantics', async t => {
+  setupAuth(t);
+  const { request } = await app(t);
+  await request('/api/notify/settings', 'POST', { barkDeviceKey: 'device-key', serverChan3: { uid: 'uid', sendKey: 'key' } });
+  for (const channel of ['bark', 'serverchan3']) {
+    const key = channel === 'bark' ? 'bark' : 'serverChan3';
+    for (const prefix of ['/api/notify/channels', '/api/notify']) {
+      assert.equal((await request(`${prefix}/${channel}/status`, 'GET', undefined, null)).status, 401);
+      for (const action of ['disable', 'enable']) {
+        assert.equal((await request(`${prefix}/${channel}/${action}`, 'POST', {})).status, 200);
+        for (const readPrefix of ['/api/notify/channels', '/api/notify']) {
+          const status = await request(`${readPrefix}/${channel}/status`);
+          assert.equal(status.status, 200);
+          assert.equal(status.body[key].enabled, action === 'enable');
+          assert.equal(status.body[key].configured, true);
+        }
+      }
+    }
+  }
+});

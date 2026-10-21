@@ -13,7 +13,7 @@ import { NotifyPresetSection } from './NotifyPresetCard.jsx';
 import { NotifyTestDialog } from './NotifyTestDialog.jsx';
 import { StatCard, cx } from '../components/experience-ui.jsx';
 import { formatEventTimeLabel, resolveEventStatusMeta } from '../app/tradePlansHelpers.js';
-import { parseBarkInput } from '../app/notifyParsers.js';
+import { normalizeBarkDeviceKey } from '../app/notifyParsers.js';
 import { getVisibleNotifyEvents, humanizeNotifyError } from './notifyHistoryHelpers.js';
 import { assertNotifyTestDelivered, detectNotifySurface, getAvailableNotifyPlatforms } from './notifySurfaceHelpers.js';
 import { AlertRuleDialog } from '../components/AlertRuleDialog.jsx';
@@ -413,9 +413,11 @@ export function NotifyExperience({ embedded = false }) {
       inputLength: String(notifyConfig.barkDeviceKey || '').length
     });
     try {
-      const parsedBarkKey = parseBarkInput(notifyConfig.barkDeviceKey);
+      const parsedBarkKey = normalizeBarkDeviceKey(notifyConfig.barkDeviceKey);
       if (!parsedBarkKey) {
-        throw new Error('请粘贴 Bark 完整链接或 Device Key');
+        throw new Error(String(notifyConfig.barkDeviceKey || '').trim()
+          ? 'Bark 链接或 Device Key 格式不正确，请粘贴 Bark 应用里的完整链接或 Device Key'
+          : '请粘贴 Bark 完整链接或 Device Key');
       }
       const saved = await saveNotificationChannelWithRebind(saveNotifySettings, { barkDeviceKey: parsedBarkKey }, 'bark', setNotifyMessage);
       if (!saved) return;
@@ -529,9 +531,11 @@ export function NotifyExperience({ embedded = false }) {
       inputLength: String(notifyConfig.barkDeviceKey || '').length
     });
     try {
-      const parsedBarkKey = parseBarkInput(notifyConfig.barkDeviceKey);
+      const parsedBarkKey = normalizeBarkDeviceKey(notifyConfig.barkDeviceKey);
       if (!parsedBarkKey) {
-        throw new Error('请先填写 iOS Bark 链接或 Device Key');
+        throw new Error(String(notifyConfig.barkDeviceKey || '').trim()
+          ? 'Bark 链接或 Device Key 格式不正确，请粘贴 Bark 应用里的完整链接或 Device Key'
+          : '请先填写 iOS Bark 链接或 Device Key');
       }
       const payload = await sendNotifyTest({
         clientId: notifyConfig.notifyClientId,

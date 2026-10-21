@@ -81,3 +81,48 @@ test('test delivery receives switch configuration and the selected rule label', 
   assert.match(experienceSource, /handleSendTestNotify\(ruleType, ruleId, ruleLabel\)/);
   assert.ok(experienceSource.includes('body: ruleLabel ? `这是「${ruleLabel}」的测试通知` : `这是一条来自"${ruleType}"的测试通知`'));
 });
+
+const syncSource = readSource('src/app/notifySync.js');
+const parserSource = readSource('src/app/notifyParsers.js');
+const { normalizeBarkDeviceKey } = await import('../src/app/notifyParsers.js');
+
+test('channel toggles use channels prefix and both Bark handlers validate input', () => {
+  for (const channel of ['bark', 'serverchan3']) {
+    for (const action of ['enable', 'disable']) {
+      assert.ok(syncSource.includes(`requestNotify('/channels/${channel}/${action}'`));
+      assert.ok(!syncSource.includes(`requestNotify('/${channel}/${action}'`));
+    }
+  }
+  assert.equal(experienceSource.match(/normalizeBarkDeviceKey\(notifyConfig.barkDeviceKey\)/g)?.length, 2);
+  assert.ok(parserSource.includes('/^[A-Za-z0-9_-]{8,128}$/'));
+});
+
+test('Bark normalization accepts links and valid keys and rejects invalid input', () => {
+  for (const key of ['a'.repeat(8), 'a'.repeat(128), 'Device_key-123']) {
+    assert.equal(normalizeBarkDeviceKey(key), key);
+    assert.equal(normalizeBarkDeviceKey(`https://api.day.app/${key}/title/body`), key);
+  }
+  for (const input of ['', 'short', 'a'.repeat(129), 'invalid/key', 'invalid key', 'invalid.key', 'https://api.day.app/', 'api.day.app/%ZZ']) {
+    assert.equal(normalizeBarkDeviceKey(input), '');
+  }
+});
+
+test('settings reject invalid Bark before writes and allow unrelated saves and removal', async () => {
+  const writes = [];
+  const start = syncSource.indexOf('export async function saveNotifySettings(');
+  const end = syncSource.indexOf('\nexport function loadNotifyEmailStatus', start);
+  const makeSave = new Function('normalizeBarkDeviceKey', 'readNotifyClientConfig', 'putAccountResourceItem', 'deleteNotifyChannel', 'normalizeNotifyClientId', 'normalizeNotifyClientLabel', 'serverChanSetup', syncSource.slice(start, end).replace('export ', '') + '\nreturn saveNotifySettings;');
+  const save = makeSave(normalizeBarkDeviceKey, () => ({ barkDeviceKey: 'legacy.invalid' }),
+    async (...args) => writes.push(args), async (...args) => writes.push(args),
+    value => value || '', value => value || '', () => ({}));
+  await assert.rejects(save({ barkDeviceKey: 'invalid/key' }), /Bark 链接或 Device Key 格式不正确/);
+  assert.equal(writes.length, 0);
+  await save({ serverChan3: { uid: 'uid', sendKey: 'key' } });
+  assert.equal(writes.length, 1);
+  await save({ barkDeviceKey: '' });
+  assert.deepEqual(writes[1], ['channel:bark', { barkDeviceKey: '' }]);
+  await save(Object.create({ barkDeviceKey: 'invalid/key' }));
+  assert.equal(writes.length, 2);
+  await save({ barkDeviceKey: 'Device_key-123' });
+  assert.deepEqual(writes[2], ['notify/client-config', 'channel:bark', { barkDeviceKey: 'Device_key-123' }]);
+});
