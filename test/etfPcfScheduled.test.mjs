@@ -9,18 +9,20 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import worker, { runEtfPcfDailyRefresh } from '../workers/ocr-proxy/src/index.js';
+import worker, { runEtfPcfDailyRefresh } from '../workers/etf-shares/src/index.js';
+import ocrWorker from '../workers/ocr-proxy/src/index.js';
+import { TARGET_CODES } from '../workers/etf-shares/src/etfPcfShares.js';
 import {
   ETF_PCF_UNIVERSE_KEY,
   refreshEtfPcfLimitCache,
   runEtfPcfScheduledRefresh
-} from '../workers/ocr-proxy/src/etfPcfUniverse.js';
-import { clearEtfPcfRuntimeStateForTests } from '../workers/ocr-proxy/src/etfPcfLimit.js';
+} from '../workers/etf-shares/src/etfPcfUniverse.js';
+import { clearEtfPcfRuntimeStateForTests } from '../workers/etf-shares/src/etfPcfLimit.js';
 import {
   SSE_PCF_CODES,
   clearSsePcfRuntimeStateForTests,
   refreshSsePcfLimitCache
-} from '../workers/ocr-proxy/src/ssePcfLimit.js';
+} from '../workers/etf-shares/src/ssePcfLimit.js';
 
 // Independent SZSE PCF retention contract; SSE/universe TTLs are separate.
 const CACHE_TTL_SECONDS = 400 * 86400;
@@ -499,7 +501,7 @@ test('scheduledTime 非法：显式报告 invalid_scheduled_time', async () => {
 
 // ─── index.js cron 分发与 09:00 组合刷新 ──────────────────────────
 
-test('新 cron 0 1 * * * 经 index 分发：先上交所 5 只刷新，再深交所全量', async () => {
+test('新 cron 0 1 * * * 经 index 分发：先上交所 5 只刷新，再深交所只抓目标 159', async () => {
   const mock = createCombinedMock({ exists: new Set(['159941']) });
   const kv = new FakeKV();
   const originalFetch = globalThis.fetch;
@@ -528,11 +530,11 @@ test('新 cron 0 1 * * * 经 index 分发：先上交所 5 只刷新，再深交
   }
   assert.ok(mock.maxActiveSse <= 2, 'SSE 并发 max=' + mock.maxActiveSse);
 
-  // SSE 结果：清单日期（TRADING_DAY）入 key，TTL 24h，时间戳来自 scheduledTime。
+  // SSE 结果：清单日期（TRADING_DAY）入 key，TTL 400 天，时间戳来自 scheduledTime。
   for (const code of SSE_PCF_CODES) {
     const puts = kv.putCalls.filter((p) => p.key === 'etf-pcf:' + code + ':20261013');
     assert.equal(puts.length, 1, code);
-    assert.equal(puts[0].options.expirationTtl, 86400, code);
+    assert.equal(puts[0].options.expirationTtl, 400 * 86400, code);
     const data = JSON.parse(puts[0].value);
     assert.equal(data.source, 'sse_pcf', code);
     assert.equal(data.tradingDay, '20261013', code);
@@ -546,19 +548,22 @@ test('新 cron 0 1 * * * 经 index 分发：先上交所 5 只刷新，再深交
   assert.equal(data513100.netSubscribeLimitShares, null);
   assert.equal(data513100.netSubscribeLimitKind, 'unlimited');
 
-  // 深交所阶段照常：1000 探测 + 1 文件，结果与名单写入。
+  // 深交所阶段只抓 TARGET_CODES 里的 8 只 159：无全市场探测，每只一次 GET。
   const szseCalls = mock.calls.filter((c) => c.market === 'szse');
-  assert.equal(szseCalls.filter((c) => c.method === 'HEAD').length, 1000);
-  assert.equal(szseCalls.filter((c) => c.method === 'GET').length, 1);
+  assert.equal(szseCalls.filter((c) => c.method === 'HEAD').length, 0);
+  assert.deepEqual(
+    szseCalls.filter((c) => c.method === 'GET').map((c) => String(c.url).match(/ETF(\d{6})\d{8}\.txt/)[1]).sort(),
+    TARGET_CODES.filter((c) => c.startsWith('159')).sort()
+  );
   const sharesCalls = mock.calls.filter((c) => c.market === 'shares');
   assert.equal(sharesCalls.length, 2);
   assert.equal(new URL(sharesCalls[1].url).searchParams.get('txtEnd'), DATE_KEY);
   assert.ok(Math.max(...szseCalls.map((c) => c.seq)) < Math.min(...sharesCalls.map((c) => c.seq)));
   // +2：上交所 ETF 规模接口取 T-1/T-2 两日 513 份额。
   assert.equal(mock.calls.filter((c) => c.market === 'sse_shares').length, 2);
-  assert.equal(mock.calls.length, 1010);
+  assert.equal(mock.calls.length, 5 + 8 + 2 + 2);
   assert.ok(kv.store.has('etf-pcf:159941:20261013'));
-  assert.ok(kv.store.has(ETF_PCF_UNIVERSE_KEY));
+  assert.ok(!kv.store.has(ETF_PCF_UNIVERSE_KEY)); // 只抓目标 159，不做全市场探测、不写名单
 
   // 阶段顺序：全部 SSE 调用先于任何深交所调用（两阶段不重叠）。
   const maxSseSeq = Math.max(...sseCalls.map((c) => c.seq));
@@ -635,7 +640,7 @@ test('阶段异常隔离：SSE 阶段抛错仍执行深交所；深交所阶段�
   // SSE 抛错不阻断深交所：探测、结果与名单照常写入。
   assert.equal(sseBoom.szse.ok, true);
   assert.ok(kv.store.has('etf-pcf:159941:20261013'));
-  assert.ok(kv.store.has(ETF_PCF_UNIVERSE_KEY));
+  assert.ok(!kv.store.has(ETF_PCF_UNIVERSE_KEY)); // 只抓目标 159，不做全市场探测、不写名单
 
   const kv2 = new FakeKV();
   const szseBoom = await runEtfPcfDailyRefresh({
@@ -676,7 +681,7 @@ test('SSE 阶段软预算到期：5 只全部 skippedDeadline、无外部请求�
   // SSE 预算不延长/不影响深交所阶段。
   assert.equal(result.szse.ok, true);
   assert.ok(kv.store.has('etf-pcf:159941:20261013'));
-  assert.ok(kv.store.has(ETF_PCF_UNIVERSE_KEY));
+  assert.ok(!kv.store.has(ETF_PCF_UNIVERSE_KEY)); // 只抓目标 159，不做全市场探测、不写名单
 });
 
 test('scheduledTime 非法：两阶段均不执行、不产生外部请求或 KV 访问', async () => {
@@ -697,7 +702,23 @@ test('scheduledTime 非法：两阶段均不执行、不产生外部请求或 KV
   assert.equal(kv.putCalls.length, 0);
 });
 
-test('旧 cron 0 12 * * * 保持原顺序：只刷场外限额与 overview，不触发 ETF', async () => {
+test('etf-shares 不处理 0 12 * * *：无外部请求、无 KV 访问', async () => {
+  let touched = 0;
+  const kv = { FUND_LIMIT_KV: { get: async () => { touched += 1; return null; }, put: async () => { touched += 1; } } };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { touched += 1; throw new Error('offline'); };
+  const pending = [];
+  try {
+    await worker.scheduled({ cron: '0 12 * * *', scheduledTime: SCHEDULED_MS }, kv, { waitUntil: (p) => pending.push(p) });
+    await Promise.all(pending);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(pending.length, 0);
+  assert.equal(touched, 0);
+});
+
+test('ocr-proxy 旧 cron 0 12 * * * 保持原顺序：只刷场外限额与 overview，不触发 ETF', async () => {
   const events = [];
   const kv = {
     FUND_LIMIT_KV: {
@@ -719,7 +740,7 @@ test('旧 cron 0 12 * * * 保持原顺序：只刷场外限额与 overview，不
   try {
     const pending = [];
     const ctx = { waitUntil: (promise) => pending.push(promise) };
-    await worker.scheduled({ cron: '0 12 * * *', scheduledTime: SCHEDULED_MS }, kv, ctx);
+    await ocrWorker.scheduled({ cron: '0 12 * * *', scheduledTime: SCHEDULED_MS }, kv, ctx);
     assert.equal(pending.length, 1);
     await Promise.all(pending);
   } finally {

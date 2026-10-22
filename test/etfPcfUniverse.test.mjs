@@ -13,7 +13,7 @@ import {
   discoverEtfPcfUniverse,
   loadEtfPcfUniverse,
   validateEtfPcfUniverseEntry
-} from '../workers/ocr-proxy/src/etfPcfUniverse.js';
+} from '../workers/etf-shares/src/etfPcfUniverse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_BYTES = new Uint8Array(

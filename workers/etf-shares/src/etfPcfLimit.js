@@ -7,7 +7,7 @@
 // KV：复用 FUND_LIMIT_KV，结果 key 为 etf-pcf:<code>:<yyyymmdd>；当日写入固定 TTL 24h，
 //     历史日期（早于上海当天）的 POST 修正写入不带过期选项，永久归档；
 //     universe 名单 key（etf-pcf-universe:v1）由 etfPcfUniverse.js 维护。
-import { mapLimit } from './fundLimit.js';
+import { mapLimit } from './util.js';
 
 const ETF_PCF_SCHEMA_VERSION = 1;
 const ETF_PCF_SOURCE = 'szse_pcf';

@@ -1,0 +1,33 @@
+# ai-dca-etf-shares：纳指 ETF PCF 申购限额 + 每日份额 + 限额环比投影。
+# 2026-10-22 从 ocr-proxy 拆出，只含 ETF 限额/份额相关代码（src/）。
+# 部署：npm run worker:etf-shares:deploy
+name = "ai-dca-etf-shares"
+main = "src/index.js"
+compatibility_date = "2026-03-26"
+compatibility_flags = ["nodejs_compat"]
+
+# 比 ocr-proxy 的 api/* 更具体，/api/etf-pcf-shares|limit|events 都落到这里。
+[[routes]]
+pattern = "api.freebacktrack.tech/api/etf-pcf*"
+zone_name = "freebacktrack.tech"
+
+# 工作日北京时间 09:00（UTC 01:00）：上交所 5 只 → 深交所 TARGET_CODES 里的 8 只 159 → 份额/限额环比投影；
+# 09:30（UTC 01:30）补跑一次。节假日由 scheduled 守卫跳过。
+[triggers]
+crons = ["0 1 * * 1-5", "30 1 * * 1-5"]
+
+# 与 ocr-proxy 共用同一个 KV（etf-pcf:* / etf-pcf-shares:* / etf-pcf-events*:*）。
+[[kv_namespaces]]
+binding = "FUND_LIMIT_KV"
+id = "633d193bdcb045e3bdbc098ff6249224"
+preview_id = "1892e345c6754009ac678ce467189ef2"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true

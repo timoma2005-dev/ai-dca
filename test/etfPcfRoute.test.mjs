@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { handleEtfPcfLimit } from '../workers/ocr-proxy/src/etfPcfRoutes.js';
-import { clearEtfPcfRuntimeStateForTests } from '../workers/ocr-proxy/src/etfPcfLimit.js';
-import { SSE_PCF_CODES, clearSsePcfRuntimeStateForTests } from '../workers/ocr-proxy/src/ssePcfLimit.js';
+import { handleEtfPcfLimit } from '../workers/etf-shares/src/etfPcfRoutes.js';
+import { clearEtfPcfRuntimeStateForTests } from '../workers/etf-shares/src/etfPcfLimit.js';
+import { SSE_PCF_CODES, clearSsePcfRuntimeStateForTests } from '../workers/etf-shares/src/ssePcfLimit.js';
 
 // Independent SZSE PCF retention contract; SSE/universe TTLs are separate.
 const CACHE_TTL_SECONDS = 400 * 86400;
@@ -599,7 +599,7 @@ test('POST SSE 缺省 date：用接口 TRADING_DAY 入库，响应日期与写�
   assert.equal(fetchMock.mock.calls.length, 1);
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:513100:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, 86400);
+  assert.equal(kv.putCalls[0].options.expirationTtl, 400 * 86400);
 
   // 抓取时间在上海 10-14，但源站 TRADING_DAY 仍是 20261013：只写清单日，不伪造当天。
   const nextDay = new FakeKV();
@@ -730,7 +730,7 @@ test('159941 仍走深交所：POST 抓 szse 固定 URL，不带上交所 Refere
 });
 
 test('SSE 前日可选字段解析与缓存形态，真实接口缺字段不造日期', async () => {
-  const { mapSsePcfFields, validateSsePcfCachedData } = await import('../workers/ocr-proxy/src/ssePcfLimit.js');
+  const { mapSsePcfFields, validateSsePcfCachedData } = await import('../workers/etf-shares/src/ssePcfLimit.js');
   const row = JSON.parse(SSE_FIXTURES.get('513100')).result[0];
   const parse = (overrides) => mapSsePcfFields({ ...row, ...overrides }, { code: '513100' });
   const missing = parse({});

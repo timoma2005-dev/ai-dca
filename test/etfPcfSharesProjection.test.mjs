@@ -9,7 +9,7 @@ import {
   previousSession,
   SOURCE,
   TTL
-} from '../workers/ocr-proxy/src/etfPcfSharesProjection.js';
+} from '../workers/etf-shares/src/etfPcfSharesProjection.js';
 const now = new Date('2026-10-14T00:00:00.000Z');
 test('synthetic exact/near/over/negative/zero/unlimited and partial, v1 NAV is always absent', () => {
   const data = syntheticProjection();

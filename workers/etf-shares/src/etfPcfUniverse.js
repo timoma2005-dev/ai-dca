@@ -8,7 +8,7 @@
 // 调度：cron 0 1 * * *（UTC 01:00 = 北京时间 09:00）由 index.js 分支调用
 // runEtfPcfScheduledRefresh，整个刷新经 ctx.waitUntil 托管：
 // 探测发现 → 名单 diff/校准 → 对当日探测有效名单逐项抓取、解析、await 写 KV。
-import { mapLimit } from './fundLimit.js';
+import { mapLimit } from './util.js';
 import {
   isValidEtfPcfCode,
   isWellFormedEtfPcfDateKey,
@@ -603,9 +603,12 @@ export async function runEtfPcfScheduledRefresh({
   concurrency = ETF_PCF_FETCH_CONCURRENCY,
   deadlineMs = ETF_PCF_JOB_DEADLINE_MS,
   requestLimit = ETF_PCF_REQUEST_BUDGET,
-  onSuccess
+  onSuccess,
+  // 指定代码时只抓这些代码的 PCF，跳过全市场探测与名单校准（cron 只需要目标 ETF）。
+  codes = null
 }) {
   const startMs = Date.now();
+  const targetedCodes = Array.isArray(codes) && codes.length > 0 ? [...new Set(codes.map(String))].sort() : null;
   const emptyFetchStats = {
     total: 0,
     success: 0,
@@ -647,8 +650,11 @@ export async function runEtfPcfScheduledRefresh({
   let degraded = false;
   let universeSourceAge = null;
   let fallbackStatus = null;
+  let fetchCodes = null;
   try {
-    try {
+    if (targetedCodes) {
+      fetchCodes = targetedCodes;
+    } else try {
       discovery = await discoverEtfPcfUniverse({
         env,
         date: dateKey,
@@ -674,8 +680,9 @@ export async function runEtfPcfScheduledRefresh({
       };
     }
 
-    let fetchCodes = null;
-    if (discovery && discovery.ok && discovery.complete) {
+    if (targetedCodes) {
+      // 已指定代码，直接抓取
+    } else if (discovery && discovery.ok && discovery.complete) {
       fetchCodes = discovery.codes;
     } else {
       // 发现失败/未完成：仅在剩余预算允许时降级使用上一有效 KV 名单。
@@ -735,7 +742,8 @@ export async function runEtfPcfScheduledRefresh({
 
   const discoveryComplete = !!(discovery && discovery.ok && discovery.complete);
   const result = {
-    ok: discoveryComplete || degraded,
+    ok: discoveryComplete || degraded || !!targetedCodes,
+    targeted: !!targetedCodes,
     date: dateKey,
     probeTotal: discovery && discovery.stats ? discovery.stats.probeTotal : 0,
     probeExists: discovery && discovery.stats ? discovery.stats.probeExists : 0,
@@ -754,7 +762,7 @@ export async function runEtfPcfScheduledRefresh({
     failures,
     jobDurationMs: Date.now() - startMs
   };
-  if (!discoveryComplete && !degraded) {
+  if (!discoveryComplete && !degraded && !targetedCodes) {
     result.ok = false;
     result.reason = 'universe_discovery_incomplete';
   }

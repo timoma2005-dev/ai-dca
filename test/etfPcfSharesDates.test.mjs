@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { eventKey, runEtfPcfEvents } from '../workers/ocr-proxy/src/etfPcfEvents.js';
-import { buildEtfPcfCacheKey, parseEtfPcf } from '../workers/ocr-proxy/src/etfPcfLimit.js';
-import { sharesKey, validateSharesProjection } from '../workers/ocr-proxy/src/etfPcfSharesProjection.js';
+import { eventKey, runEtfPcfEvents } from '../workers/etf-shares/src/etfPcfEvents.js';
+import { buildEtfPcfCacheKey, parseEtfPcf } from '../workers/etf-shares/src/etfPcfLimit.js';
+import { sharesKey, validateSharesProjection } from '../workers/etf-shares/src/etfPcfSharesProjection.js';
 
 const CACHE_TTL_SECONDS = 400 * 86400;
 const today = '2026-10-14';
