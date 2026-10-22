@@ -22,10 +22,10 @@ import {
   readEtfPcfLimitCache,
   fetchEtfPcfLimit,
   clearEtfPcfRuntimeStateForTests
-} from '../workers/ocr-proxy/src/etfPcfLimit.js';
+} from '../workers/etf-shares/src/etfPcfLimit.js';
 
-import { handleEtfPcfLimit } from '../workers/ocr-proxy/src/etfPcfRoutes.js';
-import { refreshEtfPcfLimitCache } from '../workers/ocr-proxy/src/etfPcfUniverse.js';
+import { handleEtfPcfLimit } from '../workers/etf-shares/src/etfPcfRoutes.js';
+import { refreshEtfPcfLimitCache } from '../workers/etf-shares/src/etfPcfUniverse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_BYTES = new Uint8Array(

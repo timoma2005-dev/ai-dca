@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { deflateRawSync } from 'node:zlib';
-import { crc32, unzipXlsx, parseEtfPcfSharesXlsx, fetchEtfPcfShares, decimalShares, supportsRawDeflate, historicalSharesUrl } from '../workers/ocr-proxy/src/etfPcfShares.js';
+import { crc32, unzipXlsx, parseEtfPcfSharesXlsx, fetchEtfPcfShares, decimalShares, supportsRawDeflate, historicalSharesUrl } from '../workers/etf-shares/src/etfPcfShares.js';
 // Synthetic minimal OOXML builder; every number/date/header below is synthetic.
 export function zip(parts,{method=0,flags=0}={}){
  const locals=[],central=[];let offset=0;

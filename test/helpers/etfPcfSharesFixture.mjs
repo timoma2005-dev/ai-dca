@@ -1,5 +1,5 @@
-import { buildSharesProjection } from '../../workers/ocr-proxy/src/etfPcfSharesProjection.js';
-import { TARGET_CODES } from '../../workers/ocr-proxy/src/etfPcfShares.js';
+import { buildSharesProjection } from '../../workers/etf-shares/src/etfPcfSharesProjection.js';
+import { TARGET_CODES } from '../../workers/etf-shares/src/etfPcfShares.js';
 export const calendar = {
   source: 'verified_trading_calendar',
   from: '2026-10-09',

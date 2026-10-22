@@ -13,7 +13,7 @@ import {
   validateEtfPcfHistoryData,
   buildEtfPcfCacheKey
 } from './etfPcfLimit.js';
-import { mapLimit } from './fundLimit.js';
+import { mapLimit } from './util.js';
 import {
   TARGET_CODES,
   CURRENT_SHARES_URL,

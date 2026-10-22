@@ -10,8 +10,8 @@ import {
   fetchEtfPcfLimit,
   buildEtfPcfCacheKey,
   shanghaiDateKey
-} from '../../../../workers/ocr-proxy/src/etfPcfLimit.js';
-import { runEtfPcfScheduledRefresh } from '../../../../workers/ocr-proxy/src/etfPcfUniverse.js';
+} from '../../../../workers/etf-shares/src/etfPcfLimit.js';
+import { runEtfPcfScheduledRefresh } from '../../../../workers/etf-shares/src/etfPcfUniverse.js';
 
 const fixtureU8 = fixtureBytes instanceof Uint8Array ? fixtureBytes : new Uint8Array(fixtureBytes);
 const CODE = '159941';

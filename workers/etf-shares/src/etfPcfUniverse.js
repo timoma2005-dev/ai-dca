@@ -8,7 +8,7 @@
 // 调度：cron 0 1 * * *（UTC 01:00 = 北京时间 09:00）由 index.js 分支调用
 // runEtfPcfScheduledRefresh，整个刷新经 ctx.waitUntil 托管：
 // 探测发现 → 名单 diff/校准 → 对当日探测有效名单逐项抓取、解析、await 写 KV。
-import { mapLimit } from './fundLimit.js';
+import { mapLimit } from './util.js';
 import {
   isValidEtfPcfCode,
   isWellFormedEtfPcfDateKey,

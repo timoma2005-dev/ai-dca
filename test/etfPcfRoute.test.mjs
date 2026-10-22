@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { handleEtfPcfLimit } from '../workers/ocr-proxy/src/etfPcfRoutes.js';
-import { clearEtfPcfRuntimeStateForTests } from '../workers/ocr-proxy/src/etfPcfLimit.js';
-import { SSE_PCF_CODES, clearSsePcfRuntimeStateForTests } from '../workers/ocr-proxy/src/ssePcfLimit.js';
+import { handleEtfPcfLimit } from '../workers/etf-shares/src/etfPcfRoutes.js';
+import { clearEtfPcfRuntimeStateForTests } from '../workers/etf-shares/src/etfPcfLimit.js';
+import { SSE_PCF_CODES, clearSsePcfRuntimeStateForTests } from '../workers/etf-shares/src/ssePcfLimit.js';
 
 // Independent SZSE PCF retention contract; SSE/universe TTLs are separate.
 const CACHE_TTL_SECONDS = 400 * 86400;
@@ -730,7 +730,7 @@ test('159941 仍走深交所：POST 抓 szse 固定 URL，不带上交所 Refere
 });
 
 test('SSE 前日可选字段解析与缓存形态，真实接口缺字段不造日期', async () => {
-  const { mapSsePcfFields, validateSsePcfCachedData } = await import('../workers/ocr-proxy/src/ssePcfLimit.js');
+  const { mapSsePcfFields, validateSsePcfCachedData } = await import('../workers/etf-shares/src/ssePcfLimit.js');
   const row = JSON.parse(SSE_FIXTURES.get('513100')).result[0];
   const parse = (overrides) => mapSsePcfFields({ ...row, ...overrides }, { code: '513100' });
   const missing = parse({});

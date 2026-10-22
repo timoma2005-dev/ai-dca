@@ -4,7 +4,7 @@ import { isWellFormedEtfPcfDateKey, shanghaiDateKey } from './etfPcfLimit.js';
 // 按 code 前缀分发：159xxx 走深交所，513100/513110/513300/513390/513870 走上交所，
 // 其它合法 51xxxx 明确 404 unsupported_code（未覆盖，不触发外部请求与 KV），
 // 其余前缀/非法 code 维持既有 400。客户端不控制 forceRefresh，也不支持 codes 数组批量刷新。
-import { jsonResponse } from './ocrHttp.js';
+import { jsonResponse } from './util.js';
 import { readEtfPcfLimitCache, fetchEtfPcfLimit, validateEtfPcfRequest } from './etfPcfLimit.js';
 import {
   SSE_PCF_CODES,

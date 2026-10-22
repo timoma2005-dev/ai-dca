@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { syntheticProjection } from './helpers/etfPcfSharesFixture.mjs';
-import { sharesKey, SOURCE } from '../workers/ocr-proxy/src/etfPcfSharesProjection.js';
-import { handleEtfPcfShares } from '../workers/ocr-proxy/src/etfPcfSharesRoute.js';
-import { buildEtfPcfCacheKey, parseEtfPcf } from '../workers/ocr-proxy/src/etfPcfLimit.js';
+import { sharesKey, SOURCE } from '../workers/etf-shares/src/etfPcfSharesProjection.js';
+import { handleEtfPcfShares } from '../workers/etf-shares/src/etfPcfSharesRoute.js';
+import { buildEtfPcfCacheKey, parseEtfPcf } from '../workers/etf-shares/src/etfPcfLimit.js';
 const now = new Date('2026-10-14T00:00:00.000Z');
 test('read-only API all branches: complete/partial/zero/missing/corrupt/invalid/method/unavailable', async () => {
   const original = globalThis.fetch;
@@ -186,7 +186,7 @@ test('PCF snapshot metadata uses validated cached dates and leaves share measure
   assert.equal(await read(), null);
 });
 test('Worker dispatch uses the read-only shares route including OPTIONS no-store/Allow', async () => {
-  const { default: worker } = await import('../workers/ocr-proxy/src/index.js');
+  const { default: worker } = await import('../workers/etf-shares/src/index.js');
   const data = syntheticProjection({ fetchedAt: new Date(Date.now() - 1000).toISOString() });
   const pointer = {
     schemaVersion: 1,

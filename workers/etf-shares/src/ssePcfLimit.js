@@ -12,7 +12,7 @@
 //
 // KV：复用 FUND_LIMIT_KV，结果 key 为 etf-pcf:<code>:<yyyymmdd>（51xxxx 与 159xxx 不冲突），
 // 固定 TTL 24h；入库身份日期一律取接口 TRADING_DAY（清单日期），绝不使用抓取日期。
-import { mapLimit } from './fundLimit.js';
+import { mapLimit } from './util.js';
 
 // plan 决策 (b)：worker 内硬编码冻结名单，排序固定，三个入口共用这一份。
 export const SSE_PCF_CODES = ['513100', '513110', '513300', '513390', '513870'];

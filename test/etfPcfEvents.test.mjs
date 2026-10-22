@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { limitRelaxation, netCreationNearTotalLimit, mergeEventLogs, validateEventLog, persistEventLog, eventKey, selectPreviousDate, runEtfPcfEvents, ETF_PCF_FALLBACK_MAX_READS } from '../workers/ocr-proxy/src/etfPcfEvents.js';
-import { parseEtfPcf, buildEtfPcfCacheKey } from '../workers/ocr-proxy/src/etfPcfLimit.js';
+import { limitRelaxation, netCreationNearTotalLimit, mergeEventLogs, validateEventLog, persistEventLog, eventKey, selectPreviousDate, runEtfPcfEvents, ETF_PCF_FALLBACK_MAX_READS } from '../workers/etf-shares/src/etfPcfEvents.js';
+import { parseEtfPcf, buildEtfPcfCacheKey } from '../workers/etf-shares/src/etfPcfLimit.js';
 const at='2026-10-13T01:00:00.000Z',date='2026-10-13',previous='2026-10-12',code='159659';
 const l=shares=>({kind:'limited',shares}),unlimited={kind:'unlimited',shares:null},unknown={kind:'unknown',shares:null};
 const relax=(prev,cur,overrides={})=>limitRelaxation({code,date,basis:'total',prev_date:previous,when_detected:at,prev,cur,...overrides});
@@ -126,7 +126,7 @@ test('projection sidecar reuses bounded downloads; validator/date-put/pointer fa
 });
 
 test('SSE status uses validated date-specific KV cache only; expired/source/identity misses stay unknown', async () => {
-  const { mapSsePcfFields, buildSsePcfCacheKey, buildSsePcfSourceUrl } = await import('../workers/ocr-proxy/src/ssePcfLimit.js');
+  const { mapSsePcfFields, buildSsePcfCacheKey, buildSsePcfSourceUrl } = await import('../workers/etf-shares/src/ssePcfLimit.js');
   const fixture = JSON.parse(readFileSync(new URL('./fixtures/etf-pcf-sse/SSE51310020261013.json', import.meta.url)));
   for (const failure of ['none', 'expired', 'source', 'identity']) {
     const kv = new KV();

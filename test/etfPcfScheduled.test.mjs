@@ -9,19 +9,20 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import worker, { runEtfPcfDailyRefresh } from '../workers/ocr-proxy/src/index.js';
-import { TARGET_CODES } from '../workers/ocr-proxy/src/etfPcfShares.js';
+import worker, { runEtfPcfDailyRefresh } from '../workers/etf-shares/src/index.js';
+import ocrWorker from '../workers/ocr-proxy/src/index.js';
+import { TARGET_CODES } from '../workers/etf-shares/src/etfPcfShares.js';
 import {
   ETF_PCF_UNIVERSE_KEY,
   refreshEtfPcfLimitCache,
   runEtfPcfScheduledRefresh
-} from '../workers/ocr-proxy/src/etfPcfUniverse.js';
-import { clearEtfPcfRuntimeStateForTests } from '../workers/ocr-proxy/src/etfPcfLimit.js';
+} from '../workers/etf-shares/src/etfPcfUniverse.js';
+import { clearEtfPcfRuntimeStateForTests } from '../workers/etf-shares/src/etfPcfLimit.js';
 import {
   SSE_PCF_CODES,
   clearSsePcfRuntimeStateForTests,
   refreshSsePcfLimitCache
-} from '../workers/ocr-proxy/src/ssePcfLimit.js';
+} from '../workers/etf-shares/src/ssePcfLimit.js';
 
 // Independent SZSE PCF retention contract; SSE/universe TTLs are separate.
 const CACHE_TTL_SECONDS = 400 * 86400;
@@ -701,7 +702,23 @@ test('scheduledTime 非法：两阶段均不执行、不产生外部请求或 KV
   assert.equal(kv.putCalls.length, 0);
 });
 
-test('旧 cron 0 12 * * * 保持原顺序：只刷场外限额与 overview，不触发 ETF', async () => {
+test('etf-shares 不处理 0 12 * * *：无外部请求、无 KV 访问', async () => {
+  let touched = 0;
+  const kv = { FUND_LIMIT_KV: { get: async () => { touched += 1; return null; }, put: async () => { touched += 1; } } };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { touched += 1; throw new Error('offline'); };
+  const pending = [];
+  try {
+    await worker.scheduled({ cron: '0 12 * * *', scheduledTime: SCHEDULED_MS }, kv, { waitUntil: (p) => pending.push(p) });
+    await Promise.all(pending);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(pending.length, 0);
+  assert.equal(touched, 0);
+});
+
+test('ocr-proxy 旧 cron 0 12 * * * 保持原顺序：只刷场外限额与 overview，不触发 ETF', async () => {
   const events = [];
   const kv = {
     FUND_LIMIT_KV: {
@@ -723,7 +740,7 @@ test('旧 cron 0 12 * * * 保持原顺序：只刷场外限额与 overview，不
   try {
     const pending = [];
     const ctx = { waitUntil: (promise) => pending.push(promise) };
-    await worker.scheduled({ cron: '0 12 * * *', scheduledTime: SCHEDULED_MS }, kv, ctx);
+    await ocrWorker.scheduled({ cron: '0 12 * * *', scheduledTime: SCHEDULED_MS }, kv, ctx);
     assert.equal(pending.length, 1);
     await Promise.all(pending);
   } finally {
