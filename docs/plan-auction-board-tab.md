@@ -35,3 +35,27 @@
 - 东财、新浪、腾讯等第三方数据源由浏览器直连，受可用性、限流与 JSONP 兼容性影响；本次不验证或调整其既有数据逻辑。
 - 部署环境的 CSP（内联脚本/样式、第三方脚本、frame 限制）可能影响静态页；保持原页不变，后续上线时需在实际响应头环境验收。
 - 固定 URL `/auction-board.html` 可能被浏览器或 CDN 缓存，后续更新应通过正常发布流程及既有缓存刷新策略处理；同源 localStorage 延续用户现有行为。
+
+## 设计变更：22:06 用户指令（覆盖前述子 tab 挂载方案）
+
+用户于 22:06 指定：竞价看板改为与监控雷达平行的顶级管理员 tab；雷达移除“份额新增”与“竞价看板”子 tab。此次在 `afdb389f` 之上修改源码，保留前述内容作为历史方案记录，不改写提交历史。
+
+### 最终挂载与兼容行为
+
+- `ADMIN_TAB_ORDER` 为 `['adminQuant', 'adminRadar', 'adminAuction']`；竞价在 `PRIMARY_TAB_META` 标记 `adminOnly: true`，链接使用 `?tab=adminAuction`，场景可见列表末尾添加同名 tab。
+- `WorkspacePage` 为竞价注册标题“竞价看板”、`Gavel` 图标与懒加载的 `AdminAuctionExperience`；仅管理员选中竞价 tab 时挂载 iframe，非管理员维持 `HoldingsExperience` 兜底。移动端“更多”菜单同步添加管理员竞价入口与 `Gavel` 图标。
+- 原 `AuctionBoardPanel` 的 section、iframe、标题、高度、`aria-label`、加载方式与 referrer policy 原样迁入 `src/pages/AdminAuctionExperience.jsx`，删除旧组件。
+- `AdminRadarExperience` 仅保留 `isAnalyticsAdmin(session)` 门控、现有无权限提示、容器和 `RadarPanel`，移除子 tab、hash 状态与监听，不再引用份额和竞价页面；保留文件头数据来源说明。
+- 公开 `?tab=shares` 继续直接渲染 `SharesExperience`。旧 `?tab=adminRadar#shares` 在 `WorkspacePage` 的 `adminRadar` 分支直接渲染同一组件，管理员与非管理员一致；两处 `isPublicShares` 判定保持不动。其他 hash 仍由管理员进入雷达，非管理员进入持仓兜底。
+- `?tab=adminRadar#auction` 不再挂载竞价 iframe；竞价入口改为 `?tab=adminAuction`，不新增旧竞价 hash 重定向。
+- `public/auction-board.html` 不修改，预期 SHA-256 为 `c01108707aa76ca59866c63a379c8856004dfcb932664ef9fe5f291ee54a9a89`；静态资源直接访问与第三方数据源边界延续原方案。
+
+### 新验收点
+
+- 重写 `test/adminRadarAuctionTab.test.mjs`：覆盖顶级 tab 顺序、管理员元数据、两种页面目录下的链接、场景可见性、工作台标题与图标、懒加载与权限门控、旧份额深链、雷达单面板、iframe 属性与静态 HTML 标题。
+- 更新 `test/sharesWorkspaceRedirect.test.mjs`：保留两处公开份额访问例外的行为测试，执行实际 `renderActivePanel` 验证管理员和非管理员的份额深链、雷达分流及竞价兜底。
+- 更新 `test/mobileBottomNavConfig.test.mjs`：竞价在雷达之后，管理员在“更多”中可见，非管理员不可见。
+- 更新 `test/etfSharesDetailUi.test.mjs`：复用工作台真实分流函数，验证旧 `#shares` 直达公开看板、无雷达子 tab、hash 切换与 history 长度，保留其余份额详情和请求测试。
+- 运行 `node --test test/*.test.mjs` 全量测试并报告通过、失败数；对每个失败在 `afdb389f` 基线上复核，区分本次引入与既有失败。e2e spec 不运行、不修改，报告其中明显过时的雷达子 tab 断言。
+- 单独对改动 JS、JSX 与测试执行 ESLint；运行 `npm run lint -- --quiet`、`npm run check:refactor` 和 `git diff --check`，如有失败与改动前基线对比。
+- 最后校验静态 HTML 哈希与变更范围；不修改 `docs/plan-react-router-migration.md`，不 commit、push、release，不编辑线上目录或构建产出物。

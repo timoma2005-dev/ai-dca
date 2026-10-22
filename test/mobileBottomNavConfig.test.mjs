@@ -11,7 +11,7 @@ import {
 test('mobile bottom nav keeps cn tab order', () => {
   assert.deepEqual(
     MOBILE_BOTTOM_NAV_ITEMS.map((item) => item.key),
-    ['home', 'markets', 'holdings', 'tradePlans', 'shares', 'fundSwitch', 'notify', 'articles', 'adminQuant', 'adminRadar'],
+    ['home', 'markets', 'holdings', 'tradePlans', 'shares', 'fundSwitch', 'notify', 'articles', 'adminQuant', 'adminRadar', 'adminAuction'],
   );
 });
 
@@ -27,7 +27,7 @@ test('mobile bottom nav ignores unknown visible tab keys', () => {
 
 test('mobile bottom nav hides admin tabs for non-admin users', () => {
   const items = resolveMobileBottomNavItems(
-    ['home', 'shares', 'adminQuant', 'adminRadar'],
+    ['home', 'shares', 'adminQuant', 'adminRadar', 'adminAuction'],
     false,
   );
   assert.deepEqual(items.map((item) => item.key), ['home', 'shares']);
@@ -35,10 +35,10 @@ test('mobile bottom nav hides admin tabs for non-admin users', () => {
 
 test('mobile bottom nav shows admin tabs for admin users', () => {
   const items = resolveMobileBottomNavItems(
-    ['home', 'shares', 'adminQuant', 'adminRadar'],
+    ['home', 'shares', 'adminQuant', 'adminRadar', 'adminAuction'],
     true,
   );
-  assert.deepEqual(items.map((item) => item.key), ['home', 'shares', 'adminQuant', 'adminRadar']);
+  assert.deepEqual(items.map((item) => item.key), ['home', 'shares', 'adminQuant', 'adminRadar', 'adminAuction']);
 });
 
 test('mobile bottom nav reserves fifth slot for overflow', () => {
@@ -54,7 +54,7 @@ test('mobile bottom nav overflow includes admin tabs for admin users', () => {
   assert.deepEqual(directItems.map((item) => item.key), ['home', 'markets', 'holdings', 'tradePlans']);
   assert.deepEqual(
     overflowItems.map((item) => item.key),
-    ['shares', 'fundSwitch', 'notify', 'articles', 'adminQuant', 'adminRadar'],
+    ['shares', 'fundSwitch', 'notify', 'articles', 'adminQuant', 'adminRadar', 'adminAuction'],
   );
 });
 

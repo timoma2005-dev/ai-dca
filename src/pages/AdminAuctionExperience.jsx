@@ -1,4 +1,4 @@
-export default function AuctionBoardPanel() {
+export default function AdminAuctionExperience() {
   return (
     <section
       className="h-[calc(100vh-10rem)] min-h-[560px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:h-[calc(100vh-8rem)] sm:min-h-[640px]"

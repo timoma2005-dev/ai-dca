@@ -1,6 +1,7 @@
-/* global HashChangeEvent, URL, console, dispatchEvent, document, history, innerWidth, process */
+/* global HashChangeEvent, URL, dispatchEvent, document, history, innerWidth, localStorage, process, structuredClone, window */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
@@ -208,6 +209,9 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
   delete legacy.records[0].limitChanges;
   delete legacy.records[0].limitChange;
   delete legacy.records[0].prevLimitDate;
+  // 复用工作台真实分流函数，验证旧 #shares 深链直达公开组件，不再挂载雷达子 tab。
+  const workspaceSource = readFileSync(new URL('../src/pages/WorkspacePage.jsx', import.meta.url), 'utf8');
+  const renderActivePanel = workspaceSource.match(/ {2}function renderActivePanel\(\) \{[\s\S]*?\n {2}\}/)[0];
   const bundle = await build({
     stdin: { contents: `import React from 'react';
       import { createRoot } from 'react-dom/client';
@@ -228,7 +232,24 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
         const snapshot = q.includes('legacy') ? legacy : window.__calm ? calm : data;
         return { promise: Promise.resolve({ state: q.includes('stale') ? 'stale' : 'partial', data: snapshot, receivedAt: Date.now() }), release() {} };
       };
-      createRoot(document.getElementById('root')).render(location.search.includes('admin') ? <Admin session={{ isAdmin: !location.search.includes('denied') }} /> : <SharesExperience />);`, resolveDir: process.cwd(), loader: 'jsx' },
+      function TestWorkspace() {
+        const params = new URLSearchParams(location.search);
+        const activeTab = params.get('tab') || 'shares';
+        const isAdminUser = !params.has('denied');
+        const links = {};
+        const inPagesDir = false;
+        const AdminRadarExperience = () => <Admin session={{ isAdmin: isAdminUser }} />;
+        const HoldingsExperience = () => <p>持仓兜底</p>;
+        const [, setHash] = React.useState(location.hash);
+        React.useEffect(() => {
+          const syncHash = () => setHash(location.hash);
+          window.addEventListener('hashchange', syncHash);
+          return () => window.removeEventListener('hashchange', syncHash);
+        }, []);
+        ${renderActivePanel}
+        return renderActivePanel();
+      }
+      createRoot(document.getElementById('root')).render(<TestWorkspace />);`, resolveDir: process.cwd(), loader: 'jsx' },
     alias: { '@': process.cwd() + '/src' },
     bundle: true, write: false, outfile: 'app.js', format: 'esm', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' }
   });
@@ -538,29 +559,33 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
     await page.getByRole('dialog').waitFor({ state: 'detached' });
   });
 
-  await t.test('直接映射：admin hash/tab、history 不膨胀、非 admin 看板可见', async t => {
-    const { page, requests } = await setup(t, '?admin#shares');
+  await t.test('直接映射：旧 #shares 深链直达公开看板、无雷达子 tab、history 不膨胀', async t => {
+    const { page, requests } = await setup(t, '?tab=adminRadar#shares');
     await page.locator('.shares-panel.nx-panel .nx-card').filter({ hasText: '159501' }).waitFor();
-    assert.equal(await page.getByRole('tab', { name: '份额新增' }).getAttribute('aria-selected'), 'true');
+    assert.equal(await page.getByRole('tab', { name: '份额新增' }).count(), 0);
+    assert.equal(await page.getByRole('tab', { name: '套利雷达' }).count(), 0);
     const length = await page.evaluate(() => history.length);
-    await page.getByRole('tab', { name: '套利雷达' }).click();
-    assert.equal(new URL(page.url()).hash, '#radar');
-    await page.getByRole('tab', { name: '份额新增' }).click();
-    assert.equal(new URL(page.url()).hash, '#shares');
-    assert.equal(await page.evaluate(() => history.length), length);
     await page.evaluate(() => {
       history.replaceState(history.state, '', '#radar');
       dispatchEvent(new HashChangeEvent('hashchange'));
     });
-    await page.locator('#tab-radar[aria-selected="true"]').waitFor();
+    await page.locator('.shares-panel').waitFor({ state: 'detached' });
+    assert.equal(await page.getByRole('tab', { name: '套利雷达' }).count(), 0);
     await page.evaluate(() => {
       history.replaceState(history.state, '', '#shares');
       dispatchEvent(new HashChangeEvent('hashchange'));
     });
-    await page.locator('#tab-shares[aria-selected="true"]').waitFor();
-    await page.goto(`${base}/?admin-denied#shares`);
     await page.locator('.shares-panel.nx-panel .nx-card').filter({ hasText: '159501' }).waitFor();
-    assert.equal(await page.getByRole('tab', { name: '份额新增' }).getAttribute('aria-selected'), 'true');
+    assert.equal(await page.evaluate(() => history.length), length);
+    await page.goto(`${base}/?tab=adminRadar&denied#shares`);
+    await page.locator('.shares-panel.nx-panel .nx-card').filter({ hasText: '159501' }).waitFor();
+    assert.equal(await page.getByRole('tab', { name: '份额新增' }).count(), 0);
+    await page.evaluate(() => {
+      history.replaceState(history.state, '', '#radar');
+      dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    await page.getByText('持仓兜底', { exact: true }).waitFor();
+    assert.equal(await page.locator('.shares-panel').count(), 0);
     assert.equal(requests.length, 0);
   });
 });

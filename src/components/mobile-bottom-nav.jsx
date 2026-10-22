@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BarChart3, Bell, BookOpen, ChevronRight, FlaskConical, House, LineChart, ListChecks, MoreHorizontal, Radar, Shuffle, UserRound, Wallet, X } from 'lucide-react';
+import { BarChart3, Bell, BookOpen, ChevronRight, FlaskConical, Gavel, House, LineChart, ListChecks, MoreHorizontal, Radar, Shuffle, UserRound, Wallet, X } from 'lucide-react';
 import { splitMobileBottomNavItems } from './mobile-bottom-nav-config.js';
 
 const ITEM_ICONS = {
@@ -13,6 +13,7 @@ const ITEM_ICONS = {
   articles: BookOpen,
   adminQuant: FlaskConical,
   adminRadar: Radar,
+  adminAuction: Gavel,
 };
 
 function MobileNavItem({ item, active, onSelect }) {

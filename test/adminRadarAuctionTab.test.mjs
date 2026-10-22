@@ -3,55 +3,62 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ADMIN_TAB_ORDER, PRIMARY_TAB_META, createPageLinks, getAdminTabs, isWorkspaceGroup } from '../src/app/screens.js';
+import { SCENARIOS } from '../src/app/scenarios.js';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const readSource = (relativePath) => fs.readFileSync(path.resolve(testDir, '..', relativePath), 'utf8');
 const radarSource = readSource('src/pages/AdminRadarExperience.jsx');
-const panelSource = readSource('src/pages/radar/AuctionBoardPanel.jsx');
+const auctionSource = readSource('src/pages/AdminAuctionExperience.jsx');
+const workspaceSource = readSource('src/pages/WorkspacePage.jsx');
 
-test('radar adds the auction tab after shares', () => {
-  assert.match(radarSource, /\{ key: 'shares', label: '份额新增', href: '#shares' \},\s*\{ key: 'auction', label: '竞价看板', href: '#auction' \}/);
-  assert.match(radarSource, /import AuctionBoardPanel from '\.\/radar\/AuctionBoardPanel\.jsx';/);
+test('auction is a top-level admin tab immediately after radar', () => {
+  assert.deepEqual(ADMIN_TAB_ORDER, ['adminQuant', 'adminRadar', 'adminAuction']);
+  assert.deepEqual(PRIMARY_TAB_META.adminAuction, { label: '竞价看板', hrefKey: 'adminAuction', adminOnly: true });
+  assert.equal(isWorkspaceGroup('adminAuction'), true);
+  assert.deepEqual(SCENARIOS.stock.visibleTabs.slice(-3), ADMIN_TAB_ORDER);
 });
 
-test('radar hash mapping handles auction and shares with radar as the fallback', () => {
-  const mapping = radarSource.match(/function getRadarTabFromHash\(hash\) \{([\s\S]*?)\n\}/);
-  assert.ok(mapping, 'radar defines one shared hash mapping function');
-  const resolveHash = new Function('hash', mapping[1]);
-  for (const [hash, expected] of [
-    ['#auction', 'auction'],
-    ['#shares', 'shares'],
-    ['#radar', 'radar'],
-    ['#unknown', 'radar'],
-    ['', 'radar'],
-    [undefined, 'radar']
-  ]) {
-    assert.equal(resolveHash(hash), expected, `hash=${hash}`);
+test('auction links point to the workspace in both page directories', () => {
+  for (const [inPagesDir, href] of [[false, './home.html?tab=adminAuction'], [true, '../home.html?tab=adminAuction']]) {
+    const links = createPageLinks({ inPagesDir });
+    assert.equal(links.adminAuction, href);
+    assert.deepEqual(getAdminTabs(links).at(-1), { key: 'adminAuction', label: '竞价看板', href });
   }
 });
 
-test('initial state and hashchange use the same radar hash mapping', () => {
-  assert.match(radarSource, /useState\(\(\) => getRadarTabFromHash\(typeof window !== 'undefined' \? window\.location\.hash : ''\)\)/);
-  assert.match(radarSource, /const syncHash = \(\) => setActiveTab\(getRadarTabFromHash\(window\.location\.hash\)\)/);
-  assert.match(radarSource, /window\.addEventListener\('hashchange', syncHash\)/);
-  assert.match(radarSource, /window\.removeEventListener\('hashchange', syncHash\)/);
+test('workspace registers the auction title, Gavel icon and lazy admin panel', () => {
+  assert.match(workspaceSource, /const WORKSPACE_TITLES = \{[^}]*adminAuction: '竞价看板'/);
+  assert.match(workspaceSource, /import \{[^}]*\bGavel\b[^}]*\} from 'lucide-react';/);
+  assert.match(workspaceSource, /const SIDEBAR_ICONS = \{[^}]*adminAuction: Gavel/);
+  assert.match(workspaceSource, /const AdminAuctionExperience = lazy\(\(\) => import\('\.\/AdminAuctionExperience\.jsx'\)\);/);
+  assert.match(workspaceSource, /case 'adminAuction':\s*return isAdminUser \? <AdminAuctionExperience \{\.\.\.sharedProps\} \/> : <HoldingsExperience \{\.\.\.sharedProps\} \/>;/);
 });
 
-test('auction panel has tab accessibility attributes and mounts only when selected', () => {
-  assert.match(radarSource, /<div role="tabpanel" id="panel-auction" aria-labelledby="tab-auction" hidden=\{activeTab !== 'auction'\} tabIndex=\{0\} className="mt-4">\s*\{activeTab === 'auction' && <AuctionBoardPanel \/>\}\s*<\/div>/);
+test('legacy radar shares hash renders SharesExperience before the admin radar guard', () => {
+  assert.match(workspaceSource, /case 'adminRadar':\s*if \(window\.location\.hash === '#shares'\) return <SharesExperience \/>;\s*return isAdminUser \? <AdminRadarExperience \{\.\.\.sharedProps\} \/> : <HoldingsExperience \{\.\.\.sharedProps\} \/>;/);
+});
+
+test('radar is a single admin panel without shares, auction or hash tabs', () => {
+  assert.doesNotMatch(radarSource, /份额新增|SharesExperience|PageTabs|AuctionBoardPanel|竞价看板|getRadarTabFromHash|hashchange|activeTab|useState|useEffect/);
+  assert.match(radarSource, /import \{ isAnalyticsAdmin \} from '\.\.\/app\/analytics\.js';/);
+  assert.match(radarSource, /if \(!isAnalyticsAdmin\(session\)\) \{\s*return <p[^>]*>当前账号没有权限。请使用 lovexl 登录后访问。<\/p>;/);
+  assert.match(radarSource, /<div className="mx-auto max-w-6xl min-w-0 p-4">\s*<RadarPanel session=\{session\} \/>\s*<\/div>/);
+  assert.equal(fs.existsSync(path.resolve(testDir, '../src/pages/radar/AuctionBoardPanel.jsx')), false);
 });
 
 test('auction iframe embeds the static board eagerly with an accessible title', () => {
-  assert.match(panelSource, /<section\b[^>]*aria-label="竞价看板"/);
-  assert.match(panelSource, /<iframe\b[^>]*title="纳指期指与ETF竞价看板"[^>]*src="\/auction-board\.html"[^>]*loading="eager"/);
-  assert.match(panelSource, /referrerPolicy="strict-origin-when-cross-origin"/);
+  assert.match(auctionSource, /export default function AdminAuctionExperience\(\)/);
+  assert.match(auctionSource, /<section\b[^>]*aria-label="竞价看板"/);
+  assert.match(auctionSource, /<iframe\b[^>]*title="纳指期指与ETF竞价看板"[^>]*src="\/auction-board\.html"[^>]*loading="eager"/);
+  assert.match(auctionSource, /referrerPolicy="strict-origin-when-cross-origin"/);
 });
 
 test('auction panel matches the article iframe container and height classes', () => {
   const articlesSource = readSource('src/pages/ArticlesExperience.jsx');
   for (const element of ['section', 'iframe']) {
     const classPattern = new RegExp(`<${element}\\b[^>]*className="([^"]+)"`);
-    const actual = panelSource.match(classPattern);
+    const actual = auctionSource.match(classPattern);
     const expected = articlesSource.match(classPattern);
     assert.ok(actual);
     assert.ok(expected);
@@ -63,16 +70,4 @@ test('public auction board exists with the supplied title', () => {
   const htmlPath = path.resolve(testDir, '../public/auction-board.html');
   assert.equal(fs.existsSync(htmlPath), true);
   assert.match(fs.readFileSync(htmlPath, 'utf8'), /<title>纳指期指与ETF竞价看板<\/title>/);
-});
-
-test('auction keeps the existing admin guard while shares remains public', () => {
-  assert.match(radarSource, /activeTab !== 'shares' && !isAnalyticsAdmin\(session\)/);
-  const condition = radarSource.match(/if \((.*?)\) \{\n {4}return <p/);
-  assert.ok(condition);
-  const denied = new Function('activeTab', 'session', 'isAnalyticsAdmin', `return ${condition[1]};`);
-  for (const tab of ['radar', 'auction']) {
-    assert.equal(denied(tab, null, () => false), true, `${tab} requires an admin`);
-    assert.equal(denied(tab, {}, () => true), false, `${tab} allows admins`);
-  }
-  assert.equal(denied('shares', null, () => false), false);
 });

@@ -9,6 +9,7 @@ export const MOBILE_BOTTOM_NAV_ITEMS = [
   { key: 'articles', label: '文章', subtitle: '基金科普指南与定投策略' },
   { key: 'adminQuant', label: '量化', subtitle: '量化策略回测与模拟盘', adminOnly: true },
   { key: 'adminRadar', label: '雷达', subtitle: '套利雷达与溢价监控', adminOnly: true },
+  { key: 'adminAuction', label: '竞价看板', subtitle: '纳指期指与 ETF 竞价行情', adminOnly: true },
 ];
 
 export const MOBILE_BOTTOM_NAV_MAX_TABS = 5;
