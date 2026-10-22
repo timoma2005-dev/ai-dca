@@ -43,6 +43,7 @@ export function resolveEtfPcfDailyTrigger({ cron, scheduledTime } = {}) {
 const ETF_PCF_SSE_STAGE_DEADLINE_MS = 60 * 1000;
 
 // 北京时间 09:00 顺序执行 SSE → SZSE → events，各阶段异常隔离。
+// SZSE 阶段只抓 TARGET_CODES 里的 159 代码（原来按代码顺序爬全市场约 1000 只，目标 159 要到 09:15 左右才轮到）。
 // 份额投影阶段：默认 20s 在 cron 里经常跑不到 projection（历史读取+两所份额下载），放宽到 120s。
 const ETF_PCF_EVENTS_STAGE_DEADLINE_MS = 120 * 1000;
 export async function runEtfPcfDailyRefresh({
@@ -75,7 +76,7 @@ export async function runEtfPcfDailyRefresh({
   }
   let szse; const pcfs = [];
   try {
-    szse = await szseRefresh({ env, scheduledTime, onSuccess: data => { if (TARGET_CODES.includes(data.code) && data.code.startsWith('159')) pcfs.push(data); } });
+    szse = await szseRefresh({ env, scheduledTime, codes: TARGET_CODES.filter(c => c.startsWith('159')), onSuccess: data => { if (TARGET_CODES.includes(data.code) && data.code.startsWith('159')) pcfs.push(data); } });
   } catch (e) {
     szse = { ok: false, reason: 'szse_stage_error', error: (e && e.message) || String(e) };
     console.log('[etf-pcf] scheduled stage crashed: ' + ((e && e.message) || e));
