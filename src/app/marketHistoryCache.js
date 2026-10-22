@@ -1,7 +1,10 @@
+import { getNearestTradingDayShanghai } from './holidaysCN.js';
+
 const DB_NAME = 'aiDcaMarketHistory';
 const DB_VERSION = 1;
 const STORE_NAME = 'history';
 const MAX_RECORDS = 300;
+const KLINE_RECENT_FETCH_MS = 30 * 60 * 1000;
 
 let dbPromise = null;
 
@@ -140,7 +143,19 @@ function coversRange(candles = [], startDate = '', endDate = '', { minCandles = 
   return Boolean(first && last && (!startDate || first <= startDate) && (!endDate || last >= endDate));
 }
 
-export async function readCachedKline({ symbol, timeframe = '1d', startDate = '', endDate = '', minCandles = 0 } = {}) {
+function isKlineCacheFresh({ candles = [], storedAt, timeframe = '1d', endDate = '', now = Date.now() } = {}) {
+  // Historical ranges and intraday candles retain their range-only cache policy.
+  if (endDate || String(timeframe || '1d').trim().split('|')[0] !== '1d') return true;
+  const latestDate = candles[candles.length - 1]?.date;
+  const latestTradingDay = getNearestTradingDayShanghai(shanghaiDateFromEpochSec(now / 1000));
+  if (latestDate && latestDate >= latestTradingDay) return true;
+  // A recent fetch may legitimately have no newer candles (e.g. a suspended fund).
+  const storedAtMs = Number(storedAt);
+  const age = now - storedAtMs;
+  return Number.isFinite(storedAtMs) && storedAtMs > 0 && age >= 0 && age <= KLINE_RECENT_FETCH_MS;
+}
+
+export async function readCachedKline({ symbol, timeframe = '1d', startDate = '', endDate = '', minCandles = 0, allowStale = false } = {}) {
   const key = cacheKey({ type: 'kline', symbol, timeframe });
   const record = await idbGet(key).catch(() => null);
   const dataSource = String(record?.payload?.source || record?.source || '').trim();
@@ -149,13 +164,16 @@ export async function readCachedKline({ symbol, timeframe = '1d', startDate = ''
   if (dataSource === 'eastmoney-direct') return null;
   const candles = normalizeCandles(record?.candles || []);
   if (!coversRange(candles, startDate, endDate, { minCandles })) return null;
+  const stale = !isKlineCacheFresh({ candles, storedAt: record?.storedAt, timeframe, endDate });
+  if (stale && !allowStale) return null;
   return {
     ...record?.payload,
+    ...(stale ? { stale: true } : {}),
     candles,
     dataSource,
     cached: true,
     source: 'indexeddb',
-    cache: { hit: true, source: 'indexeddb', stale: false }
+    cache: { hit: true, source: 'indexeddb', stale }
   };
 }
 
@@ -194,4 +212,4 @@ export async function clearMarketHistoryCache() {
   });
 }
 
-export const __internals = { cacheKey, normalizeCandles, coversRange, DB_NAME, STORE_NAME };
+export const __internals = { cacheKey, normalizeCandles, coversRange, isKlineCacheFresh, DB_NAME, STORE_NAME };

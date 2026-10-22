@@ -229,11 +229,25 @@ async function fetchKlineUncached(symbol, { timeframe = '1d', limit = '', minCan
   const requestedLimit = Number(limit);
   const requiredCandles = Number(minCandles) || (Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 900) : 0);
   const cacheTimeframe = session ? `${timeframe}|session=${session}` : timeframe;
+  const cacheOptions = { symbol, timeframe: cacheTimeframe, minCandles: requiredCandles };
   if (!forceLive) {
-    const cachedLocal = await readCachedKline({ symbol, timeframe: cacheTimeframe, minCandles: requiredCandles }).catch(() => null);
+    const cachedLocal = await readCachedKline(cacheOptions).catch(() => null);
     if (cachedLocal?.candles?.length) return sliceKlinePayload(cachedLocal, limit);
   }
-  const live = await getJson('/kline/' + encodeURIComponent(symbol) + '?' + params.toString());
+  let live;
+  try {
+    live = await getJson('/kline/' + encodeURIComponent(symbol) + '?' + params.toString());
+  } catch (error) {
+    const cachedLocal = await readCachedKline({ ...cacheOptions, allowStale: true }).catch(() => null);
+    if (cachedLocal?.candles?.length) {
+      return sliceKlinePayload({
+        ...cachedLocal,
+        stale: true,
+        cache: { ...cachedLocal.cache, stale: true },
+      }, limit);
+    }
+    throw error;
+  }
   if (!forceLive && live?.candles?.length) writeCachedKline({ symbol, timeframe: cacheTimeframe, payload: live }).catch(() => {});
   return live;
 }
