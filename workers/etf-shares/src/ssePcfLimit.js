@@ -11,7 +11,7 @@
 // cron 刷新共同使用，三处不各维护一份；不做 universe 探测，不读写 etf-pcf-universe:v1。
 //
 // KV：复用 FUND_LIMIT_KV，结果 key 为 etf-pcf:<code>:<yyyymmdd>（51xxxx 与 159xxx 不冲突），
-// 固定 TTL 24h；入库身份日期一律取接口 TRADING_DAY（清单日期），绝不使用抓取日期。
+// TTL 400 天（与深交所一致，次日环比要读前一限额日；原 24h 过期后 513 会变待对比）；入库身份日期一律取接口 TRADING_DAY（清单日期），绝不使用抓取日期。
 import { mapLimit } from './util.js';
 
 // plan 决策 (b)：worker 内硬编码冻结名单，排序固定，三个入口共用这一份。
@@ -24,7 +24,7 @@ const SSE_PCF_SOURCE_URL_BASE =
   'https://query.sse.com.cn/commonQuery.do?isPagination=false&FUNDID2=';
 const SSE_PCF_SOURCE_SQL_ID = 'COMMON_SSE_CP_JJLB_ETFJJGK_GGSGSHQD_JBXX_C';
 const SSE_PCF_REFERER = 'https://www.sse.com.cn/';
-const SSE_PCF_TTL_SECONDS = 24 * 3600;
+const SSE_PCF_TTL_SECONDS = 400 * 86400;
 const SSE_PCF_TTL_MS = SSE_PCF_TTL_SECONDS * 1000;
 const SSE_PCF_FETCH_TIMEOUT_MS = 5000;
 const SSE_PCF_MAX_BYTES = 1024 * 1024; // 1 MiB

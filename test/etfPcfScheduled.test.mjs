@@ -530,11 +530,11 @@ test('新 cron 0 1 * * * 经 index 分发：先上交所 5 只刷新，再深交
   }
   assert.ok(mock.maxActiveSse <= 2, 'SSE 并发 max=' + mock.maxActiveSse);
 
-  // SSE 结果：清单日期（TRADING_DAY）入 key，TTL 24h，时间戳来自 scheduledTime。
+  // SSE 结果：清单日期（TRADING_DAY）入 key，TTL 400 天，时间戳来自 scheduledTime。
   for (const code of SSE_PCF_CODES) {
     const puts = kv.putCalls.filter((p) => p.key === 'etf-pcf:' + code + ':20261013');
     assert.equal(puts.length, 1, code);
-    assert.equal(puts[0].options.expirationTtl, 86400, code);
+    assert.equal(puts[0].options.expirationTtl, 400 * 86400, code);
     const data = JSON.parse(puts[0].value);
     assert.equal(data.source, 'sse_pcf', code);
     assert.equal(data.tradingDay, '20261013', code);

@@ -599,7 +599,7 @@ test('POST SSE 缺省 date：用接口 TRADING_DAY 入库，响应日期与写�
   assert.equal(fetchMock.mock.calls.length, 1);
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:513100:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, 86400);
+  assert.equal(kv.putCalls[0].options.expirationTtl, 400 * 86400);
 
   // 抓取时间在上海 10-14，但源站 TRADING_DAY 仍是 20261013：只写清单日，不伪造当天。
   const nextDay = new FakeKV();
