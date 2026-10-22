@@ -2,17 +2,25 @@
  * 管理员纳指 ETF 套利雷达（测试版）
  * 数据来自 /api/notify/nasdaq-radar（工作日 21:35 计划计算后写入）
  * 改版后仅保留管理员门控与 Tab 挂载；面板实现见 src/pages/radar/*。
+ * 竞价看板 Tab 来自静态页 public/auction-board.html。
  */
 import { useEffect, useState } from 'react';
 import { isAnalyticsAdmin } from '../app/analytics.js';
 import SharesExperience from './SharesExperience.jsx';
+import AuctionBoardPanel from './radar/AuctionBoardPanel.jsx';
 import RadarPanel from './radar/RadarPanel.jsx';
 import { PageTabs } from '../components/experience-ui.jsx';
 
+function getRadarTabFromHash(hash) {
+  if (hash === '#shares') return 'shares';
+  if (hash === '#auction') return 'auction';
+  return 'radar';
+}
+
 export function AdminRadarExperience({ session }) {
-  const [activeTab, setActiveTab] = useState(() => typeof window !== 'undefined' && window.location.hash === '#shares' ? 'shares' : 'radar');
+  const [activeTab, setActiveTab] = useState(() => getRadarTabFromHash(typeof window !== 'undefined' ? window.location.hash : ''));
   useEffect(() => {
-    const syncHash = () => setActiveTab(window.location.hash === '#shares' ? 'shares' : 'radar');
+    const syncHash = () => setActiveTab(getRadarTabFromHash(window.location.hash));
     window.addEventListener('hashchange', syncHash);
     return () => window.removeEventListener('hashchange', syncHash);
   }, []);
@@ -25,7 +33,8 @@ export function AdminRadarExperience({ session }) {
         tablistLabel="管理员雷达"
         tabs={[
           { key: 'radar', label: '套利雷达', href: '#radar' },
-          { key: 'shares', label: '份额新增', href: '#shares' }
+          { key: 'shares', label: '份额新增', href: '#shares' },
+          { key: 'auction', label: '竞价看板', href: '#auction' }
         ]}
         activeKey={activeTab}
         onSelect={(key) => {
@@ -38,6 +47,9 @@ export function AdminRadarExperience({ session }) {
       </div>
       <div role="tabpanel" id="panel-shares" aria-labelledby="tab-shares" hidden={activeTab !== 'shares'} tabIndex={0} className="mt-4">
         {activeTab === 'shares' && <SharesExperience />}
+      </div>
+      <div role="tabpanel" id="panel-auction" aria-labelledby="tab-auction" hidden={activeTab !== 'auction'} tabIndex={0} className="mt-4">
+        {activeTab === 'auction' && <AuctionBoardPanel />}
       </div>
     </div>
   );
