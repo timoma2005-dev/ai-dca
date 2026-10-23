@@ -21,7 +21,8 @@ test('users panel loads the empty query on mount and reuses a directly callable 
 test('users show formatted last activity or never; the client requests 200 users', () => {
   assert.match(users, /最后活跃 \{user\.lastActiveAt \? formatTime\(user\.lastActiveAt\) : '从未'\}/);
   assert.match(api, /searchUsers:.*limit=200/);
-  assert.match(api, /listGuests: \(\) => request\('GET', '\/guests'\)/);
+  assert.match(api, /fetch\(apiUrl\('\/api\/sync\/analytics\/guests\?limit=200'\)/);
+  assert.doesNotMatch(api, /request\('GET', '\/guests'\)/);
 });
 
 test('guest panel loads once, renders aggregated rows, and preserves full visitor IDs in titles', () => {

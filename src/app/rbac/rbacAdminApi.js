@@ -26,7 +26,24 @@ const enc = encodeURIComponent;
 
 export const rbacAdminApi = {
   searchUsers: (q) => request('GET', `/users?q=${enc(q || '')}&limit=200`),
-  listGuests: () => request('GET', '/guests'),
+  // 分析事件存于 CF sync Worker 的 D1，游客聚合从 CF 接口读取。
+  listGuests: async () => {
+    const token = loadCloudSession()?.accessToken || '';
+    const headers = { accept: 'application/json' };
+    if (token) headers.authorization = `Bearer ${token}`;
+    const response = await fetch(apiUrl('/api/sync/analytics/guests?limit=200'), {
+      method: 'GET',
+      headers,
+      credentials: 'same-origin',
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data?.message || `请求失败：HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return data;
+  },
   grantRole: (userId, role, expiresAt) => request('POST', `/users/${enc(userId)}/roles`, { role, expiresAt: expiresAt || null }),
   revokeRole: (userId, role) => request('DELETE', `/users/${enc(userId)}/roles/${enc(role)}`, {}),
   listRoles: () => request('GET', '/roles'),

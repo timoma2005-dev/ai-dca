@@ -112,3 +112,29 @@
   `npm run check:refactor` 保持同一既有失败；`npm run lint -- --quiet` 保持原有 12 个错误；
   `npx --no-install eslint src/app/loadAccountMenu.js src/pages/WorkspacePage.jsx --quiet`
   与 `git diff --check` 通过。未运行或修复前端全量测试基线。
+
+## 任务 4：CF 侧游客聚合（2026-10-23 晚 dudu 拍板）
+
+- 背景：任务 2 的游客面板读 CN cn-data 分析库，但生产分析事件全走 CF sync worker 进 D1，
+  CN 三表恒空（探针实测：公网 track 被 CF 接走，直连 8081 才落 CN 库）。
+- 方案：workers/sync 新增 GET /api/sync/analytics/guests，聚合 D1 analytics_daily_users
+  中 is_visitor_only=1 的 identity（与 CN 侧相同 SQL），返回形状与 CN /admin/guests 一致。
+  鉴权沿用 worker 现有模式：Bearer token → D1 sessions 查 user → users 查 username →
+  isAdminUsername（ADMIN_USERNAMES 硬编码名单，RBAC 化不在本任务范围）。
+- 前端：rbacAdminApi.listGuests 改调该 CF 接口（apiUrl('/api/sync/analytics/guests')），
+  游客面板组件不变；CN /admin/guests 后端保留（前端不再调用）。
+- 部署：wrangler deploy（一次性 CF token 走环境变量，用完丢弃）；前端照常 release。
+- 验证：worker 测试覆盖 admin/非 admin/无 token 三种情况；上线后无 token 401、
+  非管理员 403，并用同一 token 对 D1 跑相同 SQL 核对聚合数值。
+
+- [x] 任务 4 源码实现与本地验证完成：CF guests 端点复用 `requireUser`（Bearer SHA-256、
+  未过期 sessions 联查 users）和 `isAdminUsername`，沿用 `json`/CORS；limit 默认 200、
+  范围 1–500，非法值回退默认。前端 `listGuests` 独立请求 CF，保留 CN `/admin/guests`。
+- 测试：`node --test workers/sync/test/*.test.mjs` 全部 56 项通过（当前 Node 24 不支持
+  直接传测试目录，显式 glob 覆盖该目录全部三个测试文件）；游客用例覆盖聚合字段、排序、
+  活跃天数、排除用户、401/403、过期/无主会话、limit 和 CORS。
+  `node --test test/rbacAdminPage.test.mjs` 4/4 通过，`npm run build:app` 通过；
+  另行运行客户端检查，验证 CF URL、Bearer token、返回形状及 HTTP 错误的 status/message。
+- 检查：前端修改文件的 ESLint 与 `git diff --check` 通过；`npm run check:refactor`
+  仍因原有 NotifyExperience.jsx 938 > 880 行失败，`npm run lint -- --quiet`
+  仍报原有 12 个错误，涉及文件均未修改。本任务只提交一次，不 push、不部署；线上验证待发布后执行。

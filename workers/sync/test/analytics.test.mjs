@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
-import { pruneOldAnalyticsEvents } from '../src/index.js';
+import worker, { pruneOldAnalyticsEvents } from '../src/index.js';
 
 function createCleanupFixture(changes) {
   const calls = [];
@@ -141,4 +142,123 @@ test('daily analytics aggregate is a no-op for empty input', async () => {
   const { env, statements } = createAggregateFixture();
   await updateDailyAnalyticsAggregate(env, []);
   assert.equal(statements.length, 0);
+});
+
+function createGuestsFixture() {
+  const statements = [];
+  const users = new Map([
+    ['user-admin', { id: 'user-admin', username: 'lovexl' }],
+    ['user-regular', { id: 'user-regular', username: 'regular-user' }],
+  ]);
+  const sessions = new Map([
+    ['admin-token', 'user-admin'],
+    ['regular-token', 'user-regular'],
+    ['expired-token', 'user-admin'],
+    ['orphan-token', 'missing-user'],
+  ].map(([token, userId]) => [createHash('sha256').update(token).digest('hex'), {
+    user_id: userId,
+    expires_at: token === 'expired-token' ? '2000-01-01T00:00:00.000Z' : new Date(Date.now() + 3600000).toISOString(),
+  }]));
+  const analyticsDailyUsers = [
+    { identity: 'visitor-older', event_date: '2026-10-20', is_visitor_only: 1 },
+    { identity: 'visitor-older', event_date: '2026-10-21', is_visitor_only: 1 },
+    { identity: 'visitor-latest', event_date: '2026-10-22', is_visitor_only: 1 },
+    { identity: 'visitor-latest', event_date: '2026-10-19', is_visitor_only: 1 },
+    { identity: 'visitor-latest', event_date: '2026-10-23', is_visitor_only: 1 },
+    { identity: 'user-regular', event_date: '2026-10-23', is_visitor_only: 0 },
+  ];
+  const env = {
+    DB: {
+      prepare(sql) {
+        const query = sql.replace(/\s+/g, ' ').trim();
+        const exec = (args = []) => ({
+          async run() {
+            assert.match(query, /^(CREATE TABLE|CREATE INDEX|ALTER TABLE)/);
+            return { success: true };
+          },
+          async first() {
+            assert.equal(query, 'SELECT users.id, users.username FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token_hash = ? AND sessions.expires_at > ?');
+            const session = sessions.get(args[0]);
+            return session && session.expires_at > args[1] ? users.get(session.user_id) || null : null;
+          },
+          async all() {
+            statements.push({ sql: query, args });
+            assert.equal(query, 'SELECT identity AS visitorId, MIN(event_date) AS firstSeenDate, MAX(event_date) AS lastActiveDate, COUNT(*) AS activeDays FROM analytics_daily_users WHERE is_visitor_only = 1 GROUP BY identity ORDER BY lastActiveDate DESC LIMIT ?');
+            const datesByVisitor = new Map();
+            for (const row of analyticsDailyUsers) {
+              if (row.is_visitor_only !== 1) continue;
+              const dates = datesByVisitor.get(row.identity) || [];
+              dates.push(row.event_date);
+              datesByVisitor.set(row.identity, dates);
+            }
+            const results = [...datesByVisitor].map(([visitorId, dates]) => {
+              dates.sort();
+              return { visitorId, firstSeenDate: dates[0], lastActiveDate: dates.at(-1), activeDays: dates.length };
+            }).sort((a, b) => b.lastActiveDate.localeCompare(a.lastActiveDate)).slice(0, args[0]);
+            return { results };
+          },
+        });
+        return { ...exec(), bind: (...args) => exec(args) };
+      },
+    },
+  };
+  return { env, statements };
+}
+
+function guestsRequest(token, query = '') {
+  const headers = { origin: 'https://cn.freebacktrack.tech' };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return new Request(`https://api.freebacktrack.tech/api/sync/analytics/guests${query}`, { headers });
+}
+
+test('admin guests endpoint aggregates visitor-only identities across days in last-active order', async () => {
+  const { env, statements } = createGuestsFixture();
+  const response = await worker.fetch(guestsRequest('admin-token'), env);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8');
+  assert.equal(response.headers.get('access-control-allow-origin'), 'https://cn.freebacktrack.tech');
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    available: true,
+    guests: [
+      { visitorId: 'visitor-latest', firstSeenDate: '2026-10-19', lastActiveDate: '2026-10-23', activeDays: 3 },
+      { visitorId: 'visitor-older', firstSeenDate: '2026-10-20', lastActiveDate: '2026-10-21', activeDays: 2 },
+    ],
+  });
+  assert.deepEqual(statements[0].args, [200]);
+});
+
+test('guests endpoint rejects a valid non-admin session without querying analytics', async () => {
+  const { env, statements } = createGuestsFixture();
+  const response = await worker.fetch(guestsRequest('regular-token'), env);
+  assert.equal(response.status, 403);
+  assert.equal(response.headers.get('access-control-allow-origin'), 'https://cn.freebacktrack.tech');
+  assert.deepEqual(statements, []);
+});
+
+test('guests endpoint requires an unexpired session belonging to an existing user', async (t) => {
+  for (const token of [undefined, 'invalid-token', 'expired-token', 'orphan-token']) {
+    await t.test(token || 'no token', async () => {
+      const { env, statements } = createGuestsFixture();
+      const response = await worker.fetch(guestsRequest(token), env);
+      assert.equal(response.status, 401);
+      assert.equal(response.headers.get('access-control-allow-origin'), 'https://cn.freebacktrack.tech');
+      assert.deepEqual(statements, []);
+    });
+  }
+});
+
+test('guests endpoint defaults invalid limits and clamps integer limits to 1–500', async (t) => {
+  for (const [value, expected] of [
+    ['', 200], [' ', 200], ['invalid', 200], ['5abc', 200], ['1.5', 200],
+    ['Infinity', 200], ['NaN', 200], ['0', 1], ['-5', 1], ['1', 1], ['500', 500], ['999', 500],
+  ]) {
+    await t.test(JSON.stringify(value), async () => {
+      const { env, statements } = createGuestsFixture();
+      const response = await worker.fetch(guestsRequest('admin-token', `?limit=${encodeURIComponent(value)}`), env);
+      assert.equal(response.status, 200);
+      assert.deepEqual(statements[0].args, [expected]);
+      assert.equal((await response.json()).guests.length, Math.min(expected, 2));
+    });
+  }
 });

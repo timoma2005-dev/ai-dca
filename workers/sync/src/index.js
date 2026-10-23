@@ -318,6 +318,19 @@ async function handleTrackAnalytics(request, env, origin) {
   return json({ ok: true, accepted }, { origin });
 }
 
+async function handleAnalyticsGuests(request, env, origin) {
+  const user = await requireUser(request, env);
+  if (!user) return json({ message: '未登录' }, { status: 401, origin });
+  if (!isAdminUsername(user.username)) return json({ message: '无管理员权限' }, { status: 403, origin });
+  const requestedLimit = Number(new URL(request.url).searchParams.get('limit')?.trim() || 200);
+  const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 200;
+  const result = await env.DB.prepare(`SELECT identity AS visitorId, MIN(event_date) AS firstSeenDate,
+    MAX(event_date) AS lastActiveDate, COUNT(*) AS activeDays
+    FROM analytics_daily_users WHERE is_visitor_only = 1
+    GROUP BY identity ORDER BY lastActiveDate DESC LIMIT ?`).bind(limit).all();
+  return json({ ok: true, available: true, guests: result?.results || [] }, { origin });
+}
+
 async function handleRegister(request, env, origin) {
   const body = await readBody(request);
   const username = normalizeUsername(body.username);
@@ -556,6 +569,7 @@ export default {
     const url = new URL(request.url);
     try {
       if (request.method === 'POST' && url.pathname === '/api/sync/analytics/track') return handleTrackAnalytics(request, env, origin);
+      if (request.method === 'GET' && url.pathname === '/api/sync/analytics/guests') return handleAnalyticsGuests(request, env, origin);
       if (request.method === 'POST' && url.pathname === '/api/sync/auth/register') return handleRegister(request, env, origin);
       if (request.method === 'POST' && url.pathname === '/api/sync/auth/login') return handleLogin(request, env, origin);
       if (request.method === 'POST' && url.pathname === '/api/sync/internal/sync-auth') return handleInternalAuthSync(request, env, origin);
