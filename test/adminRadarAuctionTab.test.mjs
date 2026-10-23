@@ -32,7 +32,7 @@ test('workspace registers the auction title, Gavel icon and lazy admin panel', (
   assert.match(workspaceSource, /import \{[^}]*\bGavel\b[^}]*\} from 'lucide-react';/);
   assert.match(workspaceSource, /const SIDEBAR_ICONS = \{[^}]*adminAuction: Gavel/);
   assert.match(workspaceSource, /const AdminAuctionExperience = lazy\(\(\) => import\('\.\/AdminAuctionExperience\.jsx'\)\);/);
-  assert.match(workspaceSource, /case 'adminAuction':\s*return isAdminUser \? <AdminAuctionExperience \{\.\.\.sharedProps\} \/> : <HoldingsExperience \{\.\.\.sharedProps\} \/>;/);
+  assert.match(workspaceSource, /case 'adminAuction':\s*return canAccessTab\('adminAuction'\) \? <AdminAuctionExperience \{\.\.\.sharedProps\} \/> : <HoldingsExperience \{\.\.\.sharedProps\} \/>;/);
 });
 
 test('legacy radar shares hash renders SharesExperience before the admin radar guard', () => {

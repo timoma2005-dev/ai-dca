@@ -63,3 +63,11 @@
 ## 2026-10-23 静态页内容更新（dudu 提供新版文件）
 - dudu 提供新版 HTML 替换 `public/auction-board.html`，新 SHA-256 `7f8962e5adee90b6489af87e675e9beb77fd36533849abafaa08a2a8b17cb238`。
 - 改动要点：溢价超阈值的推算停牌改为最多到 10:30（37800 秒），10:30 后不再顺延，之后只认行情真实停牌标志；纪律文案同步。
+
+## 2026-10-23 单账号竞价顶级 tab 授权
+
+- 为 auth 库规范化用户名 `551668745qq.com` 单独开放 `adminAuction`（竞价看板），不加入 `ADMIN_USERS`；`adminQuant` 与 `adminRadar` 对该账号仍不可见、不可达。全管理员 `lovexl` 以及现有 `session.isAdmin` 权限保持不变。
+- `analytics.js` 新增独立的 `ADMIN_AUCTION_USERS` 与 `canAccessAdminAuction`：先放行现有全管理员，否则 trim、转小写并兼容移除邮箱输入中的 `@`，再匹配规范化白名单。
+- `WorkspacePage` 使用统一 tab 权限谓词覆盖侧栏可见项、当前 tab 守卫、tab 选择与竞价面板渲染；两处公开份额 `isPublicShares` 例外保持原样。GlobalSearch 原本没有竞价条目，本次新增并通过 `showAuctionTab` 单独控制；移动端通过末尾默认关闭的 `canAccessAuction` 参数同步控制直接入口与“更多”菜单。
+- 这是与现有管理员体系同级的界面层门控，不修改 `services/auth`，不新增静态页 URL 的服务端拦截。`public/auction-board.html` 作为静态资源仍可直接通过 `/auction-board.html` 访问，这是既有事实；本次不修改该文件。
+- 行为测试直接导入 `analytics.js`，覆盖规范化账号、带 `@` 与空格输入、全管理员和拒绝场景，并验证单 tab 授权不提升全管理员权限；源码及工作台、搜索、移动导航行为测试覆盖透传和其他管理员 tab 的拒绝。仅修改源码、计划和测试并验证，不 commit、push 或 release。

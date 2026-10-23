@@ -11,6 +11,7 @@ const MAX_PENDING_EVENTS = 1000;
 const ANALYTICS_BATCH_SIZE = 20;
 const ANALYTICS_FLUSH_INTERVAL_MS = 30_000;
 const ADMIN_USERS = new Set(['lovexl']);
+const ADMIN_AUCTION_USERS = new Set(['551668745qq.com']);
 const SESSION_START_KEY = 'aiDcaAnalyticsSessionStarted_v1';
 const OPT_OUT_KEY = 'aiDcaAnalyticsOptOut_v1';
 const EVENT_STORE_RETRY_LIMITS = [MAX_EVENTS, 1000, 250, 50];
@@ -425,6 +426,13 @@ export function isAnalyticsAdmin(session = readAnalyticsSession()) {
   if (session?.isAdmin) return true;
   const username = String(session?.username || '').trim().toLowerCase();
   return ADMIN_USERS.has(username);
+}
+
+export function canAccessAdminAuction(session = readAnalyticsSession()) {
+  if (isAnalyticsAdmin(session)) return true;
+  // auth 库的规范化用户名不含 @，同时兼容邮箱形式的输入。
+  const username = String(session?.username || '').trim().toLowerCase().replace(/@/g, '');
+  return ADMIN_AUCTION_USERS.has(username);
 }
 
 export function trackAnalyticsEvent(type, meta = {}) {

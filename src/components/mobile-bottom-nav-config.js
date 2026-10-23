@@ -14,13 +14,11 @@ export const MOBILE_BOTTOM_NAV_ITEMS = [
 
 export const MOBILE_BOTTOM_NAV_MAX_TABS = 5;
 
-export function resolveMobileBottomNavItems(visibleTabs = null, isAdmin = false) {
-  if (!Array.isArray(visibleTabs)) {
-    return MOBILE_BOTTOM_NAV_ITEMS.filter((item) => isAdmin || !item.adminOnly);
-  }
-  const visibleSet = new Set(visibleTabs);
+export function resolveMobileBottomNavItems(visibleTabs = null, isAdmin = false, canAccessAuction = false) {
+  const visibleSet = Array.isArray(visibleTabs) ? new Set(visibleTabs) : null;
   return MOBILE_BOTTOM_NAV_ITEMS.filter(
-    (item) => visibleSet.has(item.key) && (isAdmin || !item.adminOnly),
+    (item) => (!visibleSet || visibleSet.has(item.key))
+      && (!item.adminOnly || isAdmin || (item.key === 'adminAuction' && canAccessAuction)),
   );
 }
 
@@ -28,8 +26,9 @@ export function splitMobileBottomNavItems(
   visibleTabs = null,
   maxTabs = MOBILE_BOTTOM_NAV_MAX_TABS,
   isAdmin = false,
+  canAccessAuction = false,
 ) {
-  const items = resolveMobileBottomNavItems(visibleTabs, isAdmin);
+  const items = resolveMobileBottomNavItems(visibleTabs, isAdmin, canAccessAuction);
   const safeMaxTabs = Math.max(1, Number(maxTabs) || MOBILE_BOTTOM_NAV_MAX_TABS);
   if (items.length <= safeMaxTabs) {
     return { directItems: items, overflowItems: [] };

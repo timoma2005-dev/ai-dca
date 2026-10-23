@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BarChart3,
   Bell,
+  Gavel,
   Search,
   Shuffle,
   Wallet,
@@ -16,6 +17,7 @@ const TAB_ENTRIES = [
   { key: 'tradePlans', label: '交易计划', desc: '加仓 / 定投策略', icon: BarChart3, keywords: 'tradeplans plans jihua dca' },
   { key: 'fundSwitch', label: '基金切换', desc: '切换链路与执行', icon: Shuffle, keywords: 'fundswitch switch qiehuan' },
   { key: 'notify', label: '通知', desc: '推送配置与状态', icon: Bell, keywords: 'notify push tongzhi' },
+  { key: 'adminAuction', label: '竞价看板', desc: '纳指期指与 ETF 竞价行情', icon: Gavel, keywords: 'adminauction auction jingjia', adminOnly: true },
 ];
 
 function pickFundsFromLedger(state) {
@@ -42,7 +44,7 @@ function kindLabel(kind) {
   return kind || '';
 }
 
-export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, showAdminTabs = false }) {
+export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, showAdminTabs = false, showAuctionTab = false }) {
   const [query, setQuery] = useState('');
   const [funds, setFunds] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -81,13 +83,15 @@ export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, showAdm
   const q = query.trim().toLowerCase();
 
   const tabResults = useMemo(() => {
-    const visibleEntries = TAB_ENTRIES.filter((tab) => !tab.adminOnly || showAdminTabs);
+    const visibleEntries = TAB_ENTRIES.filter(
+      (tab) => !tab.adminOnly || showAdminTabs || (tab.key === 'adminAuction' && showAuctionTab),
+    );
     if (!q) return visibleEntries;
     return visibleEntries.filter((tab) => {
       const hay = `${tab.label} ${tab.desc || ''} ${tab.key} ${tab.keywords || ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [q, showAdminTabs]);
+  }, [q, showAdminTabs, showAuctionTab]);
 
   const fundResults = useMemo(() => {
     if (!q) return [];

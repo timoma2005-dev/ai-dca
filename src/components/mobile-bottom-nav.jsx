@@ -73,16 +73,17 @@ export function MobileBottomNav({
   unreadCount = 0,
   hidden = false,
   isAdmin = false,
+  canAccessAuction = false,
 }) {
   const [{ directItems, overflowItems }, setItems] = useState(() =>
-    splitMobileBottomNavItems(visibleTabs, undefined, isAdmin),
+    splitMobileBottomNavItems(visibleTabs, undefined, isAdmin, canAccessAuction),
   );
   const [moreOpen, setMoreOpen] = useState(false);
   const overflowActive = overflowItems.some((item) => item.key === activeKey);
 
   useEffect(() => {
-    setItems(splitMobileBottomNavItems(visibleTabs, undefined, isAdmin));
-  }, [visibleTabs, isAdmin]);
+    setItems(splitMobileBottomNavItems(visibleTabs, undefined, isAdmin, canAccessAuction));
+  }, [visibleTabs, isAdmin, canAccessAuction]);
 
   useEffect(() => {
     if (hidden) setMoreOpen(false);

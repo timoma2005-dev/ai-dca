@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowUp, BarChart3, Bell, BookOpen, FlaskConical, Gavel, House, LineChart, ListChecks, Radar, Shuffle, Trash2, Wallet, Wrench, X } from 'lucide-react';
 import { DEFAULT_WORKSPACE_TAB, LEGACY_TAB_REDIRECTS, WORKSPACE_TAB_META, createPageLinks, getPrimaryTabs, getAdminTabs, isWorkspaceGroup } from '../app/screens.js';
 import { ConsoleLayout } from '../components/console-layout.jsx';
@@ -11,7 +11,7 @@ import { LEGACY_LEDGER_KEY, LEDGER_KEY, clearDemoData, readDemoDataMeta } from '
 import { readWorkspacePrefs, switchScenario } from '../app/workspacePrefs.js';
 import { getScenario } from '../app/scenarios.js';
 import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession } from '../app/authSession.js';
-import { isAnalyticsAdmin, trackPageEngagement, trackPageView, trackSessionHeartbeat, trackSessionStart } from '../app/analytics.js';
+import { canAccessAdminAuction, isAnalyticsAdmin, trackPageEngagement, trackPageView, trackSessionHeartbeat, trackSessionStart } from '../app/analytics.js';
 import { saveWorkspaceReturn } from '../app/workspaceReturn.js';
 import { CONVERSION_PROMPT_EVENT } from '../app/conversionPrompts.js';
 import { ConversionPromptCard } from '../components/conversion-prompt-card.jsx';
@@ -210,6 +210,11 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   const selectedScenario = getScenario(currentScenarioKey);
   const isAdminUser = isAnalyticsAdmin(cloudSession);
+  const canAccessAuction = canAccessAdminAuction(cloudSession);
+  const canAccessTab = useCallback((tabKey) => {
+    if (!WORKSPACE_TAB_META[tabKey]?.adminOnly) return true;
+    return tabKey === 'adminAuction' ? canAccessAuction : isAdminUser;
+  }, [canAccessAuction, isAdminUser]);
   const currentScenario = selectedScenario.requireAdmin && !isAdminUser ? getScenario('stock') : selectedScenario;
 
   useEffect(() => {
@@ -387,12 +392,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
       const allTabs = currentScenario.visibleTabs
         .map((key) => tabMap.get(key))
         .filter(Boolean)
-        .filter((tab) => {
-          if (WORKSPACE_TAB_META[tab.key]?.adminOnly && !isAdminUser) {
-            return false;
-          }
-          return true;
-        })
+        .filter((tab) => canAccessTab(tab.key))
         .map((tab) => ({
           ...tab,
           icon: SIDEBAR_ICONS[tab.key]
@@ -404,17 +404,17 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
       return { primaryNav, adminNav };
     },
-    [links, isAdminUser, currentScenario]
+    [links, canAccessTab, currentScenario]
   );
   const heroTitle = WORKSPACE_TITLES[activeTab] || WORKSPACE_TITLES.strategy;
 
   useEffect(() => {
     const hash = typeof window !== 'undefined' ? window.location.hash : '';
     const isPublicShares = activeTab === 'adminRadar' && hash === '#shares';
-    if (!isPublicShares && WORKSPACE_TAB_META[activeTab]?.adminOnly && !isAdminUser) {
+    if (!isPublicShares && !canAccessTab(activeTab)) {
       setActiveTab(resolveDefaultWorkspaceTab(DEFAULT_WORKSPACE_TAB));
     }
-  }, [activeTab, isAdminUser]);
+  }, [activeTab, canAccessTab]);
 
   useEffect(() => {
     document.title = heroTitle;
@@ -502,7 +502,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   function handleSelectTab(nextTab, options = {}) {
     const normalizedTab = normalizeWorkspaceTab(nextTab);
     const isPublicShares = normalizedTab === 'adminRadar' && options.hash === '#shares';
-    if (!isPublicShares && WORKSPACE_TAB_META[normalizedTab]?.adminOnly && !isAdminUser) {
+    if (!isPublicShares && !canAccessTab(normalizedTab)) {
       return;
     }
     const hash = typeof options.hash === 'string' ? options.hash : '';
@@ -638,7 +638,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         if (window.location.hash === '#shares') return <SharesExperience />;
         return isAdminUser ? <AdminRadarExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
       case 'adminAuction':
-        return isAdminUser ? <AdminAuctionExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
+        return canAccessTab('adminAuction') ? <AdminAuctionExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
       case 'holdings':
         return <HoldingsExperience {...sharedProps} />;
       default:
@@ -706,6 +706,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         accountSubtitle={cloudSession?.accessToken ? '管理账号、云端备份与同步' : '登录账号，管理云端同步'}
         unreadCount={unreadCount}
         isAdmin={isAdminUser}
+        canAccessAuction={canAccessAuction}
       />
       <Suspense fallback={null}>
         <AccountMenu
@@ -746,6 +747,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
             open={globalSearchOpen}
             onClose={() => setGlobalSearchOpen(false)}
             showAdminTabs={isAdminUser}
+            showAuctionTab={canAccessAuction}
             onSelectTab={(key) => handleSelectTab(key)}
             onSelectFund={(code) => {
               handleSelectTab('holdings');
