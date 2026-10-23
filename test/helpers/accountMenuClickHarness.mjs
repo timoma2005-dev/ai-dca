@@ -85,6 +85,9 @@ export async function runAccountMenuClickChecks(JSDOM) {
       export async function close() {
         await act(async () => { window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' })); });
       }
+      export async function outside() {
+        await act(async () => { document.body.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true })); });
+      }
       export async function unmount() {
         if (mounted) await act(async () => { mounted.unmount(); mounted = null; });
       }
@@ -117,9 +120,19 @@ export async function runAccountMenuClickChecks(JSDOM) {
       assert.equal(panel.querySelectorAll('[aria-label="我的角色"] li').length, roles.length);
       for (const role of roles) assert.ok(panel.textContent.includes(role.name), `${role.code} renders`);
       assert.equal(panel.querySelector('[data-role-badge="shield"]').getAttribute('title'), '超级管理员');
+      assert.equal(panel.parentElement, document.body, 'panel portals to body so it never lands at the page bottom');
+      assert.match(panel.className, /\bfixed\b/, 'panel is fixed-positioned under the header trigger');
+      assert.ok(panel.style.top && panel.style.right, 'panel has a computed anchor');
+      assert.ok(panel.querySelector('[role="switch"][aria-label="轻量使用统计"]'), 'privacy toggle renders as a single row');
+      assert.doesNotMatch(panel.textContent, /同步|导出|备份|权限管理|冲突|回滚/, 'sync/export/admin entries are gone');
+      assert.ok(panel.textContent.includes('退出登录'));
       assert.deepEqual(mod.errors, [], 'no React render errors');
       await mod.close();
       assert.equal(document.querySelector('[role="dialog"]'), null, 'controlled close works');
+      await mod.click();
+      assert.ok(document.querySelector('[role="dialog"]'), 'reopens after Escape');
+      await mod.outside();
+      assert.equal(document.querySelector('[role="dialog"]'), null, 'outside click closes');
       await mod.click();
       assert.ok(document.querySelector('[role="dialog"]'), 'the menu reopens');
       window.removeEventListener('ai-dca:account-auth-open', count);

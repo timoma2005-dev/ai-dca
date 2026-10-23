@@ -59,6 +59,7 @@ export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, 
           <button
             type="button"
             className="app-header__utility"
+            data-account-trigger
             aria-label="账户"
             title={topRole?.name ? `账户 · ${topRole.name}` : undefined}
             onClick={() => window.dispatchEvent(new CustomEvent(ACCOUNT_AUTH_OPEN_EVENT))}

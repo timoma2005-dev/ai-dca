@@ -26,22 +26,40 @@ export function RoleBadge({ topRole, className = '' }) {
   );
 }
 
-/** 角色列表（下拉菜单内）：名称 + 到期日。 */
-export function RoleList({ roles = [] }) {
+const DAY_MS = 24 * 60 * 60 * 1000;
+export const ROLE_EXPIRY_WARN_DAYS = 7;
+
+/** 角色有效期文案：长期有效 / MM-DD 到期（7 天内追加剩余天数并标记 warn）。 */
+export function describeRoleExpiry(expiresAt, now = Date.now()) {
+  if (!expiresAt) return { text: '长期有效', warn: false };
+  const date = String(expiresAt).slice(0, 10);
+  const ts = Date.parse(expiresAt);
+  if (!Number.isFinite(ts)) return { text: `${date} 到期`, warn: false };
+  const daysLeft = Math.ceil((ts - now) / DAY_MS);
+  if (daysLeft <= 0) return { text: `${date} 已到期`, warn: true };
+  if (daysLeft <= ROLE_EXPIRY_WARN_DAYS) return { text: `${date} 到期 · 剩 ${daysLeft} 天`, warn: true };
+  return { text: `${date} 到期`, warn: false };
+}
+
+/** 角色列表（下拉菜单内）：名称 + 到期日，临近到期标橙。 */
+export function RoleList({ roles = [], now }) {
   if (!roles.length) return null;
   return (
-    <ul className="space-y-1.5" aria-label="我的角色">
-      {roles.map((role) => (
-        <li key={role.code} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs">
-          <span className="inline-flex items-center gap-1.5 font-semibold text-slate-800">
-            <RoleBadge topRole={role} className="ring-0" />
-            {role.name || role.code}
-          </span>
-          <span className="shrink-0 text-[11px] text-slate-500">
-            {role.expiresAt ? `${String(role.expiresAt).slice(0, 10)} 到期` : '长期有效'}
-          </span>
-        </li>
-      ))}
+    <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200" aria-label="我的角色">
+      {roles.map((role) => {
+        const expiry = describeRoleExpiry(role.expiresAt, now);
+        return (
+          <li key={role.code} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+            <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold text-slate-800">
+              <RoleBadge topRole={role} className="ring-0" />
+              <span className="truncate">{role.name || role.code}</span>
+            </span>
+            <span className={`shrink-0 text-[11px] ${expiry.warn ? 'font-semibold text-orange-600' : 'text-slate-500'}`} data-role-expiry-warn={expiry.warn ? 'true' : undefined}>
+              {expiry.text}
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

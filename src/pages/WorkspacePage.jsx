@@ -706,7 +706,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         visibleTabs={currentScenario.visibleTabs}
         onSelectTab={handleSelectTab}
         onOpenAccount={() => setAccountMenuOpen(true)}
-        accountSubtitle={cloudSession?.accessToken ? '管理账号、云端备份与同步' : '登录账号，管理云端同步'}
+        accountSubtitle={cloudSession?.accessToken ? '查看角色与隐私设置' : '登录账号，多设备自动同步'}
         unreadCount={unreadCount}
         menus={flatMenus}
       />
