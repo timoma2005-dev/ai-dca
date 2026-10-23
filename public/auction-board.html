@@ -783,7 +783,7 @@ tr.is-highlight > :last-child { box-shadow: 12px 0 var(--fill-tertiary); }
           </section>
 
           <section class="x-tablebox" aria-label="ETF 报价">
-            <div class="x-hold" id="hold-box"><b>当前持有：</b><span id="hold-list"></span><span class="x-tag">（勾选表格“持有”列设置）</span></div>
+            <div class="x-hold" id="hold-box"><b>当前持有：</b><span id="hold-list"></span><span class="x-tag" id="hold-src">（勾选表格“持有”列设置）</span></div>
             <div class="x-hold x-switch" id="switch-box"></div>
             <div class="x-spread" id="spread">
               <span>最贵 vs 最便宜 相差</span><b id="spread-v">—</b><span>个百分点</span>
@@ -1241,17 +1241,12 @@ tr.is-highlight > :last-child { box-shadow: 12px 0 var(--fill-tertiary); }
             var pxNow = (auction && q.b1 > 0 && q.b1 === q.a1) ? q.b1 : (q.cur > 0 ? q.cur : (q.pre > 0 ? q.pre : 0));
             if (nv && pxNow) { r.estNav = nv.nav; r.prem = (pxNow / nv.nav - 1) * 100; r.navDate = nv.date; }
             else r.prem = null;
-            var tday = b.y + "-" + p2(b.mo) + "-" + p2(b.d);
-            if (S.haltDay !== tday) { S.haltDay = tday; S.haltUntil = {}; }
-            // 溢价超阈值：最多停牌到10:30，10:30后不再顺延（之后只认行情里的真实停牌标志）
-            if (r.prem != null && r.prem > S.haltThr && weekday(b) && t >= 33300 && t < 37800 && !S.haltUntil[r.code]) {
-              S.haltUntil[r.code] = 37800;
-            }
-            var hu = S.haltUntil[r.code];
-            if (hu && t < hu) {
-              var hh = p2(Math.floor(hu / 3600)) + ":" + p2(Math.floor(hu % 3600 / 60));
+            // 停牌按状态判断：
+            //  · 集合竞价/竞价结束（09:15–09:30）：溢价超阈值 → 推算停牌，最多到 10:30
+            //  · 连续竞价（09:30 后）：不再按溢价推算，只认行情里的真实停牌（停牌标志或无买卖盘）
+            if ((st.k === 1 || st.k === 2) && t < 34200 && r.prem != null && r.prem > S.haltThr) {
               r.halt = true;
-              r.stObj = { k: 0, text: (t < 34200 ? "溢价>" + S.haltThr + "%，预计停牌至" : "停牌至") + hh, c: "halt" }; r.st = 0;
+              r.stObj = { k: 0, text: "溢价>" + S.haltThr + "%，预计停牌至10:30", c: "halt" }; r.st = 0;
             }
             if (st.text === "停牌") { r.halt = true; r.pre = q.pre > 0 ? q.pre : null; return r; }
             r.pre = q.pre > 0 ? q.pre : null;
@@ -1296,7 +1291,7 @@ tr.is-highlight > :last-child { box-shadow: 12px 0 var(--fill-tertiary); }
             t2 < 33600 ? "09:15–09:20：可撤单，只观察竞价偏离和 NQ 变化" :
             t2 < 33900 ? "09:20–09:25：不能撤单，下单要谨慎，先确认偏离仍超过阈值" :
             t2 < 34200 ? "09:25–09:30：竞价结束，等待连续交易" :
-            t2 < 54000 ? "09:30 后：按真实买一/卖一挂限价，卖出和买入数量对等；溢价超阈值的最多停牌至10:30，复牌后按当时 NQ 和价格重算" :
+            t2 < 54000 ? "09:30 后：按真实买一/卖一挂限价，卖出和买入数量对等；停牌只认行情真实状态（竞价时溢价超阈值的推算停牌最多到10:30），复牌后按当时 NQ 和价格重算" :
             "已收盘：明天集合竞价起重新计算偏离";
           sw.push('<span class="sw"><b>步骤</b> ' + step + "</span>");
           var T = S.thr, dv = list.filter(function (r) { return r.dev != null && !r.halt; });
@@ -1340,7 +1335,7 @@ tr.is-highlight > :last-child { box-shadow: 12px 0 var(--fill-tertiary); }
             var trc = (isHi || isLo ? "is-highlight " : "") + (r.held ? "is-held" : "");
             return '<tr' + (trc ? ' class="' + trc + '"' : "") + ">" +
               '<th scope="row" title="' + esc(q ? q.full : r.name) + '">' + esc(r.name) + mark + "</th>" +
-              '<td data-label="持有"><input type="checkbox" class="x-chk" data-code="' + r.code + '"' + (r.held ? " checked" : "") + "></td>" +
+              '<td data-label="持有"><input type="checkbox" class="x-chk" data-code="' + r.code + '"' + (r.held ? " checked" : "") + (S.acct ? " disabled title=\"按账户持仓自动识别\"" : "") + "></td>" +
               '<td data-label="状态"><span class="x-st ' + r.stObj.c + '">' + r.stObj.text + "</span></td>" +
               '<td data-label="' + heads[1] + '" class="muted">' + r.code + "</td>" +
               '<td data-label="' + heads[2] + '" class="num">' + (r.price ? r.price.toFixed(3) : "—") + (r.kind ? '<span class="x-tag">' + r.kind + "</span>" : "") + "</td>" +
@@ -1398,10 +1393,24 @@ tr.is-highlight > :last-child { box-shadow: 12px 0 var(--fill-tertiary); }
           if (isFinite(v) && v >= 0) { S.thr = v; renderETF(); }
         });
         $("refresh").addEventListener("click", cycle);
-        $("halt-thr").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { S.haltThr = v; S.haltUntil = {}; renderETF(); } });
+        $("halt-thr").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { S.haltThr = v; renderETF(); } });
+        // 嵌在 ai-dca 里时，父页面按用户账户持仓（交易流水净份额>0）推送持有代码，自动判断持仓
+        S.acct = false;
+        window.addEventListener("message", function (ev) {
+          if (ev.origin !== location.origin) return;
+          var m = ev.data;
+          if (!m || m.type !== "ai-dca-auction-held" || !Array.isArray(m.codes)) return;
+          var pool = {}; ETFS.forEach(function (e) { pool[e[0].slice(2)] = true; });
+          S.acct = true; S.held = {};
+          m.codes.forEach(function (c) { c = String(c); if (pool[c]) S.held[c] = true; });
+          var hs2 = $("hold-src"); if (hs2) hs2.textContent = "（按账户持仓自动识别）";
+          renderETF();
+        });
+        try { if (window.parent !== window) window.parent.postMessage({ type: "ai-dca-auction-ready" }, location.origin); } catch (e) {}
         $("etf-body").addEventListener("change", function (ev) {
           var c = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-code");
           if (!c) return;
+          if (S.acct) { ev.target.checked = !!S.held[c]; return; }
           if (ev.target.checked) S.held[c] = true; else delete S.held[c];
           saveHeld(); renderETF();
         });
