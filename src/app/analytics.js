@@ -10,8 +10,9 @@ const MAX_EVENTS = 5000;
 const MAX_PENDING_EVENTS = 1000;
 const ANALYTICS_BATCH_SIZE = 20;
 const ANALYTICS_FLUSH_INTERVAL_MS = 30_000;
-const ADMIN_USERS = new Set(['lovexl']);
-const ADMIN_AUCTION_USERS = new Set(['551668745qq.com']);
+// 管理员 / 竞价看板权限改由服务端 RBAC 决定（见 docs/plan-rbac.md），这里不再写死用户名。
+const RBAC_STORE_KEY = 'aiDcaRbacMenus_v1';
+const PRIVILEGED_ROLE_CODES = new Set(['admin', 'superadmin']);
 const SESSION_START_KEY = 'aiDcaAnalyticsSessionStarted_v1';
 const OPT_OUT_KEY = 'aiDcaAnalyticsOptOut_v1';
 const EVENT_STORE_RETRY_LIMITS = [MAX_EVENTS, 1000, 250, 50];
@@ -422,17 +423,45 @@ export function readAnalyticsSession() {
   }
 }
 
+// 读取菜单缓存里与当前会话匹配的 RBAC 状态（只用于前端展示，服务端会再次校验）。
+function readRbacSnapshot(session) {
+  if (!session?.accessToken && !session?.userId && !session?.username) return null;
+  const ls = safeStorage();
+  if (!ls) return null;
+  try {
+    const parsed = JSON.parse(storageGetItem(ls, RBAC_STORE_KEY) || 'null');
+    const key = `user:${session.userId || session.username}`;
+    return parsed?.key === key ? parsed.state || null : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function roleCodesOf(value) {
+  return (Array.isArray(value?.roles) ? value.roles : []).map((role) => String(role?.code || ''));
+}
+
 export function isAnalyticsAdmin(session = readAnalyticsSession()) {
-  if (session?.isAdmin) return true;
-  const username = String(session?.username || '').trim().toLowerCase();
-  return ADMIN_USERS.has(username);
+  if (!session) return false;
+  if (session.isAdmin) return true;
+  if (roleCodesOf(session).some((code) => PRIVILEGED_ROLE_CODES.has(code))) return true;
+  if (PRIVILEGED_ROLE_CODES.has(String(session.topRole?.code || ''))) return true;
+  const snapshot = readRbacSnapshot(session);
+  return Boolean(snapshot?.isAdmin) || roleCodesOf(snapshot).some((code) => PRIVILEGED_ROLE_CODES.has(code));
+}
+
+/** 是否可访问某个菜单（menu:<key>:access）；perms 优先取传入对象，其次取菜单缓存。 */
+export function canAccessMenuFromSession(session = readAnalyticsSession(), menuKey = '') {
+  if (!session || !menuKey) return false;
+  const perm = `menu:${menuKey}:access`;
+  if (Array.isArray(session.perms) && session.perms.includes(perm)) return true;
+  const snapshot = readRbacSnapshot(session);
+  return Array.isArray(snapshot?.perms) && snapshot.perms.includes(perm);
 }
 
 export function canAccessAdminAuction(session = readAnalyticsSession()) {
   if (isAnalyticsAdmin(session)) return true;
-  // auth 库的规范化用户名不含 @，同时兼容邮箱形式的输入。
-  const username = String(session?.username || '').trim().toLowerCase().replace(/@/g, '');
-  return ADMIN_AUCTION_USERS.has(username);
+  return canAccessMenuFromSession(session, 'adminAuction');
 }
 
 export function trackAnalyticsEvent(type, meta = {}) {

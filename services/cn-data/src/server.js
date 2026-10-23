@@ -6,6 +6,7 @@ import { handleAccountV1Route } from './account/routes.js';
 import { handleSyncRoute } from './sync/routes.js';
 import { handleNotifyRoute } from './notify/routes.js';
 import { badRequest, handleDataRoute } from './routes/data.js';
+import { enforceRoutePermission } from './rbacGuard.js';
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const cors = {
@@ -54,6 +55,8 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
       if (req.method === 'GET' && url.pathname === '/health') {
         sendJson(res, 200, { ok: true, outbox: outboxStats(db) }); return;
       }
+      // RBAC：token 有效但缺少接口权限时 403（权限由共享 auth 库在服务端重新计算）。
+      enforceRoutePermission(req.headers, url.pathname);
       const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};
       const result = await handleNotifyRoute(db, req.method, url, body, req.headers)
         ?? handleAccountV1Route(db, req.method, url, body, req.headers)

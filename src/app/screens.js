@@ -2,9 +2,10 @@ export const PROJECT_ID = '4075224789216868860';
 export const PROJECT_TITLE = '美股策略助手';
 
 // 主 tab 顺序与元数据：所有页面都通过 WorkspacePage（侧边栏 + ?tab=）展示。
+// 菜单可见性 / 锁定 / 顺序以服务端 RBAC 菜单为准（src/app/rbac/*）；这里只保留 key → 链接 / 标题的本地映射。
 export const DEFAULT_WORKSPACE_TAB = 'home';
 export const PRIMARY_TAB_ORDER = ['home', 'markets', 'shares', 'holdings', 'tradePlans', 'fundSwitch', 'notify', 'articles', 'dataRepair'];
-export const ADMIN_TAB_ORDER = ['adminQuant', 'adminRadar', 'adminAuction'];
+export const ADMIN_TAB_ORDER = ['adminQuant', 'adminRadar', 'adminAuction', 'adminRbac'];
 
 export const PRIMARY_TAB_META = {
   home: { label: '首页', hrefKey: 'home' },
@@ -20,7 +21,8 @@ export const PRIMARY_TAB_META = {
   dataRepair: { label: '数据修复', hrefKey: 'dataRepair' },
   adminQuant: { label: '量化', hrefKey: 'adminQuant', adminOnly: true },
   adminRadar: { label: '雷达', hrefKey: 'adminRadar', adminOnly: true },
-  adminAuction: { label: '竞价看板', hrefKey: 'adminAuction', adminOnly: true }
+  adminAuction: { label: '竞价看板', hrefKey: 'adminAuction', adminOnly: true },
+  adminRbac: { label: '权限管理', hrefKey: 'adminRbac', adminOnly: true }
 };
 
 export const WORKSPACE_TAB_META = { ...PRIMARY_TAB_META };
@@ -54,6 +56,7 @@ export function createPageLinks({ inPagesDir = false } = {}) {
     adminQuant: `${homeHref}?tab=adminQuant`,
     adminRadar: `${homeHref}?tab=adminRadar`,
     adminAuction: `${homeHref}?tab=adminAuction`,
+    adminRbac: `${homeHref}?tab=adminRbac`,
     accumNew: `${homeHref}?tab=tradePlans#new`,
     accumEdit: homeHref,
     addLevel: homeHref,

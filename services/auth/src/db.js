@@ -19,12 +19,20 @@ function applyMigrations(db) {
   const applied = new Set(
     db.prepare('SELECT name FROM schema_migrations').all().map((row) => row.name)
   );
-  const files = ['001-init.sql'];
+  const files = ['001-init.sql', '002-rbac.sql'];
   for (const file of files) {
     if (applied.has(file)) continue;
     const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
-    db.exec(sql);
-    db.prepare('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)').run(file, new Date().toISOString());
+    // 每个迁移文件与 schema_migrations 记录在同一事务内，失败整体回滚。
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec(sql);
+      db.prepare('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)').run(file, new Date().toISOString());
+      db.exec('COMMIT');
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch { /* already rolled back */ }
+      throw err;
+    }
   }
 }
 

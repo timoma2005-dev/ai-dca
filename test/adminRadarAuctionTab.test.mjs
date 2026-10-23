@@ -11,38 +11,40 @@ const readSource = (relativePath) => fs.readFileSync(path.resolve(testDir, '..',
 const radarSource = readSource('src/pages/AdminRadarExperience.jsx');
 const auctionSource = readSource('src/pages/AdminAuctionExperience.jsx');
 const workspaceSource = readSource('src/pages/WorkspacePage.jsx');
+const menuIconsSource = readSource('src/components/rbac/menu-icons.js');
 
 test('auction is a top-level admin tab immediately after radar', () => {
-  assert.deepEqual(ADMIN_TAB_ORDER, ['adminQuant', 'adminRadar', 'adminAuction']);
+  assert.deepEqual(ADMIN_TAB_ORDER, ['adminQuant', 'adminRadar', 'adminAuction', 'adminRbac']);
   assert.deepEqual(PRIMARY_TAB_META.adminAuction, { label: '竞价看板', hrefKey: 'adminAuction', adminOnly: true });
   assert.equal(isWorkspaceGroup('adminAuction'), true);
-  assert.deepEqual(SCENARIOS.stock.visibleTabs.slice(-3), ADMIN_TAB_ORDER);
+  assert.deepEqual(SCENARIOS.stock.visibleTabs.slice(-4), ADMIN_TAB_ORDER);
 });
 
 test('auction links point to the workspace in both page directories', () => {
   for (const [inPagesDir, href] of [[false, './home.html?tab=adminAuction'], [true, '../home.html?tab=adminAuction']]) {
     const links = createPageLinks({ inPagesDir });
     assert.equal(links.adminAuction, href);
-    assert.deepEqual(getAdminTabs(links).at(-1), { key: 'adminAuction', label: '竞价看板', href });
+    assert.deepEqual(getAdminTabs(links).find((tab) => tab.key === 'adminAuction'), { key: 'adminAuction', label: '竞价看板', href });
   }
 });
 
-test('workspace registers the auction title, Gavel icon and lazy admin panel', () => {
+test('workspace registers the auction title, menu icon and lazy admin panel', () => {
   assert.match(workspaceSource, /const WORKSPACE_TITLES = \{[^}]*adminAuction: '竞价看板'/);
-  assert.match(workspaceSource, /import \{[^}]*\bGavel\b[^}]*\} from 'lucide-react';/);
-  assert.match(workspaceSource, /const SIDEBAR_ICONS = \{[^}]*adminAuction: Gavel/);
+  // 图标改由服务端菜单 icon 字段 + menu-icons 映射决定。
+  assert.match(menuIconsSource, /adminAuction: Gavel/);
+  assert.match(workspaceSource, /icon: resolveMenuIcon\(menu\.icon, menu\.key\)/);
   assert.match(workspaceSource, /const AdminAuctionExperience = lazy\(\(\) => import\('\.\/AdminAuctionExperience\.jsx'\)\);/);
-  assert.match(workspaceSource, /case 'adminAuction':\s*return canAccessTab\('adminAuction'\) \? <AdminAuctionExperience \{\.\.\.sharedProps\} \/> : <HoldingsExperience \{\.\.\.sharedProps\} \/>;/);
+  assert.match(workspaceSource, /case 'adminAuction':\s*return <AdminAuctionExperience \{\.\.\.sharedProps\} \/>;/);
 });
 
-test('legacy radar shares hash renders SharesExperience before the admin radar guard', () => {
-  assert.match(workspaceSource, /case 'adminRadar':\s*if \(window\.location\.hash === '#shares'\) return <SharesExperience \/>;\s*return isAdminUser \? <AdminRadarExperience \{\.\.\.sharedProps\} \/> : <HoldingsExperience \{\.\.\.sharedProps\} \/>;/);
+test('legacy radar shares hash renders SharesExperience before the radar panel', () => {
+  assert.match(workspaceSource, /case 'adminRadar':\s*if \(window\.location\.hash === '#shares'\) return <SharesExperience \/>;\s*return <AdminRadarExperience \{\.\.\.sharedProps\} \/>;/);
 });
 
-test('radar is a single admin panel without shares, auction or hash tabs', () => {
+test('radar is a single panel without shares, auction or hash tabs; gated by RBAC menu permission', () => {
   assert.doesNotMatch(radarSource, /份额新增|SharesExperience|PageTabs|AuctionBoardPanel|竞价看板|getRadarTabFromHash|hashchange|activeTab|useState|useEffect/);
-  assert.match(radarSource, /import \{ isAnalyticsAdmin \} from '\.\.\/app\/analytics\.js';/);
-  assert.match(radarSource, /if \(!isAnalyticsAdmin\(session\)\) \{\s*return <p[^>]*>当前账号没有权限。请使用 lovexl 登录后访问。<\/p>;/);
+  assert.match(radarSource, /import \{ canAccessMenuFromSession, isAnalyticsAdmin \} from '\.\.\/app\/analytics\.js';/);
+  assert.match(radarSource, /if \(!isAnalyticsAdmin\(session\) && !canAccessMenuFromSession\(session, 'adminRadar'\)\) \{\s*return <p[^>]*>当前账号没有雷达权限（需要 VIP）。<\/p>;/);
   assert.match(radarSource, /<div className="mx-auto max-w-6xl min-w-0 p-4">\s*<RadarPanel session=\{session\} \/>\s*<\/div>/);
   assert.equal(fs.existsSync(path.resolve(testDir, '../src/pages/radar/AuctionBoardPanel.jsx')), false);
 });

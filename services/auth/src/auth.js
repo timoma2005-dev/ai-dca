@@ -1,17 +1,21 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { enqueueEvent } from './outbox.js';
+import { applyBootstrapGrants, buildAuthPayload } from './rbac.js';
 
 // Must stay in sync with workers/sync/src/index.js.
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
-
-const ADMIN_USERNAMES = new Set(['lovexl', 'wanghao0902', 'de88903']);
 
 export function normalizeUsername(username = '') {
   return String(username || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 48);
 }
 
-export function isAdminUsername(username = '') {
-  return ADMIN_USERNAMES.has(String(username || '').trim().toLowerCase());
+/**
+ * 兼容旧调用：是否为管理员改由 RBAC 计算（admin / superadmin 角色），不再写死用户名。
+ * 需要 db 才能判断；无 db 时恒为 false。
+ */
+export function isAdminUser(db, user) {
+  if (!db || !user?.id) return false;
+  return Boolean(buildAuthPayload(db, user).isAdmin);
 }
 
 export function sha256Hex(text = '') {
@@ -86,7 +90,6 @@ function createSessionRow(db, user) {
       accessToken,
       refreshToken,
       expiresAt: expires,
-      isAdmin: isAdminUsername(user.username),
     },
     // outbox payload.session：只含 token_hash 与建行时写入的真实时间戳，
     // 到期时间完全复用 INSERT 值，禁止重算 30 天。
@@ -129,7 +132,17 @@ export function registerUser(db, { username, clientPasswordHash }) {
     }
     throw err;
   }
-  return { ...created.session, status: 200 };
+  return withAuthPayload(db, created.session);
+}
+
+/**
+ * 在 session 上附加 RBAC 载荷（roles/topRole/menus/perms/permVersion/isAdmin）。
+ * 必须在注册/登录事务提交之后调用：种子账号补发使用独立事务。
+ */
+export function withAuthPayload(db, session) {
+  const user = { id: session.userId, username: session.username };
+  applyBootstrapGrants(db, user);
+  return { ...session, ...buildAuthPayload(db, user), status: 200 };
 }
 
 export function loginUser(db, { username, clientPasswordHash }) {
@@ -156,7 +169,7 @@ export function loginUser(db, { username, clientPasswordHash }) {
       session: created.syncSession,
     });
   });
-  return { ...created.session, status: 200 };
+  return withAuthPayload(db, created.session);
 }
 
 export function verifySession(db, accessToken) {

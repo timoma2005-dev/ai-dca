@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUp, BarChart3, Bell, BookOpen, FlaskConical, Gavel, House, LineChart, ListChecks, Radar, Shuffle, Trash2, Wallet, Wrench, X } from 'lucide-react';
-import { DEFAULT_WORKSPACE_TAB, LEGACY_TAB_REDIRECTS, WORKSPACE_TAB_META, createPageLinks, getPrimaryTabs, getAdminTabs, isWorkspaceGroup } from '../app/screens.js';
+import { ArrowLeft, ArrowUp, Trash2, X } from 'lucide-react';
+import { DEFAULT_WORKSPACE_TAB, LEGACY_TAB_REDIRECTS, WORKSPACE_TAB_META, createPageLinks, isWorkspaceGroup } from '../app/screens.js';
 import { ConsoleLayout } from '../components/console-layout.jsx';
 import { BrandPreviewBar } from '../components/brand-preview-bar.jsx';
 import { ScenarioSwitcher } from '../components/ScenarioSwitcher.jsx';
@@ -11,11 +11,15 @@ import { LEGACY_LEDGER_KEY, LEDGER_KEY, clearDemoData, readDemoDataMeta } from '
 import { readWorkspacePrefs, switchScenario } from '../app/workspacePrefs.js';
 import { getScenario } from '../app/scenarios.js';
 import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession } from '../app/authSession.js';
-import { canAccessAdminAuction, isAnalyticsAdmin, trackPageEngagement, trackPageView, trackSessionHeartbeat, trackSessionStart } from '../app/analytics.js';
+import { trackPageEngagement, trackPageView, trackSessionHeartbeat, trackSessionStart } from '../app/analytics.js';
 import { saveWorkspaceReturn } from '../app/workspaceReturn.js';
 import { CONVERSION_PROMPT_EVENT } from '../app/conversionPrompts.js';
 import { ConversionPromptCard } from '../components/conversion-prompt-card.jsx';
-import { ACCOUNT_AUTH_OPEN_EVENT } from '../app/accountAuthEvents.js';
+import { ACCOUNT_AUTH_OPEN_EVENT, openAccountAuth } from '../app/accountAuthEvents.js';
+import { useRbac } from '../app/rbac/useRbac.js';
+import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, splitSidebarMenus } from '../app/rbac/menuModel.js';
+import { resolveMenuIcon } from '../components/rbac/menu-icons.js';
+import { AccessGuardPage } from '../components/rbac/access-guard-page.jsx';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
@@ -33,6 +37,7 @@ const AdminQuantExperience = lazy(() => import('./AdminQuantExperience.jsx').the
 const AdminRadarExperience = lazy(() => import('./AdminRadarExperience.jsx').then((m) => ({ default: m.AdminRadarExperience })));
 const AdminAuctionExperience = lazy(() => import('./AdminAuctionExperience.jsx'));
 const SharesExperience = lazy(() => import('./SharesExperience.jsx'));
+const AdminRbacExperience = lazy(() => import('./AdminRbacExperience.jsx'));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
 const ReleaseAnnouncementModal = lazy(() => import('../components/release-announcement-modal.jsx').then((m) => ({ default: m.ReleaseAnnouncementModal })));
 const AccountMenu = lazy(() => import('../components/account-menu.jsx').then((m) => ({ default: m.AccountMenu })));
@@ -79,24 +84,11 @@ const WORKSPACE_TITLES = {
   dataRepair: '数据诊断与修复',
   adminQuant: '量化看板',
   adminRadar: '纳指雷达',
-  adminAuction: '竞价看板'
+  adminAuction: '竞价看板',
+  adminRbac: '权限管理'
 };
 
-const SIDEBAR_ICONS = {
-  home: House,
-  strategy: BookOpen,
-  tradePlans: ListChecks,
-  fundSwitch: Shuffle,
-  markets: LineChart,
-  shares: BarChart3,
-  holdings: Wallet,
-  notify: Bell,
-  dataRepair: Wrench,
-  adminQuant: FlaskConical,
-  adminRadar: Radar,
-  adminAuction: Gavel,
-  articles: BookOpen
-};
+// 菜单图标、顺序、可见性与锁定状态来自服务端 RBAC 菜单（useRbac），这里只保留 tab → 组件映射（renderActivePanel）。
 
 const HASH_ROUTE_TABS = new Set(['tradePlans', 'holdings', 'adminRadar']);
 const PRESERVED_QUERY_PARAMS_BY_TAB = {
@@ -209,12 +201,15 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [currentScenarioKey, setCurrentScenarioKey] = useState(() => readWorkspacePrefs().scenario);
 
   const selectedScenario = getScenario(currentScenarioKey);
-  const isAdminUser = isAnalyticsAdmin(cloudSession);
-  const canAccessAuction = canAccessAdminAuction(cloudSession);
-  const canAccessTab = useCallback((tabKey) => {
-    if (!WORKSPACE_TAB_META[tabKey]?.adminOnly) return true;
-    return tabKey === 'adminAuction' ? canAccessAuction : isAdminUser;
-  }, [canAccessAuction, isAdminUser]);
+  // RBAC：菜单与权限来自服务端（按 permVersion 缓存）；这里的判断只决定展示，接口由服务端再次校验。
+  const rbac = useRbac();
+  const isAdminUser = isAdminState(rbac);
+  const tabAccessOf = useCallback((tabKey, hash = '') => {
+    // 旧的 ?tab=adminRadar#shares 份额链接保持公开。
+    if (tabKey === 'adminRadar' && hash === '#shares') return { status: 'ok', menu: null, requiredRole: null };
+    return evaluateTabAccess(rbac, tabKey);
+  }, [rbac]);
+  const flatMenus = useMemo(() => flattenMenus(rbac.menus).filter((menu) => isWorkspaceGroup(menu.key)), [rbac.menus]);
   const currentScenario = selectedScenario.requireAdmin && !isAdminUser ? getScenario('stock') : selectedScenario;
 
   useEffect(() => {
@@ -386,35 +381,25 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   const sidebarNav = useMemo(
     () => {
-      const tabMap = new Map(
-        [...getPrimaryTabs(links), ...getAdminTabs(links)].map((tab) => [tab.key, tab])
-      );
-      const allTabs = currentScenario.visibleTabs
-        .map((key) => tabMap.get(key))
-        .filter(Boolean)
-        .filter((tab) => canAccessTab(tab.key))
-        .map((tab) => ({
-          ...tab,
-          icon: SIDEBAR_ICONS[tab.key]
-        }));
-
-      // 分离主导航和管理项
-      const primaryNav = allTabs.filter(tab => !WORKSPACE_TAB_META[tab.key]?.adminOnly);
-      const adminNav = allTabs.filter(tab => WORKSPACE_TAB_META[tab.key]?.adminOnly);
-
-      return { primaryNav, adminNav };
+      const { primary, admin } = splitSidebarMenus(rbac.menus);
+      const visible = (menu) => isWorkspaceGroup(menu.key)
+        && (currentScenario.visibleTabs.includes(menu.key) || !RBAC_MANAGED_TABS.has(menu.key));
+      const toNav = (menu) => ({
+        key: menu.key,
+        label: menu.label,
+        href: links[menu.key] || `${links.home}?tab=${menu.key}`,
+        icon: resolveMenuIcon(menu.icon, menu.key),
+        locked: Boolean(menu.locked),
+        requiredRole: menu.requiredRole || null
+      });
+      return { primaryNav: primary.filter(visible).map(toNav), adminNav: admin.filter(visible).map(toNav) };
     },
-    [links, canAccessTab, currentScenario]
+    [links, rbac.menus, currentScenario]
   );
   const heroTitle = WORKSPACE_TITLES[activeTab] || WORKSPACE_TITLES.strategy;
 
-  useEffect(() => {
-    const hash = typeof window !== 'undefined' ? window.location.hash : '';
-    const isPublicShares = activeTab === 'adminRadar' && hash === '#shares';
-    if (!isPublicShares && !canAccessTab(activeTab)) {
-      setActiveTab(resolveDefaultWorkspaceTab(DEFAULT_WORKSPACE_TAB));
-    }
-  }, [activeTab, canAccessTab]);
+  // ?tab= 路由守卫：无权限时不再静默回退到默认 tab，而是渲染登录 / 403 守卫页（见 renderActivePanel）。
+  const activeAccess = tabAccessOf(activeTab, typeof window !== 'undefined' ? window.location.hash || '' : '');
 
   useEffect(() => {
     document.title = heroTitle;
@@ -501,10 +486,13 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   function handleSelectTab(nextTab, options = {}) {
     const normalizedTab = normalizeWorkspaceTab(nextTab);
-    const isPublicShares = normalizedTab === 'adminRadar' && options.hash === '#shares';
-    if (!isPublicShares && !canAccessTab(normalizedTab)) {
+    const access = tabAccessOf(normalizedTab, typeof options.hash === 'string' ? options.hash : '');
+    if (access.status === 'login') {
+      // 游客点击锁住的菜单：弹登录，不切换页面。
+      openAccountAuth({ mode: 'login', source: 'rbac-locked-menu', trigger: normalizedTab });
       return;
     }
+    // forbidden（已登录但角色不足）照常切换，由守卫页展示「需要 VIP / SVIP」。
     const hash = typeof options.hash === 'string' ? options.hash : '';
     const search = typeof options.search === 'string' ? options.search : '';
     const alreadyActive = normalizedTab === activeTab;
@@ -615,6 +603,17 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   function renderActivePanel() {
     const sharedProps = { links, inPagesDir, embedded: true };
+    if (activeAccess.status !== 'ok') {
+      return (
+        <AccessGuardPage
+          status={activeAccess.status}
+          requiredRole={activeAccess.requiredRole}
+          menuLabel={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
+          onLogin={() => openAccountAuth({ mode: 'login', source: 'rbac-route-guard', trigger: activeTab })}
+          onBack={() => handleSelectTab('home')}
+        />
+      );
+    }
     switch (activeTab) {
       case 'home':
         return <CnHomeExperience {...sharedProps} />;
@@ -633,12 +632,14 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
       case 'dataRepair':
         return <DataRepairExperience {...sharedProps} onNavigateToHoldings={() => handleSelectTab('holdings')} />;
       case 'adminQuant':
-        return isAdminUser ? <AdminQuantExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
+        return <AdminQuantExperience {...sharedProps} />;
       case 'adminRadar':
         if (window.location.hash === '#shares') return <SharesExperience />;
-        return isAdminUser ? <AdminRadarExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
+        return <AdminRadarExperience {...sharedProps} />;
       case 'adminAuction':
-        return canAccessTab('adminAuction') ? <AdminAuctionExperience {...sharedProps} /> : <HoldingsExperience {...sharedProps} />;
+        return <AdminAuctionExperience {...sharedProps} />;
+      case 'adminRbac':
+        return <AdminRbacExperience />;
       case 'holdings':
         return <HoldingsExperience {...sharedProps} />;
       default:
@@ -657,6 +658,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
             onSwitch={handleScenarioSwitch}
           />
         }
+        topRole={rbac.loggedIn ? rbac.topRole : null}
         onBuyMeCoffee={() => setShowQrModal(true)}
         onShowDisclaimer={() => setShowDisclaimer(true)}
       />
@@ -705,8 +707,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         onOpenAccount={() => setAccountMenuOpen(true)}
         accountSubtitle={cloudSession?.accessToken ? '管理账号、云端备份与同步' : '登录账号，管理云端同步'}
         unreadCount={unreadCount}
-        isAdmin={isAdminUser}
-        canAccessAuction={canAccessAuction}
+        menus={flatMenus}
       />
       <Suspense fallback={null}>
         <AccountMenu
@@ -746,8 +747,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           <GlobalSearch
             open={globalSearchOpen}
             onClose={() => setGlobalSearchOpen(false)}
-            showAdminTabs={isAdminUser}
-            showAuctionTab={canAccessAuction}
+            menus={flatMenus}
             onSelectTab={(key) => handleSelectTab(key)}
             onSelectFund={(code) => {
               handleSelectTab('holdings');

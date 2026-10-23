@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Menu, ChevronsRight, ChevronsLeft, X } from 'lucide-react';
+import { Menu, ChevronsRight, ChevronsLeft, X, Lock } from 'lucide-react';
 import { consumePendingToasts, subscribeToToasts } from '../app/toast.js';
 import { AccountLoadingIndicator } from './account-loading-indicator.jsx';
 
@@ -83,7 +83,7 @@ function ConsoleToastViewport() {
  * and an optional right context panel. Replaces the previous PageShell + TopBar (tabs) combo.
  *
  * Props:
- * - sidebarNav: Array<{ key, label, href?, icon? }> — 主导航项
+ * - sidebarNav: Array<{ key, label, href?, icon?, locked? }> — 主导航项（locked 显示锁图标）
  * - sidebarAdminNav: Array<{ key, label, href?, icon? }> — 管理项（可选，会在底部单独分组）
  * - activeKey: string
  * - onSelectNav: (key) => void
@@ -220,6 +220,7 @@ export function ConsoleLayout({
                   key={item.key}
                   href={item.href}
                   aria-current={isActive ? 'page' : undefined}
+                  data-locked={item.locked ? 'true' : undefined}
                   className={cx('console-sidenav__link', isActive && 'is-active')}
                   onClick={(event) => {
                     if (!onSelectNav) {
@@ -231,6 +232,7 @@ export function ConsoleLayout({
                 >
                   {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
                   <span className="truncate">{item.label}</span>
+                  {item.locked ? <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="需要更高权限" data-menu-lock="true" /> : null}
                 </a>
               );
             })}
@@ -245,6 +247,7 @@ export function ConsoleLayout({
                       key={item.key}
                       href={item.href}
                       aria-current={isActive ? 'page' : undefined}
+                      data-locked={item.locked ? 'true' : undefined}
                       className={cx('console-sidenav__link', isActive && 'is-active', 'opacity-75')}
                       onClick={(event) => {
                         if (!onSelectNav) {
@@ -256,6 +259,7 @@ export function ConsoleLayout({
                     >
                       {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
                       <span className="truncate">{item.label}</span>
+                      {item.locked ? <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="需要更高权限" data-menu-lock="true" /> : null}
                     </a>
                   );
                 })}

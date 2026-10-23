@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { isAnalyticsAdmin } from '../../app/analytics.js';
+import { canAccessMenuFromSession, isAnalyticsAdmin } from '../../app/analytics.js';
 import { countdownView, radarSession, snapshotFreshness } from '../../app/radarModel.js';
 import { cx } from '../../components/experience-ui.jsx';
 import { RADAR_COMPUTE_STATE, useRadarData } from './useRadarData.js';
@@ -46,7 +46,9 @@ function RadarSkeleton() {
 }
 
 export default function RadarPanel({ session }) {
-  const isAdmin = isAnalyticsAdmin(session);
+  // 读取：menu:adminRadar:access（VIP 及以上）；手动计算：管理员（服务端 api:nasdaq-radar-compute 再次校验）。
+  const isAdmin = isAnalyticsAdmin(session) || canAccessMenuFromSession(session, 'adminRadar');
+  const canCompute = isAnalyticsAdmin(session);
   const clockNow = useRadarClock({ enabled: isAdmin });
   const radar = useRadarData({ enabled: isAdmin });
 
@@ -64,13 +66,13 @@ export default function RadarPanel({ session }) {
   // 弹窗打开期间时段 / 日期变化 → 按当前时间重新分流并复位风险勾选（plan §5.1）；
   // 已开常规弹窗跨入盘中后不会直接提交（提交前还会再校验一次）。
   useEffect(() => {
-    if (!radar.isDialogOpen || !isAdmin) return;
+    if (!radar.isDialogOpen || !canCompute) return;
     radar.requestCompute();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在时段键或开合变化时重分流
-  }, [sessionInfo.key, radar.isDialogOpen, isAdmin]);
+  }, [sessionInfo.key, radar.isDialogOpen, canCompute]);
 
   if (!isAdmin) {
-    return <p className="p-5 text-sm text-slate-500">当前账号没有权限。请使用 lovexl 登录后访问。</p>;
+    return <p className="p-5 text-sm text-slate-500">当前账号没有雷达权限（需要 VIP）。</p>;
   }
 
   const leftColumn = firstLoading ? (
@@ -116,14 +118,14 @@ export default function RadarPanel({ session }) {
           阶段为时间预期，界面无运行日志接口；只有有效快照能证明已有结果。
         </p>
       </div>
-      <button
+      {canCompute ? <button
         type="button"
         onClick={radar.requestCompute}
         disabled={submitting}
         className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? '计算中…' : '手动触发计算（受时段分级保护）'}
-      </button>
+      </button> : null}
     </section>
   ) : (
     <div className="min-w-0 space-y-5">
@@ -158,16 +160,16 @@ export default function RadarPanel({ session }) {
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">纳指 ETF 套利雷达</h2>
           <span className="rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">测试中</span>
-          <span className="hidden text-xs text-slate-400 sm:inline">仅管理员可见</span>
+          <span className="hidden text-xs text-slate-400 sm:inline">VIP 及以上可见</span>
         </div>
-        <button
+        {canCompute ? <button
           type="button"
           onClick={radar.requestCompute}
           disabled={submitting}
           className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 text-[13px] font-semibold text-white shadow-sm shadow-indigo-200/70 transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? '计算中…' : '手动触发计算'}
-        </button>
+        </button> : null}
       </header>
 
       <RadarFreshnessBanner
@@ -217,7 +219,7 @@ export default function RadarPanel({ session }) {
               session={sessionInfo}
               clockNow={clockNow}
               computeState={radar.computeState}
-              onRequestCompute={radar.requestCompute}
+              onRequestCompute={canCompute ? radar.requestCompute : undefined}
               showPipeline={showPipelineInSidebar}
             />
           </div>

@@ -9,6 +9,7 @@ import {
 } from './authSession.js';
 import { fetchAccountManifest, fetchLegacyMigrationStatus, isLegacyMigrationSettled } from './accountApi.js';
 import { apiUrl, apiUrlDirect, fetchWithFallback } from './apiBase.js';
+import { applyRbacPayload } from './rbac/rbacStore.js';
 
 export {
   CLOUD_SYNC_SESSION_EVENT,
@@ -220,6 +221,8 @@ export async function registerCloudAccount({ username, password }) {
   });
   assertAuthSessionShape(data, '注册');
   const session = saveCloudSession(data);
+  // 登录/注册响应自带菜单与角色（permVersion），直接写入菜单缓存。
+  applyRbacPayload(data, { session });
   // 认证已成功：迁移检查与首次同步走后台单一协调入口，不阻塞注册结果。
   schedulePostAuthSync(session || loadCloudSession(), 'register', password);
   trackAnalyticsEvent('user_register', { username: normalized });
@@ -241,6 +244,8 @@ export async function loginCloudAccount({ username, password }) {
   });
   assertAuthSessionShape(data, '登录');
   const session = saveCloudSession(data);
+  // 登录/注册响应自带菜单与角色（permVersion），直接写入菜单缓存。
+  applyRbacPayload(data, { session });
   // 认证已成功：迁移检查与首次同步走后台单一协调入口，不阻塞登录结果。
   schedulePostAuthSync(session || loadCloudSession(), 'login', password);
   trackAnalyticsEvent('user_login', { username: normalized });

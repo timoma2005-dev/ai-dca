@@ -54,6 +54,7 @@ export function RadarSidebar({
           <ConsoleRow label="快照计算时间" value={computedAt == null ? '—' : `${shanghaiDateStr(computedAt)} ${shanghaiTimeStr(computedAt)}`} />
           <ConsoleRow label="本地读取时间" value={receivedAt == null ? '—' : `${shanghaiDateStr(receivedAt)} ${shanghaiTimeStr(receivedAt)}`} />
         </div>
+        {onRequestCompute ? (
         <button
           type="button"
           onClick={onRequestCompute}
@@ -67,6 +68,7 @@ export function RadarSidebar({
         >
           {submitting ? '计算中…' : '手动执行雷达计算'}
         </button>
+        ) : null}
         <p className="mt-2 text-center text-[11px] leading-5 text-slate-400">
           盘中 / 盘前 / 休市点击将唤起高危风险确认；确认后会覆盖当日正式快照及历史。
         </p>

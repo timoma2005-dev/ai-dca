@@ -42,6 +42,13 @@ export function saveCloudSession(session) {
     accessToken: String(session?.accessToken || ''),
     refreshToken: String(session?.refreshToken || ''),
     isAdmin: Boolean(session?.isAdmin),
+    // 仅用于展示（头像角标等）；权限以服务端每次请求重新计算为准。
+    roles: Array.isArray(session?.roles) ? session.roles.map((role) => ({
+      code: String(role?.code || ''),
+      name: String(role?.name || ''),
+      expiresAt: role?.expiresAt || null
+    })).filter((role) => role.code) : [],
+    topRole: session?.topRole?.code ? { code: String(session.topRole.code), name: String(session.topRole.name || '') } : null,
     savedAt: new Date().toISOString()
   };
   if (previous?.userId !== payload.userId || previous?.username !== payload.username) {

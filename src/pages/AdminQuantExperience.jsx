@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlaskConical, RefreshCw, ShieldCheck } from 'lucide-react';
 import { cx } from '../components/experience-ui.jsx';
-import { isAnalyticsAdmin } from '../app/analytics.js';
+import { canAccessMenuFromSession, isAnalyticsAdmin } from '../app/analytics.js';
 import { loadCloudSession } from '../app/authClient.js';
 import { formatClock } from './quant/quantFormat.js';
 import { QuantAccountCards } from './quant/QuantAccountCards.jsx';
@@ -16,11 +16,17 @@ const STATUS_URL = '/api/market-collector/api/paper-trade/status';
 const TRADES_URL = '/api/market-collector/api/paper-trade/trades?limit=1000';
 const HISTORY_URL = '/api/market-collector/api/paper-trade/history?limit=2000';
 const REFRESH_FAST_MS = 2000;
+
+// nginx 对 paper-trade 接口做 auth_request（api:paper-trade）：同源请求带会话 cookie，同时显式带 Bearer。
+function quantRequestInit() {
+  const token = loadCloudSession()?.accessToken;
+  return { cache: 'no-store', credentials: 'same-origin', headers: token ? { Authorization: `Bearer ${token}` } : {} };
+}
 const REFRESH_SLOW_MS = 30000;
 
 export function AdminQuantExperience({ embedded = false } = {}) {
   const session = loadCloudSession();
-  const isAdmin = isAnalyticsAdmin(session);
+  const isAdmin = isAnalyticsAdmin(session) || canAccessMenuFromSession(session, 'adminQuant');
   const [status, setStatus] = useState(null);
   const [trades, setTrades] = useState([]);
   const [history, setHistory] = useState({ nav: [], spread: [] });
@@ -33,9 +39,9 @@ export function AdminQuantExperience({ embedded = false } = {}) {
     setError('');
     try {
       const [statusRes, tradesRes, historyRes] = await Promise.all([
-        fetch(STATUS_URL, { cache: 'no-store' }),
-        fetch(TRADES_URL, { cache: 'no-store' }),
-        fetch(HISTORY_URL, { cache: 'no-store' })
+        fetch(STATUS_URL, quantRequestInit()),
+        fetch(TRADES_URL, quantRequestInit()),
+        fetch(HISTORY_URL, quantRequestInit())
       ]);
       if (!statusRes.ok) throw new Error(`status ${statusRes.status}`);
       if (!tradesRes.ok) throw new Error(`trades ${tradesRes.status}`);
@@ -104,9 +110,9 @@ export function AdminQuantExperience({ embedded = false } = {}) {
         <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
           <div className="flex items-center gap-2 text-lg font-bold">
             <ShieldCheck className="h-5 w-5" />
-            管理员权限 required
+            需要 SVIP
           </div>
-          <p className="mt-2 text-sm leading-6">当前账号没有量化看板权限。请使用 lovexl 登录后访问。</p>
+          <p className="mt-2 text-sm leading-6">当前账号没有量化看板权限（需要 SVIP），如需开通请联系管理员。</p>
         </div>
       </div>
     );

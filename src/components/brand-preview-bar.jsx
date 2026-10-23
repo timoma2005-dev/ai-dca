@@ -2,10 +2,11 @@ import { AlertCircle, Coffee, LineChart, UserRound } from 'lucide-react';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import { ACCOUNT_AUTH_OPEN_EVENT } from '../app/accountAuthEvents.js';
 import { NotifyPopover } from './notify-popover.jsx';
+import { RoleBadge } from './rbac/role-badge.jsx';
 import './brand-preview-bar.css';
 import './header-actions.css';
 
-export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, onShowDisclaimer }) {
+export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, onShowDisclaimer, topRole = null }) {
   const handleCoffeeClick = onBuyMeCoffee || onJoinGroup;
   useNotifyUnreadCount();
 
@@ -59,9 +60,13 @@ export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, 
             type="button"
             className="app-header__utility"
             aria-label="账户"
+            title={topRole?.name ? `账户 · ${topRole.name}` : undefined}
             onClick={() => window.dispatchEvent(new CustomEvent(ACCOUNT_AUTH_OPEN_EVENT))}
           >
-            <UserRound className="h-[18px] w-[18px]" aria-hidden="true" />
+            <span className="relative inline-flex">
+              <UserRound className="h-[18px] w-[18px]" aria-hidden="true" />
+              <RoleBadge topRole={topRole} className="absolute -bottom-1.5 -right-1.5" />
+            </span>
           </button>
         </div>
       </div>

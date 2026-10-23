@@ -35,6 +35,22 @@ AUTH_DB_PATH=/var/lib/ai-dca-auth/auth.sqlite npm run sync-worker
 - `POST /api/sync/auth/login` `{username, passwordHash}` → session JSON（401 用户名或密码不正确）
 - `GET /health` → `{ok: true, outbox: {...}}`
 
+### RBAC（角色 / 菜单 / 权限，详见 docs/plan-rbac.md）
+
+登录 / 注册响应额外返回 `roles`、`topRole`、`menus`（含 `locked`、`requiredRole`）、`perms`、`permVersion`、`isAdmin`，
+并 `Set-Cookie: aidca_session=<token>; HttpOnly; Secure; SameSite=Lax`。
+
+- `POST /api/sync/auth/logout` → 删除 session 并清 cookie
+- `GET /api/sync/auth/me` → 当前用户权限载荷（Bearer 或 cookie；无效 401）
+- `GET /api/sync/auth/menus` → 游客 / 当前用户菜单
+- `GET /api/sync/auth/check?perm=<code>` → 200 / 401 / 403，供 nginx `auth_request`
+- `/api/sync/auth/admin/*`（需 `api:rbac-admin`；任命管理员需 `api:rbac-grant-admin`）：
+  `users`、`users/:id/roles[/:role]`、`roles[/:code[/permissions]]`、`permissions`、`menus[/:key]`、`audit`
+
+可复用鉴权：`import { requirePerm, withPerm } from './src/rbac.js'`。
+权限每次请求按 token 在服务端重新计算，不信任客户端字段。
+`AUTH_RBAC_SYNC_ENABLED=1` 时 RBAC 变更会入队 `rbac.change`（D1 消费端未实现，默认关闭）。
+
 密码哈希口径与 `workers/sync` 完全一致：
 `stored = sha256(salt + ':' + clientHash)`，session 有效期 30 天，
 token 以 `acc_`/`ref_` 开头，DB 只存 token 的 SHA256。

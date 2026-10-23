@@ -2,23 +2,46 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
-  Bell,
-  Gavel,
+  Lock,
   Search,
-  Shuffle,
   Wallet,
   X,
 } from 'lucide-react';
 import { readLedgerState } from '../app/holdingsLedger.js';
 import { readPlanList } from '../app/plan.js';
+import { resolveMenuIcon } from './rbac/menu-icons.js';
 
-const TAB_ENTRIES = [
-  { key: 'holdings', label: '持仓总览', desc: '基金持仓、汇总收益', icon: Wallet, keywords: 'holdings cangwei chicang' },
-  { key: 'tradePlans', label: '交易计划', desc: '加仓 / 定投策略', icon: BarChart3, keywords: 'tradeplans plans jihua dca' },
-  { key: 'fundSwitch', label: '基金切换', desc: '切换链路与执行', icon: Shuffle, keywords: 'fundswitch switch qiehuan' },
-  { key: 'notify', label: '通知', desc: '推送配置与状态', icon: Bell, keywords: 'notify push tongzhi' },
-  { key: 'adminAuction', label: '竞价看板', desc: '纳指期指与 ETF 竞价行情', icon: Gavel, keywords: 'adminauction auction jingjia', adminOnly: true },
-];
+// 页面入口来自服务端 RBAC 菜单；本地只补充搜索用的描述与拼音关键字。
+export const TAB_SEARCH_META = {
+  holdings: { desc: '基金持仓、汇总收益', keywords: 'holdings cangwei chicang' },
+  tradePlans: { desc: '加仓 / 定投策略', keywords: 'tradeplans plans jihua dca' },
+  fundSwitch: { desc: '切换链路与执行', keywords: 'fundswitch switch qiehuan' },
+  notify: { desc: '推送配置与状态', keywords: 'notify push tongzhi' },
+  adminAuction: { desc: '纳指期指与 ETF 竞价行情', keywords: 'adminauction auction jingjia' },
+  adminRadar: { desc: '套利雷达与溢价监控', keywords: 'radar leida' },
+  adminQuant: { desc: '量化策略回测与模拟盘', keywords: 'quant lianghua' },
+  adminRbac: { desc: '用户角色、菜单权限与审计日志', keywords: 'rbac quanxian role' },
+};
+
+export function buildTabEntries(menus = []) {
+  return (Array.isArray(menus) ? menus : [])
+    .filter((menu) => menu?.key)
+    .map((menu) => ({
+      key: menu.key,
+      label: menu.label,
+      desc: TAB_SEARCH_META[menu.key]?.desc || menu.subtitle || '',
+      keywords: TAB_SEARCH_META[menu.key]?.keywords || '',
+      icon: resolveMenuIcon(menu.icon, menu.key),
+      locked: Boolean(menu.locked),
+      requiredRole: menu.requiredRole || null,
+    }));
+}
+
+export function filterTabEntries(entries, query = '') {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return entries;
+  return entries.filter((tab) => `${tab.label} ${tab.desc || ''} ${tab.key} ${tab.keywords || ''}`.toLowerCase().includes(q));
+}
 
 function pickFundsFromLedger(state) {
   const txs = state && Array.isArray(state.transactions) ? state.transactions : [];
@@ -44,7 +67,7 @@ function kindLabel(kind) {
   return kind || '';
 }
 
-export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, showAdminTabs = false, showAuctionTab = false }) {
+export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, menus = [] }) {
   const [query, setQuery] = useState('');
   const [funds, setFunds] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -82,16 +105,8 @@ export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, showAdm
 
   const q = query.trim().toLowerCase();
 
-  const tabResults = useMemo(() => {
-    const visibleEntries = TAB_ENTRIES.filter(
-      (tab) => !tab.adminOnly || showAdminTabs || (tab.key === 'adminAuction' && showAuctionTab),
-    );
-    if (!q) return visibleEntries;
-    return visibleEntries.filter((tab) => {
-      const hay = `${tab.label} ${tab.desc || ''} ${tab.key} ${tab.keywords || ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [q, showAdminTabs, showAuctionTab]);
+  const tabEntries = useMemo(() => buildTabEntries(menus), [menus]);
+  const tabResults = useMemo(() => filterTabEntries(tabEntries, q), [tabEntries, q]);
 
   const fundResults = useMemo(() => {
     if (!q) return [];
@@ -181,7 +196,8 @@ export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, showAdm
               key={`tab-${tab.key}`}
               icon={tab.icon}
               title={tab.label}
-              sub={tab.desc}
+              sub={tab.locked ? `需要${tab.requiredRole?.name || '登录'} · ${tab.desc}` : tab.desc}
+              locked={tab.locked}
               onClick={() => handlePickTab(tab.key)}
             />
           ))}
@@ -234,11 +250,12 @@ function Section({ title, children }) {
   );
 }
 
-function ResultRow({ icon: Icon, title, sub, onClick }) {
+function ResultRow({ icon: Icon, title, sub, onClick, locked = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-locked={locked ? 'true' : undefined}
       className="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-slate-50"
     >
       <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-slate-100 text-slate-600">
@@ -250,6 +267,7 @@ function ResultRow({ icon: Icon, title, sub, onClick }) {
           <span className="mt-0.5 block truncate text-xs text-slate-500">{sub}</span>
         ) : null}
       </span>
+      {locked ? <Lock className="h-4 w-4 flex-none text-slate-400" aria-label="需要更高权限" /> : null}
       <ArrowRight className="h-4 w-4 flex-none text-slate-300" aria-hidden="true" />
     </button>
   );

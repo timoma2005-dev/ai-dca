@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, CloudDownload, CloudUpload, Eye, EyeOff, GitMerge, KeyRound, Loader2, LogOut, RefreshCw, UserRound, X } from 'lucide-react';
+import { useRbac } from '../app/rbac/useRbac.js';
+import { clearRbacState, notifyServerLogout } from '../app/rbac/rbacStore.js';
+import { RoleBadge, RoleList } from './rbac/role-badge.jsx';
 import { clearCloudSession, CLOUD_SYNC_SESSION_EVENT, fetchCloudBackupVersions, loadCloudSession, loginCloudAccount, registerCloudAccount, rollbackCloudBackupVersion } from '../app/authClient.js';
 import { CLOUD_SYNC_PREPARING_EVENT } from '../app/postAuthSync.js';
 import { fetchAccountEnvelopeExport } from '../app/accountApi.js';
@@ -93,6 +96,7 @@ function formatAuthError(err, action = 'login') {
 export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose, hideTrigger = false }) {
   const [initialAuthIntent] = useState(() => consumeAccountAuthIntent());
   const [session, setSession] = useState(() => loadCloudSession());
+  const rbac = useRbac();
   const [meta, setMeta] = useState(() => loadLocalCloudSyncMeta());
   const [backupVersions, setBackupVersions] = useState([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
@@ -440,7 +444,10 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
   }
 
   function handleLogout() {
+    // 清除服务端 httpOnly 会话 cookie 并作废本地 session（尽力而为，不阻塞退出）。
+    void notifyServerLogout(session?.accessToken);
     clearCloudSession();
+    clearRbacState();
     clearRememberedKey();
     setSession(null);
     setConflict(null);
@@ -671,12 +678,16 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
         >
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">{initial}</span>
+                    <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
+                      {initial}
+                      <RoleBadge topRole={rbac.topRole} className="absolute -bottom-0.5 -right-0.5" />
+                    </span>
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-slate-900">{session.username}</div>
-                      <div className="text-xs text-slate-500">{statusLabel}</div>
+                      <div className="text-xs text-slate-500">{rbac.topRole?.name ? `${rbac.topRole.name} · ` : ''}{statusLabel}</div>
                     </div>
                   </div>
+                  <RoleList roles={rbac.roles} />
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div className="rounded-xl bg-slate-50 px-2 py-2">
                       <div className="text-[10px] font-semibold text-slate-400">状态</div>

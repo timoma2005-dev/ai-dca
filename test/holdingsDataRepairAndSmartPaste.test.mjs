@@ -97,7 +97,8 @@ test('DataRepair tab and buttons are properly integrated across screens', () => 
   const workspaceSource = readSource('src/pages/WorkspacePage.jsx');
   assert.match(workspaceSource, /DataRepairExperience/);
   assert.match(workspaceSource, /case 'dataRepair':/);
-  assert.match(workspaceSource, /dataRepair:\s*Wrench/);
+  // 侧边栏图标改由服务端菜单 icon 字段 + 共享映射提供。
+  assert.match(readSource('src/components/rbac/menu-icons.js'), /dataRepair:\s*Wrench/);
 
   // IncomeSummary.jsx
   const incomeSummarySource = readSource('src/app/income/IncomeSummary.jsx');

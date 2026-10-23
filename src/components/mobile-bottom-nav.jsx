@@ -1,24 +1,10 @@
 import { useEffect, useState } from 'react';
-import { BarChart3, Bell, BookOpen, ChevronRight, FlaskConical, Gavel, House, LineChart, ListChecks, MoreHorizontal, Radar, Shuffle, UserRound, Wallet, X } from 'lucide-react';
+import { ChevronRight, Lock, MoreHorizontal, UserRound, X } from 'lucide-react';
 import { splitMobileBottomNavItems } from './mobile-bottom-nav-config.js';
-
-const ITEM_ICONS = {
-  home: House,
-  markets: LineChart,
-  holdings: Wallet,
-  tradePlans: ListChecks,
-  shares: BarChart3,
-  fundSwitch: Shuffle,
-  notify: Bell,
-  articles: BookOpen,
-  adminQuant: FlaskConical,
-  adminRadar: Radar,
-  adminAuction: Gavel,
-};
+import { resolveMenuIcon } from './rbac/menu-icons.js';
 
 function MobileNavItem({ item, active, onSelect }) {
-  const Icon = ITEM_ICONS[item.key];
-  if (!Icon) return null;
+  const Icon = resolveMenuIcon(item.icon, item.key);
   return (
     <button
       key={item.key}
@@ -26,17 +12,20 @@ function MobileNavItem({ item, active, onSelect }) {
       className="mobile-bottom-nav__item"
       data-active={active || undefined}
       aria-current={active ? 'page' : undefined}
+      data-locked={item.locked ? 'true' : undefined}
       onClick={() => onSelect?.(item.key)}
     >
-      <Icon className="mobile-bottom-nav__icon" strokeWidth={active ? 2 : 1.8} aria-hidden="true" />
+      <span className="relative inline-flex">
+        <Icon className="mobile-bottom-nav__icon" strokeWidth={active ? 2 : 1.8} aria-hidden="true" />
+        {item.locked ? <Lock className="absolute -right-1.5 -top-1 h-3 w-3 rounded-full bg-white text-slate-500" aria-label="需要更高权限" /> : null}
+      </span>
       <span>{item.label}</span>
     </button>
   );
 }
 
 function MoreListRow({ item, active, unreadCount = 0, onSelect }) {
-  const Icon = ITEM_ICONS[item.key];
-  if (!Icon) return null;
+  const Icon = resolveMenuIcon(item.icon, item.key);
   const showUnread = item.key === 'notify' && unreadCount > 0;
   return (
     <button
@@ -55,6 +44,12 @@ function MoreListRow({ item, active, unreadCount = 0, onSelect }) {
         <span className="mobile-more__title-row">
           <span className="mobile-more__title">{item.label}</span>
           {item.badge ? <span className="mobile-more__pill mobile-more__pill--indigo">{item.badge}</span> : null}
+          {item.locked ? (
+            <span className="mobile-more__pill mobile-more__pill--slate" data-locked="true">
+              <Lock className="mr-0.5 inline h-3 w-3" aria-hidden="true" />
+              {item.requiredRole?.name ? `需要${item.requiredRole.name}` : '需登录'}
+            </span>
+          ) : null}
           {showUnread ? <span className="mobile-more__pill mobile-more__pill--slate">{unreadCount}条未读</span> : null}
         </span>
         {item.subtitle ? <span className="mobile-more__subtitle">{item.subtitle}</span> : null}
@@ -72,18 +67,17 @@ export function MobileBottomNav({
   accountSubtitle,
   unreadCount = 0,
   hidden = false,
-  isAdmin = false,
-  canAccessAuction = false,
+  menus = [],
 }) {
   const [{ directItems, overflowItems }, setItems] = useState(() =>
-    splitMobileBottomNavItems(visibleTabs, undefined, isAdmin, canAccessAuction),
+    splitMobileBottomNavItems(menus, visibleTabs),
   );
   const [moreOpen, setMoreOpen] = useState(false);
   const overflowActive = overflowItems.some((item) => item.key === activeKey);
 
   useEffect(() => {
-    setItems(splitMobileBottomNavItems(visibleTabs, undefined, isAdmin, canAccessAuction));
-  }, [visibleTabs, isAdmin, canAccessAuction]);
+    setItems(splitMobileBottomNavItems(menus, visibleTabs));
+  }, [menus, visibleTabs]);
 
   useEffect(() => {
     if (hidden) setMoreOpen(false);

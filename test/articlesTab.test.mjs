@@ -29,5 +29,7 @@ test('articles page embeds the cn article archive', () => {
 
 test('articles tab is visible in the cn scenario and mobile nav', () => {
   assert.match(scenariosSource, /visibleTabs: \[[^\]]*'articles'/);
-  assert.match(mobileNavSource, /articles: BookOpen/);
+  // 移动端图标改由共享的菜单图标映射提供（服务端菜单 icon 字段优先）。
+  assert.match(mobileNavSource, /resolveMenuIcon/);
+  assert.match(readSource('src/components/rbac/menu-icons.js'), /articles: BookOpen/);
 });

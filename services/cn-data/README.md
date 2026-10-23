@@ -51,6 +51,12 @@ Responses and bodies are JSON. Errors consistently use `{ "message": "..." }`.
 CORS supports GET/POST/PUT/DELETE/OPTIONS. Bodies must be JSON objects and are
 limited to 2 MiB; individual transaction payloads are limited to 64 KiB.
 
+**RBAC:** `src/rbacGuard.js` reads the shared auth SQLite (read-only) and returns 403 when a
+valid session lacks the route permission (`/api/account/*` → `api:account`, `/api/notify/switch/*` →
+`api:fund-switch`, other `/api/notify/*` → `api:notify`, `/sync` & `/api/sync/*` → `api:sync`).
+Missing/invalid tokens fall through to the routes (401); a pre-migration auth DB skips the check.
+See `docs/plan-rbac.md`.
+
 **Phase 1 identity contract:** `user_id` is required in query parameters for reads
 and in the query or JSON body for writes. Conflicting query/body identities return
 400. Identity is currently trusted; session verification through nginx/auth must

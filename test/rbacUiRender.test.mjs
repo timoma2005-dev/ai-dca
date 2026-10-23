@@ -1,0 +1,107 @@
+/* global URL */
+// 菜单渲染：用 rolldown 打包真实组件后以 react-dom/server 渲染，检查锁图标、守卫页与角色角标。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+import { rolldown } from 'rolldown';
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+const requireFromRoot = createRequire(join(root, 'package.json'));
+const abs = (rel) => JSON.stringify(join(root, rel));
+
+// 入口写在临时目录，所有依赖用绝对路径（与组件解析到同一份 react）。
+const entrySource = `
+import { createElement as h } from ${JSON.stringify(requireFromRoot.resolve('react'))};
+import { renderToStaticMarkup } from ${JSON.stringify(requireFromRoot.resolve('react-dom/server'))};
+import { ConsoleLayout } from ${abs('src/components/console-layout.jsx')};
+import { MobileBottomNav } from ${abs('src/components/mobile-bottom-nav.jsx')};
+import { GlobalSearch } from ${abs('src/components/global-search.jsx')};
+import { AccessGuardPage } from ${abs('src/components/rbac/access-guard-page.jsx')};
+import { RoleBadge, RoleList } from ${abs('src/components/rbac/role-badge.jsx')};
+import { buildGuestFallback, flattenMenus, splitSidebarMenus } from ${abs('src/app/rbac/menuModel.js')};
+import { resolveMenuIcon } from ${abs('src/components/rbac/menu-icons.js')};
+export function render(name, props) {
+  const map = { ConsoleLayout, MobileBottomNav, GlobalSearch, AccessGuardPage, RoleBadge, RoleList };
+  return renderToStaticMarkup(h(map[name], props));
+}
+export { buildGuestFallback, flattenMenus, splitSidebarMenus, resolveMenuIcon };
+`;
+
+async function loadBundle() {
+  const dir = mkdtempSync(join(tmpdir(), 'rbac-ui-'));
+  const entry = join(dir, 'entry.jsx');
+  writeFileSync(entry, entrySource);
+  const bundle = await rolldown({
+    input: entry,
+    platform: 'node',
+    logLevel: 'silent',
+    moduleTypes: { '.css': 'empty', '.jpg': 'empty', '.png': 'empty', '.svg': 'empty' },
+    transform: { jsx: 'react-jsx', define: { 'import.meta.env': '{}', 'process.env.NODE_ENV': '"production"' } },
+  });
+  const { output } = await bundle.generate({ format: 'esm' });
+  await bundle.close();
+  const file = join(dir, 'bundle.mjs');
+  writeFileSync(file, output[0].code);
+  const mod = await import(pathToFileURL(file).href);
+  return { mod, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+const { mod, cleanup } = await loadBundle();
+test.after(cleanup);
+
+test('sidebar renders server menus with a lock icon on locked items', () => {
+  const guest = mod.buildGuestFallback();
+  const { primary } = mod.splitSidebarMenus(guest.menus);
+  const nav = primary.map((m) => ({ key: m.key, label: m.label, href: `?tab=${m.key}`, icon: mod.resolveMenuIcon(m.icon, m.key), locked: m.locked }));
+  const html = mod.render('ConsoleLayout', { brand: 'x', sidebarNav: nav, activeKey: 'home', children: null });
+  assert.match(html, /首页/);
+  assert.match(html, /持仓总览/);
+  const lockedLinks = html.match(/data-locked="true"/g) || [];
+  assert.equal(lockedLinks.length, 5, 'holdings/tradePlans/fundSwitch/notify/dataRepair are locked for guests');
+  assert.equal((html.match(/data-menu-lock="true"/g) || []).length, 5);
+  assert.doesNotMatch(html, /雷达|权限管理/);
+});
+
+test('mobile bottom nav renders only server-visible menus and marks locked ones', () => {
+  const menus = mod.flattenMenus(mod.buildGuestFallback().menus);
+  const html = mod.render('MobileBottomNav', { activeKey: 'home', menus, onSelectTab() {}, onOpenAccount() {} });
+  assert.match(html, /首页/);
+  assert.match(html, /持仓/);
+  assert.match(html, /data-locked="true"/);
+  assert.doesNotMatch(html, /量化|雷达|竞价看板/);
+});
+
+test('global search lists menu entries with lock state', () => {
+  const menus = [
+    { key: 'holdings', label: '持仓总览', locked: false },
+    { key: 'adminRadar', label: '雷达', locked: true, requiredRole: { code: 'vip', name: 'VIP' } },
+  ];
+  const html = mod.render('GlobalSearch', { open: true, menus, onClose() {}, onSelectTab() {} });
+  assert.match(html, /持仓总览/);
+  assert.match(html, /需要VIP/);
+  assert.equal((html.match(/data-locked="true"/g) || []).length, 1);
+});
+
+test('route guard pages: 403 shows the required role, login page shows the login button', () => {
+  const forbidden = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'svip', name: 'SVIP' }, menuLabel: '竞价看板' });
+  assert.match(forbidden, /data-testid="access-guard-forbidden"/);
+  assert.match(forbidden, /403/);
+  assert.match(forbidden, /需要 SVIP/);
+  const login = mod.render('AccessGuardPage', { status: 'login', requiredRole: { code: 'user', name: '普通用户' }, menuLabel: '持仓总览' });
+  assert.match(login, /data-testid="access-guard-login"/);
+  assert.match(login, /登录 \/ 注册/);
+});
+
+test('avatar role badge: VIP gold crown, SVIP diamond, admin shield, none for user; role list shows expiry', () => {
+  assert.match(mod.render('RoleBadge', { topRole: { code: 'vip' } }), /data-role-badge="crown"[^>]*|bg-amber-400/);
+  assert.match(mod.render('RoleBadge', { topRole: { code: 'svip' } }), /data-role-badge="diamond"/);
+  assert.match(mod.render('RoleBadge', { topRole: { code: 'admin' } }), /data-role-badge="shield"/);
+  assert.equal(mod.render('RoleBadge', { topRole: { code: 'user' } }), '');
+  const list = mod.render('RoleList', { roles: [{ code: 'vip', name: 'VIP', expiresAt: '2026-12-31T15:59:59.000Z' }, { code: 'user', name: '普通用户', expiresAt: null }] });
+  assert.match(list, /2026-12-31 到期/);
+  assert.match(list, /长期有效/);
+});
