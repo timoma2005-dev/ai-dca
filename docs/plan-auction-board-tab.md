@@ -70,3 +70,13 @@
 - 持仓自动识别：`AdminAuctionExperience` 读取账户交易流水（`readLedgerState` + `getActiveHoldingCodeList`，净份额 > 0），通过同源 `postMessage({type:'ai-dca-auction-held', codes})` 推给 iframe；iframe 加载后发 `ai-dca-auction-ready`，登录态下账户流水只在内存 runtime，父页面先 `pullHoldingTransactions` 从云端拉取后再推送，之后每 60 秒重拉一次，iframe onLoad、ready、storage 事件也会推送。收到后持有列按账户自动勾选并禁用手动勾选；单独打开静态页时仍可手动勾选。
 - iframe `src="/auction-board.html"` 及容器样式不变。
 - 验收：`node --test test/adminRadarAuctionTab.test.mjs` 新增用例；ESLint 改动文件；`git diff --check`；上线后用 lovexl 登录 `?tab=adminAuction` 验收。
+
+## 2026-10-23 UI 与交互重构（PC + App，用户确认设计稿后执行）
+
+- `public/auction-board.html` 重写界面层，数据获取与停牌/偏离计算逻辑保持不变：去掉 Hark 组件库样式和 Google Fonts，改为自带样式、系统字体。
+- PC（>1280px）：顶栏含交易阶段胶囊与时段条、参数芯片、数据源状态、刷新；首行为操作建议大卡（卖出→买入两条腿、当前时段步骤）、NQ 卡（自昨日15:00分时折线）、持仓卡；第二行为偏离分布条形图（买入区/卖出线）与12只ETF表格（状态、现价、涨跌、偏离、溢价、买一/卖一、信号，可排序）；底部为今日信号、规则、停牌与口径。860–1280px 自动堆叠。
+- App（≤860px）：顶栏标题+设置按钮、阶段与当日进度条；操作建议卡、NQ/持仓双卡；“全部/买入区/停牌”筛选，卡片列表持仓置顶、按偏离排序，每张卡带偏离条。
+- 参数改到设置面板（PC 弹层、App 底部抽屉）：偏离阈值、买入下限（默认0.5）、停牌溢价，存 localStorage。买入候选限定在 `−买入下限 ~ −阈值`（与已确认设计稿和用户策略一致）。
+- 今日信号：交易时段内记录进入/离开买入区、持仓回归、偏贵、停牌/复牌，按日存 localStorage。
+- 父页面额外推送 `rounds`（每个持仓最近一笔 BUY 的日期/价格，及同 `switchPairId` 的配对卖出代码/价格），看板据此显示本轮买入与相对卖出标的的相对收益。
+- 验收：测试新增响应式/设置/买入区断言；ESLint、`git diff --check`、vite build；上线后 PC 与手机宽度分别用 lovexl 验收。

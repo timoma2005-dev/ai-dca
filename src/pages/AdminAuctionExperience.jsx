@@ -14,6 +14,33 @@ export function readAuctionHeldCodes() {
   }
 }
 
+// 每个持仓代码的本轮买入：最近一笔 BUY 的日期与价格；若带 switchPairId，同时给出配对卖出的代码与价格，
+// 供看板计算本轮收益 / 相对卖出标的的相对收益。
+export function readAuctionRounds(codes = readAuctionHeldCodes()) {
+  try {
+    const txs = readLedgerState().transactions || [];
+    return codes.map((code) => {
+      const buys = txs
+        .filter((tx) => String(tx?.code) === code && tx?.type === 'BUY' && Number(tx?.price) > 0)
+        .sort((a, b) => String(a?.date || '').localeCompare(String(b?.date || '')));
+      const last = buys.at(-1);
+      if (!last) return null;
+      const pair = last.switchPairId
+        ? txs.find((tx) => tx?.switchPairId === last.switchPairId && tx?.type === 'SELL' && String(tx?.code) !== code)
+        : null;
+      return {
+        code,
+        date: String(last.date || ''),
+        price: Number(last.price),
+        fromCode: pair ? String(pair.code) : '',
+        fromPrice: pair ? Number(pair.price) || 0 : 0
+      };
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 const HELD_REFRESH_MS = 60000;
 
 export default function AdminAuctionExperience() {
@@ -23,7 +50,8 @@ export default function AdminAuctionExperience() {
   const pushHeld = useCallback(() => {
     const target = frameRef.current && frameRef.current.contentWindow;
     if (!target || !readyRef.current) return;
-    target.postMessage({ type: 'ai-dca-auction-held', codes: readAuctionHeldCodes() }, window.location.origin);
+    const codes = readAuctionHeldCodes();
+    target.postMessage({ type: 'ai-dca-auction-held', codes, rounds: readAuctionRounds(codes) }, window.location.origin);
   }, []);
 
   const loadHoldings = useCallback(async () => {

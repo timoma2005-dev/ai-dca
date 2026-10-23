@@ -77,7 +77,8 @@ test('auction panel pushes account holdings to the iframe via same-origin postMe
   assert.match(auctionSource, /import \{ getActiveHoldingCodeList \} from '\.\.\/app\/holdingsLedgerCore\.js';/);
   assert.match(auctionSource, /import \{ pullHoldingTransactions \} from '\.\.\/app\/holdingTransactionsSync\.js';/);
   assert.match(auctionSource, /await pullHoldingTransactions\(\{ session \}\)/);
-  assert.match(auctionSource, /type: 'ai-dca-auction-held'/);
+  assert.match(auctionSource, /type: 'ai-dca-auction-held', codes, rounds: readAuctionRounds\(codes\)/);
+  assert.match(auctionSource, /switchPairId/);
   assert.match(auctionSource, /'ai-dca-auction-ready'/);
   assert.match(auctionSource, /window\.location\.origin/);
   assert.match(auctionSource, /onLoad=\{pushHeld\}/);
@@ -90,4 +91,16 @@ test('static board takes holdings from the parent and halts by status', () => {
   assert.match(html, /按账户持仓自动识别/);
   assert.match(html, /\(st\.k === 1 \|\| st\.k === 2\) && t < 34200 && r\.prem != null && r\.prem > S\.haltThr/);
   assert.doesNotMatch(html, /S\.haltUntil\[/);
+});
+
+test('static board is a responsive PC/app layout with buy zone and settings', () => {
+  const html = fs.readFileSync(path.resolve(testDir, '../public/auction-board.html'), 'utf8');
+  assert.match(html, /<meta name="viewport"[^>]*width=device-width/);
+  assert.match(html, /@media \(max-width:860px\)/);
+  for (const id of ['act-h', 'act-flow', 'nq-spark', 'hold-name', 'bars', 'etf-body', 'm-items', 'mseg', 'log', 'thr', 'lo', 'halt-thr']) {
+    assert.match(html, new RegExp(`id="${id}"`), id);
+  }
+  assert.match(html, /function inZone\(r\) \{ return r\.dev != null && !r\.halt && r\.dev <= -S\.thr && r\.dev >= -S\.lo; \}/);
+  assert.match(html, /m\.rounds/);
+  assert.doesNotMatch(html, /fonts\.googleapis\.com/);
 });
