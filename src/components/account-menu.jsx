@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { KeyRound, Loader2, LogOut, UserRound, X } from 'lucide-react';
 import { useRbac } from '../app/rbac/useRbac.js';
 import { clearRbacState, notifyServerLogout } from '../app/rbac/rbacStore.js';
-import { RoleBadge, RoleList } from './rbac/role-badge.jsx';
+import { RoleAvatar, RoleList } from './rbac/role-badge.jsx';
 import { clearCloudSession, CLOUD_SYNC_SESSION_EVENT, loadCloudSession, loginCloudAccount, registerCloudAccount } from '../app/authClient.js';
 import { ACCOUNT_AUTH_OPEN_EVENT, consumeAccountAuthIntent } from '../app/accountAuthEvents.js';
 import { clearRememberedKey } from '../app/secureVault.js';
@@ -225,10 +225,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
         ) : null}
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <span className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-base font-bold text-white">
-              {initial}
-              <RoleBadge topRole={rbac.topRole} className="absolute -bottom-0.5 -right-0.5" />
-            </span>
+            <RoleAvatar topRole={rbac.topRole} initial={initial} size="lg" showChip />
             <div className="min-w-0">
               <div className="truncate text-sm font-bold text-slate-900">{session.username}</div>
               <div className="truncate text-xs text-slate-500">{topRoleName || '已登录'}</div>

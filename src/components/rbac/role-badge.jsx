@@ -1,5 +1,5 @@
 import { Crown, Gem, Shield } from 'lucide-react';
-import { roleBadgeFor } from '../../app/rbac/menuModel.js';
+import { roleBadgeFor, roleRingFor } from '../../app/rbac/menuModel.js';
 
 const TONES = {
   gold: 'bg-amber-400 text-white ring-amber-100',
@@ -22,6 +22,80 @@ export function RoleBadge({ topRole, className = '' }) {
       data-role-badge={badge.kind}
     >
       <Icon className="h-2.5 w-2.5" strokeWidth={2.4} aria-hidden="true" />
+    </span>
+  );
+}
+
+const RING_STYLES = {
+  vip: {
+    ring: 'conic-gradient(from 200deg, #f59e0b, #fde68a, #d97706, #fbbf24, #f59e0b)',
+    glow: '0 0 8px rgba(245, 158, 11, 0.45)',
+    chip: 'linear-gradient(90deg, #f59e0b, #d97706)',
+    chipText: 'VIP',
+  },
+  svip: {
+    ring: 'conic-gradient(from 180deg, #8b5cf6, #ec4899, #f0abfc, #6366f1, #8b5cf6)',
+    glow: '0 0 10px rgba(168, 85, 247, 0.45)',
+    chip: 'linear-gradient(90deg, #8b5cf6, #ec4899)',
+    chipText: 'SVIP',
+    spin: true,
+  },
+  admin: {
+    ring: 'conic-gradient(from 210deg, #2563eb, #38bdf8, #1d4ed8, #60a5fa, #2563eb)',
+    glow: '0 0 8px rgba(59, 130, 246, 0.4)',
+    chip: '#2563eb',
+    chipText: '管理员',
+  },
+  superadmin: {
+    ring: 'conic-gradient(#4285f4 0 25%, #ea4335 0 50%, #fbbc05 0 75%, #34a853 0 100%)',
+    glow: '0 0 10px rgba(66, 133, 244, 0.4)',
+    chip: 'linear-gradient(90deg, #4285f4, #ea4335, #fbbc05, #34a853)',
+    chipText: '超管',
+  },
+};
+
+const AVATAR_SIZES = {
+  sm: { outer: 30, ring: 2, gap: 2, font: 12 },
+  lg: { outer: 48, ring: 3, gap: 2, font: 17 },
+};
+
+/**
+ * 带角色光圈的首字母头像：普通用户细灰描边；VIP/SVIP/管理员/超级管理员各有渐变光圈与外发光。
+ * SVIP 光圈缓慢流转（减少动态效果时停止）；lg 尺寸可在右下角显示角色胶囊。
+ */
+export function RoleAvatar({ topRole, initial = '', size = 'sm', showChip = false, className = '' }) {
+  const ring = roleRingFor(topRole);
+  const tone = ring ? RING_STYLES[ring.tier] : null;
+  const dim = AVATAR_SIZES[size] || AVATAR_SIZES.sm;
+  const inner = dim.outer - (dim.ring + dim.gap) * 2;
+  return (
+    <span
+      className={`relative inline-flex shrink-0 items-center justify-center rounded-full ${className}`}
+      style={{ width: dim.outer, height: dim.outer, boxShadow: tone?.glow }}
+      data-role-ring={ring?.tier || 'none'}
+      title={ring?.label}
+    >
+      <span
+        aria-hidden="true"
+        className={`absolute inset-0 rounded-full ${tone?.spin ? 'animate-spin motion-reduce:animate-none' : ''}`}
+        style={{ background: tone?.ring || '#e2e8f0', animationDuration: tone?.spin ? '6s' : undefined }}
+      />
+      <span className="absolute rounded-full bg-white" style={{ inset: dim.ring }} aria-hidden="true" />
+      <span
+        className="relative inline-flex items-center justify-center rounded-full bg-teal-700 font-bold leading-none text-white"
+        style={{ width: inner, height: inner, fontSize: dim.font }}
+      >
+        {initial}
+      </span>
+      {showChip && tone ? (
+        <span
+          className="pointer-events-none absolute -bottom-1 -right-2 whitespace-nowrap rounded-full border-2 border-white px-1.5 py-px text-[9px] font-bold leading-tight text-white"
+          style={{ background: tone.chip }}
+          data-role-chip={ring.tier}
+        >
+          {tone.chipText}
+        </span>
+      ) : null}
     </span>
   );
 }

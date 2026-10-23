@@ -171,3 +171,12 @@ export function roleBadgeFor(topRole) {
   if (code === 'vip') return { kind: 'crown', label: 'VIP', tone: 'gold' };
   return null;
 }
+
+const RING_TIERS = ['superadmin', 'admin', 'svip', 'vip'];
+
+/** 头像光圈等级（参考 Google 账号头像外圈）：VIP 金、SVIP 紫粉、管理员蓝、超级管理员四色；其余无光圈。 */
+export function roleRingFor(topRole) {
+  const code = topRole?.code || '';
+  if (!RING_TIERS.includes(code)) return null;
+  return { tier: code, label: topRole?.name || ROLE_LABELS[code] };
+}

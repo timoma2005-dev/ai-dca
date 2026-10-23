@@ -11,6 +11,7 @@ import {
   flattenMenus,
   isAdminState,
   roleBadgeFor,
+  roleRingFor,
   splitSidebarMenus,
 } from '../src/app/rbac/menuModel.js';
 import { canAccessAdminAuction, canAccessMenuFromSession, isAnalyticsAdmin } from '../src/app/analytics.js';
@@ -86,6 +87,13 @@ test('sidebar split by server group and role badges by top role', () => {
   assert.equal(roleBadgeFor({ code: 'admin' }).kind, 'shield');
   assert.equal(roleBadgeFor({ code: 'superadmin' }).kind, 'shield');
   assert.equal(roleBadgeFor({ code: 'user' }), null);
+  assert.equal(roleRingFor({ code: 'vip' }).tier, 'vip');
+  assert.equal(roleRingFor({ code: 'svip' }).tier, 'svip');
+  assert.equal(roleRingFor({ code: 'admin' }).tier, 'admin');
+  assert.equal(roleRingFor({ code: 'superadmin' }).tier, 'superadmin');
+  assert.equal(roleRingFor({ code: 'superadmin' }).label, '超级管理员');
+  assert.equal(roleRingFor({ code: 'user' }), null);
+  assert.equal(roleRingFor(null), null);
   assert.equal(isAdminState({ roles: [{ code: 'superadmin' }] }), true);
   assert.equal(isAdminState(USER_STATE), false);
 });

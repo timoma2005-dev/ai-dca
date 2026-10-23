@@ -660,6 +660,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           />
         }
         topRole={rbac.loggedIn ? rbac.topRole : null}
+        username={cloudSession?.accessToken ? cloudSession.username || '' : ''}
         onBuyMeCoffee={() => setShowQrModal(true)}
         onShowDisclaimer={() => setShowDisclaimer(true)}
       />

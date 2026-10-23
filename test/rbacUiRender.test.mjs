@@ -21,11 +21,11 @@ import { ConsoleLayout } from ${abs('src/components/console-layout.jsx')};
 import { MobileBottomNav } from ${abs('src/components/mobile-bottom-nav.jsx')};
 import { GlobalSearch } from ${abs('src/components/global-search.jsx')};
 import { AccessGuardPage } from ${abs('src/components/rbac/access-guard-page.jsx')};
-import { RoleBadge, RoleList } from ${abs('src/components/rbac/role-badge.jsx')};
+import { RoleAvatar, RoleBadge, RoleList } from ${abs('src/components/rbac/role-badge.jsx')};
 import { buildGuestFallback, flattenMenus, splitSidebarMenus } from ${abs('src/app/rbac/menuModel.js')};
 import { resolveMenuIcon } from ${abs('src/components/rbac/menu-icons.js')};
 export function render(name, props) {
-  const map = { ConsoleLayout, MobileBottomNav, GlobalSearch, AccessGuardPage, RoleBadge, RoleList };
+  const map = { ConsoleLayout, MobileBottomNav, GlobalSearch, AccessGuardPage, RoleAvatar, RoleBadge, RoleList };
   return renderToStaticMarkup(h(map[name], props));
 }
 export { buildGuestFallback, flattenMenus, splitSidebarMenus, resolveMenuIcon };
@@ -104,4 +104,23 @@ test('avatar role badge: VIP gold crown, SVIP diamond, admin shield, none for us
   const list = mod.render('RoleList', { roles: [{ code: 'vip', name: 'VIP', expiresAt: '2026-12-31T15:59:59.000Z' }, { code: 'user', name: '普通用户', expiresAt: null }] });
   assert.match(list, /2026-12-31 到期/);
   assert.match(list, /长期有效/);
+});
+
+test('avatar ring: tiered gradient ring per role, superadmin four-colour, plain grey for user, chip only on lg', () => {
+  const vip = mod.render('RoleAvatar', { topRole: { code: 'vip', name: 'VIP' }, initial: 'L' });
+  assert.match(vip, /data-role-ring="vip"/);
+  assert.match(vip, /#f59e0b/);
+  assert.doesNotMatch(vip, /data-role-chip/);
+  const svip = mod.render('RoleAvatar', { topRole: { code: 'svip' }, initial: 'L', size: 'lg', showChip: true });
+  assert.match(svip, /animate-spin/);
+  assert.match(svip, /motion-reduce:animate-none/);
+  assert.match(svip, /data-role-chip="svip"/);
+  const superadmin = mod.render('RoleAvatar', { topRole: { code: 'superadmin' }, initial: 'L', size: 'lg', showChip: true });
+  assert.match(superadmin, /#4285f4 0 25%, #ea4335 0 50%, #fbbc05 0 75%, #34a853 0 100%/);
+  assert.match(superadmin, />超管</);
+  assert.match(mod.render('RoleAvatar', { topRole: { code: 'admin' }, initial: 'L' }), /data-role-ring="admin"/);
+  const user = mod.render('RoleAvatar', { topRole: { code: 'user' }, initial: 'L', size: 'lg', showChip: true });
+  assert.match(user, /data-role-ring="none"/);
+  assert.match(user, /#e2e8f0/);
+  assert.doesNotMatch(user, /data-role-chip/);
 });
