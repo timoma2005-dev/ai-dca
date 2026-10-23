@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { lockLabelFor } from '../app/rbac/menuModel.js';
 import {
   ArrowRight,
   BarChart3,
@@ -196,7 +197,7 @@ export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, menus =
               key={`tab-${tab.key}`}
               icon={tab.icon}
               title={tab.label}
-              sub={tab.locked ? `需要${tab.requiredRole?.name || '登录'} · ${tab.desc}` : tab.desc}
+              sub={tab.locked ? `${lockLabelFor(tab.requiredRole)} · ${tab.desc}` : tab.desc}
               locked={tab.locked}
               onClick={() => handlePickTab(tab.key)}
             />

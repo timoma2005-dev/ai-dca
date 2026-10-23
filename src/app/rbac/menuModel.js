@@ -157,6 +157,23 @@ export function requiredRoleLabel(requiredRole) {
   return requiredRole.name || ROLE_LABELS[requiredRole.code] || requiredRole.code;
 }
 
+const LOGIN_ONLY_ROLES = new Set(['', 'guest', 'user']);
+const PAID_ROLES = new Set(['vip', 'svip']);
+
+/** 需要付费角色（VIP / SVIP）才能使用。 */
+export function isPaidRole(requiredRole) {
+  return PAID_ROLES.has(requiredRole?.code || '');
+}
+
+/** 锁定菜单的短标签：只需登录的显示「需登录」，付费功能显示「VIP 专享」，管理功能显示「仅管理员」。 */
+export function lockLabelFor(requiredRole) {
+  const code = requiredRole?.code || '';
+  if (LOGIN_ONLY_ROLES.has(code)) return '需登录';
+  if (PAID_ROLES.has(code)) return `${requiredRole.name || ROLE_LABELS[code]} 专享`;
+  if (code === 'admin' || code === 'superadmin') return '仅管理员';
+  return `需${requiredRoleLabel(requiredRole)}`;
+}
+
 export function isAdminState(state) {
   if (state?.isAdmin) return true;
   const codes = (Array.isArray(state?.roles) ? state.roles : []).map((role) => role?.code);

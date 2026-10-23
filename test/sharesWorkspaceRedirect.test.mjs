@@ -100,13 +100,13 @@ const panelSource = source.match(/ {2}function renderActivePanel\(\) \{[\s\S]*?\
 const panelCode = (await transformWithOxc(panelSource, 'panel.jsx', { lang: 'jsx', jsx: { runtime: 'classic' } })).code;
 const renderPanel = new Function('activeTab', 'activeAccess', 'window', 'links', 'inPagesDir', 'React', 'WORKSPACE_TAB_META',
   'openAccountAuth', 'handleSelectTab', 'AccessGuardPage',
-  'SharesExperience', 'AdminQuantExperience', 'AdminRadarExperience', 'AdminAuctionExperience', 'HoldingsExperience', 'AdminRbacExperience',
+  'SharesExperience', 'AdminQuantExperience', 'AdminRadarExperience', 'AdminAuctionExperience', 'HoldingsExperience', 'AdminRbacExperience', 'accountUsername',
   `${panelCode}\nreturn renderActivePanel();`);
 const resolvePanel = (state, tab, hash = '') => {
   const element = renderPanel(tab, tabAccessFor(state)(tab, hash), { location: { hash } }, {}, false,
     { createElement: (component, props) => (component === 'guard' ? `guard:${props.status}:${props.requiredRole?.code || ''}` : component) },
     WORKSPACE_TAB_META, () => {}, () => {}, 'guard',
-    'shares', 'quant', 'radar', 'auction', 'holdings', 'rbac');
+    'shares', 'quant', 'radar', 'auction', 'holdings', 'rbac', '');
   return element;
 };
 

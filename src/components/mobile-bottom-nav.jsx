@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { lockLabelFor } from '../app/rbac/menuModel.js';
 import { ChevronRight, Lock, MoreHorizontal, UserRound, X } from 'lucide-react';
 import { splitMobileBottomNavItems } from './mobile-bottom-nav-config.js';
 import { resolveMenuIcon } from './rbac/menu-icons.js';
@@ -47,7 +48,7 @@ function MoreListRow({ item, active, unreadCount = 0, onSelect }) {
           {item.locked ? (
             <span className="mobile-more__pill mobile-more__pill--slate" data-locked="true">
               <Lock className="mr-0.5 inline h-3 w-3" aria-hidden="true" />
-              {item.requiredRole?.name ? `需要${item.requiredRole.name}` : '需登录'}
+              {lockLabelFor(item.requiredRole)}
             </span>
           ) : null}
           {showUnread ? <span className="mobile-more__pill mobile-more__pill--slate">{unreadCount}条未读</span> : null}

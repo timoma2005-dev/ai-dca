@@ -82,15 +82,25 @@ test('global search lists menu entries with lock state', () => {
   ];
   const html = mod.render('GlobalSearch', { open: true, menus, onClose() {}, onSelectTab() {} });
   assert.match(html, /持仓总览/);
-  assert.match(html, /需要VIP/);
+  assert.match(html, /VIP 专享/);
   assert.equal((html.match(/data-locked="true"/g) || []).length, 1);
 });
 
 test('route guard pages: 403 shows the required role, login page shows the login button', () => {
   const forbidden = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'svip', name: 'SVIP' }, menuLabel: '竞价看板' });
-  assert.match(forbidden, /data-testid="access-guard-forbidden"/);
-  assert.match(forbidden, /403/);
-  assert.match(forbidden, /需要 SVIP/);
+  assert.match(forbidden, /data-testid="access-guard-paid"/);
+  assert.match(forbidden, /SVIP 专享/);
+  assert.doesNotMatch(forbidden, /403/);
+  const paid = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'vip', name: 'VIP' }, menuLabel: '雷达', username: 'lovexl', onUpgrade() {} });
+  assert.match(paid, /请随意打赏并备注账号名/);
+  assert.match(paid, /lovexl/);
+  assert.match(paid, /管理员看到后会尽快为您开通/);
+  assert.match(paid, /打赏开通/);
+  const adminOnly = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'admin', name: '管理员' }, menuLabel: '权限管理' });
+  assert.match(adminOnly, /data-testid="access-guard-forbidden"/);
+  assert.match(adminOnly, /403/);
+  assert.match(adminOnly, /仅管理员可访问/);
+  assert.doesNotMatch(adminOnly, /打赏/);
   const login = mod.render('AccessGuardPage', { status: 'login', requiredRole: { code: 'user', name: '普通用户' }, menuLabel: '持仓总览' });
   assert.match(login, /data-testid="access-guard-login"/);
   assert.match(login, /登录 \/ 注册/);

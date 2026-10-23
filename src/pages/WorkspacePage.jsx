@@ -192,6 +192,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mobileBottomSheetHidden, setMobileBottomSheetHidden] = useState(() => isMobileBottomSheetOpen());
   const [showQrModal, setShowQrModal] = useState(false);
+  const [qrPurpose, setQrPurpose] = useState('coffee');
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [cloudSession, setCloudSession] = useState(() => loadCloudSession());
   const [conversionPrompt, setConversionPrompt] = useState(null);
@@ -204,6 +205,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const selectedScenario = getScenario(currentScenarioKey);
   // RBAC：菜单与权限来自服务端（按 permVersion 缓存）；这里的判断只决定展示，接口由服务端再次校验。
   const rbac = useRbac();
+  const accountUsername = cloudSession?.accessToken ? cloudSession.username || '' : '';
   const isAdminUser = isAdminState(rbac);
   const tabAccessOf = useCallback((tabKey, hash = '') => {
     // 旧的 ?tab=adminRadar#shares 份额链接保持公开。
@@ -610,7 +612,9 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           status={activeAccess.status}
           requiredRole={activeAccess.requiredRole}
           menuLabel={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
+          username={accountUsername}
           onLogin={() => openAccountAuth({ mode: 'login', source: 'rbac-route-guard', trigger: activeTab })}
+          onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
           onBack={() => handleSelectTab('home')}
         />
       );
@@ -660,8 +664,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           />
         }
         topRole={rbac.loggedIn ? rbac.topRole : null}
-        username={cloudSession?.accessToken ? cloudSession.username || '' : ''}
-        onBuyMeCoffee={() => setShowQrModal(true)}
+        username={accountUsername}
+        onBuyMeCoffee={() => { setQrPurpose('coffee'); setShowQrModal(true); }}
         onShowDisclaimer={() => setShowDisclaimer(true)}
       />
       <ConsoleLayout
@@ -775,7 +779,13 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
             </button>
             <div className="overflow-hidden rounded-2xl bg-white shadow-2xl">
               <img src={buyMeCoffeeQr} alt="Buy me coffee 二维码" className="block w-full" />
-              <p className="px-4 py-3 text-center text-xs text-slate-600">扫码支持作者</p>
+              {qrPurpose === 'upgrade' ? (
+                <p className="px-4 py-3 text-center text-xs leading-5 text-slate-600" data-qr-upgrade-hint>
+                  金额随意，付款备注请填写账号名{cloudSession?.username ? <>「<span className="font-bold text-slate-900">{cloudSession.username}</span>」</> : ''}，管理员看到后会尽快为您开通。
+                </p>
+              ) : (
+                <p className="px-4 py-3 text-center text-xs text-slate-600">扫码支持作者</p>
+              )}
             </div>
           </div>
         </div>
