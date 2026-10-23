@@ -31,7 +31,6 @@ const ICONS_BY_KEY = {
   articles: BookOpen,
   strategy: BookOpen,
   dataRepair: Wrench,
-  adminQuant: FlaskConical,
   adminRadar: Radar,
   adminAuction: Gavel,
   adminRbac: ShieldCheck,

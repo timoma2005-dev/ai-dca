@@ -69,7 +69,7 @@ test('logged-in fallback (no server menus yet) keeps user features usable and VI
   assert.equal(radar.requiredRole.code, 'vip');
   assert.equal(evaluateTabAccess(user, 'adminRbac').status, 'forbidden');
   const admin = buildUserFallback({ isAdmin: true });
-  for (const key of ['adminRadar', 'adminAuction', 'adminQuant', 'adminRbac']) assert.equal(evaluateTabAccess(admin, key).status, 'ok', key);
+  for (const key of ['adminRadar', 'adminAuction', 'adminRbac']) assert.equal(evaluateTabAccess(admin, key).status, 'ok', key);
 });
 
 test('route guard never trusts a tampered locked flag without the access permission', () => {

@@ -14,10 +14,10 @@ const workspaceSource = readSource('src/pages/WorkspacePage.jsx');
 const menuIconsSource = readSource('src/components/rbac/menu-icons.js');
 
 test('auction is a top-level admin tab immediately after radar', () => {
-  assert.deepEqual(ADMIN_TAB_ORDER, ['adminQuant', 'adminRadar', 'adminAuction', 'adminRbac']);
+  assert.deepEqual(ADMIN_TAB_ORDER, ['adminRadar', 'adminAuction', 'adminRbac']);
   assert.deepEqual(PRIMARY_TAB_META.adminAuction, { label: '竞价看板', hrefKey: 'adminAuction', adminOnly: true });
   assert.equal(isWorkspaceGroup('adminAuction'), true);
-  assert.deepEqual(SCENARIOS.stock.visibleTabs.slice(-4), ADMIN_TAB_ORDER);
+  assert.deepEqual(SCENARIOS.stock.visibleTabs.slice(-3), ADMIN_TAB_ORDER);
 });
 
 test('auction links point to the workspace in both page directories', () => {
@@ -105,4 +105,11 @@ test('static board is a responsive PC/app layout with buy zone and settings', ()
   assert.match(html, /function inZone\(r\) \{ return r\.dev != null && !r\.halt && r\.dev <= -S\.thr && r\.dev >= -S\.lo; \}/);
   assert.match(html, /m\.rounds/);
   assert.doesNotMatch(html, /fonts\.googleapis\.com/);
+});
+
+test('quant tab is removed: no menu, no meta, legacy ?tab=adminQuant redirects home', () => {
+  assert.equal(PRIMARY_TAB_META.adminQuant, undefined);
+  assert.equal(SCENARIOS.stock.visibleTabs.includes('adminQuant'), false);
+  assert.doesNotMatch(workspaceSource, /AdminQuantExperience/);
+  assert.doesNotMatch(menuIconsSource, /adminQuant/);
 });

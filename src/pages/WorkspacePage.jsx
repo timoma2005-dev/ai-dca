@@ -34,7 +34,6 @@ const MarketsExperience = lazy(() => import('./MarketsExperience.jsx').then((m) 
 const CnHomeExperience = lazy(() => import('./CnHomeExperience.jsx').then((m) => ({ default: m.CnHomeExperience })));
 const ArticlesExperience = lazy(() => import('./ArticlesExperience.jsx').then((m) => ({ default: m.ArticlesExperience })));
 const DataRepairExperience = lazy(() => import('./DataRepairExperience.jsx').then((m) => ({ default: m.DataRepairExperience })));
-const AdminQuantExperience = lazy(() => import('./AdminQuantExperience.jsx').then((m) => ({ default: m.AdminQuantExperience })));
 const AdminRadarExperience = lazy(() => import('./AdminRadarExperience.jsx').then((m) => ({ default: m.AdminRadarExperience })));
 const AdminAuctionExperience = lazy(() => import('./AdminAuctionExperience.jsx'));
 const SharesExperience = lazy(() => import('./SharesExperience.jsx'));
@@ -83,7 +82,6 @@ const WORKSPACE_TITLES = {
   holdings: '持仓总览',
   notify: '通知设置',
   dataRepair: '数据诊断与修复',
-  adminQuant: '量化看板',
   adminRadar: '纳指雷达',
   adminAuction: '竞价看板',
   adminRbac: '权限管理'
@@ -636,8 +634,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         return <NotifyExperience {...sharedProps} />;
       case 'dataRepair':
         return <DataRepairExperience {...sharedProps} onNavigateToHoldings={() => handleSelectTab('holdings')} />;
-      case 'adminQuant':
-        return <AdminQuantExperience {...sharedProps} />;
       case 'adminRadar':
         if (window.location.hash === '#shares') return <SharesExperience />;
         return <AdminRadarExperience {...sharedProps} />;

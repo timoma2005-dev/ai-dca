@@ -24,7 +24,6 @@ const SEED_MENUS = [
   ['notify', '通知管理', 'Bell', 'primary', 70, '管理消息推送与提醒设置'],
   ['articles', '文章', 'BookOpen', 'primary', 80, '基金科普指南与定投策略'],
   ['dataRepair', '数据修复', 'Wrench', 'primary', 90, '数据诊断与修复'],
-  ['adminQuant', '量化', 'FlaskConical', 'admin', 110, '量化策略回测与模拟盘'],
   ['adminRadar', '雷达', 'Radar', 'admin', 120, '套利雷达与溢价监控'],
   ['adminAuction', '竞价看板', 'Gavel', 'admin', 130, '纳指期指与 ETF 竞价行情'],
   ['adminRbac', '权限管理', 'ShieldCheck', 'admin', 140, '用户角色、菜单权限与审计日志'],
@@ -64,7 +63,7 @@ export function buildGuestFallback() {
   };
 }
 
-const USER_LOCKED = { adminQuant: 'svip', adminRadar: 'vip', adminAuction: 'svip' };
+const USER_LOCKED = { adminRadar: 'vip', adminAuction: 'svip' };
 const VIP_NAMES = { vip: 'VIP', svip: 'SVIP' };
 
 /**
@@ -144,11 +143,17 @@ export function evaluateTabAccess(state, tabKey) {
 }
 
 /** 侧边栏分组：primary / admin（服务端 group 字段）。 */
+/** 有权限的排在前面、锁定的排在后面，各自保持原有顺序（稳定分区）。 */
+export function sortAccessibleFirst(items = []) {
+  const list = Array.isArray(items) ? items : [];
+  return [...list.filter((item) => !item?.locked), ...list.filter((item) => item?.locked)];
+}
+
 export function splitSidebarMenus(menus = []) {
   const items = flattenMenus(menus).filter((item) => !item.parentKey || !findMenu(menus, item.parentKey));
   return {
-    primary: items.filter((item) => item.group !== 'admin'),
-    admin: items.filter((item) => item.group === 'admin'),
+    primary: sortAccessibleFirst(items.filter((item) => item.group !== 'admin')),
+    admin: sortAccessibleFirst(items.filter((item) => item.group === 'admin')),
   };
 }
 

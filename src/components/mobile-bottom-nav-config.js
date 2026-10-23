@@ -1,3 +1,4 @@
+import { sortAccessibleFirst } from '../app/rbac/menuModel.js';
 // 移动端底部导航：哪些菜单出现、是否锁住，全部来自服务端 RBAC 菜单（flattenMenus 后传入）。
 // 本地只保留移动端的展示配置（顺序、短标签、副标题、徽标）；服务端新增而这里没有配置的菜单按其 sort 追加在末尾。
 export const MOBILE_BOTTOM_NAV_ITEMS = [
@@ -9,7 +10,6 @@ export const MOBILE_BOTTOM_NAV_ITEMS = [
   { key: 'fundSwitch', label: '换基', subtitle: '切换定投目标基金，查看调仓方案', badge: '调仓工具', primary: true },
   { key: 'notify', label: '通知', subtitle: '管理消息推送与提醒设置' },
   { key: 'articles', label: '文章', subtitle: '基金科普指南与定投策略' },
-  { key: 'adminQuant', label: '量化', subtitle: '量化策略回测与模拟盘' },
   { key: 'adminRadar', label: '雷达', subtitle: '套利雷达与溢价监控' },
   { key: 'adminAuction', label: '竞价看板', subtitle: '纳指期指与 ETF 竞价行情' },
   { key: 'adminRbac', label: '权限管理', subtitle: '用户角色、菜单权限与审计日志' },
@@ -47,6 +47,7 @@ export function splitMobileBottomNavItems(menus = [], visibleTabs = null, maxTab
   const directCount = Math.max(0, safeMaxTabs - 1);
   return {
     directItems: items.slice(0, directCount),
-    overflowItems: items.slice(directCount),
+    // 「更多」里有权限的排在前面，锁定的排在后面。
+    overflowItems: sortAccessibleFirst(items.slice(directCount)),
   };
 }
