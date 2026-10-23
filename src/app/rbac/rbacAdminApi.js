@@ -25,7 +25,8 @@ async function request(method, path, body) {
 const enc = encodeURIComponent;
 
 export const rbacAdminApi = {
-  searchUsers: (q) => request('GET', `/users?q=${enc(q || '')}&limit=50`),
+  searchUsers: (q) => request('GET', `/users?q=${enc(q || '')}&limit=200`),
+  listGuests: () => request('GET', '/guests'),
   grantRole: (userId, role, expiresAt) => request('POST', `/users/${enc(userId)}/roles`, { role, expiresAt: expiresAt || null }),
   revokeRole: (userId, role) => request('DELETE', `/users/${enc(userId)}/roles/${enc(role)}`, {}),
   listRoles: () => request('GET', '/roles'),

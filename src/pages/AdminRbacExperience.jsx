@@ -9,6 +9,7 @@ import { RbacAuditPanel } from './rbac/RbacAuditPanel.jsx';
 import { RbacMenusPanel } from './rbac/RbacMenusPanel.jsx';
 import { RbacRolesPanel } from './rbac/RbacRolesPanel.jsx';
 import { RbacUsersPanel } from './rbac/RbacUsersPanel.jsx';
+import { RbacGuestsPanel } from './rbac/RbacGuestsPanel.jsx';
 import { ErrorNote } from './rbac/rbacUi.jsx';
 
 const SECTIONS = [
@@ -59,7 +60,12 @@ export default function AdminRbacExperience() {
       </header>
       <PageTabs tabs={SECTIONS.map((s) => ({ ...s, href: `#${s.key}` }))} activeKey={section} onSelect={setSection} />
       <ErrorNote error={error} />
-      {section === 'users' ? <RbacUsersPanel roles={data.roles} canGrantAdmin={canGrantAdmin} onChanged={handleChanged} /> : null}
+      {section === 'users' ? (
+        <>
+          <RbacUsersPanel roles={data.roles} canGrantAdmin={canGrantAdmin} onChanged={handleChanged} />
+          <RbacGuestsPanel />
+        </>
+      ) : null}
       {section === 'roles' ? <RbacRolesPanel roles={data.roles} permissions={data.permissions} menus={data.menus} canGrantAdmin={canGrantAdmin} onChanged={handleChanged} /> : null}
       {section === 'menus' ? <RbacMenusPanel menus={data.menus} onChanged={handleChanged} /> : null}
       {section === 'audit' ? <RbacAuditPanel /> : null}

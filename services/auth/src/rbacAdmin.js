@@ -5,6 +5,7 @@
 // - 修改特权角色的权限、或给任意角色加/去特权权限，同样需要 superadmin。
 import { nowIso, withTransaction } from './auth.js';
 import { enqueueEvent } from './outbox.js';
+import { listGuestActivity, userLastActiveDates } from './analyticsRead.js';
 import {
   ADMIN_ROLE,
   BASE_ROLE,
@@ -76,12 +77,29 @@ function normalizeExpiresAt(value) {
 
 export function searchUsers(db, { q = '', limit = 20 } = {}) {
   const query = text(q, 48).toLowerCase();
-  const max = Math.min(Math.max(Number(limit) || 20, 1), 100);
-  const rows = query
-    ? db.prepare(`SELECT id, username, created_at FROM users WHERE username LIKE ? ESCAPE '\\' OR id = ? ORDER BY username LIMIT ?`)
+  const max = Math.min(Math.max(Math.floor(Number(limit) || 20), 1), 500);
+  const select = `SELECT u.id, u.username, u.created_at, s.last_session_at FROM users u
+    LEFT JOIN (SELECT user_id, MAX(created_at) AS last_session_at FROM sessions GROUP BY user_id) s ON s.user_id = u.id`;
+  let rows = query
+    ? db.prepare(`${select} WHERE u.username LIKE ? ESCAPE '\\' OR u.id = ? ORDER BY u.username LIMIT ?`)
       .all(`%${query.replace(/[\\%_]/g, (m) => `\\${m}`)}%`, query, max)
-    : db.prepare(`SELECT u.id, u.username, u.created_at FROM users u
-        WHERE EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = u.id) ORDER BY u.username LIMIT ?`).all(max);
+    : db.prepare(`${select} ORDER BY u.username`).all();
+  const activeDates = userLastActiveDates();
+  rows = rows.map((row) => {
+    const date = activeDates.get(row.id);
+    const sessionAt = row.last_session_at;
+    const lastActiveAt = date && (!sessionAt || Date.parse(date) > Date.parse(sessionAt)) ? date : sessionAt || null;
+    return { ...row, lastActiveAt };
+  });
+  if (!query) {
+    // 必须先合并分析日期再排序、截断，否则姓名靠后的活跃用户会被 LIMIT 遗漏。
+    rows.sort((a, b) => {
+      if (!a.lastActiveAt) return b.lastActiveAt ? 1 : 0;
+      if (!b.lastActiveAt) return -1;
+      return Date.parse(b.lastActiveAt) - Date.parse(a.lastActiveAt);
+    });
+    rows = rows.slice(0, max);
+  }
   const graph = loadRoleGraph(db);
   const now = nowIso();
   const roleStmt = db.prepare('SELECT role_code, expires_at, granted_by, created_at FROM user_roles WHERE user_id = ? ORDER BY created_at');
@@ -89,6 +107,7 @@ export function searchUsers(db, { q = '', limit = 20 } = {}) {
     id: row.id,
     username: row.username,
     createdAt: row.created_at,
+    lastActiveAt: row.lastActiveAt,
     roles: roleStmt.all(row.id).map((r) => ({
       code: r.role_code,
       name: graph.get(r.role_code)?.name || r.role_code,
@@ -98,6 +117,10 @@ export function searchUsers(db, { q = '', limit = 20 } = {}) {
       createdAt: r.created_at,
     })),
   }));
+}
+
+export function listGuests({ limit = 200 } = {}) {
+  return listGuestActivity(limit);
 }
 
 function requireUser(db, userId) {

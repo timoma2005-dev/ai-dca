@@ -53,7 +53,8 @@
 ## 执行约束
 
 - 只动：src/app/postAuthSync.js、test/cloudSyncContract.test.mjs（新）、services/auth/src/、
-  services/auth/test/、src/app/rbac/rbacAdminApi.js、src/pages/rbac/、相关前端 test/、本计划文件。
+  services/auth/test/、src/app/rbac/rbacAdminApi.js、src/pages/rbac/、
+  src/pages/AdminRbacExperience.jsx（实际所在路径）、相关前端 test/、本计划文件。
 - 不动：services/cn-data、deploy/ nginx、workers/。
 - 每项一个提交，显式路径 git add，不 push（发布由协调方执行）。
 - 已知基线（勿修、勿新增）：前端全量测试 32 个既有失败 + 3 个文件加载失败
@@ -62,7 +63,7 @@
 ## 进度
 
 - [x] 任务 1 实现 + 测试
-- [ ] 任务 2 实现 + 测试
+- [x] 任务 2 实现 + 测试
 - [ ] 任务 3 定位结论与修复
 - [ ] build 通过，相关测试通过
 
@@ -70,6 +71,10 @@
 
 - 任务 1：契约测试在修复前两条均失败，准确指出已删除 API；修复后契约、authClient、
   accountMigrationGate、cloudSyncConflict、cloudSyncMerge 共 32 个测试通过。
+- 任务 2：auth 全套 92 个测试通过；前端 RBAC 相关 22 个测试通过。覆盖全部用户、
+  会话/分析日期取较晚值、排序后限量、游客聚合、500 上限、只读与缺失/损坏/缺表降级、
+  guests 路由门禁。仓库无原 rbacAdminPage.test.mjs，新建同名源码契约测试，覆盖挂载加载、
+  当前查询刷新、最后活跃与游客各状态。
 - 原始 HEAD 6a5b6c58 的 refactor guard 已失败：NotifyExperience.jsx 为 938 行，
-  超过 880 行限制；当前全仓 lint 有 12 个错误，后续与原始 HEAD 对比。
+  超过 880 行限制；原始 HEAD 与当前全仓 lint 均为相同的 12 个错误，修改文件定向 lint 通过。
   保持本计划限定范围，不修无关基线。

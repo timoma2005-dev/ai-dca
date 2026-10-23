@@ -17,6 +17,7 @@ import {
   deleteRole,
   grantUserRole,
   listAudit,
+  listGuests,
   listMenus,
   listPermissions,
   listRoles,
@@ -94,6 +95,7 @@ const ADMIN_PREFIX = '/api/sync/auth/admin';
 // 管理路由表：[method, RegExp, handler(db, access, match, body, url)]
 const ADMIN_ROUTES = [
   ['GET', /^\/users$/, (db, _a, _m, _b, url) => ({ users: searchUsers(db, { q: url.searchParams.get('q') || '', limit: url.searchParams.get('limit') }) })],
+  ['GET', /^\/guests$/, (_db, _a, _m, _b, url) => listGuests({ limit: url.searchParams.get('limit') })],
   ['POST', /^\/users\/([^/]+)\/roles$/, (db, a, m, b) => grantUserRole(db, a, { userId: m[1], role: b.role, expiresAt: b.expiresAt })],
   ['DELETE', /^\/users\/([^/]+)\/roles\/([^/]+)$/, (db, a, m) => revokeUserRole(db, a, { userId: m[1], role: m[2] })],
   ['GET', /^\/roles$/, (db) => ({ roles: listRoles(db) })],

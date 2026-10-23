@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { expiryInputToIso, rbacAdminApi } from '../../app/rbac/rbacAdminApi.js';
 import { showToast } from '../../app/toast.js';
@@ -13,21 +13,33 @@ export function RbacUsersPanel({ roles = [], canGrantAdmin = false, onChanged })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [drafts, setDrafts] = useState({});
+  const pendingSearches = useRef(new Map());
+  const latestSearch = useRef(0);
   const grantable = roles.filter((role) => !NON_GRANTABLE.has(role.code) && !role.isVirtual);
 
-  async function search(event) {
-    event?.preventDefault?.();
+  const search = useCallback(async (searchQuery = '') => {
+    const requestId = ++latestSearch.current;
     setLoading(true);
     setError('');
     try {
-      const data = await rbacAdminApi.searchUsers(query);
-      setUsers(Array.isArray(data.users) ? data.users : []);
+      let pending = pendingSearches.current.get(searchQuery);
+      if (!pending) {
+        pending = rbacAdminApi.searchUsers(searchQuery).finally(() => pendingSearches.current.delete(searchQuery));
+        pendingSearches.current.set(searchQuery, pending);
+      }
+      const data = await pending;
+      if (requestId === latestSearch.current) setUsers(Array.isArray(data.users) ? data.users : []);
     } catch (err) {
-      setError(err.message);
+      if (requestId === latestSearch.current) setError(err.message);
     } finally {
-      setLoading(false);
+      if (requestId === latestSearch.current) setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    search('');
+    return () => { latestSearch.current += 1; };
+  }, [search]);
 
   function updateDraft(userId, patch) {
     setDrafts((current) => ({ ...current, [userId]: { role: '', expires: '', ...current[userId], ...patch } }));
@@ -40,7 +52,7 @@ export function RbacUsersPanel({ roles = [], canGrantAdmin = false, onChanged })
       await rbacAdminApi.grantRole(user.id, draft.role, expiryInputToIso(draft.expires));
       showToast({ title: '已授予角色', description: `${user.username} → ${draft.role}`, tone: 'emerald' });
       updateDraft(user.id, { role: '', expires: '' });
-      await search();
+      await search(query);
       onChanged?.();
     } catch (err) {
       setError(err.message);
@@ -52,7 +64,7 @@ export function RbacUsersPanel({ roles = [], canGrantAdmin = false, onChanged })
     try {
       await rbacAdminApi.revokeRole(user.id, role.code);
       showToast({ title: '已撤销角色', tone: 'slate' });
-      await search();
+      await search(query);
       onChanged?.();
     } catch (err) {
       setError(err.message);
@@ -61,8 +73,8 @@ export function RbacUsersPanel({ roles = [], canGrantAdmin = false, onChanged })
 
   return (
     <Panel title="用户角色" description="所有登录用户默认拥有「普通用户」。到期日留空表示长期有效，过期后自动失效。">
-      <form className="flex flex-wrap gap-2" onSubmit={search}>
-        <input className={`${inputClass} flex-1`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="用户名或用户 ID（留空列出已授权用户）" aria-label="搜索用户" />
+      <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); search(query); }}>
+        <input className={`${inputClass} flex-1`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="用户名或用户 ID（留空列出全部用户）" aria-label="搜索用户" />
         <button type="submit" className={buttonClass} disabled={loading}>
           <Search className="h-4 w-4" aria-hidden="true" />
           {loading ? '搜索中…' : '搜索'}
@@ -78,6 +90,7 @@ export function RbacUsersPanel({ roles = [], canGrantAdmin = false, onChanged })
                 <div className="text-sm font-bold text-slate-900">{user.username}</div>
                 <div className="text-[11px] text-slate-400">{user.id} · 注册 {formatTime(user.createdAt)}</div>
               </div>
+              <div className="mt-1 text-xs text-slate-500">最后活跃 {user.lastActiveAt ? formatTime(user.lastActiveAt) : '从未'}</div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">普通用户（默认）</span>
                 {user.roles.map((role) => {
@@ -111,7 +124,7 @@ export function RbacUsersPanel({ roles = [], canGrantAdmin = false, onChanged })
           );
         })}
       </ul>
-      {!loading && !users.length ? <p className="mt-4 text-xs text-slate-400">输入用户名后搜索。</p> : null}
+      {!loading && !users.length ? <p className="mt-4 text-xs text-slate-400">暂无匹配用户。</p> : null}
     </Panel>
   );
 }
