@@ -16,6 +16,7 @@ import { saveWorkspaceReturn } from '../app/workspaceReturn.js';
 import { CONVERSION_PROMPT_EVENT } from '../app/conversionPrompts.js';
 import { ConversionPromptCard } from '../components/conversion-prompt-card.jsx';
 import { ACCOUNT_AUTH_OPEN_EVENT, openAccountAuth } from '../app/accountAuthEvents.js';
+import { loadAccountMenu } from '../app/loadAccountMenu.js';
 import { useRbac } from '../app/rbac/useRbac.js';
 import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, splitSidebarMenus } from '../app/rbac/menuModel.js';
 import { resolveMenuIcon } from '../components/rbac/menu-icons.js';
@@ -40,7 +41,7 @@ const SharesExperience = lazy(() => import('./SharesExperience.jsx'));
 const AdminRbacExperience = lazy(() => import('./AdminRbacExperience.jsx'));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
 const ReleaseAnnouncementModal = lazy(() => import('../components/release-announcement-modal.jsx').then((m) => ({ default: m.ReleaseAnnouncementModal })));
-const AccountMenu = lazy(() => import('../components/account-menu.jsx').then((m) => ({ default: m.AccountMenu })));
+const AccountMenu = lazy(() => loadAccountMenu(() => import('../components/account-menu.jsx')).then((m) => ({ default: m.AccountMenu })));
 
 
 function readPreferredWorkspaceTab(fallbackTab = DEFAULT_WORKSPACE_TAB) {

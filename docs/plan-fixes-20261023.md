@@ -49,6 +49,23 @@
 - 要求：用 jsdom 渲染测试以 superadmin 形态的 rbac 数据复现点击流；定位根因并修复；
   若代码层无法复现，必须在本文件写明结论，并落地 chunk 加载韧性（lazy 失败重试一次 +
   一次性整页重载，sessionStorage 防循环）作为缓解。补回归测试。
+- 定位结论（2026-10-23）：**代码层未复现，疑似客户端 chunk/缓存**。沿用并完善
+  `test/helpers/accountMenuClickHarness.mjs`，以真实 BrandPreviewBar / AccountMenu 组件和
+  WorkspacePage 源码中的事件监听执行 jsdom 点击流。RBAC 数据为
+  superadmin → admin → svip → vip → user → guest 完整继承链，加 auction_viewer，
+  topRole=superadmin；分别验证完整 RBAC 缓存和无 RBAC 缓存的旧长效会话。
+  两种情况下均完成按钮点击 → `ai-dca:account-auth-open` → `setAccountMenuOpen(true)` →
+  受控 AccountMenu（hideTrigger）面板渲染，7 个角色及超级管理员盾牌显示正常，
+  关闭/重开正常；RoleList、RoleBadge、useRbac 路径未捕获 React 渲染异常。
+  jsdom 结果不能确认生产客户端的 chunk / service worker 缓存状态，故不将该嫌疑当作已证实根因。
+- 韧性修复：检索现有 lazy 用法后未找到同类 helper。新增仅用于 AccountMenu 的
+  `src/app/loadAccountMenu.js`，接入 WorkspacePage 的 lazy 导入；导入失败重试一次，
+  再失败则先写 sessionStorage `aiDcaAccountMenuReload_v1` 再整页 reload。
+  标记在同一标签页 session 内保留（成功导入也不清除），避免循环重载；存储不可用时不自动重载。
+  reload 和存储访问均可注入，最终保留导入错误。
+- 回归：新增 `test/accountMenuClick.test.mjs` 与 `test/loadAccountMenu.test.mjs`；
+  点击脚手架纳入版本管理，清理 React act 的 MessageChannel 端口，避免测试进程挂起。
+  添加 jsdom 26.1 为开发依赖，使点击测试可直接由 `node --test` 执行。
 
 ## 执行约束
 
@@ -56,6 +73,9 @@
   services/auth/test/、src/app/rbac/rbacAdminApi.js、src/pages/rbac/、
   src/pages/AdminRbacExperience.jsx（实际所在路径）、相关前端 test/、本计划文件。
 - 不动：services/cn-data、deploy/ nginx、workers/。
+- 任务 3 按本轮明确授权补充范围：`src/pages/WorkspacePage.jsx`、
+  `src/app/loadAccountMenu.js`、上述相关前端测试/脚手架，以及测试所需的
+  `package.json` / `package-lock.json` 开发依赖；任务 1、2 的代码不再修改。
 - 每项一个提交，显式路径 git add，不 push（发布由协调方执行）。
 - 已知基线（勿修、勿新增）：前端全量测试 32 个既有失败 + 3 个文件加载失败
   （accountResourceSync/resourceSync/syncRegistry，均为 10-04 重构遗留）。
@@ -64,8 +84,9 @@
 
 - [x] 任务 1 实现 + 测试
 - [x] 任务 2 实现 + 测试
-- [ ] 任务 3 定位结论与修复
-- [ ] build 通过，相关测试通过
+- [x] 任务 3 定位结论与修复
+- [x] 任务 3 新增回归 10 项通过，Vite 构建通过
+- [ ] build 通过，相关测试通过（现有 guard / 测试基线阻断，详见下方）
 
 ## 验证记录
 
@@ -78,3 +99,16 @@
 - 原始 HEAD 6a5b6c58 的 refactor guard 已失败：NotifyExperience.jsx 为 938 行，
   超过 880 行限制；原始 HEAD 与当前全仓 lint 均为相同的 12 个错误，修改文件定向 lint 通过。
   保持本计划限定范围，不修无关基线。
+- 任务 3：`node --test test/accountMenuClick.test.mjs test/loadAccountMenu.test.mjs`
+  新增 10 项全部通过；覆盖完整高角色渲染、旧会话、导入首次成功/失败后重试成功、
+  连续失败只 reload 一次（重新导入 helper 模拟整页重载后仍受 session 标记保护）、
+  成功导入不清除标记、存储缺失/访问/读写异常及 reload 异常。
+- 任务 3 相关测试：运行 rbacUiRender、rbacStore、rbacMenuModel、accountMenuPreviewKeyCount、
+  accountMenuClick、loadAccountMenu、workspaceMobileBottomNavMount 共 37 项，36 通过、1 个既有失败。
+  失败为 `accountMenuPreviewKeyCount.test.mjs:28` 的旧源码正则仍匹配 `!open`，
+  而组件现已使用 `!effectiveOpen`；在本次源码修改前已复核同样失败，保留基线、不修改该测试或组件。
+- 任务 3 构建/检查：`npm run build` 已执行，因原有 NotifyExperience.jsx 938 > 880 行
+  的 refactor guard 失败而未进入 Vite；另行运行 `npm run build:app`，Vite 构建成功。
+  `npm run check:refactor` 保持同一既有失败；`npm run lint -- --quiet` 保持原有 12 个错误；
+  `npx --no-install eslint src/app/loadAccountMenu.js src/pages/WorkspacePage.jsx --quiet`
+  与 `git diff --check` 通过。未运行或修复前端全量测试基线。
