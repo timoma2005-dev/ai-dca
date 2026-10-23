@@ -75,26 +75,13 @@ async function runWithSessionPropagationRetry(task, { identity, phase, session }
   throw error;
 }
 
-/** 首次同步：沿用原 runInitialSync 的语义，但冲突检测修正为读取 summary。 */
+/** 首次同步：有云端备份时直接拉取；新注册且无备份时上传本机数据。 */
 async function runInitialAccountSync(cloudSync, { action, identity }) {
   assertSameSession(identity);
   const remoteMeta = await cloudSync.refreshRemoteCloudMeta();
   const hasRemoteBackup = Boolean(remoteMeta?.version);
   cloudSync.ensureLocalChangeBaseline();
   if (hasRemoteBackup) {
-    const conflict = await cloudSync.prepareCloudSyncConflict();
-    const summary = conflict?.summary || {};
-    if (summary.hasLocalChanges) {
-      const error = new Error('本机与云端数据不一致，请先选择同步方式。');
-      error.isCloudSyncConflict = true;
-      // 冲突弹窗按 summary 字段（summaryText/changedKeys 等）渲染；保留原始信封供手动处理。
-      error.conflict = {
-        ...summary,
-        remoteEnvelope: conflict?.remoteEnvelope || null,
-        localEnvelope: conflict?.localEnvelope || null
-      };
-      throw error;
-    }
     const pulled = await cloudSync.restoreEncryptedCloudBackup();
     dispatch('cloud-sync:auto-restored', { result: pulled });
     return 'pulled';
