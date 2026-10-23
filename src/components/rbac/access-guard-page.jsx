@@ -47,14 +47,20 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
       ) : isPaid ? (
         <>
           <div className="mt-4 inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700">{roleLabel} 专享</div>
-          <h2 className="mt-2 text-lg font-bold text-slate-900">{target}为 {roleLabel} 会员功能</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            如需更多功能，请随意打赏并备注账号名{username ? <>「<span className="font-semibold text-slate-700">{username}</span>」</> : ''}，管理员看到后会尽快为您开通。
+          <h2 className="mt-2 text-lg font-bold text-slate-900">{menuLabel || '此功能'}为 {roleLabel} 会员功能</h2>
+          <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500 [text-wrap:balance]">
+            如需更多功能，请随意打赏并备注账号名，管理员看到后会尽快为您开通。
           </p>
+          {username ? (
+            <div className="mt-4 inline-flex max-w-full items-center gap-2 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm" data-testid="access-guard-account">
+              <span className="shrink-0 text-slate-500">备注账号</span>
+              <span className="truncate font-semibold text-slate-800">{username}</span>
+            </div>
+          ) : null}
           {onUpgrade ? (
             <button
               type="button"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-600"
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-600"
               onClick={() => onUpgrade()}
             >
               <Coffee className="h-4 w-4" aria-hidden="true" />
