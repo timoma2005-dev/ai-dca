@@ -130,7 +130,7 @@ test('TTL anchored to fetch; monotone pointer; independent date/pointer failures
   assert.equal((await persistSharesProjection(kv, data)).ok, true);
   assert.equal(puts.length, 2);
   for (const put of puts)
-    assert.equal(put.options.expirationTtl, Math.floor((Date.parse(data.expiresAt) - put.at) / 1000));
+    assert.equal(put.options?.expirationTtl, undefined); // 投影永久保存
   await persistSharesProjection(kv, data);
   assert.equal(puts.length, 2);
   assert.equal(
