@@ -115,7 +115,6 @@ async function mockOtcCompareNetwork(page) {
 test('OTC fund comparison uses NAV history when K-line data is unavailable', async ({ page }) => {
   const networkState = await mockOtcCompareNetwork(page);
   await page.addInitScript(() => {
-    window.__AI_DCA_RELEASE_ANNOUNCEMENT__ = { enabled: false };
     window.localStorage.setItem('markets:watchlist:v1', JSON.stringify({
       lists: [{
         id: 'default-otc',

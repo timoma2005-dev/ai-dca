@@ -30,7 +30,6 @@ const ETF_NAMES = {
 
 async function seedSwitchPage(page, { withHolding = true } = {}) {
   await page.addInitScript(({ withHolding }) => {
-    window.__AI_DCA_RELEASE_ANNOUNCEMENT__ = { enabled: false };
     window.localStorage.clear();
     window.localStorage.setItem('aiDcaFundHoldingsLedger', JSON.stringify({
       source: 'react-fund-holdings-ledger',

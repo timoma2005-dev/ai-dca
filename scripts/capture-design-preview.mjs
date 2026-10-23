@@ -19,7 +19,6 @@ const context=await browser.newContext({viewport:{width:390,height:844}});
 await context.addInitScript(({state})=>{
   localStorage.setItem('aiDcaCloudSyncSession',JSON.stringify({userId:'design-preview',username:'设计预览',accessToken:'fixture-not-a-real-token',isAdmin:true,roles:state.roles}));
   localStorage.setItem('aiDcaRbacMenus_v1',JSON.stringify({key:'user:design-preview',state}));
-  window.__AI_DCA_RELEASE_ANNOUNCEMENT__={enabled:false};
 },{state});
 const page=await context.newPage(); let writes=0; const blockedWriteRequests=[]; const errors=[]; const layoutChecks=[]; const stateChecks=[];
 page.on('pageerror',e=>errors.push(e.message));
@@ -65,6 +64,7 @@ if(label==='after') {
  if(keyboardSelected!=='#guests') throw new Error('Arrow navigation failed');
  await page.locator('a[href="#users"]').click();
  await page.evaluate(()=>{document.documentElement.classList.add('dark');window.scrollTo(0,0)}); await page.waitForTimeout(200); console.log('DARK',await page.locator('a[data-active=true], .ui-filter').evaluateAll(els=>els.slice(0,4).map(e=>({text:e.textContent,classes:e.className,color:getComputedStyle(e).color,background:getComputedStyle(e).backgroundColor,primary:getComputedStyle(e).getPropertyValue('--ds-primary')}))));
+ await page.mouse.move(1, 1); await page.waitForTimeout(500);
  await page.screenshot({path:`${out}/admin-rbac-dark-mobile.png`});
  await page.evaluate(()=>document.documentElement.classList.remove('dark'));
  for(const tab of ['home','markets','holdings','tradePlans']) {

@@ -42,15 +42,15 @@ const REFACTOR_PHASES = [
     budgets: [['src/pages/MarketsExperience.jsx', 1520]]
   },
   {
-    name: 'switch strategy panels',
-    activationFile: 'src/pages/SwitchStrategyOpportunityPanels.jsx',
+    name: 'fund switch board',
+    activationFile: 'src/pages/FundSwitchExperience.jsx',
     requiredFiles: [
-      'src/pages/SwitchStrategyClassificationPanel.jsx',
-      'src/pages/SwitchStrategyOpportunityPanels.jsx',
-      'src/pages/SwitchStrategyPanels.jsx',
-      'src/pages/switchStrategyHelpers.js'
+      'src/pages/FundSwitchExperience.jsx',
+      'src/pages/switch/SwitchStrategyBoardExperience.jsx',
+      'src/pages/switch/SwitchStrategyRuleModal.jsx',
+      'src/pages/switch/switchBoardModel.js'
     ],
-    budgets: [['src/pages/SwitchStrategyExperience.jsx', 1100]]
+    budgets: [['src/pages/FundSwitchExperience.jsx', 100]]
   },
   {
     name: 'notify page cards',
@@ -63,13 +63,11 @@ const REFACTOR_PHASES = [
     budgets: [['src/pages/NotifyExperience.jsx', 880]]
   },
   {
-    name: 'new plan shell',
-    activationFile: 'src/pages/NewPlanShell.jsx',
+    name: 'new plan layout',
+    activationFile: 'src/pages/NewPlanExperience.jsx',
     requiredFiles: [
-      'src/pages/NewPlanConfigCards.jsx',
-      'src/pages/NewPlanPreviewSidebar.jsx',
-      'src/pages/NewPlanSelectionCards.jsx',
-      'src/pages/NewPlanShell.jsx'
+      'src/pages/NewPlanExperience.jsx',
+      'src/pages/NewPlanExperienceLayout.jsx'
     ],
     budgets: [['src/pages/NewPlanExperience.jsx', 650]]
   },
@@ -117,7 +115,7 @@ const REFACTOR_PHASES = [
 const BASE_LINE_BUDGETS = [
   ['src/pages/MarketsExperience.jsx', 1900],
   ['src/pages/HoldingsExperience.jsx', 1300],
-  ['src/pages/SwitchStrategyExperience.jsx', 1900],
+  ['src/pages/FundSwitchExperience.jsx', 100],
   ['src/pages/NotifyExperience.jsx', 1150],
   ['src/pages/NewPlanExperience.jsx', 1000],
   ['workers/ocr-proxy/src/index.js', 950],

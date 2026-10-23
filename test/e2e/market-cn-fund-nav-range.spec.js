@@ -59,7 +59,6 @@ function makeNavItems() {
 
 async function mockMarkets(page) {
   await page.addInitScript(() => {
-    window.__AI_DCA_RELEASE_ANNOUNCEMENT__ = { enabled: false };
     window.localStorage.setItem('markets:watchlist:v1', JSON.stringify({
       cn: ['513100'],
       us: [],

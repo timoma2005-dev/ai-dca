@@ -39,7 +39,6 @@ const AdminAuctionExperience = lazy(() => import('./AdminAuctionExperience.jsx')
 const SharesExperience = lazy(() => import('./SharesExperience.jsx'));
 const AdminRbacExperience = lazy(() => import('./AdminRbacExperience.jsx'));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
-const ReleaseAnnouncementModal = lazy(() => import('../components/release-announcement-modal.jsx').then((m) => ({ default: m.ReleaseAnnouncementModal })));
 const AccountMenu = lazy(() => loadAccountMenu(() => import('../components/account-menu.jsx')).then((m) => ({ default: m.AccountMenu })));
 
 
@@ -351,7 +350,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const restoreScrollOnNextTabRef = useRef(false);
   const activeTabRef = useRef(activeTab);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
-  const [releaseAnnouncementReady, setReleaseAnnouncementReady] = useState(false);
   const currentPageLabel = WORKSPACE_TAB_META[activeTab]?.label || '';
 
   function handleScenarioSwitch(newScenarioKey) {
@@ -430,12 +428,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         .then((mod) => mod.triggerNetworkTrace?.())
         .catch(() => {});
     }, { timeout: 3000, delayMs: 1500 });
-  }, []);
-
-  useEffect(() => {
-    runWhenIdle(() => {
-      setReleaseAnnouncementReady(true);
-    }, { timeout: 4000, delayMs: 45000 });
   }, []);
 
   useEffect(() => {
@@ -534,16 +526,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     window.history.pushState({ tab: normalizedTab }, '', nextUrl);
     setActiveTab(normalizedTab);
     setActiveHash(window.location.hash || '');
-    // 记录侧边 tab 点击，供「策略指南 · Recently visited」读取。
-    try {
-      const RECENT_KEY = 'aiDcaRecentGuideAnchors';
-      const raw = JSON.parse(window.localStorage.getItem(RECENT_KEY) || '[]');
-      const list = Array.isArray(raw) ? raw.filter(Boolean) : [];
-      list.unshift({ id: `tab:${normalizedTab}`, ts: Date.now() });
-      window.localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 12)));
-    } catch {
-      // 忽略最近访问记录写入失败，不影响 tab 切换。
-    }
     // 合并后：侧边栏《新建建仓计划》通过 #new hash 跳进《交易计划》的新建子视图。
     // 由于 TradePlansExperience 在 mount 时才读 hash，手动触发 hashchange 用于已 mount 的情况。
     if (hash && alreadyActive) {
@@ -759,11 +741,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
               );
             }}
           />
-        </Suspense>
-      ) : null}
-      {releaseAnnouncementReady ? (
-        <Suspense fallback={null}>
-          <ReleaseAnnouncementModal cloudSession={cloudSession} />
         </Suspense>
       ) : null}
       <ConversionPromptCard prompt={conversionPrompt} onClose={() => setConversionPrompt(null)} />
