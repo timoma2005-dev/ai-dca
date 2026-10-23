@@ -730,7 +730,7 @@ test('fetchEtfPcfLimit：默认缓存优先，forceRefresh 才绕过缓存抓取
   assert.equal(fetchFn.calls.length, 1);
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:159941:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, CACHE_TTL_SECONDS);
+  assert.equal(kv.putCalls[0].options?.expirationTtl, undefined);
   const persisted = JSON.parse(kv.putCalls[0].value);
   assert.equal(persisted.code, '159941');
   assert.equal(persisted.date, '2026-10-13');
@@ -1070,7 +1070,7 @@ test('历史 inflight 合并、成功重校验调用 now、不同日期不串 ke
   assert.equal(kv.putCalls.length, 1);
 });
 
-test('cron 单标的当日刷新不修改历史永久 key，TTL 保持 400 天', async () => {
+test('cron 单标的当日刷新不修改历史永久 key，写入不设 TTL（永久保存）', async () => {
   const history = historyFixture('159941', '2025-10-13');
   const key = buildEtfPcfCacheKey(history.code, history.date);
   const original = JSON.stringify(history);
@@ -1081,7 +1081,7 @@ test('cron 单标的当日刷新不修改历史永久 key，TTL 保持 400 天',
   assert.equal(kv.expirations.has(key), false);
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:159941:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, CACHE_TTL_SECONDS);
+  assert.equal(kv.putCalls[0].options?.expirationTtl, undefined);
 });
 
 test('P 日真实数值与原始净值精度，T 日现金不串段', () => {

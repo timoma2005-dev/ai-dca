@@ -988,7 +988,8 @@ export async function fetchEtfPcfLimit({
       if (historical) {
         await env.FUND_LIMIT_KV.put(key, JSON.stringify(persisted));
       } else {
-        await env.FUND_LIMIT_KV.put(key, JSON.stringify(persisted), { expirationTtl: ETF_PCF_TTL_SECONDS });
+        // PCF 原始数据永久保存（不设 KV TTL）；对象内 expiresAt 只表示「当日缓存」新鲜度，历史读取不看它。
+        await env.FUND_LIMIT_KV.put(key, JSON.stringify(persisted));
       }
     } catch (_e) {
       return { ok: false, status: 503, reason: 'kv_write_failed', error: 'ETF PCF 缓存写入失败。', code: v.code, date: v.date };

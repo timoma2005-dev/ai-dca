@@ -71,3 +71,20 @@
 - `WorkspacePage` 使用统一 tab 权限谓词覆盖侧栏可见项、当前 tab 守卫、tab 选择与竞价面板渲染；两处公开份额 `isPublicShares` 例外保持原样。GlobalSearch 原本没有竞价条目，本次新增并通过 `showAuctionTab` 单独控制；移动端通过末尾默认关闭的 `canAccessAuction` 参数同步控制直接入口与“更多”菜单。
 - 这是与现有管理员体系同级的界面层门控，不修改 `services/auth`，不新增静态页 URL 的服务端拦截。`public/auction-board.html` 作为静态资源仍可直接通过 `/auction-board.html` 访问，这是既有事实；本次不修改该文件。
 - 行为测试直接导入 `analytics.js`，覆盖规范化账号、带 `@` 与空格输入、全管理员和拒绝场景，并验证单 tab 授权不提升全管理员权限；源码及工作台、搜索、移动导航行为测试覆盖透传和其他管理员 tab 的拒绝。仅修改源码、计划和测试并验证，不 commit、push 或 release。
+
+## 2026-10-23 停牌按状态判断 + 持仓按账户自动识别（用户指令）
+
+- 停牌按状态判断：集合竞价/竞价结束（09:15–09:30）时溢价超阈值 → 推算停牌，显示“预计停牌至10:30”，不参与比较；连续竞价（09:30 后）不再按溢价推算，只认行情真实停牌（停牌标志或无买卖盘）。移除 `haltUntil` 跨时段顺延。
+- 持仓自动识别：`AdminAuctionExperience` 读取账户交易流水（`readLedgerState` + `getActiveHoldingCodeList`，净份额 > 0），通过同源 `postMessage({type:'ai-dca-auction-held', codes})` 推给 iframe；iframe 加载后发 `ai-dca-auction-ready`，登录态下账户流水只在内存 runtime，父页面先 `pullHoldingTransactions` 从云端拉取后再推送，之后每 60 秒重拉一次，iframe onLoad、ready、storage 事件也会推送。收到后持有列按账户自动勾选并禁用手动勾选；单独打开静态页时仍可手动勾选。
+- iframe `src="/auction-board.html"` 及容器样式不变。
+- 验收：`node --test test/adminRadarAuctionTab.test.mjs` 新增用例；ESLint 改动文件；`git diff --check`；上线后用 lovexl 登录 `?tab=adminAuction` 验收。
+
+## 2026-10-23 UI 与交互重构（PC + App，用户确认设计稿后执行）
+
+- `public/auction-board.html` 重写界面层，数据获取与停牌/偏离计算逻辑保持不变：去掉 Hark 组件库样式和 Google Fonts，改为自带样式、系统字体。
+- PC（>1280px）：顶栏含交易阶段胶囊与时段条、参数芯片、数据源状态、刷新；首行为操作建议大卡（卖出→买入两条腿、当前时段步骤）、NQ 卡（自昨日15:00分时折线）、持仓卡；第二行为偏离分布条形图（买入区/卖出线）与12只ETF表格（状态、现价、涨跌、偏离、溢价、买一/卖一、信号，可排序）；底部为今日信号、规则、停牌与口径。860–1280px 自动堆叠。
+- App（≤860px）：顶栏标题+设置按钮、阶段与当日进度条；操作建议卡、NQ/持仓双卡；“全部/买入区/停牌”筛选，卡片列表持仓置顶、按偏离排序，每张卡带偏离条。
+- 参数改到设置面板（PC 弹层、App 底部抽屉）：偏离阈值、买入下限（默认0.5）、停牌溢价，存 localStorage。买入候选限定在 `−买入下限 ~ −阈值`（与已确认设计稿和用户策略一致）。
+- 今日信号：交易时段内记录进入/离开买入区、持仓回归、偏贵、停牌/复牌，按日存 localStorage。
+- 父页面额外推送 `rounds`（每个持仓最近一笔 BUY 的日期/价格，及同 `switchPairId` 的配对卖出代码/价格），看板据此显示本轮买入与相对卖出标的的相对收益。
+- 验收：测试新增响应式/设置/买入区断言；ESLint、`git diff --check`、vite build；上线后 PC 与手机宽度分别用 lovexl 验收。

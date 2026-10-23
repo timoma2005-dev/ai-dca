@@ -314,7 +314,7 @@ test('POST 成功抓取解析并写入精确 key（TTL 400 天）后返回 200',
   assert.equal(fetchMock.mock.calls[0].arguments[0], 'https://reportdocs.static.szse.cn/files/text/etf/ETF15994120261013.txt');
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:159941:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, CACHE_TTL_SECONDS);
+  assert.equal(kv.putCalls[0].options?.expirationTtl, undefined);
 });
 
 test('POST date 省略默认上海当天', async (t) => {
@@ -599,7 +599,7 @@ test('POST SSE 缺省 date：用接口 TRADING_DAY 入库，响应日期与写�
   assert.equal(fetchMock.mock.calls.length, 1);
   assert.equal(kv.putCalls.length, 1);
   assert.equal(kv.putCalls[0].key, 'etf-pcf:513100:20261013');
-  assert.equal(kv.putCalls[0].options.expirationTtl, 400 * 86400);
+  assert.equal(kv.putCalls[0].options?.expirationTtl, undefined);
 
   // 抓取时间在上海 10-14，但源站 TRADING_DAY 仍是 20261013：只写清单日，不伪造当天。
   const nextDay = new FakeKV();

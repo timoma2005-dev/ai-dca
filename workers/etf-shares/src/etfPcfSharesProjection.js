@@ -53,9 +53,9 @@ export function persistSharesProjection(kv, data, { deadlineAt = Infinity, signa
         const wait = 1000 - (Date.now() - (state.times.get(key) || 0));
         if (wait > 0) await bounded(new Promise((resolve) => setTimeout(resolve, wait)));
         check();
-        const expirationTtl = Math.floor((Date.parse(data.expiresAt) - Date.now()) / 1000);
-        if (expirationTtl < 60) throw Error('projection_expired');
-        await bounded(kv.put(key, JSON.stringify(value), { expirationTtl }));
+        // 份额投影永久保存（不设 KV TTL）；expiresAt 仍只用于 latest 新鲜度校验。
+        if (Date.parse(data.expiresAt) - Date.now() < 60000) throw Error('projection_expired');
+        await bounded(kv.put(key, JSON.stringify(value)));
         state.times.set(key, Date.now());
       };
       try {

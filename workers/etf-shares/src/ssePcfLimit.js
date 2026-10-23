@@ -920,7 +920,8 @@ export async function fetchSsePcfLimit({
     // 写前再次核对名单与真实公历日期；成功抓取解析后必须 await 写入，写失败不冒充已缓存。
     const key = buildSsePcfCacheKey(v.code, structured.date);
     try {
-      await env.FUND_LIMIT_KV.put(key, JSON.stringify(persisted), { expirationTtl: SSE_PCF_TTL_SECONDS });
+      // 上交所 PCF 永久保存（不设 KV TTL），否则上一限额日过期会导致 513 无法环比。
+      await env.FUND_LIMIT_KV.put(key, JSON.stringify(persisted));
     } catch (_e) {
       return {
         ok: false,
