@@ -1,6 +1,7 @@
 import { normalizeBarkDeviceKey, sendBarkNotification } from './barkChannel.js';
 import { sendServerChan3Notification } from './serverChan3Channel.js';
 import { loadTestDeliverySettings } from './testDelivery.js';
+import { emailDailyLimitFor, emailSentToday, recordEmailSent, shanghaiDate } from './emailQuota.js';
 const RESEND_FROM = 'notify@freebacktrack.tech'; // mirrors worker's DEFAULT_FROM
 
 function text(value = '', max = 5000) { return String(value ?? '').trim().slice(0, max); }
@@ -134,11 +135,24 @@ export function saveNotifyEvent(db, account, event) {
 }
 
 
+// 测试可注入 auth 库；默认读取共享 auth SQLite。
+export const emailQuotaDeps = { openAuthDb: undefined };
+
 export async function deliverCycleNotification(db, account, notification, {targetChannels = null} = {}) {
   const settings = loadTestDeliverySettings(db, account);
   const results = [];
+  let emailLimit = null;
+  const quotaDate = shanghaiDate();
   for (const channel of channelsOfTest(targetChannels)) {
+    if (channel === 'email' && account?.userId) {
+      emailLimit ??= emailDailyLimitFor(account.userId, { openDb: emailQuotaDeps.openAuthDb });
+      if (emailSentToday(db, account.userId, quotaDate) >= emailLimit) {
+        results.push({ channel, status: 'skipped', detail: `今日邮件通知已达上限（${emailLimit} 条）`, dailyLimitReached: true, configKey: `${channel}-client:${account.clientId}`, configType: `${channel}-client`, configId: account.clientId });
+        continue;
+      }
+    }
     const result = await deliverTestChannel(notification, channel, settings);
+    if (channel === 'email' && account?.userId && result.status === 'delivered') recordEmailSent(db, account.userId, quotaDate);
     results.push({...result, configKey: `${channel}-client:${account.clientId}`, configType: `${channel}-client`, configId: account.clientId});
   }
   const status = results.some(r => r.status === 'delivered' || r.status === 'queued') ? 'delivered' : results.some(r => r.status !== 'skipped') ? 'failed' : 'skipped';

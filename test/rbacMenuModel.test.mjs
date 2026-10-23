@@ -38,8 +38,8 @@ const USER_STATE = {
 test('guest fallback mirrors the server seed: public menus open, user menus locked, VIP menus hidden', () => {
   const guest = buildGuestFallback();
   const byKey = Object.fromEntries(flattenMenus(guest.menus).map((m) => [m.key, m]));
-  for (const key of ['home', 'markets', 'shares', 'articles']) assert.equal(byKey[key].locked, false, key);
-  for (const key of ['holdings', 'tradePlans', 'fundSwitch', 'notify', 'dataRepair']) {
+  for (const key of ['home', 'shares', 'articles']) assert.equal(byKey[key].locked, false, key);
+  for (const key of ['markets', 'holdings', 'tradePlans', 'fundSwitch', 'notify', 'dataRepair']) {
     assert.equal(byKey[key].locked, true, key);
     assert.equal(byKey[key].requiredRole.code, 'user');
   }
@@ -61,12 +61,13 @@ test('route guard: guest → login, insufficient role → forbidden with require
   assert.equal(evaluateTabAccess(USER_STATE, 'strategy').status, 'ok', 'unmanaged legacy tabs are not guarded');
 });
 
-test('logged-in fallback (no server menus yet) keeps user features usable and VIP features locked', () => {
+test('logged-in fallback (no server menus yet) keeps user features usable and member features locked', () => {
   const user = buildUserFallback();
   assert.equal(evaluateTabAccess(user, 'holdings').status, 'ok');
   const radar = evaluateTabAccess(user, 'adminRadar');
   assert.equal(radar.status, 'forbidden');
-  assert.equal(radar.requiredRole.code, 'vip');
+  assert.equal(radar.requiredRole.code, 'svip');
+  for (const key of ['markets', 'fundSwitch', 'notify']) assert.equal(evaluateTabAccess(user, key).requiredRole?.code, 'vip', key);
   assert.equal(evaluateTabAccess(user, 'adminRbac').status, 'forbidden');
   const admin = buildUserFallback({ isAdmin: true });
   for (const key of ['adminRadar', 'adminAuction', 'adminRbac']) assert.equal(evaluateTabAccess(admin, key).status, 'ok', key);

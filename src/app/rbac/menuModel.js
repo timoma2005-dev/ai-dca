@@ -31,8 +31,8 @@ const SEED_MENUS = [
 
 export const RBAC_MANAGED_TABS = new Set(SEED_MENUS.map(([key]) => key));
 
-const GUEST_OPEN = new Set(['home', 'markets', 'shares', 'articles']);
-const GUEST_LOCKED = new Set(['holdings', 'tradePlans', 'fundSwitch', 'notify', 'dataRepair']);
+const GUEST_OPEN = new Set(['home', 'shares', 'articles']);
+const GUEST_LOCKED = new Set(['markets', 'holdings', 'tradePlans', 'fundSwitch', 'notify', 'dataRepair']);
 
 function seedItem([key, label, icon, group, sort, subtitle], locked) {
   return {
@@ -63,7 +63,8 @@ export function buildGuestFallback() {
   };
 }
 
-const USER_LOCKED = { adminRadar: 'vip', adminAuction: 'svip' };
+// 会员分层（2026-10-24）：VIP = 行情 + 换基 + 通知推送；SVIP 再加雷达与竞价看板。
+const USER_LOCKED = { markets: 'vip', fundSwitch: 'vip', notify: 'vip', adminRadar: 'svip', adminAuction: 'svip' };
 const VIP_NAMES = { vip: 'VIP', svip: 'SVIP' };
 
 /**

@@ -61,8 +61,8 @@ test('sidebar renders server menus with a lock icon on locked items', () => {
   assert.match(html, /首页/);
   assert.match(html, /持仓总览/);
   const lockedLinks = html.match(/data-locked="true"/g) || [];
-  assert.equal(lockedLinks.length, 5, 'holdings/tradePlans/fundSwitch/notify/dataRepair are locked for guests');
-  assert.equal((html.match(/data-menu-lock="true"/g) || []).length, 5);
+  assert.equal(lockedLinks.length, 6, 'markets/holdings/tradePlans/fundSwitch/notify/dataRepair are locked for guests');
+  assert.equal((html.match(/data-menu-lock="true"/g) || []).length, 6);
   assert.doesNotMatch(html, /雷达|权限管理/);
 });
 
