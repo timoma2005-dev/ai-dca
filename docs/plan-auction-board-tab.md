@@ -67,6 +67,6 @@
 ## 2026-10-23 停牌按状态判断 + 持仓按账户自动识别（用户指令）
 
 - 停牌按状态判断：集合竞价/竞价结束（09:15–09:30）时溢价超阈值 → 推算停牌，显示“预计停牌至10:30”，不参与比较；连续竞价（09:30 后）不再按溢价推算，只认行情真实停牌（停牌标志或无买卖盘）。移除 `haltUntil` 跨时段顺延。
-- 持仓自动识别：`AdminAuctionExperience` 读取账户交易流水（`readLedgerState` + `getActiveHoldingCodeList`，净份额 > 0），通过同源 `postMessage({type:'ai-dca-auction-held', codes})` 推给 iframe；iframe 加载后发 `ai-dca-auction-ready`，父页面在 iframe onLoad、ready、storage 事件和每 30 秒推送一次。收到后持有列按账户自动勾选并禁用手动勾选；单独打开静态页时仍可手动勾选。
+- 持仓自动识别：`AdminAuctionExperience` 读取账户交易流水（`readLedgerState` + `getActiveHoldingCodeList`，净份额 > 0），通过同源 `postMessage({type:'ai-dca-auction-held', codes})` 推给 iframe；iframe 加载后发 `ai-dca-auction-ready`，登录态下账户流水只在内存 runtime，父页面先 `pullHoldingTransactions` 从云端拉取后再推送，之后每 60 秒重拉一次，iframe onLoad、ready、storage 事件也会推送。收到后持有列按账户自动勾选并禁用手动勾选；单独打开静态页时仍可手动勾选。
 - iframe `src="/auction-board.html"` 及容器样式不变。
 - 验收：`node --test test/adminRadarAuctionTab.test.mjs` 新增用例；ESLint 改动文件；`git diff --check`；上线后用 lovexl 登录 `?tab=adminAuction` 验收。

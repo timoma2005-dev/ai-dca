@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { readLedgerState } from '../app/holdingsLedger.js';
 import { getActiveHoldingCodeList } from '../app/holdingsLedgerCore.js';
+import { loadCloudSession } from '../app/authSession.js';
+import { pullHoldingTransactions } from '../app/holdingTransactionsSync.js';
 
 // 竞价看板静态页（public/auction-board.html）的持仓由账户自动判断：
 // 读取当前用户的交易流水，取净份额 > 0 的基金代码，通过同源 postMessage 推给 iframe。
@@ -12,16 +14,30 @@ export function readAuctionHeldCodes() {
   }
 }
 
-const HELD_REFRESH_MS = 30000;
+const HELD_REFRESH_MS = 60000;
 
 export default function AdminAuctionExperience() {
   const frameRef = useRef(null);
+  const readyRef = useRef(false);
 
   const pushHeld = useCallback(() => {
     const target = frameRef.current && frameRef.current.contentWindow;
-    if (!target) return;
+    if (!target || !readyRef.current) return;
     target.postMessage({ type: 'ai-dca-auction-held', codes: readAuctionHeldCodes() }, window.location.origin);
   }, []);
+
+  const loadHoldings = useCallback(async () => {
+    const session = loadCloudSession();
+    if (session?.accessToken) {
+      try {
+        await pullHoldingTransactions({ session });
+      } catch {
+        // 拉取失败时用已有本地/runtime 账本兜底
+      }
+    }
+    readyRef.current = true;
+    pushHeld();
+  }, [pushHeld]);
 
   useEffect(() => {
     const onMessage = (event) => {
@@ -30,13 +46,14 @@ export default function AdminAuctionExperience() {
     };
     window.addEventListener('message', onMessage);
     window.addEventListener('storage', pushHeld);
-    const timer = window.setInterval(pushHeld, HELD_REFRESH_MS);
+    loadHoldings();
+    const timer = window.setInterval(loadHoldings, HELD_REFRESH_MS);
     return () => {
       window.removeEventListener('message', onMessage);
       window.removeEventListener('storage', pushHeld);
       window.clearInterval(timer);
     };
-  }, [pushHeld]);
+  }, [pushHeld, loadHoldings]);
 
   return (
     <section

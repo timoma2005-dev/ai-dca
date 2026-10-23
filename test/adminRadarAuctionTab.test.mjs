@@ -75,6 +75,8 @@ test('public auction board exists with the supplied title', () => {
 test('auction panel pushes account holdings to the iframe via same-origin postMessage', () => {
   assert.match(auctionSource, /import \{ readLedgerState \} from '\.\.\/app\/holdingsLedger\.js';/);
   assert.match(auctionSource, /import \{ getActiveHoldingCodeList \} from '\.\.\/app\/holdingsLedgerCore\.js';/);
+  assert.match(auctionSource, /import \{ pullHoldingTransactions \} from '\.\.\/app\/holdingTransactionsSync\.js';/);
+  assert.match(auctionSource, /await pullHoldingTransactions\(\{ session \}\)/);
   assert.match(auctionSource, /type: 'ai-dca-auction-held'/);
   assert.match(auctionSource, /'ai-dca-auction-ready'/);
   assert.match(auctionSource, /window\.location\.origin/);
