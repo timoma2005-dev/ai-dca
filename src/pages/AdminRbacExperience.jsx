@@ -100,13 +100,14 @@ export default function AdminRbacExperience() {
   const show = (key) => visited.has(key) || section === key;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 pb-24 md:pb-10">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></span>
+    <div className="rbac-page mx-auto max-w-6xl space-y-5 px-4 pb-24 md:pb-10">
+      <header className="rbac-page__header flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="rbac-page__icon"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></span>
           <div>
-            <h2 className="text-lg font-bold text-slate-900">权限管理</h2>
-            <p className="text-xs text-slate-500">{canGrantAdmin ? '超级管理员：可任命 / 撤销管理员' : '管理员：可管理 VIP / SVIP 等角色，任命管理员需超级管理员'}</p>
+            <p className="rbac-page__eyebrow">管理控制台 / 访问权限</p>
+            <h2 className="rbac-page__title">权限管理</h2>
+            <p className="rbac-page__description">{canGrantAdmin ? '超级管理员：可任命 / 撤销管理员' : '管理员：可管理 VIP / SVIP 等角色，任命管理员需超级管理员'}</p>
           </div>
         </div>
       </header>
@@ -116,29 +117,29 @@ export default function AdminRbacExperience() {
         <StatCard label="角色" value={data.roles.length || null} hint={data.roles.length ? `${data.roles.filter((role) => role.privileged).length} 个管理员级` : undefined} />
         <StatCard label="菜单" value={data.menus.length || null} hint={data.menus.length ? `${enabledMenus} 个启用` : undefined} />
       </div>
-      <PageTabs tabs={tabs} activeKey={section} onSelect={selectSection} />
+      <PageTabs tabs={tabs} activeKey={section} onSelect={selectSection} tablistLabel="权限管理分区" />
       <ErrorNote error={error} />
       {/* 用户列表始终挂载：概览卡的注册 / 特权用户数来自它的首轮加载。 */}
-      <div hidden={section !== 'users'}>
+      <div id="panel-users" role="tabpanel" aria-labelledby="tab-users" hidden={section !== 'users'}>
         <RbacUsersPanel roles={data.roles} canGrantAdmin={canGrantAdmin} onChanged={handleChanged} onLoaded={handleUsersLoaded} />
       </div>
       {show('guests') ? (
-        <div hidden={section !== 'guests'}>
+        <div id="panel-guests" role="tabpanel" aria-labelledby="tab-guests" hidden={section !== 'guests'}>
           <RbacGuestsPanel onLoaded={setGuestCount} />
         </div>
       ) : null}
       {show('matrix') ? (
-        <div hidden={section !== 'matrix'}>
+        <div id="panel-matrix" role="tabpanel" aria-labelledby="tab-matrix" hidden={section !== 'matrix'}>
           <RbacMatrixPanel roles={data.roles} permissions={data.permissions} menus={data.menus} canGrantAdmin={canGrantAdmin} onChanged={handleChanged} />
         </div>
       ) : null}
       {show('menus') ? (
-        <div hidden={section !== 'menus'}>
+        <div id="panel-menus" role="tabpanel" aria-labelledby="tab-menus" hidden={section !== 'menus'}>
           <RbacMenusPanel menus={data.menus} onChanged={handleChanged} />
         </div>
       ) : null}
       {show('audit') ? (
-        <div hidden={section !== 'audit'}>
+        <div id="panel-audit" role="tabpanel" aria-labelledby="tab-audit" hidden={section !== 'audit'}>
           <RbacAuditPanel roles={data.roles} menus={data.menus} />
         </div>
       ) : null}

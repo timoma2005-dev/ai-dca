@@ -423,7 +423,7 @@ test('guest loading, unavailable, empty and error states stay distinct', async (
 
 test('the page shows overview cards and five flat tabs with counts synced to the URL hash', async () => {
   await mod.mount('page');
-  const tabs = all('a', q('.overflow-x-auto'));
+  const tabs = all('a', q('[role="tablist"]'));
   assert.deepEqual(tabs.map((tab) => tab.getAttribute('href')), ['#users', '#guests', '#matrix', '#menus', '#audit']);
   assert.equal(tabs[0].textContent, '用户18');
   assert.equal(tabs[1].textContent, '游客');
@@ -432,12 +432,12 @@ test('the page shows overview cards and five flat tabs with counts synced to the
   await click(tabs[1]);
   assert.equal(window.location.hash, '#guests');
   assert.equal(calls.guests, 1);
-  assert.equal(all('a', q('.overflow-x-auto'))[1].textContent, '游客18');
+  assert.equal(all('a', q('[role="tablist"]'))[1].textContent, '游客18');
   assert.ok(q('table[aria-label="注册用户"]').closest('[hidden]'));
-  await click(all('a', q('.overflow-x-auto'))[0]);
-  await click(all('a', q('.overflow-x-auto'))[1]);
+  await click(all('a', q('[role="tablist"]'))[0]);
+  await click(all('a', q('[role="tablist"]'))[1]);
   assert.equal(calls.guests, 1, 'returning to a visited tab keeps its data');
-  await click(all('a', q('.overflow-x-auto'))[4]);
+  await click(all('a', q('[role="tablist"]'))[4]);
   assert.equal(window.location.hash, '#audit');
   assert.match(document.body.textContent, /lovexl 给 lin 授予 VIP，到期 2026-12-31/);
 });
@@ -445,7 +445,7 @@ test('the page shows overview cards and five flat tabs with counts synced to the
 test('a legacy #roles link opens the permission matrix', async () => {
   window.history.replaceState(null, '', '/home.html?tab=adminRbac#roles');
   await mod.mount('page');
-  const active = all('a', q('.overflow-x-auto')).find((tab) => /bg-indigo-600/.test(tab.className));
+  const active = all('a', q('[role="tablist"]')).find((tab) => tab.getAttribute('aria-selected') === 'true');
   assert.equal(active.getAttribute('href'), '#matrix');
   assert.ok(q('table[aria-label="权限矩阵"]'));
 });

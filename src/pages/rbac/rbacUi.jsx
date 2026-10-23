@@ -3,10 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { setMobileBottomSheetOpen } from '../../app/mobileBottomSheet.js';
-export const inputClass = 'h-9 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
-export const buttonClass = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50';
-export const subtleButtonClass = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50';
-export const dangerButtonClass = 'inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50';
+export const inputClass = 'ui-input min-w-0';
+export const buttonClass = 'ui-button ui-button--primary';
+export const subtleButtonClass = 'ui-button ui-button--secondary';
+export const dangerButtonClass = 'ui-button ui-button--danger';
 export const PEOPLE_PAGE_SIZE = 20;
 // 与 searchUsers / listGuests 当前请求的 limit 一致。
 export const PEOPLE_LIMIT = 200;
@@ -26,8 +26,8 @@ export function PeoplePagination({ page, pageCount, onPageChange, disabled = fal
 
 export function Panel({ title, description, actions, children }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <section className="ui-card rbac-panel">
+      <div className="rbac-panel__heading flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-base font-bold text-slate-900">{title}</h3>
           {description ? <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p> : null}
@@ -91,10 +91,10 @@ export function RoleChip({ role, children, className = '' }) {
 
 export function StatCard({ label, value, hint }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className="mt-1 text-xl font-bold tabular-nums text-slate-900">{value ?? '—'}</div>
-      {hint ? <div className="mt-0.5 text-[11px] text-slate-400">{hint}</div> : null}
+    <div className="ui-card rbac-stat">
+      <div className="rbac-stat__label">{label}</div>
+      <div className="rbac-stat__value">{value ?? '—'}</div>
+      {hint ? <div className="rbac-stat__hint">{hint}</div> : null}
     </div>
   );
 }
@@ -132,7 +132,7 @@ export function Drawer({ open, title, subtitle, onClose, children, footer, sourc
         aria-modal="true"
         aria-label={title}
         data-testid={testId}
-        className="flex h-full w-full flex-col bg-white shadow-2xl sm:max-w-md"
+        className="rbac-drawer flex h-full w-full flex-col shadow-2xl sm:max-w-md"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">

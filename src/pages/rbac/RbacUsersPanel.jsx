@@ -86,7 +86,7 @@ function UserDrawer({ user, roles, canGrantAdmin, onClose, onGrant, onRevoke, bu
               type="button"
               aria-pressed={draft.preset === key}
               disabled={busy}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${draft.preset === key ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              className="ui-filter"
               onClick={() => setDraft({ ...draft, preset: key, expires: days === null ? draft.expires : presetToDateInput(days) })}
             >
               {label}
@@ -223,7 +223,7 @@ export function RbacUsersPanel({ roles = [], canGrantAdmin = false, onChanged, o
       </form>
       <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="按角色筛选">
         {roleFilters.map((item) => (
-          <button key={item.code} type="button" aria-pressed={roleFilter === item.code} data-role-filter={item.code} className={`rounded-full px-3 py-1 text-xs font-medium ${roleFilter === item.code ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`} onClick={() => { setRoleFilter(item.code); setPage(1); }}>
+          <button key={item.code} type="button" aria-pressed={roleFilter === item.code} data-role-filter={item.code} className="ui-filter" onClick={() => { setRoleFilter(item.code); setPage(1); }}>
             {item.label}<span className="ml-1 tabular-nums opacity-75">{item.count}</span>
           </button>
         ))}

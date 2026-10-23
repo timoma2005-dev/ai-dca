@@ -43,6 +43,7 @@ const Button = React.forwardRef(function Button(
     <Comp
       ref={ref}
       data-slot="button"
+      data-variant={variant || "default"}
       data-loading={loading ? "true" : undefined}
       aria-busy={loading ? true : undefined}
       disabled={computedDisabled}

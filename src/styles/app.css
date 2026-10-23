@@ -8,6 +8,15 @@
 @theme inline {
   --font-sans: var(--app-font-sans);
   --font-mono: var(--app-font-mono);
+  --color-indigo-50: #eeedfc;
+  --color-indigo-100: #e2defa;
+  --color-indigo-200: #cec8f5;
+  --color-indigo-300: #afa5ec;
+  --color-indigo-400: #8a7cde;
+  --color-indigo-500: #6253d4;
+  --color-indigo-600: var(--ds-primary);
+  --color-indigo-700: var(--ds-primary-hover);
+  --color-indigo-800: #302a81;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -52,7 +61,7 @@
   --gm3-sys-typescale-title-large-font: var(--app-font-sans);
   --gm3-sys-typescale-title-medium-font: var(--app-font-sans);
   --gm3-sys-typescale-title-small-font: var(--app-font-sans);
-  --radius: 0.5rem;
+  --radius: 0.75rem;
   /* surfaces — slate 系 */
   --background: oklch(1 0 0);
   --foreground: oklch(0.208 0.042 265.755); /* slate-900 */
@@ -61,12 +70,12 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.208 0.042 265.755);
   /* primary — indigo-600 */
-  --primary: oklch(0.511 0.262 276.966);
+  --primary: var(--ds-primary);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.968 0.007 247.896); /* slate-100 */
   --secondary-foreground: oklch(0.208 0.042 265.755);
   --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417); /* slate-500 */
+  --muted-foreground: #617087; /* slate-500 */
   --accent: oklch(0.968 0.007 247.896);
   --accent-foreground: oklch(0.208 0.042 265.755);
   --destructive: oklch(0.577 0.245 27.325);
@@ -89,7 +98,7 @@
   --card-foreground: oklch(0.984 0.003 247.858);
   --popover: oklch(0.208 0.042 265.755);
   --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.585 0.233 277.117); /* indigo-500 */
+  --primary: var(--ds-primary); /* indigo-500 */
   --primary-foreground: oklch(0.984 0.003 247.858);
   --secondary: oklch(0.279 0.041 260.031); /* slate-800 */
   --secondary-foreground: oklch(0.984 0.003 247.858);
@@ -125,8 +134,8 @@ body,
 
 body {
   margin: 0;
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--ds-canvas);
+  color: var(--ds-ink);
   font-family: var(--app-font-sans);
   font-synthesis-weight: none;
   text-rendering: optimizeLegibility;
@@ -171,11 +180,6 @@ input,
 select,
 textarea {
   font-family: var(--app-font-sans);
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
 }
 
 button {

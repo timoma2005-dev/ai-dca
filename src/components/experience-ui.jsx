@@ -4,10 +4,10 @@ export function cx(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
-export const primaryButtonClass = 'inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-indigo-600 bg-indigo-600 px-4 py-2.5 text-sm font-semibold leading-5 text-white shadow-sm shadow-indigo-200/70 transition-colors hover:border-indigo-700 hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
-export const secondaryButtonClass = 'inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-semibold leading-5 text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
-export const subtleButtonClass = 'inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-white px-4 py-2.5 text-sm font-semibold leading-5 text-slate-800 ring-1 ring-slate-300 transition-colors hover:bg-indigo-50 hover:text-indigo-700 hover:ring-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
-export const inputClass = 'h-11 w-full rounded-xl border border-slate-200/70 bg-white px-3 text-sm text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] outline-none transition-colors placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100';
+export const primaryButtonClass = 'ui-button ui-button--primary';
+export const secondaryButtonClass = 'ui-button ui-button--secondary';
+export const subtleButtonClass = 'ui-button ui-button--subtle';
+export const inputClass = 'ui-input w-full';
 export const tableInputClass = 'h-10 w-full rounded-xl border border-transparent bg-transparent px-3 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-300 hover:border-slate-200/70 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100';
 
 const pillToneClasses = {
@@ -49,7 +49,7 @@ export function Card({ children, className = '', ...props }) {
     <div
       data-scroll-card="true"
       {...props}
-      className={cx('rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] sm:p-7', className)}
+      className={cx('ui-card p-5 sm:p-6', className)}
     >
       {children}
     </div>
@@ -117,8 +117,8 @@ export function PageTabs({ tabs = [], activeKey = '', className = '', onSelect, 
   }
 
   return (
-    <div className={cx('overflow-x-auto', className)}>
-      <div role={tablistLabel ? 'tablist' : undefined} aria-label={tablistLabel} className="inline-flex min-w-full items-center gap-1.5 rounded-2xl bg-slate-100 p-1.5 sm:min-w-0">
+    <div className={cx('ui-page-tabs', className)}>
+      <div role={tablistLabel ? 'tablist' : undefined} aria-label={tablistLabel} className="ui-page-tabs__list">
         {tabs.map((tab) => {
           const isActive = tab.key === activeKey;
           return (
@@ -137,10 +137,9 @@ export function PageTabs({ tabs = [], activeKey = '', className = '', onSelect, 
                 onSelect?.(tabs[next].key);
                 document.getElementById(`tab-${tabs[next].key}`)?.focus();
               }}
-              className={cx(
-                'inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-xl px-3.5 py-2 text-[13px] font-semibold transition-all',
-                isActive ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'text-slate-500 hover:bg-white hover:text-slate-800'
-              )}
+              data-active={isActive ? 'true' : 'false'}
+              aria-current={!tablistLabel && isActive ? 'page' : undefined}
+              className="ui-page-tabs__item"
               href={tab.href}
               onClick={(event) => {
                 if (!onSelect) {
