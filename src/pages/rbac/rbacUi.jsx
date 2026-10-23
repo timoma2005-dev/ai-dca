@@ -3,6 +3,22 @@ export const inputClass = 'h-9 min-w-0 rounded-lg border border-slate-200 bg-whi
 export const buttonClass = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50';
 export const subtleButtonClass = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50';
 export const dangerButtonClass = 'inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50';
+export const PEOPLE_PAGE_SIZE = 8;
+// 与 searchUsers / listGuests 当前请求的 limit 一致。
+export const PEOPLE_LIMIT = 200;
+
+export function PeoplePagination({ page, pageCount, onPageChange, disabled = false, children }) {
+  return (
+    <footer className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+      <p>{children}</p>
+      <nav className="ml-auto flex items-center gap-2" aria-label="分页">
+        <button type="button" className={subtleButtonClass} disabled={disabled || page <= 1} onClick={() => onPageChange(page - 1)}>上一页</button>
+        <span className="whitespace-nowrap" aria-live="polite">第 {page} / {pageCount} 页</span>
+        <button type="button" className={subtleButtonClass} disabled={disabled || page >= pageCount} onClick={() => onPageChange(page + 1)}>下一页</button>
+      </nav>
+    </footer>
+  );
+}
 
 export function Panel({ title, description, actions, children }) {
   return (

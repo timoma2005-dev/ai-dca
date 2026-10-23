@@ -10,7 +10,7 @@ import { RbacMenusPanel } from './rbac/RbacMenusPanel.jsx';
 import { RbacRolesPanel } from './rbac/RbacRolesPanel.jsx';
 import { RbacUsersPanel } from './rbac/RbacUsersPanel.jsx';
 import { RbacGuestsPanel } from './rbac/RbacGuestsPanel.jsx';
-import { ErrorNote } from './rbac/rbacUi.jsx';
+import { ErrorNote, PEOPLE_LIMIT } from './rbac/rbacUi.jsx';
 
 const SECTIONS = [
   { key: 'users', label: '用户角色' },
@@ -18,6 +18,33 @@ const SECTIONS = [
   { key: 'menus', label: '菜单' },
   { key: 'audit', label: '审计日志' },
 ];
+
+function RbacPeoplePanels({ roles, canGrantAdmin, onChanged }) {
+  const [active, setActive] = useState('users');
+  const [guestsVisited, setGuestsVisited] = useState(false);
+  const [userCount, setUserCount] = useState(null);
+  const [guestCount, setGuestCount] = useState(null);
+
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="用户类型">
+        {[['users', '注册用户', userCount], ['guests', '游客', guestCount]].map(([key, label, count]) => (
+          <button key={key} type="button" aria-pressed={active === key} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${active === key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`} onClick={() => { setActive(key); if (key === 'guests') setGuestsVisited(true); }}>
+            {label}{count !== null ? <span className="ml-1.5 text-xs tabular-nums">{count}{count >= PEOPLE_LIMIT ? '+' : ''}</span> : null}
+          </button>
+        ))}
+      </div>
+      <div hidden={active !== 'users'}>
+        <RbacUsersPanel roles={roles} canGrantAdmin={canGrantAdmin} onChanged={onChanged} onLoaded={setUserCount} />
+      </div>
+      {guestsVisited ? (
+        <div hidden={active !== 'guests'}>
+          <RbacGuestsPanel onLoaded={setGuestCount} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /** 权限管理（adminRbac）：需要 api:rbac-admin；任命管理员需要 api:rbac-grant-admin（超级管理员）。 */
 export default function AdminRbacExperience() {
@@ -61,10 +88,7 @@ export default function AdminRbacExperience() {
       <PageTabs tabs={SECTIONS.map((s) => ({ ...s, href: `#${s.key}` }))} activeKey={section} onSelect={setSection} />
       <ErrorNote error={error} />
       {section === 'users' ? (
-        <>
-          <RbacUsersPanel roles={data.roles} canGrantAdmin={canGrantAdmin} onChanged={handleChanged} />
-          <RbacGuestsPanel />
-        </>
+        <RbacPeoplePanels roles={data.roles} canGrantAdmin={canGrantAdmin} onChanged={handleChanged} />
       ) : null}
       {section === 'roles' ? <RbacRolesPanel roles={data.roles} permissions={data.permissions} menus={data.menus} canGrantAdmin={canGrantAdmin} onChanged={handleChanged} /> : null}
       {section === 'menus' ? <RbacMenusPanel menus={data.menus} onChanged={handleChanged} /> : null}
