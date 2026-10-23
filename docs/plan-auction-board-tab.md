@@ -59,3 +59,7 @@
 - 运行 `node --test test/*.test.mjs` 全量测试并报告通过、失败数；对每个失败在 `afdb389f` 基线上复核，区分本次引入与既有失败。e2e spec 不运行、不修改，报告其中明显过时的雷达子 tab 断言。
 - 单独对改动 JS、JSX 与测试执行 ESLint；运行 `npm run lint -- --quiet`、`npm run check:refactor` 和 `git diff --check`，如有失败与改动前基线对比。
 - 最后校验静态 HTML 哈希与变更范围；不修改 `docs/plan-react-router-migration.md`，不 commit、push、release，不编辑线上目录或构建产出物。
+
+## 2026-10-23 静态页内容更新（dudu 提供新版文件）
+- dudu 提供新版 HTML 替换 `public/auction-board.html`，新 SHA-256 `7f8962e5adee90b6489af87e675e9beb77fd36533849abafaa08a2a8b17cb238`。
+- 改动要点：溢价超阈值的推算停牌改为最多到 10:30（37800 秒），10:30 后不再顺延，之后只认行情真实停牌标志；纪律文案同步。

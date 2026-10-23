@@ -1243,12 +1243,9 @@ tr.is-highlight > :last-child { box-shadow: 12px 0 var(--fill-tertiary); }
             else r.prem = null;
             var tday = b.y + "-" + p2(b.mo) + "-" + p2(b.d);
             if (S.haltDay !== tday) { S.haltDay = tday; S.haltUntil = {}; }
-            if (r.prem != null && r.prem > S.haltThr && weekday(b) && t >= 33300 && t < 54000 && !S.haltUntil[r.code]) {
-              var startS = Math.max(t, 34200);
-              if (startS >= 41400 && startS < 46800) startS = 46800;
-              var endS = startS + 3600;
-              if (startS < 41400 && endS > 41400) endS = 46800 + (endS - 41400);
-              S.haltUntil[r.code] = endS;
+            // 溢价超阈值：最多停牌到10:30，10:30后不再顺延（之后只认行情里的真实停牌标志）
+            if (r.prem != null && r.prem > S.haltThr && weekday(b) && t >= 33300 && t < 37800 && !S.haltUntil[r.code]) {
+              S.haltUntil[r.code] = 37800;
             }
             var hu = S.haltUntil[r.code];
             if (hu && t < hu) {
@@ -1299,7 +1296,7 @@ tr.is-highlight > :last-child { box-shadow: 12px 0 var(--fill-tertiary); }
             t2 < 33600 ? "09:15–09:20：可撤单，只观察竞价偏离和 NQ 变化" :
             t2 < 33900 ? "09:20–09:25：不能撤单，下单要谨慎，先确认偏离仍超过阈值" :
             t2 < 34200 ? "09:25–09:30：竞价结束，等待连续交易" :
-            t2 < 54000 ? "09:30 后：按真实买一/卖一挂限价，卖出和买入数量对等；停牌至10:30的，复牌后按当时 NQ 和价格重算" :
+            t2 < 54000 ? "09:30 后：按真实买一/卖一挂限价，卖出和买入数量对等；溢价超阈值的最多停牌至10:30，复牌后按当时 NQ 和价格重算" :
             "已收盘：明天集合竞价起重新计算偏离";
           sw.push('<span class="sw"><b>步骤</b> ' + step + "</span>");
           var T = S.thr, dv = list.filter(function (r) { return r.dev != null && !r.halt; });
