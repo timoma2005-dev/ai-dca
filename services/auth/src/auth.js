@@ -97,6 +97,29 @@ function createSessionRow(db, user) {
   };
 }
 
+// 新注册赠送会员（2026-10-24 产品决定）：注册即送 3 个月 VIP，到期日为北京时间当天 23:59:59。
+export const SIGNUP_GIFT = { role: 'vip', months: 3 };
+
+export function signupGiftExpiresAt(now = new Date(), months = SIGNUP_GIFT.months) {
+  const sh = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const y = sh.getUTCFullYear();
+  const m = sh.getUTCMonth() + months;
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const day = Math.min(sh.getUTCDate(), lastDay);
+  return new Date(Date.UTC(y, m, day, 15, 59, 59)).toISOString();
+}
+
+function grantSignupGift(db, userId, now) {
+  // 测试（以及临时关闭活动）可设置 AUTH_SIGNUP_GIFT=0。
+  if (String(process.env.AUTH_SIGNUP_GIFT ?? '1') === '0') return;
+  const hasRole = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'roles'").get()
+    && db.prepare('SELECT 1 FROM roles WHERE code = ?').get(SIGNUP_GIFT.role);
+  if (!hasRole) return;
+  db.prepare(
+    `INSERT OR IGNORE INTO user_roles (user_id, role_code, expires_at, granted_by, created_at) VALUES (?, ?, ?, 'signup-gift', ?)`
+  ).run(userId, SIGNUP_GIFT.role, signupGiftExpiresAt(new Date(now)), now);
+}
+
 export function registerUser(db, { username, clientPasswordHash }) {
   const validation = validateCredentials(username, clientPasswordHash);
   if (validation.error) return validation;
@@ -115,6 +138,7 @@ export function registerUser(db, { username, clientPasswordHash }) {
   try {
     withTransaction(db, () => {
       insertUser.run(user.id, normalized, storedHash, salt, now, now);
+      grantSignupGift(db, user.id, now);
       created = createSessionRow(db, user);
       enqueueEvent(db, 'user.register', {
         id: user.id,

@@ -1,3 +1,5 @@
+// 这些用例按普通注册用户（无赠送会员）断言权限。
+process.env.AUTH_SIGNUP_GIFT = '0';
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
