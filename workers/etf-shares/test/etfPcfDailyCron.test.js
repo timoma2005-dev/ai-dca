@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { resolveEtfPcfDailyTrigger } from '../src/index.js';
 
-const DAILY_CRON = '0 1 * * 1-5';
+const DAILY_CRON = '0 1 * * MON-FRI';
 
 for (const [name, cron, timestamp, expected] of [
   ['weekday trading day', DAILY_CRON, '2026-10-16T01:00:00Z',

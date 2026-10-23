@@ -13,8 +13,10 @@ import { sendPcfSignalNotifications } from './pcfSignalNotify.js';
 import { emptyResponse, jsonResponse } from './util.js';
 import { isTradingDayShanghai } from '../../../shared/etfPcfTradingCalendar.js';
 
-// 30 1 * * 1-5：北京时间 09:30 补跑，覆盖 09:00 时交易所数据尚未就绪的情况。
-const ETF_PCF_DAILY_CRONS = new Set(['0 1 * * *', '0 1 * * 1-5', '30 1 * * 1-5']);
+// 注意：Cloudflare cron 星期 1=周日…7=周六，「1-5」是周日到周四，周五不会触发；工作日必须写 MON-FRI。
+// 30 1 * * MON-FRI：北京时间 09:30 补跑，覆盖 09:00 时交易所数据尚未就绪的情况。
+// 旧写法（1-5）保留识别，避免定时切换期间被当成 wrong-cron。
+const ETF_PCF_DAILY_CRONS = new Set(['0 1 * * *', '0 1 * * MON-FRI', '30 1 * * MON-FRI', '0 1 * * 1-5', '30 1 * * 1-5']);
 
 export function resolveEtfPcfDailyTrigger({ cron, scheduledTime } = {}) {
   if (!ETF_PCF_DAILY_CRONS.has(cron)) {
