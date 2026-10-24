@@ -406,7 +406,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   // ?tab= 路由守卫：无权限时不再静默回退到默认 tab，而是渲染登录 / 403 守卫页（见 renderActivePanel）。
   const activeAccess = tabAccessOf(activeTab, typeof window !== 'undefined' ? window.location.hash || '' : '');
-  // 付费功能演示：未开通 VIP/SVIP 时可先体验（每天限次、限时，见 app/demo/featureDemo.js）。
+  // 付费功能演示：未开通 VIP/SVIP 时可先体验（按 limit 限时 / 限条数 / 不计时，见 app/demo/featureDemo.js）。
   const demoAsGuest = activeAccess.status === 'login';
   const demoFeature = demoAsGuest || (activeAccess.status === 'forbidden' && isPaidRole(activeAccess.requiredRole)) ? demoFeatureFor(activeTab) : null;
   const handleDemoUpgrade = demoAsGuest

@@ -2,8 +2,13 @@
 // - localStorage 写入只进内存覆盖层（不落盘、不同步），退出演示后丢弃；
 // - fetch 拦截：命中 fixtures 的请求返回示例数据；写用户数据的接口（同步 / 账户 / 通知）一律拒绝；
 //   其余请求（公开行情等）照常放行；
-// - 每个功能每天可体验 DEMO_RUNS_PER_DAY 次、每次 durationSec 秒。
+// - 按数据类型限制（limit）：
+//   time  持续刷新的数据（行情、竞价看板）：每次限时 durationSec 秒，每天 DEMO_RUNS_PER_DAY 次；
+//   count 一次性数据（雷达）：不计时、不限次，只渲染前 visibleRows 条，其余用占位假行遮罩（见 rbac/demo-lock.jsx）；
+//   save  需要保存的数据（持仓、计划、换基、通知、数据修复）：不计时、不限次，手动「结束演示」/ 离开 / 刷新即结束，
+//         keeps=true 的演示内容按 keepKeys 保留 15 分钟并在注册/升级后带入。
 
+export const DEMO_LIMITS = Object.freeze({ TIME: 'time', COUNT: 'count', SAVE: 'save' });
 export const DEMO_RUNS_PER_DAY = 3;
 export const DEMO_QUOTA_KEY = 'aiDcaFeatureDemoQuota';
 export const DEMO_READONLY_CODE = 'DEMO_READONLY';
@@ -26,58 +31,66 @@ export { DEMO_ACCESS_TOKEN, DEMO_ACTIVE_FLAG, isFeatureDemoActive };
 //   prepareImport(entries, { seed, storage }): 带入账号前过滤 keepKeys 内容（例如去掉 seed 的示例条目、并入账号现有数据）
 //   importState(state, { fetch }): 升级后把 mock 服务端状态写到真实接口（可选）
 // points: 守卫页介绍要点（2–3 条短句，每条一行）；旧的 pitch 字符串字段守卫页仍兼容。
+// limit: 'time' | 'count' | 'save'（见文件头）；time 用 durationSec，count 用 visibleRows，keeps 表示演示内容会带入账号。
 // ready=false 的功能暂不提供演示（守卫页不显示体验按钮）。
 export const DEMO_FEATURES = {
   markets: {
     ready: true,
-    durationSec: 300,
+    limit: 'time',
+    durationSec: 180,
+    keeps: true,
     points: ['自选基金实时行情，涨跌溢价一眼看清', '净值、溢价走势图随手切换', '多只基金同屏对比，强弱立判'],
     load: async () => ({ default: { keepKeys: ['markets:watchlist:v1'] } }),
   },
   fundSwitch: {
     ready: true,
-    durationSec: 300,
+    limit: 'save',
+    keeps: true,
     points: ['实时对比各只纳指 ETF 的溢价差', '设好切出、切回阈值，命中就提醒', '回测找最优阈值，一键生成方案'],
     // mock 方案配置与快照 GET；保存 / 测试 / 自动填充等写入由演示框架拦截。回测生成的换基偏好保留并在注册/升级后带入。
     load: () => import('./fixtures/fundSwitch.js'),
   },
   notify: {
     ready: true,
-    durationSec: 300,
+    limit: 'save',
     points: ['Bark、Server酱、邮件多渠道推送', '换基信号、溢价预警、每日持仓摘要', '推送记录随时可查'],
     // mock 渠道状态、推送记录、持仓规则与换基方案 GET；保存 / 启停 / 测试 / 同步等写入由演示框架拦截。
     load: () => import('./fixtures/notify.js'),
   },
   adminRadar: {
     ready: true,
-    durationSec: 300,
+    limit: 'count',
+    visibleRows: 3,
     points: ['12 只纳指 QDII ETF 溢价一张表', '找出当前最划算的切换组合', '历史分位判断现在贵不贵'],
     // 只读演示：mock 雷达快照 GET，计算按钮仍仅管理员可见（POST 被演示框架拦截）。
     load: () => import('./fixtures/adminRadar.js'),
   },
   adminAuction: {
     ready: true,
-    durationSec: 300,
+    limit: 'time',
+    durationSec: 180,
     points: ['开盘前看各 ETF 相对纳指期货的偏离', '自动提示卖哪只、买哪只', '溢价过高提前预警停牌'],
     // 演示 tab 内 iframe 改指 /auction-board-demo.html（与正式页同一渲染逻辑的模拟行情 / 时钟，不请求真实行情，localStorage 用 demo_ 前缀）。
   },
   holdings: {
     ready: true,
-    durationSec: 300,
+    limit: 'save',
+    keeps: true,
     points: ['ETF 和场外基金，市值收益一屏看清', '换基配对逐笔追踪，每轮赚多少一目了然', '收益曲线和今日换基信号'],
     // 游客读 seed 的本地账本；已登录走 mock 交易行 / 资金配置接口。演示中不推送；新增的自洽交易保留并在注册/升级后并入账号。
     load: () => import('./fixtures/holdings.js'),
   },
   tradePlans: {
     ready: true,
-    durationSec: 300,
+    limit: 'save',
+    keeps: true,
     points: ['按回撤分档加仓，到价提醒', '定期或智能定投，高位少投低位多投', '计划和持仓自动对齐'],
     // 本地 seed 加仓 / 定投计划，mock 账号计划资源与通知状态 GET；演示中不云同步。新建的计划保留并在注册/升级后按 id 带入。
     load: () => import('./fixtures/tradePlans.js'),
   },
   dataRepair: {
     ready: true,
-    durationSec: 300,
+    limit: 'save',
     points: ['一键扫描持仓记录里的错误', '清理错位、重复的记录', '补全基金名称和类别'],
     // 演示账本（同持仓演示）混入待修复问题，mock 基金字典与云端交易行 GET；修复只改演示本地底账，退出即丢弃，云端写入由演示框架 403。
     load: () => import('./fixtures/dataRepair.js'),
@@ -100,6 +113,30 @@ export function demoFeatureFor(tab) {
   return feature && feature.ready ? feature : null;
 }
 
+/** 演示限制方式：{ limit, timed, durationSec（仅 time）, visibleRows（仅 count）, keeps, perDay（Infinity 表示不限次） }。 */
+export function demoLimitOf(tab) {
+  const feature = DEMO_FEATURES[tab] || {};
+  const limit = Object.values(DEMO_LIMITS).includes(feature.limit) ? feature.limit : DEMO_LIMITS.TIME;
+  const timed = limit === DEMO_LIMITS.TIME;
+  return {
+    limit,
+    timed,
+    durationSec: timed ? Math.max(1, Number(feature.durationSec) || 180) : null,
+    visibleRows: limit === DEMO_LIMITS.COUNT ? Math.max(0, Number(feature.visibleRows) || 3) : Infinity,
+    keeps: Boolean(feature.keeps),
+    perDay: timed ? DEMO_RUNS_PER_DAY : Infinity,
+  };
+}
+
+/** 横幅第二行：按限制方式说明（time 限时、count 部分数据、save 演示数据去留）。 */
+export function demoBannerNote(limit, { guest = false, roleLabel = 'VIP' } = {}) {
+  const limitInfo = typeof limit === 'string' ? demoLimitOf(limit) : limit;
+  const cta = guest ? '注册' : '升级';
+  if (limitInfo.limit === 'count') return `演示仅展示部分数据，${guest ? '注册' : `升级 ${roleLabel} `}后查看全部`;
+  if (limitInfo.limit === 'save') return limitInfo.keeps ? `演示数据，结束演示后删除；${cta}后可保留你新增的内容` : '演示数据，结束演示后删除';
+  return limitInfo.keeps ? `演示内容保留 ${Math.round(DEMO_RETAIN_MS / 60000)} 分钟，请尽快${cta}后保留数据` : '模拟数据，到时自动结束演示';
+}
+
 function shanghaiDay(now) {
   return new Date(Number(now) + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
@@ -113,13 +150,16 @@ function readQuota(storage, day) {
   }
 }
 
-export function demoQuotaFor(tab, { storage = globalThis.localStorage, now = Date.now(), perDay = DEMO_RUNS_PER_DAY } = {}) {
+// 次数只限 time 类（持续刷新的行情要靠限时 + 限次控制）；count / save 类不计次（unlimited）。
+export function demoQuotaFor(tab, { storage = globalThis.localStorage, now = Date.now(), perDay = demoLimitOf(tab).perDay } = {}) {
+  if (!Number.isFinite(perDay)) return { used: 0, remaining: Infinity, perDay, unlimited: true };
   const quota = readQuota(storage, shanghaiDay(now));
   const used = Math.max(0, Number(quota.used[tab]) || 0);
   return { used, remaining: Math.max(0, perDay - used), perDay };
 }
 
-export function consumeDemoQuota(tab, { storage = globalThis.localStorage, now = Date.now(), perDay = DEMO_RUNS_PER_DAY } = {}) {
+export function consumeDemoQuota(tab, { storage = globalThis.localStorage, now = Date.now(), perDay = demoLimitOf(tab).perDay } = {}) {
+  if (!Number.isFinite(perDay)) return true;
   const day = shanghaiDay(now);
   const quota = readQuota(storage, day);
   const used = Math.max(0, Number(quota.used[tab]) || 0);

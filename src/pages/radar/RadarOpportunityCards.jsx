@@ -1,5 +1,6 @@
 import { cx } from '../../components/experience-ui.jsx';
-import { percentileView, validBestPair } from '../../app/radarModel.js';
+import { percentileView, rankRadarEtfs, validBestPair } from '../../app/radarModel.js';
+import { DemoLockedValue, useDemoVisibleRows } from '../../components/rbac/demo-lock.jsx';
 
 /**
  * 左栏最优机会 Hero 与溢价差分位条（plan §4）。
@@ -35,6 +36,10 @@ function PercentileBar({ percentile }) {
 export function RadarOpportunityCards({ data }) {
   const pair = validBestPair(data);
   const percentile = percentileView(data);
+  // count 类演示：最佳配对只露卖出侧；买入侧不在可见条数内时遮罩（价差也能反推买入溢价，一并隐藏）。
+  const visibleRows = useDemoVisibleRows();
+  const buyHidden = Boolean(pair && !rankRadarEtfs(data).slice(0, visibleRows).some((etf) => etf.code === pair.buy.code));
+  const spreadText = buyHidden ? '--.--%' : `${pair?.spread.toFixed(2)}%`;
 
   return (
     <div className="min-w-0 space-y-5">
@@ -63,17 +68,17 @@ export function RadarOpportunityCards({ data }) {
               <div className="flex flex-col items-center justify-center px-1">
                 <span aria-hidden="true" className="text-2xl leading-none">→</span>
                 <span className="mt-1 whitespace-nowrap rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 shadow tabular-nums">
-                  价差 {pair.spread.toFixed(2)}%
+                  价差 {spreadText}
                 </span>
               </div>
-              <div className="min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 sm:text-right">
+              {buyHidden ? <DemoLockedValue className="min-h-24 min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-indigo-100 sm:text-right">低溢价买入 ●●●●●● --.--%</DemoLockedValue> : <div className="min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 sm:text-right">
                 <div className="flex items-center gap-1.5 text-[11px] text-indigo-100 sm:justify-end">
                   低溢价买入 <span aria-hidden="true" className="text-emerald-300">●</span>
                 </div>
                 <div className="mt-0.5 text-xl font-extrabold leading-tight tracking-tight tabular-nums">{pair.buy.code}</div>
                 <div className="break-words text-xs leading-tight text-indigo-100">{pair.buy.name || '—'}</div>
                 <div className="mt-1.5 text-2xl font-extrabold leading-none tabular-nums">{pair.buy.premium.toFixed(2)}%</div>
-              </div>
+              </div>}
             </div>
             <div className="relative mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/15 pt-3 text-xs text-indigo-100">
               {percentile.visible && percentile.percentile != null ? (
@@ -117,7 +122,7 @@ export function RadarOpportunityCards({ data }) {
           percentile.percentile != null ? (
             <>
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                当前价差 <b className="text-slate-800 tabular-nums">{pair.spread.toFixed(2)}%</b>，
+                当前价差 <b className="text-slate-800 tabular-nums">{spreadText}</b>，
                 超过了近 20 个交易日样本中 <b className="text-indigo-600 tabular-nums">{percentile.percentile}%</b> 的日子。
                 {percentile.attention ? '分位高于 85，建议关注轮动机会。' : '分位未高于 85，暂无特别提示。'}
               </p>

@@ -1,4 +1,5 @@
 import { cx } from '../../components/experience-ui.jsx';
+import { DemoLockedRows, useDemoVisibleRows } from '../../components/rbac/demo-lock.jsx';
 import {
   RADAR_PIPELINE_STAGES,
   computedAtEpoch,
@@ -34,6 +35,8 @@ export function RadarSidebar({
 }) {
   const maturity = maturityView(data);
   const recent = recentOpportunities(data);
+  // count 类演示：近期套利对多指向不可见的低溢价标的，整块用占位行遮罩。
+  const visibleRows = useDemoVisibleRows();
   const computedAt = computedAtEpoch(data);
   const stageIndex = expectedPipelineStage(clockNow);
   const submitting = computeState === 'submitting';
@@ -183,7 +186,9 @@ export function RadarSidebar({
           <h3 className="text-sm font-bold text-slate-900">近期套利机会</h3>
           <span className="text-[11px] text-slate-400">近 5 个记录</span>
         </div>
-        {recent.length ? (
+        {recent.length && Number.isFinite(visibleRows) ? (
+          <DemoLockedRows count={recent.length} rowClassName="h-8 rounded-lg bg-slate-50" />
+        ) : recent.length ? (
           <ul className="space-y-1.5">
             {recent.map((item) => (
               <li

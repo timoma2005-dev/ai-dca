@@ -75,10 +75,12 @@
   var DAY_GAP_MIN = Math.round((MIDNIGHT - BASE_MS) / 60000); // 昨日 15:00 → 今日 0 点的分钟数（周一跨周末更长）
   var SKIP_MIN = DAY_GAP_MIN - 540; // 跨周末多出的分钟：期指剧本在此期间走平，今日走势与周二到周五一致
 
-  /* ---------- 模拟时钟：集合竞价半速、午休 10 倍速，其余按 speed（默认 1 秒 = 60 秒） ---------- */
+  /* ---------- 模拟时钟：集合竞价半速、午休 10 倍速，其余按 speed（默认 1 秒 = 120 秒：09:15 → 15:05 约 2 分 22 秒，
+   * 在演示 3 分钟限时内播完；DEFAULT_SPEED 改动需同步 test/auctionBoardDemo.test.mjs 的时长断言） ---------- */
+  var DEFAULT_SPEED = 120;
   var realNow = OPT.realNow || function () { return Date.now(); };
   var sp = /[?&]speed=(\d+(?:\.\d+)?)/.exec((root.location && root.location.search) || "");
-  var clock = { sim: START, real: realNow(), speed: +(OPT.speed || (sp && sp[1]) || 60), paused: false };
+  var clock = { sim: START, real: realNow(), speed: +(OPT.speed || (sp && sp[1]) || DEFAULT_SPEED), paused: false };
   function rate(s) { return s < OPEN ? clock.speed / 2 : s >= NOON && s < PM ? clock.speed * 10 : clock.speed; }
   function nextEdge(s) { return s < OPEN ? OPEN : s < NOON ? NOON : s < PM ? PM : END; }
   function advance() {
@@ -144,8 +146,8 @@
     bar.innerHTML = '<b style="background:#f59e0b;color:#fff;border-radius:6px;padding:1px 8px">演示数据</b>' +
       '<span>模拟行情与交易时钟（09:15 起加速播放），不是真实行情，不请求任何行情接口</span>' +
       '<span data-demo-clock style="font-weight:600"></span><span style="flex:1"></span>' +
-      '<button type="button" data-speed="30" style="' + btn + '">×30</button><button type="button" data-speed="60" style="' + btn + '">×60</button>' +
-      '<button type="button" data-speed="120" style="' + btn + '">×120</button><button type="button" data-demo="pause" style="' + btn + '">暂停/继续</button>' +
+      '<button type="button" data-speed="60" style="' + btn + '">×60</button><button type="button" data-speed="120" style="' + btn + '">×120</button>' +
+      '<button type="button" data-speed="240" style="' + btn + '">×240</button><button type="button" data-demo="pause" style="' + btn + '">暂停/继续</button>' +
       '<button type="button" data-demo="restart" style="' + btn + '">重播</button>';
     bar.addEventListener("click", function (ev) {
       var t = ev.target, s = t && t.getAttribute && t.getAttribute("data-speed"), a = t && t.getAttribute && t.getAttribute("data-demo");
@@ -182,6 +184,7 @@
     keyPrefix: KEY_PREFIX,
     now: now,
     load: function () { return snapshot(simSec()); },
+    defaultSpeed: DEFAULT_SPEED,
     interval: 1000,
     tickMs: 250,
     held: ["513100"],

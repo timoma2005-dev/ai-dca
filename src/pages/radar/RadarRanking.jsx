@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { cx } from '../../components/experience-ui.jsx';
 import { candidatePair, rankRadarEtfs, rotationAdvice } from '../../app/radarModel.js';
+import { DemoLockedRows, DemoLockedValue, useDemoVisibleRows } from '../../components/rbac/demo-lock.jsx';
 
 /**
  * 纳指 ETF 溢价排行与内联轮动建议（plan §4）。
@@ -12,8 +13,12 @@ import { candidatePair, rankRadarEtfs, rotationAdvice } from '../../app/radarMod
 
 export function RadarRanking({ data, selectedCode, onToggleSelected }) {
   const ranked = rankRadarEtfs(data);
+  // count 类演示：只渲染前 visibleRows 只，其余为占位假行（真实值不进 DOM）；轮动建议里不可见的换入标的同样遮罩。
+  const visibleRows = useDemoVisibleRows();
+  const shown = ranked.slice(0, visibleRows);
   const candidates = candidatePair(data);
   const advice = rotationAdvice(data, selectedCode);
+  const lowestHidden = Boolean(advice && !shown.some((etf) => etf.code === advice.lowest.code));
   const adviceRef = useRef(null);
   const previousAdviceKeyRef = useRef(null);
 
@@ -36,7 +41,7 @@ export function RadarRanking({ data, selectedCode, onToggleSelected }) {
         <span className="text-[11px] text-slate-400">按溢价率排序 · 点击行查看轮动建议</span>
       </div>
       <div className="space-y-2.5">
-        {ranked.map((etf, index) => {
+        {shown.map((etf, index) => {
           const width = maxP > minP ? (((etf.premium - minP) / (maxP - minP)) * 100).toFixed(0) : 100;
           const isSellCandidate = candidates?.sell.code === etf.code;
           const isBuyCandidate = candidates?.buy.code === etf.code;
@@ -94,6 +99,7 @@ export function RadarRanking({ data, selectedCode, onToggleSelected }) {
             </button>
           );
         })}
+        <DemoLockedRows count={ranked.length - shown.length} />
       </div>
 
       {advice && (
@@ -128,14 +134,14 @@ export function RadarRanking({ data, selectedCode, onToggleSelected }) {
                   <div aria-hidden="true" className="text-lg leading-none">→</div>
                   <div className="mt-1 rounded-xl bg-white/10 px-3 py-1.5 text-center">
                     <div className="text-[10px] text-slate-400">溢价差</div>
-                    <div className="text-base font-extrabold text-amber-300 tabular-nums">{advice.spreadPoints}</div>
+                    <div className="text-base font-extrabold text-amber-300 tabular-nums">{lowestHidden ? '--.--' : advice.spreadPoints}</div>
                   </div>
                 </div>
-                <div className="min-w-0 flex-1 text-right">
+                {!lowestHidden ? <div className="min-w-0 flex-1 text-right">
                   <div className="text-[11px] text-slate-400">换入最低溢价</div>
                   <div className="text-base font-bold tabular-nums">{advice.lowest.code}</div>
                   <div className="text-sm font-bold text-emerald-300 tabular-nums">{advice.lowest.premium.toFixed(2)}%</div>
-                </div>
+                </div> : <DemoLockedValue className="min-h-16 min-w-0 flex-1 rounded-xl text-right text-slate-400">换入 ●●●●●● --.--%</DemoLockedValue>}
               </div>
               <p className="mt-3 border-t border-white/10 pt-2 text-[11px] leading-5 text-slate-400">
                 溢价差（百分点），未计交易成本；差价来自当前快照 premium，不构成收益承诺。

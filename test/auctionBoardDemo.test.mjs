@@ -119,7 +119,7 @@ test('demo page never requests real market data and only writes demo_ storage ke
 });
 
 test('simulated clock starts at 09:15 and runs through auction (half speed), lunch (fast) and close', () => {
-  const page = createPage({ demo: true });
+  const page = createPage({ demo: true, speed: 60 });
   const demo = page.ctx.AUCTION_BOARD_DEMO;
   assert.equal(demo.simSec(), 9 * 3600 + 15 * 60);
   page.advance(10_000); // 竞价阶段 ×30：10 秒 = 5 分钟
@@ -131,8 +131,23 @@ test('simulated clock starts at 09:15 and runs through auction (half speed), lun
   assert.equal(Math.round(demo.simSec()), 13 * 3600);
   page.advance(3_600_000);
   assert.equal(Math.round(demo.simSec()), 15 * 3600 + 5 * 60); // 15:05 停住
-  const total = (15 * 60) / 30 + (120 * 60) / 60 + (90 * 60) / 600 + (125 * 60) / 60;
-  assert.ok(total <= DEMO_FEATURES.adminAuction.durationSec, `播完需 ${total} 秒`);
+});
+
+test('default speed plays 09:15 → close (15:05 stop) within the 3-minute time-limited demo; speed buttons kept', () => {
+  assert.equal(DEMO_FEATURES.adminAuction.limit, 'time');
+  assert.equal(DEMO_FEATURES.adminAuction.durationSec, 180);
+  const page = createPage({ demo: true });
+  const demo = page.ctx.AUCTION_BOARD_DEMO;
+  const speed = page.ctx.AUCTION_BOARD_ENV.defaultSpeed;
+  assert.equal(speed, 120);
+  const total = (15 * 60) / (speed / 2) + (120 * 60) / speed + (90 * 60) / (speed * 10) + (125 * 60) / speed;
+  assert.ok(total <= 170, `播完需 ${total} 秒，需留出加载余量`);
+  page.advance(Math.ceil(total * 1000) - 2_000);
+  assert.ok(demo.simSec() < 15 * 3600 + 5 * 60, 'not finished before the computed total');
+  page.advance(2_000);
+  assert.equal(Math.round(demo.simSec()), 15 * 3600 + 5 * 60, '收盘后停在 15:05');
+  const src = fs.readFileSync(path.join(ROOT, 'public/auction-board-demo.js'), 'utf8');
+  for (const n of [60, 120, 240]) assert.match(src, new RegExp(`data-speed="${n}"`));
 });
 
 test('clock-driven states: auction halt, resume, regression switch, candidates in/out, sell-and-wait, close', async () => {

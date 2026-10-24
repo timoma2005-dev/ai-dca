@@ -73,7 +73,7 @@ test('blocked write list covers sync, account and notify, but not auth or analyt
   assert.equal(isDemoBlockedWrite('POST', '/api/market-collector/backtest'), false);
 });
 
-test('daily quota: 3 runs per feature per Beijing day', () => {
+test('daily quota: 3 runs per time-limited feature per Beijing day', () => {
   const storage = new FakeStorage();
   const now = Date.parse('2026-10-24T02:00:00Z');
   assert.equal(demoQuotaFor('markets', { storage, now }).remaining, 3);
@@ -82,7 +82,8 @@ test('daily quota: 3 runs per feature per Beijing day', () => {
   assert.equal(consumeDemoQuota('markets', { storage, now }), true);
   assert.equal(consumeDemoQuota('markets', { storage, now }), false);
   assert.equal(demoQuotaFor('markets', { storage, now }).remaining, 0);
-  assert.equal(demoQuotaFor('notify', { storage, now }).remaining, 3, 'per feature');
+  assert.equal(demoQuotaFor('adminAuction', { storage, now }).remaining, 3, 'per feature');
+  assert.equal(demoQuotaFor('notify', { storage, now }).unlimited, true, 'save demos are not counted');
   assert.equal(demoQuotaFor('markets', { storage, now: Date.parse('2026-10-24T16:30:00Z') }).remaining, 3, 'resets at Beijing midnight');
 });
 
