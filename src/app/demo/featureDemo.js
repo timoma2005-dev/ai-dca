@@ -62,7 +62,13 @@ export const DEMO_FEATURES = {
     // 游客读 seed 的本地账本；已登录走 mock 交易行 / 资金配置接口。演示中不推送；新增的自洽交易保留并在注册/升级后并入账号。
     load: () => import('./fixtures/holdings.js'),
   },
-  tradePlans: { ready: false, durationSec: 300, pitch: '' },
+  tradePlans: {
+    ready: true,
+    durationSec: 300,
+    pitch: '纳指 QDII ETF 回撤分档加仓、120 日线分层与智能定投一屏管理：每档参考价、计划投入与下期扣款日一目了然，触发即推送到手机。',
+    // 本地 seed 加仓 / 定投计划，mock 账号计划资源与通知状态 GET；演示中不云同步。新建的计划保留并在注册/升级后按 id 带入。
+    load: () => import('./fixtures/tradePlans.js'),
+  },
   dataRepair: { ready: false, durationSec: 300, pitch: '' },
 };
 

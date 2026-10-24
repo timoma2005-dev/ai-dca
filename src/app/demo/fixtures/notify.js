@@ -7,13 +7,15 @@
 //   GET /api/notify/switch/config        换基方案（useSwitchNotifyRules，复用基金切换演示的同一份方案）
 // 推送记录在演示开始时生成一次并固定：全局 PC 通知轮询也会读 /events，列表不变就不会弹出演示桌面通知。
 // 写入（保存渠道、启停、测试、同步规则、持仓规则、邮箱验证等 POST / PUT）不提供 mock，由演示框架按写入拦截（403）。
-// 本地：seed 示例渠道缓存、溢价预警规则、预设开关与换基方案缓存（首屏不闪账号原数据，不带入）；
+// 本地：seed 示例渠道缓存、溢价预警规则、预设开关、换基方案缓存与交易 / 定投计划（同交易计划演示；规则卡、预设计数、送达测试
+// 不显示账号真实计划；首屏不闪账号原数据，不带入）；
 // 通知页的修改都要写到服务器才算数，演示中被拦截，因此不保留任何内容（无 keepKeys / getState）。
 import { RADAR_DEMO_ETFS } from './adminRadar.js';
 import {
   SWITCH_CONFIG_CACHE_KEY, SWITCH_CONFIG_PATH, SWITCH_DEMO_CLIENT_ID, SWITCH_DEMO_RULES, buildSwitchDemoConfig, switchDemoComputedAt,
 } from './fundSwitch.js';
 import { getPreviousTradingDayShanghai } from '../../holidaysCN.js';
+import { tradePlansDemoSeed } from './tradePlansData.js';
 
 export const NOTIFY_STATUS_PATH = '/api/notify/status';
 export const NOTIFY_EVENTS_PATH = '/api/notify/events';
@@ -300,6 +302,7 @@ export default {
       [NOTIFY_HOLDING_ALERTS_KEY, '[]'],
       [NOTIFY_PRESETS_KEY, JSON.stringify({ daily: { enabled: true }, premium: { enabled: true, threshold: PREMIUM_ALERT_THRESHOLD } })],
       [SWITCH_CONFIG_CACHE_KEY, JSON.stringify(buildSwitchDemoConfig())],
+      ...tradePlansDemoSeed(),
     ];
   },
   createFixtures() {

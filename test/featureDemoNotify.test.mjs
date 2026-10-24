@@ -60,7 +60,11 @@ test('notify demo is ready, lazily loads its module, mocks exactly the page GETs
   assert.ok(feature.pitch.length > 10);
   const mod = await loadDemoModule('notify');
   assert.deepEqual(mod.keepKeys, []);
-  assert.deepEqual(mod.seed().map(([key]) => key).sort(), [NOTIFY_CLIENT_CONFIG_KEY, NOTIFY_MARKET_ALERTS_KEY, 'aiDcaHoldingAlerts', NOTIFY_PRESETS_KEY, SWITCH_CONFIG_CACHE_KEY].sort());
+  assert.deepEqual(mod.seed().map(([key]) => key).sort(), [
+    NOTIFY_CLIENT_CONFIG_KEY, NOTIFY_MARKET_ALERTS_KEY, 'aiDcaHoldingAlerts', NOTIFY_PRESETS_KEY, SWITCH_CONFIG_CACHE_KEY,
+    // 规则卡 / 预设计数 / 送达测试读的交易与定投计划：用交易计划演示的同一份，不显示账号真实计划。
+    'aiDcaPlanStore', 'aiDcaPlanState', 'aiDcaDcaStore', 'aiDcaDcaState', 'aiDcaSellPlanStore', 'aiDcaSellPlanDraft',
+  ].sort());
   const { routes, getState } = mod.createFixtures({ state: null });
   assert.deepEqual(Object.keys(routes).sort(), MOCKED_GETS);
   assert.equal(getState, undefined, 'writes stay blocked, no mock server state');

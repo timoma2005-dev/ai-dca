@@ -12,6 +12,7 @@ import {
   fetchAccountManifest,
   putAccountResource
 } from './accountApi.js';
+import { isFeatureDemoActive } from './demo/demoMode.js';
 
 export const ACCOUNT_SYNC_STATE_KEY = 'aiDcaAccountSyncState';
 export const ACCOUNT_SYNC_EVENTS = {
@@ -349,6 +350,11 @@ export function markAllResourcesDirty() {
 }
 
 async function runPush() {
+  // 功能演示中不推送（读到的是演示存储覆盖层）；待推送资源留到演示结束后再推。
+  if (isFeatureDemoActive()) {
+    scheduleAccountPush({ delay: PULL_INTERVAL_MS });
+    return;
+  }
   if (pushInFlight || pullInFlight) {
     scheduleAccountPush({ delay: 800 });
     return;
@@ -370,7 +376,8 @@ async function runPush() {
 }
 
 async function runPull() {
-  if (pushInFlight || pullInFlight || suppressWatch) return;
+  // 功能演示中不拉取（不把账号数据并进演示覆盖层，也不触发回传）。
+  if (pushInFlight || pullInFlight || suppressWatch || isFeatureDemoActive()) return;
   const session = loadCloudSession();
   if (!session?.accessToken) return;
   pullInFlight = true;
