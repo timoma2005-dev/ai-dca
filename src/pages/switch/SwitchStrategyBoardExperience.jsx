@@ -16,6 +16,8 @@ import { SwitchStrategyMetricsBar } from './SwitchStrategyMetricsBar.jsx';
 import { SwitchStrategyCardItem } from './SwitchStrategyCardItem.jsx';
 import { SwitchStrategyTable } from './SwitchStrategyTable.jsx';
 import { SwitchStrategyRuleModal } from './SwitchStrategyRuleModal.jsx';
+import { SwitchDemoTeaserCard } from './SwitchDemoTeaserCard.jsx';
+import { useDemoActive, useFeatureDemo } from '../../components/rbac/demo-lock.jsx';
 
 function isFundCode(value) {
   return /^\d{6}$/.test(String(value || '').trim());
@@ -117,6 +119,8 @@ function snapshotHasRulePremium(snapshot, ruleId) {
 }
 
 export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade } = {}) {
+  const demoActive = useDemoActive();
+  const featureDemo = useFeatureDemo();
   const [config, setConfig] = useState(() => normalizeSwitchConfigShape(readSwitchConfigCache()));
   const [snapshot, setSnapshot] = useState(null);
   const [keyword, setKeyword] = useState('');
@@ -296,6 +300,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
 
   return (
     <div className="space-y-3 sm:space-y-4">
+      {demoActive ? <SwitchDemoTeaserCard onUpgrade={featureDemo?.onUpgrade} /> : null}
       {/* 统计概览与操作栏 */}
       <SwitchStrategyMetricsBar
         total={rows.length}

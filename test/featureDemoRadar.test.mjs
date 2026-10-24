@@ -96,7 +96,7 @@ test('installed radar demo: the real radar client reads the mock (both hosts), c
   assert.equal(computed.state, 'failure');
   assert.equal(computed.reason, 'http_error');
   assert.deepEqual(blocked, ['POST /api/notify/nasdaq-radar/compute']);
-  assert.deepEqual(realCalls, [], 'nothing reaches the network');
+  assert.deepEqual(realCalls, ['/api/notify/demo-teaser/radar'], 'only the public teaser reaches the network');
   env.uninstall();
   assert.equal(readDemoSession('adminRadar', { storage }), null, 'read-only demo leaves nothing to keep');
   assert.ok(RADAR_GET_URLS.primary.endsWith('/api/notify/nasdaq-radar'));
@@ -107,7 +107,7 @@ test('installed radar demo: the real radar client reads the mock (both hosts), c
 test('no regression: demo-token GET without a mock → 503, writes → 403; radar mock still wins', async () => {
   const mod = await loadDemoModule('adminRadar');
   let hits = 0;
-  const f = createDemoFetch({ realFetch: async () => { hits += 1; return new Response('{}'); }, fixtures: mod.createFixtures({}).routes, origin: 'https://x.example' });
+  const f = createDemoFetch({ realFetch: async (input) => { if (String(input) !== '/api/notify/demo-teaser/radar') hits += 1; return new Response('{}'); }, fixtures: mod.createFixtures({}).routes, origin: 'https://x.example' });
   const auth = { headers: { authorization: `Bearer ${DEMO_ACCESS_TOKEN}` } };
   assert.equal((await f('/api/notify/nasdaq-radar', auth)).status, 200);
   const missing = await f('/api/notify/nasdaq-radar/history', auth);

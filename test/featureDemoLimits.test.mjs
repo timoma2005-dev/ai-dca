@@ -148,17 +148,19 @@ test('radar rotation advice hides the off-screen lowest ETF and the spread in a 
   assert.match(html, /升级 SVIP 查看全部/);
 });
 
-test('best pair shows only the sell half in a count demo; recent opportunities are masked', () => {
+test('best pair shows the sell half and the spread (conclusion) in a count demo; buy side and recent pairs are masked', () => {
   const pair = validBestPair(DATA);
   const html = mod.render('RadarOpportunityCards', { data: DATA }, COUNT_DEMO);
   assert.ok(html.includes(pair.sell.code));
   assert.ok(!html.includes(pair.buy.code), 'buy side code not in DOM');
   assert.ok(!html.includes(pair.buy.name));
-  assert.ok(!html.includes(`${pair.spread.toFixed(2)}%`), 'spread not in DOM');
+  assert.ok(html.includes(`${pair.spread.toFixed(2)}%`), 'spread is the hook and stays visible');
+  assert.ok(html.includes(`¥${Math.round(pair.spread * 1000).toLocaleString('zh-CN')}`), '10 万元换算');
   assert.match(html, /data-testid="demo-locked-value"/);
   const side = mod.render('RadarSidebar', { data: DATA, receivedAt: NOW, session: { label: '盘中' }, clockNow: NOW, computeState: 'idle', showPipeline: false }, COUNT_DEMO);
   for (const item of DATA.recentOpportunities) assert.ok(!side.includes(item.pair), `recent ${item.pair} masked`);
-  assert.match(side, /data-locked-count="5"/);
+  assert.match(side, /升级查看/);
+  for (const item of DATA.recentOpportunities) assert.ok(side.includes(item.date), `recent ${item.date} shown`);
 });
 
 test('FeatureDemo banner: time shows a countdown; count / save show no timer and the right note plus an explicit 结束演示 button', () => {

@@ -107,12 +107,68 @@ export function buildRadarDemoSnapshot(now = Date.now()) {
   };
 }
 
+export const RADAR_TEASER_PATH = '/api/notify/demo-teaser/radar';
+
+/**
+ * 用服务端「公开数据预告」拼出雷达快照：前 3 名与最佳价差是当天真实数据；
+ * 其余标的、买入侧、历史配对服务端不下发，这里只放占位（界面按 visibleRows 遮罩，不进 DOM）。
+ */
+export function buildRadarTeaserSnapshot(teaser) {
+  if (!teaser || !Array.isArray(teaser.top) || !teaser.top.length || !teaser.bestPair) return null;
+  const top = teaser.top.map((e) => ({ code: String(e.code), name: String(e.name || ''), premium: Number(e.premium) }));
+  const floor = top[top.length - 1].premium;
+  const spread = Number(teaser.bestPair.spread);
+  const buyPremium = +(top[0].premium - spread).toFixed(2);
+  const hidden = Math.max(1, Number(teaser.hiddenCount) || 0);
+  const fillers = Array.from({ length: hidden }, (_, i) => ({
+    code: `demo-hidden-${i + 1}`,
+    name: '升级查看',
+    premium: i === hidden - 1 ? buyPremium : +(floor - ((floor - buyPremium) * (i + 1)) / hidden).toFixed(2),
+  }));
+  const buy = fillers[fillers.length - 1];
+  const fallback = buildRadarDemoSnapshot();
+  return {
+    ...fallback,
+    date: teaser.date || fallback.date,
+    computedAt: teaser.computedAt || fallback.computedAt,
+    premiumSource: teaser.premiumSource || fallback.premiumSource,
+    etfs: [...top, ...fillers],
+    bestPair: {
+      sell: { ...top[0] },
+      buy: { ...buy },
+      spread,
+      percentile: teaser.bestPair.percentile ?? fallback.bestPair.percentile,
+      historyDays: teaser.bestPair.historyDays ?? fallback.bestPair.historyDays,
+    },
+    recentOpportunities: (teaser.recent || []).map((r) => ({ date: r.date, pair: '升级查看', spread: Number(r.spread) })),
+    demo: true,
+    teaser: true,
+  };
+}
+
+async function loadTeaser(realFetch) {
+  if (typeof realFetch !== 'function') return null;
+  try {
+    const res = await realFetch(RADAR_TEASER_PATH, { headers: { accept: 'application/json' } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.ok ? json.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export default {
   keepKeys: [],
   createFixtures() {
+    let pending = null; // 每次演示只取一次预告；失败时整场演示用示例数据
     return {
       routes: {
-        [`GET ${RADAR_DEMO_PATH}`]: () => ({ ok: true, data: buildRadarDemoSnapshot() }),
+        [`GET ${RADAR_DEMO_PATH}`]: async ({ realFetch } = {}) => {
+          if (!pending) pending = loadTeaser(realFetch).then(buildRadarTeaserSnapshot);
+          const snapshot = await pending;
+          return { ok: true, data: snapshot || buildRadarDemoSnapshot() };
+        },
       },
     };
   },

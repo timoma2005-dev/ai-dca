@@ -36,10 +36,11 @@ function PercentileBar({ percentile }) {
 export function RadarOpportunityCards({ data }) {
   const pair = validBestPair(data);
   const percentile = percentileView(data);
-  // count 类演示：最佳配对只露卖出侧；买入侧不在可见条数内时遮罩（价差也能反推买入溢价，一并隐藏）。
+  // count 类演示：最佳配对只露卖出侧与价差（结论），买入标的遮罩；服务端预告接口本就不下发买入侧。
   const visibleRows = useDemoVisibleRows();
   const buyHidden = Boolean(pair && !rankRadarEtfs(data).slice(0, visibleRows).some((etf) => etf.code === pair.buy.code));
-  const spreadText = buyHidden ? '--.--%' : `${pair?.spread.toFixed(2)}%`;
+  const spreadText = `${pair?.spread.toFixed(2)}%`;
+  const per100k = pair ? Math.round(pair.spread * 1000) : null;
 
   return (
     <div className="min-w-0 space-y-5">
@@ -71,7 +72,7 @@ export function RadarOpportunityCards({ data }) {
                   价差 {spreadText}
                 </span>
               </div>
-              {buyHidden ? <DemoLockedValue className="min-h-24 min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-indigo-100 sm:text-right">低溢价买入 ●●●●●● --.--%</DemoLockedValue> : <div className="min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 sm:text-right">
+              {buyHidden ? <DemoLockedValue className="min-h-24 min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-indigo-100 sm:text-right">低溢价买入 ●●●●●● 升级查看</DemoLockedValue> : <div className="min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 sm:text-right">
                 <div className="flex items-center gap-1.5 text-[11px] text-indigo-100 sm:justify-end">
                   低溢价买入 <span aria-hidden="true" className="text-emerald-300">●</span>
                 </div>
@@ -80,6 +81,11 @@ export function RadarOpportunityCards({ data }) {
                 <div className="mt-1.5 text-2xl font-extrabold leading-none tabular-nums">{pair.buy.premium.toFixed(2)}%</div>
               </div>}
             </div>
+            {buyHidden && per100k != null ? (
+              <p className="relative mt-3 rounded-xl bg-white/15 px-3 py-2 text-xs leading-5 text-white">
+                按今天价差，10 万元本金换一次约多换回 <b className="text-base font-extrabold tabular-nums">¥{per100k.toLocaleString('zh-CN')}</b> 的溢价差。升级 SVIP 查看该买哪一只。
+              </p>
+            ) : null}
             <div className="relative mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/15 pt-3 text-xs text-indigo-100">
               {percentile.visible && percentile.percentile != null ? (
                 <span>

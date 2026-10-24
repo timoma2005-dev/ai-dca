@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { cx } from '../components/experience-ui.jsx';
 import { useNotifyPresets } from './notify/useNotifyPresets.js';
 import { NotifyRecommendationSection } from './notify/NotifyRecommendationCard.jsx';
+import { NotifyDemoTeaserCard } from './notify/NotifyDemoTeaserCard.jsx';
 
 const PRESET_META = [
   { id: 'daily', icon: Wallet, tone: 'bg-indigo-50 text-indigo-600', name: '每日收盘汇总' },
@@ -203,6 +204,7 @@ export function NotifyPresetSection({
   });
   return (
     <>
+      <NotifyDemoTeaserCard />
       <NotifyRecommendationSection
         presets={notifyPresets}
         dcaCount={dcaPlans.length}

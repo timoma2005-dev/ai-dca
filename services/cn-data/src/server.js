@@ -7,6 +7,7 @@ import { handleSyncRoute } from './sync/routes.js';
 import { handleNotifyRoute } from './notify/routes.js';
 import { badRequest, handleDataRoute } from './routes/data.js';
 import { enforceRoutePermission } from './rbacGuard.js';
+import { handleDemoTeaserRoute } from './demo/teaser.js';
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const cors = {
@@ -55,6 +56,9 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
       if (req.method === 'GET' && url.pathname === '/health') {
         sendJson(res, 200, { ok: true, outbox: outboxStats(db) }); return;
       }
+      // 付费功能演示的公开数据预告：游客可读，只下发结论型数字（见 demo/teaser.js）。
+      const teaser = await handleDemoTeaserRoute(req.method, url, req.headers);
+      if (teaser) { sendJson(res, teaser.status ?? 200, teaser.body, teaser.headers); return; }
       // RBAC：token 有效但缺少接口权限时 403（权限由共享 auth 库在服务端重新计算）。
       enforceRoutePermission(req.headers, url.pathname);
       const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};

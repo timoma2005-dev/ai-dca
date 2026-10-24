@@ -186,9 +186,7 @@ export function RadarSidebar({
           <h3 className="text-sm font-bold text-slate-900">近期套利机会</h3>
           <span className="text-[11px] text-slate-400">近 5 个记录</span>
         </div>
-        {recent.length && Number.isFinite(visibleRows) ? (
-          <DemoLockedRows count={recent.length} rowClassName="h-8 rounded-lg bg-slate-50" />
-        ) : recent.length ? (
+        {recent.length ? (
           <ul className="space-y-1.5">
             {recent.map((item) => (
               <li
@@ -196,7 +194,11 @@ export function RadarSidebar({
                 className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs"
               >
                 <span className="font-mono text-slate-400 tabular-nums">{item.date}</span>
-                <span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{item.pair}</span>
+                {Number.isFinite(visibleRows) ? (
+                  <span className="min-w-0 flex-1 truncate font-semibold text-slate-400">●●●●●● → ●●●●●● 升级查看</span>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{item.pair}</span>
+                )}
                 <span className="font-bold text-rose-600 tabular-nums">
                   {item.spread == null ? '—' : `价差 ${item.spread.toFixed(2)}%`}
                 </span>

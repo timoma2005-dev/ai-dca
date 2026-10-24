@@ -277,7 +277,7 @@ export function createDemoFetch({ realFetch, fixtures = {}, onBlocked, origin = 
     if (fixture !== undefined) {
       let body = typeof init?.body === 'string' ? init.body : null;
       if (body == null && typeof Request !== 'undefined' && input instanceof Request) body = await input.clone().text().catch(() => null);
-      const value = typeof fixture === 'function' ? await fixture({ url, method, init, body }) : fixture;
+      const value = typeof fixture === 'function' ? await fixture({ url, method, init, body, realFetch }) : fixture;
       const payload = value && typeof value === 'object' && typeof value.file === 'string' ? await loadFile(value.file) : value;
       if (payload instanceof Response) return payload;
       return payload == null ? jsonResponse({ ok: false, error: '示例数据暂不可用' }, 503) : jsonResponse(payload);
