@@ -32,7 +32,13 @@ export const DEMO_FEATURES = {
     pitch: '实时行情、溢价与净值走势，多只基金同屏对比。',
     load: async () => ({ default: { keepKeys: ['markets:watchlist:v1'] } }),
   },
-  fundSwitch: { ready: false, durationSec: 300, pitch: '' },
+  fundSwitch: {
+    ready: true,
+    durationSec: 300,
+    pitch: '纳指 QDII ETF 高低溢价轮动：实时溢价差标尺、切出 / 切回阈值与今日命中，回测最优阈值一键生成方案。',
+    // mock 方案配置与快照 GET；保存 / 测试 / 自动填充等写入由演示框架拦截。回测生成的换基偏好保留并在注册/升级后带入。
+    load: () => import('./fixtures/fundSwitch.js'),
+  },
   notify: { ready: false, durationSec: 300, pitch: '' },
   adminRadar: {
     ready: true,
