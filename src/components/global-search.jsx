@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { lockLabelFor, sortAccessibleFirst } from '../app/rbac/menuModel.js';
 import {
   ArrowRight,
   BarChart3,
@@ -19,7 +20,6 @@ export const TAB_SEARCH_META = {
   notify: { desc: '推送配置与状态', keywords: 'notify push tongzhi' },
   adminAuction: { desc: '纳指期指与 ETF 竞价行情', keywords: 'adminauction auction jingjia' },
   adminRadar: { desc: '套利雷达与溢价监控', keywords: 'radar leida' },
-  adminQuant: { desc: '量化策略回测与模拟盘', keywords: 'quant lianghua' },
   adminRbac: { desc: '用户角色、菜单权限与审计日志', keywords: 'rbac quanxian role' },
 };
 
@@ -106,7 +106,7 @@ export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, menus =
   const q = query.trim().toLowerCase();
 
   const tabEntries = useMemo(() => buildTabEntries(menus), [menus]);
-  const tabResults = useMemo(() => filterTabEntries(tabEntries, q), [tabEntries, q]);
+  const tabResults = useMemo(() => sortAccessibleFirst(filterTabEntries(tabEntries, q)), [tabEntries, q]);
 
   const fundResults = useMemo(() => {
     if (!q) return [];
@@ -196,7 +196,7 @@ export function GlobalSearch({ open, onClose, onSelectTab, onSelectFund, menus =
               key={`tab-${tab.key}`}
               icon={tab.icon}
               title={tab.label}
-              sub={tab.locked ? `需要${tab.requiredRole?.name || '登录'} · ${tab.desc}` : tab.desc}
+              sub={tab.locked ? `${lockLabelFor(tab.requiredRole)} · ${tab.desc}` : tab.desc}
               locked={tab.locked}
               onClick={() => handlePickTab(tab.key)}
             />

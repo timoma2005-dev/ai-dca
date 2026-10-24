@@ -24,7 +24,6 @@ const SEED_MENUS = [
   ['notify', '通知管理', 'Bell', 'primary', 70, '管理消息推送与提醒设置'],
   ['articles', '文章', 'BookOpen', 'primary', 80, '基金科普指南与定投策略'],
   ['dataRepair', '数据修复', 'Wrench', 'primary', 90, '数据诊断与修复'],
-  ['adminQuant', '量化', 'FlaskConical', 'admin', 110, '量化策略回测与模拟盘'],
   ['adminRadar', '雷达', 'Radar', 'admin', 120, '套利雷达与溢价监控'],
   ['adminAuction', '竞价看板', 'Gavel', 'admin', 130, '纳指期指与 ETF 竞价行情'],
   ['adminRbac', '权限管理', 'ShieldCheck', 'admin', 140, '用户角色、菜单权限与审计日志'],
@@ -32,8 +31,8 @@ const SEED_MENUS = [
 
 export const RBAC_MANAGED_TABS = new Set(SEED_MENUS.map(([key]) => key));
 
-const GUEST_OPEN = new Set(['home', 'markets', 'shares', 'articles']);
-const GUEST_LOCKED = new Set(['holdings', 'tradePlans', 'fundSwitch', 'notify', 'dataRepair']);
+const GUEST_OPEN = new Set(['home', 'shares', 'articles']);
+const GUEST_LOCKED = new Set(['markets', 'holdings', 'tradePlans', 'fundSwitch', 'notify', 'dataRepair']);
 
 function seedItem([key, label, icon, group, sort, subtitle], locked) {
   return {
@@ -64,7 +63,8 @@ export function buildGuestFallback() {
   };
 }
 
-const USER_LOCKED = { adminQuant: 'svip', adminRadar: 'vip', adminAuction: 'svip' };
+// 会员分层（2026-10-24）：VIP = 行情 + 换基 + 通知推送；SVIP 再加雷达与竞价看板。
+const USER_LOCKED = { markets: 'vip', fundSwitch: 'vip', notify: 'vip', adminRadar: 'svip', adminAuction: 'svip' };
 const VIP_NAMES = { vip: 'VIP', svip: 'SVIP' };
 
 /**
@@ -144,17 +144,40 @@ export function evaluateTabAccess(state, tabKey) {
 }
 
 /** 侧边栏分组：primary / admin（服务端 group 字段）。 */
+/** 有权限的排在前面、锁定的排在后面，各自保持原有顺序（稳定分区）。 */
+export function sortAccessibleFirst(items = []) {
+  const list = Array.isArray(items) ? items : [];
+  return [...list.filter((item) => !item?.locked), ...list.filter((item) => item?.locked)];
+}
+
 export function splitSidebarMenus(menus = []) {
   const items = flattenMenus(menus).filter((item) => !item.parentKey || !findMenu(menus, item.parentKey));
   return {
-    primary: items.filter((item) => item.group !== 'admin'),
-    admin: items.filter((item) => item.group === 'admin'),
+    primary: sortAccessibleFirst(items.filter((item) => item.group !== 'admin')),
+    admin: sortAccessibleFirst(items.filter((item) => item.group === 'admin')),
   };
 }
 
 export function requiredRoleLabel(requiredRole) {
   if (!requiredRole) return '更高权限';
   return requiredRole.name || ROLE_LABELS[requiredRole.code] || requiredRole.code;
+}
+
+const LOGIN_ONLY_ROLES = new Set(['', 'guest', 'user']);
+const PAID_ROLES = new Set(['vip', 'svip']);
+
+/** 需要付费角色（VIP / SVIP）才能使用。 */
+export function isPaidRole(requiredRole) {
+  return PAID_ROLES.has(requiredRole?.code || '');
+}
+
+/** 锁定菜单的短标签：只需登录的显示「需登录」，付费功能显示「VIP 专享」，管理功能显示「仅管理员」。 */
+export function lockLabelFor(requiredRole) {
+  const code = requiredRole?.code || '';
+  if (LOGIN_ONLY_ROLES.has(code)) return '需登录';
+  if (PAID_ROLES.has(code)) return `${requiredRole.name || ROLE_LABELS[code]} 专享`;
+  if (code === 'admin' || code === 'superadmin') return '仅管理员';
+  return `需${requiredRoleLabel(requiredRole)}`;
 }
 
 export function isAdminState(state) {
@@ -170,4 +193,13 @@ export function roleBadgeFor(topRole) {
   if (code === 'svip') return { kind: 'diamond', label: 'SVIP', tone: 'violet' };
   if (code === 'vip') return { kind: 'crown', label: 'VIP', tone: 'gold' };
   return null;
+}
+
+const RING_TIERS = ['superadmin', 'admin', 'svip', 'vip'];
+
+/** 头像光圈等级（参考 Google 账号头像外圈）：VIP 金、SVIP 紫粉、管理员蓝、超级管理员四色；其余无光圈。 */
+export function roleRingFor(topRole) {
+  const code = topRole?.code || '';
+  if (!RING_TIERS.includes(code)) return null;
+  return { tier: code, label: topRole?.name || ROLE_LABELS[code] };
 }

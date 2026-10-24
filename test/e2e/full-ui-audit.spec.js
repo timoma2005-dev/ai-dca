@@ -193,7 +193,6 @@ test.describe.serial('full UI audit (real account)', () => {
     for (const viewport of ['desktop', 'mobile']) {
       const context = await browser.newContext({ viewport: viewport === 'desktop' ? DESKTOP : MOBILE });
       // Suppress the release-announcement modal so it doesn't block interaction.
-      await context.addInitScript(() => { window.__AI_DCA_RELEASE_ANNOUNCEMENT__ = { enabled: false }; });
       const page = await context.newPage();
       const consoleErrors = [];
       page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });

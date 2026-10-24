@@ -2,13 +2,14 @@ import { AlertCircle, Coffee, LineChart, UserRound } from 'lucide-react';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import { ACCOUNT_AUTH_OPEN_EVENT } from '../app/accountAuthEvents.js';
 import { NotifyPopover } from './notify-popover.jsx';
-import { RoleBadge } from './rbac/role-badge.jsx';
+import { RoleAvatar } from './rbac/role-badge.jsx';
 import './brand-preview-bar.css';
 import './header-actions.css';
 
-export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, onShowDisclaimer, topRole = null }) {
+export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, onShowDisclaimer, topRole = null, username = '' }) {
   const handleCoffeeClick = onBuyMeCoffee || onJoinGroup;
   useNotifyUnreadCount();
+  const initial = username ? String(username).slice(0, 1).toUpperCase() : '';
 
   return (
     <header className="app-header brand-preview-bar" data-testid="brand-preview-bar">
@@ -59,14 +60,17 @@ export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, 
           <button
             type="button"
             className="app-header__utility"
+            data-account-trigger
             aria-label="账户"
             title={topRole?.name ? `账户 · ${topRole.name}` : undefined}
+            data-account-avatar={initial ? 'true' : undefined}
             onClick={() => window.dispatchEvent(new CustomEvent(ACCOUNT_AUTH_OPEN_EVENT))}
           >
-            <span className="relative inline-flex">
+            {initial ? (
+              <RoleAvatar topRole={topRole} initial={initial} size="sm" />
+            ) : (
               <UserRound className="h-[18px] w-[18px]" aria-hidden="true" />
-              <RoleBadge topRole={topRole} className="absolute -bottom-1.5 -right-1.5" />
-            </span>
+            )}
           </button>
         </div>
       </div>

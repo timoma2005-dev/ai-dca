@@ -22,7 +22,7 @@ function readPrivacyState() {
   };
 }
 
-export function PrivacyNotice({ compact = false } = {}) {
+export function PrivacyNotice({ compact = false, variant = 'card' } = {}) {
   const [state, setState] = useState(() => readPrivacyState());
   const [detailsOpen, setDetailsOpen] = useState(false);
   const enabled = !state.disabled;
@@ -51,6 +51,78 @@ export function PrivacyNotice({ compact = false } = {}) {
     : enabled
       ? '轻量使用统计已开启'
       : '轻量使用统计已关闭';
+
+  const detailsDialog = (
+    <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+      <DialogContent className="z-[160] max-h-[88vh] overflow-y-auto border-slate-200 bg-white text-slate-900 sm:max-w-lg">
+        <DialogTitle className="text-base font-bold text-slate-950">隐私与数据采集说明</DialogTitle>
+        <DialogDescription className="text-sm leading-6 text-slate-500">
+          这些统计只用于了解功能使用情况、排查错误和改进页面体验。
+        </DialogDescription>
+
+        <div className="space-y-4 text-sm leading-6 text-slate-600">
+          <div>
+            <div className="font-bold text-slate-900">会采集</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>页面访问、按钮操作、功能结果等轻量事件。</li>
+              <li>当前路径、tab、hash、登录用户 ID/用户名，以及随机 visitorId/sessionId。</li>
+              <li>粗化后的浏览器/系统族、设备类型、语言、时区、在线状态和 PWA 展示状态。</li>
+            </ul>
+          </div>
+
+          <div>
+            <div className="font-bold text-slate-900">不会采集</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>登录密码、安全密码、token、SendKey、原始文本内容或完整链接。</li>
+              <li>完整 userAgent、屏幕尺寸、设备像素比、CPU/内存、网络类型、平台和语言列表。</li>
+              <li>金额、价格、股数等敏感业务字段会在事件元数据中被过滤。</li>
+            </ul>
+          </div>
+
+          <div>
+            <div className="font-bold text-slate-900">关闭后</div>
+            <p className="mt-2">
+              关闭开关或启用浏览器 Do Not Track 后，页面不会生成新的 visitorId/sessionId，也不会写入或上报新的统计事件。
+              已保存的本地业务数据和云同步功能不受影响。
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (variant === 'row') {
+    // 头像菜单内的单行版：标题 + 说明链接 + 开关。
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs" data-privacy-row>
+        <div className="min-w-0">
+          <div className="font-bold text-slate-800">轻量使用统计</div>
+          <div className="mt-0.5 text-[11px] leading-5 text-slate-500">
+            {locked ? '浏览器 DNT 已开启，统计保持关闭' : '帮助改进产品'}
+            {' · '}
+            <button type="button" className="font-semibold text-indigo-600 hover:underline" onClick={() => setDetailsOpen(true)}>数据说明</button>
+          </div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="轻量使用统计"
+          disabled={locked}
+          onClick={() => handleToggle(!enabled)}
+          className={cx(
+            'relative h-6 w-11 shrink-0 rounded-full transition',
+            enabled ? 'bg-indigo-600' : 'bg-slate-300',
+            locked && 'cursor-not-allowed opacity-60'
+          )}
+          title={locked ? '浏览器 DNT 已开启，统计保持关闭' : statusText}
+        >
+          <span className={cx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all', enabled ? 'left-[1.375rem]' : 'left-0.5')} />
+        </button>
+        {detailsDialog}
+      </div>
+    );
+  }
 
   return (
     <div className={cx('rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600', compact && 'bg-white')}>
@@ -99,42 +171,7 @@ export function PrivacyNotice({ compact = false } = {}) {
         </div>
       ) : null}
 
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="z-[160] max-h-[88vh] overflow-y-auto border-slate-200 bg-white text-slate-900 sm:max-w-lg">
-          <DialogTitle className="text-base font-bold text-slate-950">隐私与数据采集说明</DialogTitle>
-          <DialogDescription className="text-sm leading-6 text-slate-500">
-            这些统计只用于了解功能使用情况、排查错误和改进页面体验。
-          </DialogDescription>
-
-          <div className="space-y-4 text-sm leading-6 text-slate-600">
-            <div>
-              <div className="font-bold text-slate-900">会采集</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li>页面访问、按钮操作、功能结果等轻量事件。</li>
-                <li>当前路径、tab、hash、登录用户 ID/用户名，以及随机 visitorId/sessionId。</li>
-                <li>粗化后的浏览器/系统族、设备类型、语言、时区、在线状态和 PWA 展示状态。</li>
-              </ul>
-            </div>
-
-            <div>
-              <div className="font-bold text-slate-900">不会采集</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li>登录密码、安全密码、token、SendKey、原始文本内容或完整链接。</li>
-                <li>完整 userAgent、屏幕尺寸、设备像素比、CPU/内存、网络类型、平台和语言列表。</li>
-                <li>金额、价格、股数等敏感业务字段会在事件元数据中被过滤。</li>
-              </ul>
-            </div>
-
-            <div>
-              <div className="font-bold text-slate-900">关闭后</div>
-              <p className="mt-2">
-                关闭开关或启用浏览器 Do Not Track 后，页面不会生成新的 visitorId/sessionId，也不会写入或上报新的统计事件。
-                已保存的本地业务数据和云同步功能不受影响。
-              </p>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {detailsDialog}
     </div>
   );
 }

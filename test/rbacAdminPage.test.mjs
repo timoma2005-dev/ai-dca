@@ -8,21 +8,22 @@ import { MessageChannel } from 'node:worker_threads';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { rolldown } from 'rolldown';
+import { rbacFixture } from './helpers/rbacFixture.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const requireFromRoot = createRequire(join(root, 'package.json'));
 const abs = (path) => JSON.stringify(join(root, path));
 const dependency = (name) => JSON.stringify(requireFromRoot.resolve(name));
 const roleDefinitions = [
-  { code: 'guest', name: '游客' },
-  { code: 'user', name: '普通用户' },
-  { code: 'superadmin', name: '超级管理员', privileged: true },
-  { code: 'admin', name: '管理员', privileged: true },
-  { code: 'svip', name: 'SVIP' },
-  { code: 'vip', name: 'VIP' },
-  { code: 'auction_viewer', name: '竞价看板' },
-  { code: 'virtual_test', name: '虚拟角色', isVirtual: true },
-  { code: 'privileged_test', name: '特权角色', privileged: true }
+  { code: 'guest', name: '游客', level: 0 },
+  { code: 'user', name: '普通用户', level: 10 },
+  { code: 'superadmin', name: '超级管理员', privileged: true, level: 100 },
+  { code: 'admin', name: '管理员', privileged: true, level: 90 },
+  { code: 'svip', name: 'SVIP', level: 30 },
+  { code: 'vip', name: 'VIP', level: 20 },
+  { code: 'auction_viewer', name: '竞价看板', level: 12 },
+  { code: 'virtual_test', name: '虚拟角色', isVirtual: true, level: 5 },
+  { code: 'privileged_test', name: '特权角色', privileged: true, level: 95 }
 ];
 const role = (code) => ({ ...roleDefinitions.find((item) => item.code === code), expiresAt: null });
 const makeUsers = (count = 18) => Array.from({ length: count }, (_, index) => ({
@@ -52,6 +53,9 @@ const entrySource = [
   'import AdminRbacExperience from ' + abs('src/pages/AdminRbacExperience.jsx') + ';',
   'import { RbacUsersPanel } from ' + abs('src/pages/rbac/RbacUsersPanel.jsx') + ';',
   'import { RbacGuestsPanel } from ' + abs('src/pages/rbac/RbacGuestsPanel.jsx') + ';',
+  'import { RbacMatrixPanel } from ' + abs('src/pages/rbac/RbacMatrixPanel.jsx') + ';',
+  'import { RbacMenusPanel } from ' + abs('src/pages/rbac/RbacMenusPanel.jsx') + ';',
+  'import { RbacAuditPanel } from ' + abs('src/pages/rbac/RbacAuditPanel.jsx') + ';',
   'import { formatTime } from ' + abs('src/pages/rbac/rbacUi.jsx') + ';',
   'import { rbacAdminApi } from ' + abs('src/app/rbac/rbacAdminApi.js') + ';',
   'import { applyRbacPayload, __rbacStoreInternals } from ' + abs('src/app/rbac/rbacStore.js') + ';',
@@ -59,7 +63,7 @@ const entrySource = [
   'export const errors = [];',
   'let mounted;',
   'export async function mount(name, props) {',
-  '  const Component = { users: RbacUsersPanel, guests: RbacGuestsPanel, page: AdminRbacExperience }[name];',
+  '  const Component = { users: RbacUsersPanel, guests: RbacGuestsPanel, matrix: RbacMatrixPanel, menus: RbacMenusPanel, audit: RbacAuditPanel, page: AdminRbacExperience }[name];',
   '  mounted = createRoot(document.getElementById("root"), {',
   '    onUncaughtError: (error) => errors.push(error), onCaughtError: (error) => errors.push(error),',
   '    onRecoverableError: (error) => errors.push(error)',
@@ -119,7 +123,7 @@ test.before(async () => {
 test.beforeEach(() => {
   userRows = makeUsers();
   guestData = { available: true, guests: makeGuests() };
-  calls = { search: [], guests: 0, grants: [], revokes: [], loaded: [], changed: 0, toasts: [] };
+  calls = { search: [], guests: 0, grants: [], revokes: [], loaded: [], changed: 0, toasts: [], perms: [], menuUpdates: [], audit: [] };
   Object.assign(mod.rbacAdminApi, {
     searchUsers: async (query) => { calls.search.push(query); return { users: userRows }; },
     listGuests: async () => { calls.guests += 1; return guestData; },
@@ -130,12 +134,19 @@ test.beforeEach(() => {
       calls.grants.push([id, code, expiresAt]);
       userRows = userRows.map((user) => user.id === id ? { ...user, roles: [...user.roles, { ...role(code), expiresAt }] } : user);
     },
+    setRolePermissions: async (code, perms) => { calls.perms.push([code, perms]); },
+    updateMenu: async (key, body) => { calls.menuUpdates.push([key, body]); },
+    listAudit: async (query) => {
+      calls.audit.push(query);
+      return { entries: [{ id: 2, actorUsername: 'lovexl', action: 'role.grant', targetType: 'user', targetId: 'usr_1', detail: { username: 'lin', role: 'vip', expiresAt: '2026-12-31T15:59:59.000Z' }, createdAt: '2026-10-23T08:00:00.000Z' }] };
+    },
     revokeRole: async (id, code) => {
       calls.revokes.push([id, code]);
       userRows = userRows.map((user) => user.id === id ? { ...user, roles: user.roles.filter((item) => item.code !== code) } : user);
     }
   });
-  window.confirm = () => true;
+  window.confirm = () => { throw new Error('native confirm must not be used'); };
+  window.history.replaceState(null, '', '/home.html?tab=adminRbac');
   window.localStorage.clear();
   const session = { userId: 'test-admin', username: 'test-admin', accessToken: 'test-token' };
   window.localStorage.setItem('aiDcaCloudSyncSession', JSON.stringify(session));
@@ -167,7 +178,8 @@ const q = (selector, scope = document) => scope.querySelector(selector);
 const all = (selector, scope = document) => [...scope.querySelectorAll(selector)];
 const rows = (kind = 'user') => all('[data-testid="rbac-' + kind + '-row"]');
 const button = (label, scope = document) => all('button', scope).find((item) => item.textContent.trim() === label);
-const editor = () => q('[data-testid="rbac-user-editor"]');
+const drawer = () => q('[data-testid="rbac-user-drawer"]');
+const wait = (ms) => mod.act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); });
 const userProps = (extra = {}) => ({
   roles: roleDefinitions, onLoaded: (count) => calls.loaded.push(count), onChanged: () => { calls.changed += 1; }, ...extra
 });
@@ -196,178 +208,66 @@ const resolveRequest = async (pending, value) => {
   await mod.act(async () => { pending.resolve(value); await pending.promise; });
 };
 
-test('users auto-load once in StrictMode and render compact table columns with eight-row pagination', async () => {
+test('users auto-load once in StrictMode, render the table and paginate twenty rows per page', async () => {
+  userRows = makeUsers(45);
   await mod.mount('users', userProps());
   assert.deepEqual(calls.search, ['']);
-  assert.deepEqual(calls.loaded, [18]);
+  assert.deepEqual(calls.loaded, [45]);
   const table = q('table[aria-label="注册用户"]');
-  assert.deepEqual(all('th', table).map((cell) => cell.textContent), ['用户名', '角色', '注册', '最后活跃', '操作']);
-  assert.match(table.className, /text-sm/);
-  assert.match(q('thead', table).className, /text-xs text-slate-400/);
-  assert.equal(rows().length, 8);
+  assert.deepEqual(all('th', table).map((cell) => cell.textContent), ['用户', '角色', '注册', '最后活跃', '']);
+  assert.equal(rows().length, 20);
   const cells = all('td', rows()[0]);
   assert.match(cells[0].textContent, /用户0.*usr_000/);
-  assert.match(cells[1].textContent, /普通用户（默认）.*超级管理员/);
+  assert.match(cells[1].textContent, /超级管理员/);
   assert.equal(cells[2].textContent, mod.formatTime(userRows[0].createdAt));
   assert.equal(cells[3].textContent, '从未');
-  assert.equal(all('td', rows()[1])[3].textContent, mod.formatTime(userRows[1].lastActiveAt));
-  assert.equal(editor(), null);
+  assert.match(all('td', rows()[4])[1].textContent, /普通用户/);
   assert.ok(button('上一页').disabled);
-  assert.match(q('footer').textContent, /共 18 位注册用户.*第 1 \/ 3 页/);
+  assert.match(q('footer').textContent, /共 45 位注册用户.*第 1 \/ 3 页/);
+  assert.doesNotMatch(q('footer').textContent, /取前/);
   await click(button('下一页'));
-  assert.equal(rows().length, 8);
-  assert.match(rows()[0].textContent, /usr_008/);
-  await click(button('下一页'));
-  assert.equal(rows().length, 2);
-  assert.ok(button('下一页').disabled);
-  await click(button('上一页'));
-  assert.match(q('footer').textContent, /第 2 \/ 3 页/);
-  assert.deepEqual(calls.search, [''], 'pagination stays on the loaded result set');
-});
-
-test('role chips match codes exactly and paginate the client-filtered result set', async () => {
-  await mod.mount('users', userProps());
-  const filters = q('[aria-label="按角色筛选"]');
-  assert.deepEqual(all('button', filters).map((item) => item.textContent), ['全部', '超级管理员', '管理员', 'SVIP', 'VIP', '竞价看板', '无额外角色']);
-  await click(button('下一页'));
-  await click(button('VIP', filters));
-  assert.equal(button('VIP', filters).getAttribute('aria-pressed'), 'true');
-  assert.equal(rows().length, 8);
-  assert.match(q('footer').textContent, /筛选 13 \/ 18 位注册用户.*第 1 \/ 2 页/);
-  assert.ok(rows().every((row) => !row.textContent.includes('SVIP')));
+  assert.match(rows()[0].textContent, /usr_020/);
   await click(button('下一页'));
   assert.equal(rows().length, 5);
-  for (const [label, id] of [['超级管理员', 'usr_000'], ['管理员', 'usr_001'], ['SVIP', 'usr_002'], ['竞价看板', 'usr_003'], ['无额外角色', 'usr_004']]) {
-    await click(button(label, filters));
-    assert.equal(rows().length, 1);
-    assert.ok(rows()[0].textContent.includes(id));
-    assert.match(q('footer').textContent, /第 1 \/ 1 页/);
-  }
-  await click(button('全部', filters));
-  assert.equal(rows().length, 8);
-  assert.deepEqual(calls.search, [''], 'chips never call searchUsers');
-  assert.deepEqual(calls.loaded, [18], 'loaded count is independent of local filters');
+  assert.ok(button('下一页').disabled);
+  assert.deepEqual(calls.search, [''], 'pagination stays on the loaded result set');
+  assert.equal(drawer(), null);
 });
 
-test('the search form queries the server only on submit, reports new loaded counts and resets the page', async () => {
+test('role chips are built from roles by level with live counts and filter locally', async () => {
   await mod.mount('users', userProps());
-  await click(button('下一页'));
+  const filters = q('[aria-label="按角色筛选"]');
+  assert.deepEqual(all('button', filters).map((item) => item.textContent), ['全部18', '超级管理员1', '特权角色0', '管理员1', 'SVIP1', 'VIP13', '竞价看板1', '无额外角色1']);
+  await click(q('[data-role-filter="vip"]'));
+  assert.equal(q('[data-role-filter="vip"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(rows().length, 13);
+  assert.match(q('footer').textContent, /筛选 13 \/ 18 位注册用户/);
+  for (const [code, id] of [['superadmin', 'usr_000'], ['admin', 'usr_001'], ['svip', 'usr_002'], ['auction_viewer', 'usr_003'], ['none', 'usr_004']]) {
+    await click(q(`[data-role-filter="${code}"]`));
+    assert.equal(rows().length, 1);
+    assert.ok(rows()[0].textContent.includes(id));
+  }
+  await click(q('[data-role-filter="all"]'));
+  assert.equal(rows().length, 18);
+  assert.deepEqual(calls.search, [''], 'chips never call searchUsers');
+});
+
+test('typing searches after a debounce, submit searches immediately, and stale results never win', async () => {
+  await mod.mount('users', userProps());
   const input = q('[aria-label="搜索用户"]');
+  userRows = [makeUsers()[17]];
   await change(input, '用户17');
-  assert.deepEqual(calls.search, ['']);
-  userRows = [userRows[17]];
-  await submit(input.form);
+  assert.deepEqual(calls.search, [''], 'no request while typing');
+  await wait(400);
   assert.deepEqual(calls.search, ['', '用户17']);
   assert.deepEqual(calls.loaded, [18, 1]);
   assert.equal(rows().length, 1);
-  assert.match(rows()[0].textContent, /usr_017/);
-  assert.match(q('footer').textContent, /共 1 位注册用户.*第 1 \/ 1 页/);
   userRows = [];
   await searchUsers('不存在');
+  assert.deepEqual(calls.search, ['', '用户17', '不存在']);
+  await wait(400);
+  assert.deepEqual(calls.search, ['', '用户17', '不存在'], 'submit cancels the pending debounce');
   assert.match(document.body.textContent, /暂无匹配用户。/);
-  assert.equal(rows().length, 0);
-});
-
-test('only one inline grant editor expands, with unchanged role gates and already-owned roles excluded', async () => {
-  await mod.mount('users', userProps());
-  await click(button('授予角色', rows()[5]));
-  assert.equal(all('[data-testid="rbac-user-editor"]').length, 1);
-  assert.equal(q('td', editor()).colSpan, 5);
-  assert.equal(editor().previousElementSibling, rows()[5]);
-  const select = q('select', editor());
-  const options = all('option', select);
-  for (const code of ['guest', 'user', 'superadmin', 'virtual_test', 'vip']) {
-    assert.equal(options.find((option) => option.value === code), undefined, code + ' must not be grantable');
-  }
-  assert.ok(options.find((option) => option.value === 'admin').disabled);
-  assert.ok(options.find((option) => option.value === 'privileged_test').disabled);
-  assert.equal(options.find((option) => option.value === 'svip').disabled, false);
-  assert.ok(button('确认授予', editor()).disabled);
-  await change(select, 'svip');
-  await change(q('input[type="date"]', editor()), '2026-12-31');
-  await click(button('授予角色', rows()[4]));
-  assert.equal(all('[data-testid="rbac-user-editor"]').length, 1);
-  assert.equal(editor().previousElementSibling, rows()[4]);
-  assert.equal(q('select', editor()).value, '');
-  assert.equal(q('input', editor()).value, '');
-  await click(button('取消', editor()));
-  assert.equal(editor(), null);
-  await click(button('授予角色', rows()[0]));
-  await click(button('下一页'));
-  assert.equal(editor(), null);
-  await click(button('授予角色', rows()[0]));
-  await click(button('无额外角色', q('[aria-label="按角色筛选"]')));
-  assert.equal(editor(), null);
-  assert.equal(q('[aria-label="撤销超级管理员"]'), null);
-  await click(button('全部', q('[aria-label="按角色筛选"]')));
-  assert.equal(q('[aria-label="撤销管理员"]'), null, 'ordinary admins cannot revoke privileged roles');
-});
-
-test('grant keeps the query, expiry conversion, toast and onChanged flow and closes the editor', async () => {
-  userRows = [makeUsers()[5]];
-  await mod.mount('users', userProps());
-  await searchUsers('用户5');
-  await click(button('授予角色', rows()[0]));
-  await change(q('select', editor()), 'svip');
-  await change(q('input[type="date"]', editor()), '2026-12-31');
-  await submit(q('form', editor()));
-  assert.deepEqual(calls.grants, [['usr_005', 'svip', '2026-12-31T15:59:59.000Z']]);
-  assert.deepEqual(calls.search, ['', '用户5', '用户5']);
-  assert.equal(calls.changed, 1);
-  assert.equal(calls.toasts[0].title, '已授予角色');
-  assert.equal(calls.toasts[0].description, '用户5 → svip');
-  assert.equal(editor(), null);
-  assert.match(rows()[0].textContent, /SVIP.*2026-12-31 到期/);
-});
-
-test('superadmins can grant a permanent admin role and revoke admins while superadmin stays locked', async () => {
-  await mod.mount('users', userProps({ canGrantAdmin: true }));
-  assert.ok(q('[aria-label="撤销管理员"]'));
-  assert.equal(q('[aria-label="撤销超级管理员"]'), null);
-  await click(button('授予角色', rows()[4]));
-  assert.equal(q('option[value="admin"]', editor()).disabled, false);
-  assert.equal(q('option[value="privileged_test"]', editor()).disabled, false);
-  await change(q('select', editor()), 'admin');
-  await submit(q('form', editor()));
-  assert.deepEqual(calls.grants, [['usr_004', 'admin', null]]);
-});
-
-test('grant failures preserve the draft and do not refresh or notify success; pending grants disable repeat submit', async () => {
-  const pending = deferred();
-  mod.rbacAdminApi.grantRole = (...args) => { calls.grants.push(args); return pending.promise; };
-  await mod.mount('users', userProps());
-  await click(button('授予角色', rows()[4]));
-  await change(q('select', editor()), 'vip');
-  await submit(q('form', editor()));
-  assert.ok(button('授予中…', editor()).disabled);
-  assert.ok(q('select', editor()).disabled);
-  await submit(q('form', editor()));
-  assert.equal(calls.grants.length, 1);
-  await mod.act(async () => { pending.reject(new Error('授予失败')); });
-  assert.match(document.body.textContent, /授予失败/);
-  assert.equal(q('select', editor()).value, 'vip');
-  assert.deepEqual(calls.search, ['']);
-  assert.equal(calls.changed, 0);
-  assert.deepEqual(calls.toasts, []);
-});
-
-test('revoke preserves confirmation, the current query, toast and onChanged', async () => {
-  userRows = [makeUsers()[5]];
-  await mod.mount('users', userProps());
-  await searchUsers('用户5');
-  const confirmations = [];
-  window.confirm = (message) => { confirmations.push(message); return false; };
-  await click(q('[aria-label="撤销VIP"]'));
-  assert.deepEqual(calls.revokes, []);
-  window.confirm = (message) => { confirmations.push(message); return true; };
-  await click(q('[aria-label="撤销VIP"]'));
-  assert.deepEqual(confirmations, ['确认撤销 用户5 的「VIP」角色？', '确认撤销 用户5 的「VIP」角色？']);
-  assert.deepEqual(calls.revokes, [['usr_005', 'vip']]);
-  assert.deepEqual(calls.search, ['', '用户5', '用户5']);
-  assert.equal(calls.changed, 1);
-  assert.equal(calls.toasts[0].title, '已撤销角色');
-  assert.equal(q('[aria-label="撤销VIP"]'), null);
-  assert.match(rows()[0].textContent, /普通用户（默认）/);
 });
 
 test('a stale initial search cannot replace a newer query and the mount replay shares its inflight request', async () => {
@@ -386,133 +286,259 @@ test('a stale initial search cannot replace a newer query and the mount replay s
   assert.deepEqual(calls.loaded, [1]);
 });
 
-test('guests load once, render a compact aggregated table, paginate and search visitor IDs locally', async () => {
+test('clicking a row opens the user drawer with info, owned roles and gated grantable roles', async () => {
+  await mod.mount('users', userProps());
+  await click(rows()[5]);
+  assert.ok(drawer());
+  assert.match(drawer().textContent, /用户5.*usr_005/);
+  assert.match(q('[aria-label="已有角色"]', drawer()).textContent, /普通用户.*默认.*VIP/);
+  const options = all('option', q('select', drawer()));
+  for (const code of ['guest', 'user', 'superadmin', 'virtual_test', 'vip']) {
+    assert.equal(options.find((option) => option.value === code), undefined, code + ' must not be grantable');
+  }
+  assert.ok(options.find((option) => option.value === 'admin').disabled);
+  assert.ok(options.find((option) => option.value === 'privileged_test').disabled);
+  assert.equal(options.find((option) => option.value === 'svip').disabled, false);
+  assert.ok(button('确认授予', drawer()).disabled);
+  assert.deepEqual(all('button', q('[aria-label="有效期"]', drawer())).map((item) => item.textContent), ['7 天', '30 天', '1 年', '长期', '自定义']);
+  await click(q('[aria-label="关闭"]', drawer()));
+  assert.equal(drawer(), null);
+  await click(rows()[0]);
+  assert.equal(q('[aria-label="撤销超级管理员"]'), null, 'superadmin is never revocable');
+  await mod.act(async () => { window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' })); });
+  assert.equal(drawer(), null);
+  await click(rows()[1]);
+  assert.equal(q('[aria-label="撤销管理员"]'), null, 'ordinary admins cannot revoke privileged roles');
+});
+
+test('grant with a custom expiry converts to Beijing end-of-day, refreshes, notifies and keeps the drawer on the user', async () => {
+  userRows = [makeUsers()[5]];
+  await mod.mount('users', userProps());
+  await searchUsers('用户5');
+  await click(rows()[0]);
+  await change(q('select', drawer()), 'svip');
+  await click(button('自定义', drawer()));
+  assert.ok(button('确认授予', drawer()).disabled, 'custom needs a date');
+  await change(q('input[type="date"]', drawer()), '2026-12-31');
+  await submit(q('form', drawer()));
+  assert.deepEqual(calls.grants, [['usr_005', 'svip', '2026-12-31T15:59:59.000Z']]);
+  assert.deepEqual(calls.search, ['', '用户5', '用户5']);
+  assert.equal(calls.changed, 1);
+  assert.equal(calls.toasts[0].title, '已授予角色');
+  assert.equal(calls.toasts[0].description, '用户5 → svip');
+  assert.match(q('[aria-label="已有角色"]', drawer()).textContent, /SVIP.*2026-12-31 到期/);
+  assert.equal(q('select', drawer()).value, '');
+});
+
+test('presets fill the expiry and 长期 grants permanently; superadmins can grant admin', async () => {
+  await mod.mount('users', userProps({ canGrantAdmin: true }));
+  await click(rows()[4]);
+  assert.equal(q('option[value="admin"]', drawer()).disabled, false);
+  await change(q('select', drawer()), 'admin');
+  await click(button('30 天', drawer()));
+  assert.match(drawer().textContent, /到期 \d{4}-\d{2}-\d{2}（北京时间当天 23:59）/);
+  await click(button('长期', drawer()));
+  await submit(q('form', drawer()));
+  assert.deepEqual(calls.grants, [['usr_004', 'admin', null]]);
+  await click(q('[aria-label="关闭"]', drawer()));
+  await click(rows()[1]);
+  assert.ok(q('[aria-label="撤销管理员"]'), 'superadmins can revoke admins');
+});
+
+test('grant failures keep the draft, show the error and skip refresh and success toasts', async () => {
+  const pending = deferred();
+  mod.rbacAdminApi.grantRole = (...args) => { calls.grants.push(args); return pending.promise; };
+  await mod.mount('users', userProps());
+  await click(rows()[4]);
+  await change(q('select', drawer()), 'vip');
+  await submit(q('form', drawer()));
+  assert.ok(button('处理中…', drawer()).disabled);
+  await submit(q('form', drawer()));
+  assert.equal(calls.grants.length, 1);
+  await mod.act(async () => { pending.reject(new Error('授予失败')); });
+  assert.match(drawer().textContent, /授予失败/);
+  assert.equal(q('select', drawer()).value, 'vip');
+  assert.deepEqual(calls.search, ['']);
+  assert.equal(calls.changed, 0);
+  assert.deepEqual(calls.toasts, []);
+});
+
+test('revoke asks with the in-page confirm dialog instead of window.confirm', async () => {
+  userRows = [makeUsers()[5]];
+  await mod.mount('users', userProps());
+  await click(rows()[0]);
+  await click(q('[aria-label="撤销VIP"]'));
+  const dialog = q('[data-testid="rbac-confirm"]');
+  assert.match(dialog.textContent, /确认撤销 用户5 的「VIP」角色？/);
+  await click(button('取消', dialog));
+  assert.equal(q('[data-testid="rbac-confirm"]'), null);
+  assert.deepEqual(calls.revokes, []);
+  await click(q('[aria-label="撤销VIP"]'));
+  await click(button('撤销', q('[data-testid="rbac-confirm"]')));
+  assert.deepEqual(calls.revokes, [['usr_005', 'vip']]);
+  assert.equal(calls.changed, 1);
+  assert.equal(calls.toasts[0].title, '已撤销角色');
+  assert.equal(q('[aria-label="撤销VIP"]'), null);
+});
+
+test('guests load once, paginate twenty rows and search visitor IDs locally', async () => {
+  guestData = { available: true, guests: makeGuests(45) };
   await mod.mount('guests', { onLoaded: (count) => calls.loaded.push(count) });
   assert.equal(calls.guests, 1);
-  assert.deepEqual(calls.loaded, [18]);
+  assert.deepEqual(calls.loaded, [45]);
   const table = q('table[aria-label="游客"]');
   assert.deepEqual(all('th', table).map((cell) => cell.textContent), ['访客标识', '首次访问', '最近活跃', '活跃天数']);
-  assert.match(table.className, /text-sm/);
-  assert.match(q('thead', table).className, /text-xs text-slate-400/);
-  assert.equal(rows('guest').length, 8);
+  assert.equal(rows('guest').length, 20);
   const cells = all('td', rows('guest')[0]);
   assert.equal(cells[0].title, guestData.guests[0].visitorId);
   assert.equal(cells[0].textContent, guestData.guests[0].visitorId.slice(0, 18) + '…');
-  assert.match(cells[0].className, /font-mono/);
-  assert.deepEqual(cells.slice(1).map((cell) => cell.textContent), ['2026-10-01', '2026-10-23', '1']);
-  assert.match(q('footer').textContent, /共 18 位游客/);
-  assert.doesNotMatch(q('footer').textContent, /取前 200/);
-  assert.ok(button('上一页').disabled);
-  await click(button('下一页'));
-  assert.equal(rows('guest').length, 8);
-  await click(button('下一页'));
-  assert.equal(rows('guest').length, 2);
-  assert.ok(button('下一页').disabled);
+  assert.match(q('footer').textContent, /共 45 位游客.*第 1 \/ 3 页/);
   await change(q('[aria-label="搜索游客"]'), ' GUEST-017 ');
   assert.equal(rows('guest').length, 1);
-  assert.equal(q('td', rows('guest')[0]).title, guestData.guests[17].visitorId);
-  assert.match(q('footer').textContent, /筛选 1 \/ 18 位游客.*第 1 \/ 1 页/);
+  assert.match(q('footer').textContent, /筛选 1 \/ 45 位游客/);
   await change(q('[aria-label="搜索游客"]'), 'no-such-visitor');
-  assert.equal(rows('guest').length, 0);
   assert.match(document.body.textContent, /暂无匹配游客。/);
-  await change(q('[aria-label="搜索游客"]'), '');
-  assert.equal(rows('guest').length, 8);
-  assert.equal(calls.guests, 1, 'searching and paging do not re-fetch guests');
-  assert.deepEqual(calls.loaded, [18], 'local searches do not change the loaded count');
+  assert.equal(calls.guests, 1);
 });
 
-test('guest loading stays distinct from unavailable and empty states', async () => {
+test('guest loading, unavailable, empty and error states stay distinct', async () => {
   const pending = deferred();
   mod.rbacAdminApi.listGuests = () => { calls.guests += 1; return pending.promise; };
   await mod.mount('guests', { onLoaded: (count) => calls.loaded.push(count) });
   assert.match(document.body.textContent, /正在加载游客…/);
-  assert.doesNotMatch(document.body.textContent, /暂无游客/);
-  assert.ok(button('下一页').disabled);
   await resolveRequest(pending, { available: false, guests: [] });
   assert.match(document.body.textContent, /暂无游客数据（分析库不可用）/);
-  assert.doesNotMatch(document.body.textContent, /正在加载游客|暂无游客访问记录/);
   assert.deepEqual(calls.loaded, [0]);
-  assert.equal(calls.guests, 1);
-});
-
-test('available empty guests show the empty state and report zero loaded rows', async () => {
+  await mod.unmount();
   guestData = { available: true, guests: [] };
-  await mod.mount('guests', { onLoaded: (count) => calls.loaded.push(count) });
+  mod.rbacAdminApi.listGuests = async () => guestData;
+  await mod.mount('guests', {});
   assert.match(document.body.textContent, /暂无游客访问记录。/);
-  assert.doesNotMatch(document.body.textContent, /分析库不可用/);
-  assert.equal(rows('guest').length, 0);
-  assert.deepEqual(calls.loaded, [0]);
-  assert.match(q('footer').textContent, /共 0 位游客.*第 1 \/ 1 页/);
-});
-
-test('guest request failures display the error without pretending the data source is empty', async () => {
+  await mod.unmount();
   mod.rbacAdminApi.listGuests = async () => { throw new Error('游客请求失败'); };
-  await mod.mount('guests', { onLoaded: (count) => calls.loaded.push(count) });
+  await mod.mount('guests', {});
   assert.match(document.body.textContent, /游客请求失败/);
-  assert.doesNotMatch(document.body.textContent, /正在加载游客|暂无游客访问记录|分析库不可用/);
-  assert.deepEqual(calls.loaded, []);
+  assert.doesNotMatch(document.body.textContent, /暂无游客访问记录|分析库不可用/);
 });
 
-test('the users tab defaults to registered users and segments show loaded counts while preserving each view', async () => {
+test('the page shows overview cards and five flat tabs with counts synced to the URL hash', async () => {
   await mod.mount('page');
-  const segments = q('[aria-label="用户类型"]');
-  const [registered, guests] = all('button', segments);
-  assert.equal(registered.textContent, '注册用户18');
-  assert.equal(registered.getAttribute('aria-pressed'), 'true');
-  assert.equal(guests.textContent, '游客');
-  assert.equal(calls.guests, 0, 'guests load when their segment is first visited');
-  const usersTable = q('table[aria-label="注册用户"]');
-  const usersSection = usersTable.closest('section');
-  assert.equal(usersTable.closest('[hidden]'), null);
-  await click(button('下一页', usersSection));
-  await click(guests);
-  const guestsTable = q('table[aria-label="游客"]');
-  assert.ok(usersTable.closest('[hidden]'));
-  assert.equal(guestsTable.closest('[hidden]'), null);
-  assert.equal(guests.getAttribute('aria-pressed'), 'true');
-  assert.equal(registered.getAttribute('aria-pressed'), 'false');
-  assert.equal(guests.textContent, '游客18');
-  await change(q('[aria-label="搜索游客"]'), 'guest-017');
-  assert.equal(guests.textContent, '游客18', 'the badge counts loaded rows, not filtered rows');
-  await click(registered);
-  assert.equal(usersTable.closest('[hidden]'), null);
-  assert.ok(guestsTable.closest('[hidden]'));
-  assert.match(q('footer', usersSection).textContent, /第 2 \/ 3 页/);
-  await click(guests);
-  assert.equal(q('[aria-label="搜索游客"]').value, 'guest-017');
-  assert.equal(rows('guest').length, 1);
-  assert.deepEqual(calls.search, ['']);
-  assert.equal(calls.guests, 1, 'returning to a loaded segment does not repeat its request');
-  await click(registered);
-  userRows = [userRows[17]];
-  await searchUsers('用户17');
-  assert.equal(registered.textContent, '注册用户1');
-  assert.equal(guests.textContent, '游客18');
+  const tabs = all('a', q('[role="tablist"]'));
+  assert.deepEqual(tabs.map((tab) => tab.getAttribute('href')), ['#users', '#guests', '#matrix', '#menus', '#audit']);
+  assert.equal(tabs[0].textContent, '用户18');
+  assert.equal(tabs[1].textContent, '游客');
+  assert.match(q('[aria-label="概览"]').textContent, /注册用户18.*特权用户17.*角色9/);
+  assert.equal(calls.guests, 0, 'guests load when their tab is first visited');
+  await click(tabs[1]);
+  assert.equal(window.location.hash, '#guests');
+  assert.equal(calls.guests, 1);
+  assert.equal(all('a', q('[role="tablist"]'))[1].textContent, '游客18');
+  assert.ok(q('table[aria-label="注册用户"]').closest('[hidden]'));
+  await click(all('a', q('[role="tablist"]'))[0]);
+  await click(all('a', q('[role="tablist"]'))[1]);
+  assert.equal(calls.guests, 1, 'returning to a visited tab keeps its data');
+  await click(all('a', q('[role="tablist"]'))[4]);
+  assert.equal(window.location.hash, '#audit');
+  assert.match(document.body.textContent, /lovexl 给 lin 授予 VIP，到期 2026-12-31/);
 });
 
-test('segment counts show 200+ at the cap and guest footer describes only a capped response', async () => {
-  userRows = makeUsers(200);
-  guestData = { available: true, guests: makeGuests(200) };
+test('a legacy #roles link opens the permission matrix', async () => {
+  window.history.replaceState(null, '', '/home.html?tab=adminRbac#roles');
   await mod.mount('page');
-  const [registered, guests] = all('button', q('[aria-label="用户类型"]'));
-  assert.equal(registered.textContent, '注册用户200+');
-  assert.match(q('footer').textContent, /共 200 位注册用户（当前查询取前 200）/);
-  await click(guests);
-  assert.equal(guests.textContent, '游客200+');
-  const footer = q('footer', q('table[aria-label="游客"]').closest('section'));
-  assert.match(footer.textContent, /共 200 位游客（按最近活跃排序，取前 200）/);
-  assert.match(footer.textContent, /第 1 \/ 25 页/);
-  await change(q('[aria-label="搜索游客"]'), 'guest-199');
-  assert.match(footer.textContent, /筛选 1 \/ 200 位游客（按最近活跃排序，取前 200）/);
+  const active = all('a', q('[role="tablist"]')).find((tab) => tab.getAttribute('aria-selected') === 'true');
+  assert.equal(active.getAttribute('href'), '#matrix');
+  assert.ok(q('table[aria-label="权限矩阵"]'));
 });
 
-test('the client retains the 200-row limits and the CF guest source; other admin sections remain wired', () => {
+const matrixProps = (extra = {}) => ({ ...rbacFixture(), onChanged: () => { calls.changed += 1; }, ...extra });
+const cell = (menuKey, roleCode) => {
+  const row = q(`table[aria-label="权限矩阵"] [data-matrix-row="${menuKey}"]`);
+  const index = all('thead th', q('table[aria-label="权限矩阵"]')).findIndex((th) => th.dataset.roleColumn === roleCode);
+  return all('td', row)[index - 1]?.querySelector('button');
+};
+
+test('matrix lists roles along the chain, menus by group plus API rows, with inherited cells marked', async () => {
+  await mod.mount('matrix', matrixProps({ canGrantAdmin: true }));
+  const heads = all('thead th', q('table[aria-label="权限矩阵"]')).map((th) => th.dataset.roleColumn).filter(Boolean);
+  assert.deepEqual(heads, ['guest', 'user', 'vip', 'svip', 'admin', 'superadmin', 'auction_viewer']);
+  assert.deepEqual(all('th[scope="rowgroup"]').slice(0, 3).map((th) => th.textContent), ['主导航', '管理', '接口权限']);
+  assert.equal(cell('holdings', 'guest').dataset.cellState, 'view');
+  assert.equal(cell('holdings', 'user').dataset.cellState, 'access');
+  assert.equal(cell('holdings', 'vip').dataset.inherited, 'true');
+  assert.match(cell('holdings', 'vip').getAttribute('aria-label'), /继承自 普通用户/);
+  assert.equal(cell('api:sync', 'svip').disabled, true, 'inherited API permissions cannot be unticked');
+  assert.equal(q('[data-testid="rbac-matrix-savebar"]'), null);
+});
+
+test('clicking cells cycles none → view → access, stages changes and saves only changed roles', async () => {
+  await mod.mount('matrix', matrixProps({ canGrantAdmin: true }));
+  await click(cell('adminRbac', 'vip'));
+  assert.equal(cell('adminRbac', 'vip').dataset.cellState, 'view');
+  assert.equal(cell('adminRbac', 'svip').dataset.inherited, 'true', 'children follow the draft immediately');
+  await click(cell('adminRbac', 'vip'));
+  assert.equal(cell('adminRbac', 'vip').dataset.cellState, 'access');
+  await click(cell('api:paper-trade', 'vip'));
+  const bar = q('[data-testid="rbac-matrix-savebar"]');
+  assert.match(bar.textContent, /已修改 3 处 · VIP/);
+  await click(button('撤销', bar));
+  assert.equal(q('[data-testid="rbac-matrix-savebar"]'), null);
+  assert.equal(cell('adminRbac', 'vip').dataset.cellState, 'none');
+  await click(cell('holdings', 'user'));
+  assert.equal(cell('holdings', 'user').dataset.cellState, 'view', 'cannot drop below the inherited floor');
+  await click(cell('notify', 'guest'));
+  assert.equal(cell('notify', 'guest').dataset.cellState, 'access');
+  await click(button('保存', q('[data-testid="rbac-matrix-savebar"]')));
+  assert.deepEqual(calls.perms.map(([code]) => code), ['guest', 'user']);
+  assert.ok(calls.perms[0][1].includes('menu:notify:access'));
+  assert.ok(!calls.perms[1][1].includes('menu:holdings:access'));
+  assert.equal(calls.changed, 1);
+  assert.equal(calls.toasts.at(-1).title, '权限已保存');
+});
+
+test('ordinary admins see privileged columns read-only and can create roles in a drawer', async () => {
+  let created = null;
+  mod.rbacAdminApi.createRole = async (body) => { created = body; };
+  await mod.mount('matrix', matrixProps({ canGrantAdmin: false }));
+  assert.equal(cell('home', 'admin').disabled, true);
+  assert.equal(cell('home', 'superadmin').disabled, true);
+  assert.equal(cell('home', 'vip').disabled, false);
+  assert.equal(q('[aria-label="编辑角色 管理员"]'), null);
+  await click(button('新建角色'));
+  const editorEl = q('[data-testid="rbac-role-editor"]');
+  assert.ok(q('option[value="admin"]', editorEl).disabled);
+  await change(q('[aria-label="角色编码"]', editorEl), 'beta');
+  await change(q('[aria-label="角色名称"]', editorEl), '内测');
+  await submit(q('form', editorEl));
+  assert.deepEqual(created, { code: 'beta', name: '内测', parent: 'user', description: '' });
+  assert.equal(q('[data-testid="rbac-role-editor"]'), null);
+});
+
+test('menus group by navigation area, toggle instantly and save reordering in one batch', async () => {
+  await mod.mount('menus', { menus: rbacFixture().menus, onChanged: () => { calls.changed += 1; } });
+  assert.deepEqual(all('section[aria-label$="菜单"]').map((section) => section.getAttribute('aria-label')), ['主导航菜单', '管理菜单']);
+  await click(q('[aria-label="通知管理 启用"]'));
+  assert.deepEqual(calls.menuUpdates, [['notify', { enabled: false }]]);
+  assert.equal(q('[aria-label="权限管理 启用"]').disabled, true);
+  await click(q('[aria-label="下移 量化"]'));
+  const bar = q('[data-testid="rbac-menu-savebar"]');
+  assert.match(bar.textContent, /排序已调整 2 项/);
+  await click(button('保存排序', bar));
+  assert.deepEqual(calls.menuUpdates.slice(1), [['adminRadar', { sort: 110 }], ['adminQuant', { sort: 120 }]]);
+  assert.equal(calls.changed, 2);
+});
+
+test('audit renders a humanized timeline and filters by action', async () => {
+  await mod.mount('audit', { roles: rbacFixture().roles, menus: rbacFixture().menus });
+  assert.equal(all('[data-testid="rbac-audit-entry"]').length, 1);
+  assert.match(q('[data-testid="rbac-audit-entry"]').textContent, /lovexl 给 lin 授予 VIP，到期 2026-12-31/);
+  await change(q('[aria-label="操作类型"]'), 'role.revoke');
+  assert.deepEqual(calls.audit.at(-1), { before: '', target: '', action: 'role.revoke' });
+});
+
+test('the client retains the CF guest source and the 200-row search limit', () => {
   const api = readFileSync(join(root, 'src/app/rbac/rbacAdminApi.js'), 'utf8');
   assert.match(api, /searchUsers:.*limit=200/);
   assert.match(api, /fetch\(apiUrl\('\/api\/sync\/analytics\/guests\?limit=200'\)/);
-  assert.doesNotMatch(api, /request\('GET', '\/guests'\)/);
-  const page = readFileSync(join(root, 'src/pages/AdminRbacExperience.jsx'), 'utf8');
-  for (const [section, panel] of [['roles', 'RbacRolesPanel'], ['menus', 'RbacMenusPanel'], ['audit', 'RbacAuditPanel']]) {
-    assert.ok(page.includes("section === '" + section + "' ? <" + panel));
-  }
+  const users = readFileSync(join(root, 'src/pages/rbac/RbacUsersPanel.jsx'), 'utf8');
+  assert.doesNotMatch(users, /window\.confirm/);
 });

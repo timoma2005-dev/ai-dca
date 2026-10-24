@@ -18,9 +18,11 @@ import { ConversionPromptCard } from '../components/conversion-prompt-card.jsx';
 import { ACCOUNT_AUTH_OPEN_EVENT, openAccountAuth } from '../app/accountAuthEvents.js';
 import { loadAccountMenu } from '../app/loadAccountMenu.js';
 import { useRbac } from '../app/rbac/useRbac.js';
-import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, splitSidebarMenus } from '../app/rbac/menuModel.js';
+import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, isPaidRole, requiredRoleLabel, splitSidebarMenus } from '../app/rbac/menuModel.js';
 import { resolveMenuIcon } from '../components/rbac/menu-icons.js';
 import { AccessGuardPage } from '../components/rbac/access-guard-page.jsx';
+import { FeatureDemo } from '../components/rbac/feature-demo.jsx';
+import { consumeDemoQuota, demoFeatureFor, demoQuotaFor } from '../app/demo/featureDemo.js';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
@@ -34,13 +36,11 @@ const MarketsExperience = lazy(() => import('./MarketsExperience.jsx').then((m) 
 const CnHomeExperience = lazy(() => import('./CnHomeExperience.jsx').then((m) => ({ default: m.CnHomeExperience })));
 const ArticlesExperience = lazy(() => import('./ArticlesExperience.jsx').then((m) => ({ default: m.ArticlesExperience })));
 const DataRepairExperience = lazy(() => import('./DataRepairExperience.jsx').then((m) => ({ default: m.DataRepairExperience })));
-const AdminQuantExperience = lazy(() => import('./AdminQuantExperience.jsx').then((m) => ({ default: m.AdminQuantExperience })));
 const AdminRadarExperience = lazy(() => import('./AdminRadarExperience.jsx').then((m) => ({ default: m.AdminRadarExperience })));
 const AdminAuctionExperience = lazy(() => import('./AdminAuctionExperience.jsx'));
 const SharesExperience = lazy(() => import('./SharesExperience.jsx'));
 const AdminRbacExperience = lazy(() => import('./AdminRbacExperience.jsx'));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
-const ReleaseAnnouncementModal = lazy(() => import('../components/release-announcement-modal.jsx').then((m) => ({ default: m.ReleaseAnnouncementModal })));
 const AccountMenu = lazy(() => loadAccountMenu(() => import('../components/account-menu.jsx')).then((m) => ({ default: m.AccountMenu })));
 
 
@@ -83,7 +83,6 @@ const WORKSPACE_TITLES = {
   holdings: '持仓总览',
   notify: '通知设置',
   dataRepair: '数据诊断与修复',
-  adminQuant: '量化看板',
   adminRadar: '纳指雷达',
   adminAuction: '竞价看板',
   adminRbac: '权限管理'
@@ -192,6 +191,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mobileBottomSheetHidden, setMobileBottomSheetHidden] = useState(() => isMobileBottomSheetOpen());
   const [showQrModal, setShowQrModal] = useState(false);
+  const [qrPurpose, setQrPurpose] = useState('coffee');
+  const [demoTab, setDemoTab] = useState('');
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [cloudSession, setCloudSession] = useState(() => loadCloudSession());
   const [conversionPrompt, setConversionPrompt] = useState(null);
@@ -204,6 +205,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const selectedScenario = getScenario(currentScenarioKey);
   // RBAC：菜单与权限来自服务端（按 permVersion 缓存）；这里的判断只决定展示，接口由服务端再次校验。
   const rbac = useRbac();
+  const accountUsername = cloudSession?.accessToken ? cloudSession.username || '' : '';
   const isAdminUser = isAdminState(rbac);
   const tabAccessOf = useCallback((tabKey, hash = '') => {
     // 旧的 ?tab=adminRadar#shares 份额链接保持公开。
@@ -351,7 +353,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const restoreScrollOnNextTabRef = useRef(false);
   const activeTabRef = useRef(activeTab);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
-  const [releaseAnnouncementReady, setReleaseAnnouncementReady] = useState(false);
   const currentPageLabel = WORKSPACE_TAB_META[activeTab]?.label || '';
 
   function handleScenarioSwitch(newScenarioKey) {
@@ -401,6 +402,17 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   // ?tab= 路由守卫：无权限时不再静默回退到默认 tab，而是渲染登录 / 403 守卫页（见 renderActivePanel）。
   const activeAccess = tabAccessOf(activeTab, typeof window !== 'undefined' ? window.location.hash || '' : '');
+  // 付费功能演示：未开通 VIP/SVIP 时可先体验（每天限次、限时，见 app/demo/featureDemo.js）。
+  const demoFeature = activeAccess.status === 'forbidden' && isPaidRole(activeAccess.requiredRole) ? demoFeatureFor(activeTab) : null;
+  const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), minutes: Math.round(demoFeature.durationSec / 60), pitch: demoFeature.pitch } : null;
+  const demoActive = Boolean(demoFeature) && demoTab === activeTab;
+  function startFeatureDemo() {
+    if (consumeDemoQuota(activeTab)) setDemoTab(activeTab);
+    else showToast({ title: '今日体验次数已用完', description: '明天可以再来体验，或打赏开通后不限次使用。', tone: 'amber' });
+  }
+  useEffect(() => {
+    if (demoTab && demoTab !== activeTab) setDemoTab('');
+  }, [activeTab, demoTab]);
 
   useEffect(() => {
     document.title = heroTitle;
@@ -430,12 +442,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         .then((mod) => mod.triggerNetworkTrace?.())
         .catch(() => {});
     }, { timeout: 3000, delayMs: 1500 });
-  }, []);
-
-  useEffect(() => {
-    runWhenIdle(() => {
-      setReleaseAnnouncementReady(true);
-    }, { timeout: 4000, delayMs: 45000 });
   }, []);
 
   useEffect(() => {
@@ -534,16 +540,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     window.history.pushState({ tab: normalizedTab }, '', nextUrl);
     setActiveTab(normalizedTab);
     setActiveHash(window.location.hash || '');
-    // 记录侧边 tab 点击，供「策略指南 · Recently visited」读取。
-    try {
-      const RECENT_KEY = 'aiDcaRecentGuideAnchors';
-      const raw = JSON.parse(window.localStorage.getItem(RECENT_KEY) || '[]');
-      const list = Array.isArray(raw) ? raw.filter(Boolean) : [];
-      list.unshift({ id: `tab:${normalizedTab}`, ts: Date.now() });
-      window.localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 12)));
-    } catch {
-      // 忽略最近访问记录写入失败，不影响 tab 切换。
-    }
     // 合并后：侧边栏《新建建仓计划》通过 #new hash 跳进《交易计划》的新建子视图。
     // 由于 TradePlansExperience 在 mount 时才读 hash，手动触发 hashchange 用于已 mount 的情况。
     if (hash && alreadyActive) {
@@ -602,15 +598,19 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function renderActivePanel() {
+  function renderActivePanel({ demo = false } = {}) {
     const sharedProps = { links, inPagesDir, embedded: true };
-    if (activeAccess.status !== 'ok') {
+    if (activeAccess.status !== 'ok' && !demo) {
       return (
         <AccessGuardPage
           status={activeAccess.status}
           requiredRole={activeAccess.requiredRole}
           menuLabel={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
+          username={accountUsername}
           onLogin={() => openAccountAuth({ mode: 'login', source: 'rbac-route-guard', trigger: activeTab })}
+          onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+          demo={demoOffer}
+          onDemo={startFeatureDemo}
           onBack={() => handleSelectTab('home')}
         />
       );
@@ -632,8 +632,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         return <NotifyExperience {...sharedProps} />;
       case 'dataRepair':
         return <DataRepairExperience {...sharedProps} onNavigateToHoldings={() => handleSelectTab('holdings')} />;
-      case 'adminQuant':
-        return <AdminQuantExperience {...sharedProps} />;
       case 'adminRadar':
         if (window.location.hash === '#shares') return <SharesExperience />;
         return <AdminRadarExperience {...sharedProps} />;
@@ -660,7 +658,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           />
         }
         topRole={rbac.loggedIn ? rbac.topRole : null}
-        onBuyMeCoffee={() => setShowQrModal(true)}
+        username={accountUsername}
+        onBuyMeCoffee={() => { setQrPurpose('coffee'); setShowQrModal(true); }}
         onShowDisclaimer={() => setShowDisclaimer(true)}
       />
       <ConsoleLayout
@@ -697,7 +696,18 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           </div>
         ) : null}
         <div className={activeTab === 'markets' ? 'h-full min-h-0' : activeTab === 'holdings' ? '' : 'pt-4'}>
-          <Suspense fallback={<TabLoadingFallback />}>{renderActivePanel()}</Suspense>
+          <Suspense fallback={<TabLoadingFallback />}>
+            {demoActive ? (
+              <FeatureDemo
+                tab={activeTab}
+                label={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
+                roleLabel={requiredRoleLabel(activeAccess.requiredRole)}
+                onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+              >
+                {renderActivePanel({ demo: true })}
+              </FeatureDemo>
+            ) : renderActivePanel()}
+          </Suspense>
         </div>
       </ConsoleLayout>
       <MobileBottomNav
@@ -706,7 +716,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         visibleTabs={currentScenario.visibleTabs}
         onSelectTab={handleSelectTab}
         onOpenAccount={() => setAccountMenuOpen(true)}
-        accountSubtitle={cloudSession?.accessToken ? '管理账号、云端备份与同步' : '登录账号，管理云端同步'}
+        accountSubtitle={cloudSession?.accessToken ? '查看角色与隐私设置' : '登录账号，多设备自动同步'}
         unreadCount={unreadCount}
         menus={flatMenus}
       />
@@ -760,11 +770,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           />
         </Suspense>
       ) : null}
-      {releaseAnnouncementReady ? (
-        <Suspense fallback={null}>
-          <ReleaseAnnouncementModal cloudSession={cloudSession} />
-        </Suspense>
-      ) : null}
       <ConversionPromptCard prompt={conversionPrompt} onClose={() => setConversionPrompt(null)} />
       {showQrModal ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/70 p-4" role="dialog" aria-modal="true" aria-label="Buy me coffee 二维码" onClick={() => setShowQrModal(false)}>
@@ -774,7 +779,13 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
             </button>
             <div className="overflow-hidden rounded-2xl bg-white shadow-2xl">
               <img src={buyMeCoffeeQr} alt="Buy me coffee 二维码" className="block w-full" />
-              <p className="px-4 py-3 text-center text-xs text-slate-600">扫码支持作者</p>
+              {qrPurpose === 'upgrade' ? (
+                <p className="px-4 py-3 text-center text-xs leading-5 text-slate-600" data-qr-upgrade-hint>
+                  金额随意，付款备注请填写账号名{cloudSession?.username ? <>「<span className="font-bold text-slate-900">{cloudSession.username}</span>」</> : ''}，管理员看到后会尽快为您开通。
+                </p>
+              ) : (
+                <p className="px-4 py-3 text-center text-xs text-slate-600">扫码支持作者</p>
+              )}
             </div>
           </div>
         </div>

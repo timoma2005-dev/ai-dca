@@ -35,7 +35,6 @@ const SERVER_CONFIG = {
 test('does not repeatedly POST the same switch config when the server canonicalizes it differently', async ({ page }) => {
   let postCount = 0;
   await page.addInitScript((prefs) => {
-    window.__AI_DCA_RELEASE_ANNOUNCEMENT__ = { enabled: false };
     window.localStorage.clear();
     window.localStorage.setItem('aiDcaNotifyClientConfig', JSON.stringify({
       notifyClientId: 'web:playwright-switch-sync',

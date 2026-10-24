@@ -17,8 +17,7 @@ const STATES = {
   user: {
     loggedIn: true,
     menus: [menu('home', false), menu('shares', false), menu('holdings', false),
-      menu('adminRadar', true, { code: 'vip', name: 'VIP' }, 'admin'), menu('adminAuction', true, { code: 'svip', name: 'SVIP' }, 'admin'),
-      menu('adminQuant', true, { code: 'svip', name: 'SVIP' }, 'admin')],
+      menu('adminRadar', true, { code: 'vip', name: 'VIP' }, 'admin'), menu('adminAuction', true, { code: 'svip', name: 'SVIP' }, 'admin')],
     perms: ['menu:home:access', 'menu:shares:access', 'menu:holdings:access'],
   },
   auctionOnly: {
@@ -28,8 +27,8 @@ const STATES = {
   },
   admin: {
     loggedIn: true,
-    menus: ['home', 'shares', 'holdings', 'adminRadar', 'adminAuction', 'adminQuant', 'adminRbac'].map((k) => menu(k, false)),
-    perms: ['home', 'shares', 'holdings', 'adminRadar', 'adminAuction', 'adminQuant', 'adminRbac'].map((k) => `menu:${k}:access`),
+    menus: ['home', 'shares', 'holdings', 'adminRadar', 'adminAuction', 'adminRbac'].map((k) => menu(k, false)),
+    perms: ['home', 'shares', 'holdings', 'adminRadar', 'adminAuction', 'adminRbac'].map((k) => `menu:${k}:access`),
   },
 };
 
@@ -66,10 +65,9 @@ test('route guard decisions per role (legacy #shares link stays public)', () => 
     ['user', 'adminAuction', '#shares', 'forbidden'],
     ['user', 'adminRbac', '', 'forbidden'],
     ['auctionOnly', 'adminAuction', '', 'ok'],
-    ['auctionOnly', 'adminQuant', '', 'forbidden'],
+    ['auctionOnly', 'adminRbac', '', 'forbidden'],
     ['auctionOnly', 'adminRadar', '#radar', 'forbidden'],
     ['admin', 'adminRbac', '', 'ok'],
-    ['admin', 'adminQuant', '', 'ok'],
   ];
   for (const [state, tab, hash, expected] of cases) {
     assert.equal(tabAccessFor(state)(tab, hash).status, expected, `${state} ${tab}${hash}`);
@@ -96,17 +94,17 @@ test('tab selection: guests clicking a locked menu get the login dialog instead 
   }
 });
 
-const panelSource = source.match(/ {2}function renderActivePanel\(\) \{[\s\S]*?\n {2}\}\n/)[0];
+const panelSource = source.match(/ {2}function renderActivePanel\([^)]*\) \{[\s\S]*?\n {2}\}\n/)[0];
 const panelCode = (await transformWithOxc(panelSource, 'panel.jsx', { lang: 'jsx', jsx: { runtime: 'classic' } })).code;
 const renderPanel = new Function('activeTab', 'activeAccess', 'window', 'links', 'inPagesDir', 'React', 'WORKSPACE_TAB_META',
   'openAccountAuth', 'handleSelectTab', 'AccessGuardPage',
-  'SharesExperience', 'AdminQuantExperience', 'AdminRadarExperience', 'AdminAuctionExperience', 'HoldingsExperience', 'AdminRbacExperience',
+  'SharesExperience', 'AdminRadarExperience', 'AdminAuctionExperience', 'HoldingsExperience', 'AdminRbacExperience', 'accountUsername', 'demoOffer', 'startFeatureDemo',
   `${panelCode}\nreturn renderActivePanel();`);
 const resolvePanel = (state, tab, hash = '') => {
   const element = renderPanel(tab, tabAccessFor(state)(tab, hash), { location: { hash } }, {}, false,
     { createElement: (component, props) => (component === 'guard' ? `guard:${props.status}:${props.requiredRole?.code || ''}` : component) },
     WORKSPACE_TAB_META, () => {}, () => {}, 'guard',
-    'shares', 'quant', 'radar', 'auction', 'holdings', 'rbac');
+    'shares', 'radar', 'auction', 'holdings', 'rbac', '', null, () => {});
   return element;
 };
 
@@ -115,7 +113,7 @@ test('panel rendering: guard page replaces the panel instead of silently showing
   assert.equal(resolvePanel('user', 'adminRadar'), 'guard:forbidden:vip');
   assert.equal(resolvePanel('user', 'adminAuction'), 'guard:forbidden:svip');
   assert.equal(resolvePanel('auctionOnly', 'adminAuction'), 'auction');
-  assert.equal(resolvePanel('auctionOnly', 'adminQuant'), 'guard:forbidden:', 'hidden menu: forbidden without a role hint');
+  assert.equal(resolvePanel('auctionOnly', 'adminRbac'), 'guard:forbidden:', 'hidden menu: forbidden without a role hint');
   assert.equal(resolvePanel('admin', 'adminRadar'), 'radar');
   assert.equal(resolvePanel('admin', 'adminRbac'), 'rbac');
   for (const state of ['guest', 'user', 'auctionOnly', 'admin']) {

@@ -9,39 +9,51 @@ const readSource = (relativePath) => fs.readFileSync(path.resolve(testDir, '..',
 
 const configSource = readSource('src/pages/NotifyConfigCard.jsx');
 const rulesSource = readSource('src/pages/NotifyRulesCard.jsx');
-const actionsSource = readSource('src/pages/NotifySyncAndTestCard.jsx');
+import { renderNotifyCard, cleanup } from './helpers/renderNotifyCards.mjs';
+test.after(cleanup);
 const historySource = readSource('src/pages/NotifyHistoryCard.jsx');
 const testDialogSource = readSource('src/pages/NotifyTestDialog.jsx');
 const experienceSource = readSource('src/pages/NotifyExperience.jsx');
 
 test('notification channel management exposes a status-first channel picker', () => {
-  assert.match(configSource, /const channelCards = platformTabs\.map/);
-  assert.match(configSource, /可用渠道/);
-  assert.match(configSource, /role="tablist" aria-label="通知渠道"/);
+  const html = renderNotifyCard('NotifyConfigCard', {
+    notifyConfig: {}, pairedWebWsDevices: [], notifyPlatform: 'ios',
+    emailDraft: '', emailCode: '', isLoggedIn: false
+  });
+  assert.match(html, /通知渠道/);
+  assert.match(html, /点击渠道卡片进行设置和管理/);
+  for (const label of ['iOS', 'Android', 'Email', 'PC']) assert.ok(html.includes(label));
+  assert.match(configSource, /onClick=\{\(\) => openChannel\(channel.key\)\}/);
   assert.match(configSource, /setConfigCollapsed\?\.\(false\)/);
-  assert.match(configSource, /section === 'config'/);
-  assert.match(configSource, /登录后配置会归属到账号/);
+  assert.match(configSource, /fieldset disabled=\{!isLoggedIn\}/);
 });
 
 test('daily holdings return rule remains manageable while disabled', () => {
-  assert.match(rulesSource, /const holdingsRuleCount = 1/);
-  assert.match(rulesSource, /持仓每日收益/);
-  assert.match(rulesSource, /\{holdingsEnabled \? '已开启' : '未开启'\}/);
-  assert.match(rulesSource, /onToggleHoldingsRule\?\.\(event\.target\.checked\)/);
-  assert.doesNotMatch(rulesSource, /\{holdingsEnabled && \(/);
-  assert.match(rulesSource, /section === 'rules'/);
+  const html = renderNotifyCard('NotifyRulesCard', {
+    expanded: true, holdingsRule: { enabled: false }, onToggleHoldingsRule() {}
+  });
+  assert.match(html, /持仓收益提醒/);
+  assert.match(html, /持仓收益提醒状态/);
+  assert.match(html, /已关闭/);
+  assert.match(html, /type="checkbox"/);
+  assert.doesNotMatch(html, /checked=""/);
+  assert.match(rulesSource, /onChange\?\.\(event.target.checked\)/);
+  assert.match(rulesSource, /action=\{onToggleHoldingsRule\}/);
+  assert.match(rulesSource, /get\('section'\) === 'rules'/);
 });
 
 test('sync, test, and history refresh actions stay available without opening details', () => {
-  const syncAction = actionsSource.indexOf('onClick={onSyncRules}');
-  const actionsDisclosure = actionsSource.indexOf('{expanded ? (');
-  const historyRefresh = historySource.indexOf('onClick={refreshNotifyEvents}');
-  const historyDisclosure = historySource.indexOf('{expanded ? (');
-
-  assert.ok(syncAction >= 0 && syncAction < actionsDisclosure);
-  assert.ok(historyRefresh >= 0 && historyRefresh < historyDisclosure);
-  assert.match(actionsSource, /发送测试/);
-  assert.match(historySource, /最近：/);
+  const html = renderNotifyCard('NotifyRulesCard', {
+    expanded: false, onSyncRules() {}, onOpenTestDialog() {}
+  });
+  assert.match(html, /同步规则/);
+  assert.match(html, /送达测试/);
+  assert.doesNotMatch(html, /规则名称/);
+  const historyHtml = renderNotifyCard('NotifyHistoryCard', { expanded: false, events: [] });
+  assert.match(historyHtml, /刷新送达记录/);
+  assert.match(rulesSource, /onClick=\{onSyncRules\}/);
+  assert.match(rulesSource, /onClick=\{onOpenTestDialog\}/);
+  assert.match(historySource, /onClick=\{refreshNotifyEvents\}/);
 });
 
 test('channel test buttons stay clickable before the channel is configured', () => {

@@ -10,6 +10,7 @@ import { initPostHog } from "./app/posthog.js";
 import { registerAssetCacheWhenIdle } from "./app/assetCacheRegistration.js";
 import { installAccountRemoteReadGuard } from "./app/accountRuntimeStore.js";
 import "./styles/app.css";
+import "./styles/design-system.css";
 
 installAccountRemoteReadGuard();
 installLegacyConfirmAdapter();
