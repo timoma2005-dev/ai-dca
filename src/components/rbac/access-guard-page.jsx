@@ -34,15 +34,33 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
       {isLogin ? (
         <>
           <h2 className="mt-4 text-lg font-bold text-slate-900">登录后即可使用{target}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">免费注册，数据保存在你的账号里，换设备也能接着用。</p>
-          <button
-            type="button"
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-indigo-700"
-            onClick={() => onLogin?.()}
-          >
-            <LogIn className="h-4 w-4" aria-hidden="true" />
-            登录 / 注册
-          </button>
+          {demo?.pitch ? <p className="mt-1 max-w-xs text-sm font-medium leading-6 text-slate-700 [text-wrap:balance]" data-testid="access-guard-pitch">{demo.pitch}</p> : null}
+          <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500 [text-wrap:balance]">
+            {demo ? '免费注册即送 3 个月 VIP，数据保存在你的账号里，换设备也能接着用。' : '免费注册，数据保存在你的账号里，换设备也能接着用。'}
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+            {demo && onDemo ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => onDemo()}
+                disabled={demo.remaining <= 0}
+                data-testid="access-guard-demo"
+              >
+                <PlayCircle className="h-4 w-4" aria-hidden="true" />
+                免费体验 {demo.minutes} 分钟
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-indigo-700"
+              onClick={() => onLogin?.()}
+            >
+              <LogIn className="h-4 w-4" aria-hidden="true" />
+              登录 / 注册
+            </button>
+          </div>
+          {demo ? <p className="mt-3 text-xs text-slate-400">{demo.remaining > 0 ? `今日还可体验 ${demo.remaining} 次` : '今日体验次数已用完'}</p> : null}
         </>
       ) : isPaid ? (
         <>

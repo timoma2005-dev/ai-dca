@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { transformWithOxc } from 'vite';
 import { DEFAULT_WORKSPACE_TAB, LEGACY_TAB_REDIRECTS, WORKSPACE_TAB_META, isWorkspaceGroup } from '../src/app/screens.js';
 import { buildGuestFallback, evaluateTabAccess } from '../src/app/rbac/menuModel.js';
+import { demoFeatureFor } from '../src/app/demo/featureDemo.js';
 
 const source = readFileSync(new URL('../src/pages/WorkspacePage.jsx', import.meta.url), 'utf8');
 
@@ -77,17 +78,18 @@ test('route guard decisions per role (legacy #shares link stays public)', () => 
 test('tab selection: guests clicking a locked menu get the login dialog instead of navigation', () => {
   const start = source.indexOf('  function handleSelectTab(');
   const end = source.indexOf('    const hash =', start);
-  const select = new Function('nextTab', 'options', 'tabAccessOf', 'normalizeWorkspaceTab', 'openAccountAuth',
+  const select = new Function('nextTab', 'options', 'tabAccessOf', 'normalizeWorkspaceTab', 'openAccountAuth', 'demoFeatureFor',
     source.slice(start, end) + '\nreturn true;\n}\nreturn handleSelectTab(nextTab, options);');
   for (const [state, tab, hash, navigates, opensLogin] of [
     ['guest', 'holdings', undefined, false, true],
     ['guest', 'home', undefined, true, false],
+    ['guest', 'markets', undefined, true, false], // 有演示的付费功能：进入守卫页先体验
     ['guest', 'adminRadar', '#shares', true, false],
     ['user', 'adminRadar', undefined, true, false], // 角色不足：照常切换，由 403 页展示
     ['user', 'holdings', undefined, true, false],
   ]) {
     const prompts = [];
-    const result = select(tab, { hash }, tabAccessFor(state), (v) => v, (detail) => prompts.push(detail));
+    const result = select(tab, { hash }, tabAccessFor(state), (v) => v, (detail) => prompts.push(detail), demoFeatureFor);
     assert.equal(result === true, navigates, `${state} ${tab} navigates`);
     assert.equal(prompts.length > 0, opensLogin, `${state} ${tab} login prompt`);
     if (opensLogin) assert.equal(prompts[0].mode, 'login');

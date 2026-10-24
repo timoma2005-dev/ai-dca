@@ -403,7 +403,11 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   // ?tab= 路由守卫：无权限时不再静默回退到默认 tab，而是渲染登录 / 403 守卫页（见 renderActivePanel）。
   const activeAccess = tabAccessOf(activeTab, typeof window !== 'undefined' ? window.location.hash || '' : '');
   // 付费功能演示：未开通 VIP/SVIP 时可先体验（每天限次、限时，见 app/demo/featureDemo.js）。
-  const demoFeature = activeAccess.status === 'forbidden' && isPaidRole(activeAccess.requiredRole) ? demoFeatureFor(activeTab) : null;
+  const demoAsGuest = activeAccess.status === 'login';
+  const demoFeature = demoAsGuest || (activeAccess.status === 'forbidden' && isPaidRole(activeAccess.requiredRole)) ? demoFeatureFor(activeTab) : null;
+  const handleDemoUpgrade = demoAsGuest
+    ? () => openAccountAuth({ mode: 'register', source: 'feature-demo', trigger: activeTab })
+    : () => { setQrPurpose('upgrade'); setShowQrModal(true); };
   const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), minutes: Math.round(demoFeature.durationSec / 60), pitch: demoFeature.pitch } : null;
   const demoActive = Boolean(demoFeature) && demoTab === activeTab;
   function startFeatureDemo() {
@@ -494,8 +498,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   function handleSelectTab(nextTab, options = {}) {
     const normalizedTab = normalizeWorkspaceTab(nextTab);
     const access = tabAccessOf(normalizedTab, typeof options.hash === 'string' ? options.hash : '');
-    if (access.status === 'login') {
-      // 游客点击锁住的菜单：弹登录，不切换页面。
+    if (access.status === 'login' && !demoFeatureFor(normalizedTab)) {
+      // 游客点击锁住的菜单：弹登录，不切换页面（有演示的付费功能除外：进入守卫页，可先体验再注册）。
       openAccountAuth({ mode: 'login', source: 'rbac-locked-menu', trigger: normalizedTab });
       return;
     }
@@ -611,6 +615,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
           demo={demoOffer}
           onDemo={startFeatureDemo}
+          autoPromptLogin={!demoOffer}
           onBack={() => handleSelectTab('home')}
         />
       );
@@ -701,8 +706,9 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
               <FeatureDemo
                 tab={activeTab}
                 label={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
-                roleLabel={requiredRoleLabel(activeAccess.requiredRole)}
-                onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+                roleLabel={requiredRoleLabel(activeAccess.requiredRole || { code: 'vip', name: 'VIP' })}
+                guest={demoAsGuest}
+                onUpgrade={handleDemoUpgrade}
               >
                 {renderActivePanel({ demo: true })}
               </FeatureDemo>

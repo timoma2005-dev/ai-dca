@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Coffee, PlayCircle, X } from 'lucide-react';
+import { Coffee, LogIn, PlayCircle, X } from 'lucide-react';
 import { DEMO_FEATURES, DEMO_READONLY_MESSAGE, installFeatureDemo } from '../../app/demo/featureDemo.js';
 import { showToast } from '../../app/toast.js';
 
@@ -12,7 +12,7 @@ function formatClock(totalSec) {
  * 付费功能演示外壳：先安装沙箱（存储覆盖层 + fetch 拦截），再渲染真实页面；顶部常驻演示条与倒计时。
  * 退出 / 到时：卸载沙箱并刷新页面，丢弃演示期间的内存状态，保证不会污染真实数据。
  */
-export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', onUpgrade, children }) {
+export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false, onUpgrade, children }) {
   const feature = DEMO_FEATURES[tab] || { durationSec: 300 };
   const envRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -68,8 +68,8 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', onUpgrade, chi
         </div>
         {onUpgrade ? (
           <button type="button" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 font-bold text-white hover:bg-amber-600" onClick={() => onUpgrade()}>
-            <Coffee className="h-3.5 w-3.5" aria-hidden="true" />
-            开通
+            {guest ? <LogIn className="h-3.5 w-3.5" aria-hidden="true" /> : <Coffee className="h-3.5 w-3.5" aria-hidden="true" />}
+            {guest ? '注册' : '开通'}
           </button>
         ) : null}
         <button type="button" aria-label="退出演示" className="shrink-0 rounded-lg p-1 text-amber-700 hover:bg-amber-100" onClick={exitDemo}>
@@ -81,11 +81,15 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', onUpgrade, chi
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-6" role="dialog" aria-modal="true" data-testid="feature-demo-ended">
           <div className="w-full max-w-xs rounded-2xl bg-white p-5 text-center shadow-xl">
             <h3 className="text-base font-bold text-slate-900">演示结束</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-500 [text-wrap:balance]">喜欢{label ? `「${label}」` : '这个功能'}的话，开通 {roleLabel} 后就能一直使用，数据也会保存在你的账号里。</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500 [text-wrap:balance]">
+              {guest
+                ? '免费注册即送 3 个月 VIP，行情、换基、通知都能直接用，数据保存在你的账号里。'
+                : `喜欢${label ? `「${label}」` : '这个功能'}的话，开通 ${roleLabel} 后就能一直使用，数据也会保存在你的账号里。`}
+            </p>
             {onUpgrade ? (
               <button type="button" className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600" onClick={() => onUpgrade()}>
-                <Coffee className="h-4 w-4" aria-hidden="true" />
-                打赏开通
+                {guest ? <LogIn className="h-4 w-4" aria-hidden="true" /> : <Coffee className="h-4 w-4" aria-hidden="true" />}
+                {guest ? '免费注册，领 3 个月 VIP' : '打赏开通'}
               </button>
             ) : null}
             <button type="button" className="mt-2 w-full rounded-xl px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800" onClick={exitDemo}>
