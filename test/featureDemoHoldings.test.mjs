@@ -89,7 +89,7 @@ function userBuy(id, code, shares, extra = {}) {
 test('holdings demo is ready, lazily loads its module and mocks exactly the holdings page GETs', async () => {
   const feature = demoFeatureFor('holdings');
   assert.ok(feature);
-  assert.ok(feature.pitch.length > 10);
+  assert.ok(feature.points.length >= 2);
   const mod = await loadDemoModule('holdings');
   assert.deepEqual(mod.keepKeys, [HOLDINGS_LEDGER_KEY]);
   const { routes, getState } = mod.createFixtures({ state: null });

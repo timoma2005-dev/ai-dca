@@ -176,3 +176,12 @@ test('prefix routes and demo-token requests never reach the network', async () =
   await f('/api/markets/public');
   assert.equal(hits, 1);
 });
+
+test('guard page copy: every ready feature has 2–3 short intro points (one line each)', () => {
+  for (const [tab, feature] of Object.entries(DEMO_FEATURES)) {
+    if (!feature.ready) continue;
+    assert.ok(Array.isArray(feature.points), tab);
+    assert.ok(feature.points.length >= 2 && feature.points.length <= 3, tab);
+    for (const point of feature.points) assert.ok(point.length > 4 && point.length <= 22, `${tab}: ${point}`);
+  }
+});

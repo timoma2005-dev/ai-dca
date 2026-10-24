@@ -25,59 +25,60 @@ export { DEMO_ACCESS_TOKEN, DEMO_ACTIVE_FLAG, isFeatureDemoActive };
 //   pruneKept(entries, { seed }): 演示结束时过滤要保留的 keepKeys 内容（返回空数组则不保留）
 //   prepareImport(entries, { seed, storage }): 带入账号前过滤 keepKeys 内容（例如去掉 seed 的示例条目、并入账号现有数据）
 //   importState(state, { fetch }): 升级后把 mock 服务端状态写到真实接口（可选）
+// points: 守卫页介绍要点（2–3 条短句，每条一行）；旧的 pitch 字符串字段守卫页仍兼容。
 // ready=false 的功能暂不提供演示（守卫页不显示体验按钮）。
 export const DEMO_FEATURES = {
   markets: {
     ready: true,
     durationSec: 300,
-    pitch: '实时行情、溢价与净值走势，多只基金同屏对比。',
+    points: ['自选基金实时行情，涨跌溢价一眼看清', '净值、溢价走势图随手切换', '多只基金同屏对比，强弱立判'],
     load: async () => ({ default: { keepKeys: ['markets:watchlist:v1'] } }),
   },
   fundSwitch: {
     ready: true,
     durationSec: 300,
-    pitch: '纳指 QDII ETF 高低溢价轮动：实时溢价差标尺、切出 / 切回阈值与今日命中，回测最优阈值一键生成方案。',
+    points: ['实时对比各只纳指 ETF 的溢价差', '设好切出、切回阈值，命中就提醒', '回测找最优阈值，一键生成方案'],
     // mock 方案配置与快照 GET；保存 / 测试 / 自动填充等写入由演示框架拦截。回测生成的换基偏好保留并在注册/升级后带入。
     load: () => import('./fixtures/fundSwitch.js'),
   },
   notify: {
     ready: true,
     durationSec: 300,
-    pitch: 'Bark / Server酱³ / 邮件 / PC 多渠道推送：纳指 QDII ETF 溢价预警、换基切换信号与每日持仓收益，送达记录一目了然。',
+    points: ['Bark、Server酱、邮件多渠道推送', '换基信号、溢价预警、每日持仓摘要', '推送记录随时可查'],
     // mock 渠道状态、推送记录、持仓规则与换基方案 GET；保存 / 启停 / 测试 / 同步等写入由演示框架拦截。
     load: () => import('./fixtures/notify.js'),
   },
   adminRadar: {
     ready: true,
     durationSec: 300,
-    pitch: '12 只纳指 QDII ETF 溢价排行、最优套利对与历史分位，每日收盘后自动计算。',
+    points: ['12 只纳指 QDII ETF 溢价一张表', '找出当前最划算的切换组合', '历史分位判断现在贵不贵'],
     // 只读演示：mock 雷达快照 GET，计算按钮仍仅管理员可见（POST 被演示框架拦截）。
     load: () => import('./fixtures/adminRadar.js'),
   },
   adminAuction: {
     ready: true,
     durationSec: 300,
-    pitch: '12 只纳指 QDII ETF 竞价看板：模拟交易日从 09:15 集合竞价加速播放到收盘，偏离度进出买入区、持仓回归与切换建议、溢价超 10% 停牌逐一出现。',
+    points: ['开盘前看各 ETF 相对纳指期货的偏离', '自动提示卖哪只、买哪只', '溢价过高提前预警停牌'],
     // 演示 tab 内 iframe 改指 /auction-board-demo.html（与正式页同一渲染逻辑的模拟行情 / 时钟，不请求真实行情，localStorage 用 demo_ 前缀）。
   },
   holdings: {
     ready: true,
     durationSec: 300,
-    pitch: '纳指 QDII ETF 与场外联接一屏总览：市值、浮盈与已实现收益，513100 ⇄ 513110 / 159513 换基配对逐笔追踪，收益曲线与今日换基信号。',
+    points: ['ETF 和场外基金，市值收益一屏看清', '换基配对逐笔追踪，每轮赚多少一目了然', '收益曲线和今日换基信号'],
     // 游客读 seed 的本地账本；已登录走 mock 交易行 / 资金配置接口。演示中不推送；新增的自洽交易保留并在注册/升级后并入账号。
     load: () => import('./fixtures/holdings.js'),
   },
   tradePlans: {
     ready: true,
     durationSec: 300,
-    pitch: '纳指 QDII ETF 回撤分档加仓、120 日线分层与智能定投一屏管理：每档参考价、计划投入与下期扣款日一目了然，触发即推送到手机。',
+    points: ['按回撤分档加仓，到价提醒', '定期或智能定投，高位少投低位多投', '计划和持仓自动对齐'],
     // 本地 seed 加仓 / 定投计划，mock 账号计划资源与通知状态 GET；演示中不云同步。新建的计划保留并在注册/升级后按 id 带入。
     load: () => import('./fixtures/tradePlans.js'),
   },
   dataRepair: {
     ready: true,
     durationSec: 300,
-    pitch: '一键体检持仓流水：揪出日期错位的幽灵记录、补齐导入时的占位名称、纠正场内 / 场外 / QDII 类别，修复前后逐笔对比。',
+    points: ['一键扫描持仓记录里的错误', '清理错位、重复的记录', '补全基金名称和类别'],
     // 演示账本（同持仓演示）混入待修复问题，mock 基金字典与云端交易行 GET；修复只改演示本地底账，退出即丢弃，云端写入由演示框架 403。
     load: () => import('./fixtures/dataRepair.js'),
   },

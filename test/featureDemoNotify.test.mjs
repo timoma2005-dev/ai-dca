@@ -57,7 +57,7 @@ function installBrowser(storage) {
 test('notify demo is ready, lazily loads its module, mocks exactly the page GETs, keeps nothing', async () => {
   const feature = demoFeatureFor('notify');
   assert.ok(feature);
-  assert.ok(feature.pitch.length > 10);
+  assert.ok(feature.points.length >= 2);
   const mod = await loadDemoModule('notify');
   assert.deepEqual(mod.keepKeys, []);
   assert.deepEqual(mod.seed().map(([key]) => key).sort(), [

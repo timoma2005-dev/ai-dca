@@ -102,7 +102,7 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
             <h3 className="text-base font-bold text-slate-900">演示结束</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500 [text-wrap:balance]">
               {guest
-                ? '免费注册即送 3 个月 VIP，行情、换基、通知都能直接用。'
+                ? '免费注册送 3 个月 VIP，行情、换基、通知都能直接用。'
                 : `喜欢${label ? `「${label}」` : '这个功能'}的话，开通 ${roleLabel} 后就能一直使用。`}
             </p>
             <p className="mt-1 text-xs leading-5 text-amber-700 [text-wrap:balance]">演示内容保留 {RETAIN_MINUTES} 分钟，{guest ? '注册' : '升级'}后自动带入你的账号。</p>

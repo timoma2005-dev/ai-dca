@@ -80,7 +80,7 @@ const ids = (list) => list.map((item) => item.id);
 test('tradePlans demo is ready, lazily loads its module and mocks exactly the page GETs', async () => {
   const feature = demoFeatureFor('tradePlans');
   assert.ok(feature);
-  assert.ok(feature.pitch.length > 10);
+  assert.ok(feature.points.length >= 2);
   const mod = await loadDemoModule('tradePlans');
   assert.deepEqual(mod.keepKeys, [PLAN_KEY, DCA_KEY, SELL_KEY]);
   const { routes, getState } = mod.createFixtures({ state: null });

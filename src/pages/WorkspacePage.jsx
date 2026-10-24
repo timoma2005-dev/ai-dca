@@ -412,7 +412,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const handleDemoUpgrade = demoAsGuest
     ? () => openAccountAuth({ mode: 'register', source: 'feature-demo', trigger: activeTab })
     : () => { setQrPurpose('upgrade'); setShowQrModal(true); };
-  const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), minutes: Math.round(demoFeature.durationSec / 60), pitch: demoFeature.pitch, retainedUntil: readDemoSession(activeTab)?.expiresAt || 0 } : null;
+  const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), points: demoFeature.points, pitch: demoFeature.pitch, retainedUntil: readDemoSession(activeTab)?.expiresAt || 0 } : null;
   const demoActive = Boolean(demoFeature) && demoTab === activeTab;
   function startFeatureDemo() {
     if (consumeDemoQuota(activeTab)) setDemoTab(activeTab);

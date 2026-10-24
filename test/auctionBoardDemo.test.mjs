@@ -210,7 +210,7 @@ test('demo ignores parent holdings messages; formal board still uses real source
 test('adminAuction feature demo is ready and embeds the demo page instead of the gated board', () => {
   const feature = demoFeatureFor('adminAuction');
   assert.ok(feature);
-  assert.match(feature.pitch, /09:15/);
+  assert.ok(feature.points.some((point) => /纳指期货/.test(point)));
   const src = read('src/pages/AdminAuctionExperience.jsx');
   assert.match(src, /export const AUCTION_BOARD_SRC = '\/auction-board\.html';/);
   assert.match(src, /export const AUCTION_BOARD_DEMO_SRC = '\/auction-board-demo\.html';/);

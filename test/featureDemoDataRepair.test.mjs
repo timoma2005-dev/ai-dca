@@ -89,7 +89,7 @@ async function runRepairLikePage(token) {
 
 test('dataRepair demo is ready, lazily loads its module, mocks exactly the page GETs and keeps nothing', async () => {
   const feature = demoFeatureFor('dataRepair');
-  assert.ok(feature?.pitch.length > 10);
+  assert.ok(feature?.points.length >= 2);
   const mod = await loadDemoModule('dataRepair');
   assert.equal(mod.keepKeys, undefined, 'repairs on the sample ledger are never kept or imported');
   assert.equal(mod.importState, undefined);

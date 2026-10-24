@@ -61,7 +61,7 @@ function installBrowser(storage) {
 test('fundSwitch demo is ready, lazily loads its module, mocks only the two switch GETs', async () => {
   const feature = demoFeatureFor('fundSwitch');
   assert.ok(feature);
-  assert.ok(feature.pitch.length > 10);
+  assert.ok(feature.points.length >= 2);
   const mod = await loadDemoModule('fundSwitch');
   assert.deepEqual(mod.keepKeys, [SWITCH_PREFS_KEY]);
   assert.deepEqual(mod.seed().map(([key]) => key).sort(), [SWITCH_CONFIG_CACHE_KEY, 'aiDcaSwitchRuleChannels'].sort());

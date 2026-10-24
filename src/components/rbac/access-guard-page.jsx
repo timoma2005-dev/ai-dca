@@ -1,6 +1,22 @@
 import { useEffect, useRef } from 'react';
-import { Coffee, Lock, LogIn, PlayCircle, ShieldAlert, Sparkles } from 'lucide-react';
+import { Check, Coffee, Lock, LogIn, PlayCircle, ShieldAlert, Sparkles } from 'lucide-react';
 import { isPaidRole, requiredRoleLabel } from '../../app/rbac/menuModel.js';
+
+/** 功能介绍要点：points 数组每条一行；兼容旧的 pitch 字符串。 */
+function DemoPoints({ demo, tone }) {
+  const points = Array.isArray(demo?.points) ? demo.points.filter(Boolean) : demo?.pitch ? [demo.pitch] : [];
+  if (!points.length) return null;
+  return (
+    <ul className="mx-auto mt-3 w-full max-w-xs space-y-2 text-left text-sm font-medium leading-6 text-slate-700" data-testid="access-guard-points">
+      {points.map((point) => (
+        <li key={point} className="flex items-start gap-2">
+          <Check className={`mt-1 h-4 w-4 shrink-0 ${tone}`} aria-hidden="true" />
+          <span className="min-w-0 break-words">{point}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /**
  * 路由守卫页：
@@ -34,9 +50,10 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
       {isLogin ? (
         <>
           <h2 className="mt-4 text-lg font-bold text-slate-900">登录后即可使用{target}</h2>
-          {demo?.pitch ? <p className="mt-1 max-w-xs text-sm font-medium leading-6 text-slate-700 [text-wrap:balance]" data-testid="access-guard-pitch">{demo.pitch}</p> : null}
-          <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500 [text-wrap:balance]">
-            {demo ? '免费注册即送 3 个月 VIP，数据保存在你的账号里，换设备也能接着用。' : '免费注册，数据保存在你的账号里，换设备也能接着用。'}
+          <DemoPoints demo={demo} tone="text-indigo-500" />
+          <p className="mt-4 text-sm leading-6 text-slate-500" data-testid="access-guard-signup-note">
+            <span className="block font-semibold text-indigo-600">{demo ? '免费注册送 3 个月 VIP' : '免费注册即可使用'}</span>
+            <span className="block">数据存在账号里，换设备也能接着用</span>
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
             {demo && onDemo ? (
@@ -48,7 +65,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
                 data-testid="access-guard-demo"
               >
                 <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                免费体验 {demo.minutes} 分钟
+                体验一下
               </button>
             ) : null}
             <button
@@ -67,7 +84,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
         <>
           <div className="mt-4 inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700">{roleLabel} 专享</div>
           <h2 className="mt-2 text-lg font-bold text-slate-900">{menuLabel || '此功能'}为 {roleLabel} 会员功能</h2>
-          {demo?.pitch ? <p className="mt-1 max-w-xs text-sm font-medium leading-6 text-slate-700 [text-wrap:balance]" data-testid="access-guard-pitch">{demo.pitch}</p> : null}
+          <DemoPoints demo={demo} tone="text-amber-500" />
           <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500 [text-wrap:balance]">
             如需使用该功能，请随意打赏并备注账号名，管理员看到后会尽快为您开通。
           </p>
@@ -87,7 +104,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
                 data-testid="access-guard-demo"
               >
                 <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                免费体验 {demo.minutes} 分钟
+                体验一下
               </button>
             ) : null}
             {onUpgrade ? (

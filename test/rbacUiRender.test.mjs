@@ -106,6 +106,22 @@ test('route guard pages: 403 shows the required role, login page shows the login
   assert.match(login, /登录 \/ 注册/);
 });
 
+test('route guard demo offer: intro points render one per line, signup note is two lines, demo button reads 体验一下', () => {
+  const demo = { remaining: 2, perDay: 3, points: ['实时对比各只纳指 ETF 的溢价差', '设好切出、切回阈值，命中就提醒'] };
+  const login = mod.render('AccessGuardPage', { status: 'login', requiredRole: { code: 'vip', name: 'VIP' }, menuLabel: '换基策略', demo, onDemo() {}, autoPromptLogin: false });
+  assert.match(login, /data-testid="access-guard-points"/);
+  assert.equal((login.match(/<li /g) || []).length, 2);
+  assert.match(login, /免费注册送 3 个月 VIP<\/span><span class="block">数据存在账号里，换设备也能接着用/);
+  assert.match(login, /体验一下/);
+  assert.doesNotMatch(login, /免费体验|分钟/);
+  assert.match(login, /今日还可体验 2 次/);
+  const paid = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'vip', name: 'VIP' }, menuLabel: '雷达', demo: { remaining: 0, pitch: '旧的一段介绍' }, onDemo() {}, onUpgrade() {} });
+  assert.equal((paid.match(/<li /g) || []).length, 1); // 兼容旧 pitch 字符串
+  assert.match(paid, /旧的一段介绍/);
+  assert.match(paid, /体验一下/);
+  assert.match(paid, /今日体验次数已用完/);
+});
+
 test('avatar role badge: VIP gold crown, SVIP diamond, admin shield, none for user; role list shows expiry', () => {
   assert.match(mod.render('RoleBadge', { topRole: { code: 'vip' } }), /data-role-badge="crown"[^>]*|bg-amber-400/);
   assert.match(mod.render('RoleBadge', { topRole: { code: 'svip' } }), /data-role-badge="diamond"/);
