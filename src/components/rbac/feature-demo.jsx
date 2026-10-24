@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Coffee, LogIn, PlayCircle, X } from 'lucide-react';
-import { DEMO_FEATURES, DEMO_READONLY_MESSAGE, installFeatureDemo } from '../../app/demo/featureDemo.js';
+import { DEMO_FEATURES, DEMO_READONLY_MESSAGE, DEMO_RETAIN_MS, installFeatureDemo } from '../../app/demo/featureDemo.js';
 import { showToast } from '../../app/toast.js';
+
+const RETAIN_MINUTES = Math.round(DEMO_RETAIN_MS / 60000);
 
 function formatClock(totalSec) {
   const sec = Math.max(0, Math.ceil(totalSec));
@@ -9,8 +11,9 @@ function formatClock(totalSec) {
 }
 
 /**
- * 付费功能演示外壳：先安装沙箱（存储覆盖层 + fetch 拦截），再渲染真实页面；顶部常驻演示条与倒计时。
- * 退出 / 到时：卸载沙箱并刷新页面，丢弃演示期间的内存状态，保证不会污染真实数据。
+ * 付费功能演示外壳：先安装沙箱（存储覆盖层 + fetch 拦截 / mock），再渲染真实页面；顶部常驻演示条与倒计时。
+ * 退出 / 到时：卸载沙箱（演示中保存的内容保留 15 分钟）并刷新页面，丢弃内存状态，保证不污染真实数据。
+ * 布局：外层 flex 列 + h-full，内容区 flex-1 可滚动，兼容行情这类自带 h-full 布局的页面。
  */
 export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false, onUpgrade, children }) {
   const feature = DEMO_FEATURES[tab] || { durationSec: 300 };
@@ -30,7 +33,10 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
       },
     });
     setReady(true);
+    const onUnload = () => envRef.current?.uninstall();
+    window.addEventListener('pagehide', onUnload);
     return () => {
+      window.removeEventListener('pagehide', onUnload);
       const env = envRef.current;
       envRef.current = null;
       env?.uninstall();
@@ -57,39 +63,46 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
     window.location.reload();
   }
 
+  const ctaShort = guest ? '注册' : '升级';
+  const ctaLong = guest ? '免费注册，领 3 个月 VIP' : '打赏开通';
+  const CtaIcon = guest ? LogIn : Coffee;
+
   return (
-    <div className="relative" data-testid="feature-demo">
-      <div className="sticky top-0 z-30 mx-3 mb-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/95 px-3 py-2 text-xs shadow-sm backdrop-blur sm:mx-6">
+    <div className="flex h-full min-h-0 flex-col" data-testid="feature-demo">
+      <div className="sticky top-0 z-30 mx-3 mb-3 flex shrink-0 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/95 px-3 py-2 text-xs shadow-sm backdrop-blur sm:mx-6">
         <PlayCircle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
         <div className="min-w-0 flex-1 leading-5">
-          <span className="font-bold text-amber-900">演示模式</span>
-          <span className="text-amber-800"> · 剩余 {formatClock(left)}</span>
-          <span className="hidden text-amber-700 sm:inline"> · 操作不会保存</span>
+          <div>
+            <span className="font-bold text-amber-900">演示模式</span>
+            <span className="text-amber-800"> · 剩余 {formatClock(left)}</span>
+          </div>
+          <div className="text-[11px] leading-4 text-amber-700" data-testid="feature-demo-retain">演示内容保留 {RETAIN_MINUTES} 分钟，请尽快{guest ? '注册' : '升级'}后保留数据</div>
         </div>
         {onUpgrade ? (
           <button type="button" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 font-bold text-white hover:bg-amber-600" onClick={() => onUpgrade()}>
-            {guest ? <LogIn className="h-3.5 w-3.5" aria-hidden="true" /> : <Coffee className="h-3.5 w-3.5" aria-hidden="true" />}
-            {guest ? '注册' : '开通'}
+            <CtaIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            {ctaShort}
           </button>
         ) : null}
         <button type="button" aria-label="退出演示" className="shrink-0 rounded-lg p-1 text-amber-700 hover:bg-amber-100" onClick={exitDemo}>
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-      {ready ? children : null}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">{ready ? children : null}</div>
       {ended ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-6" role="dialog" aria-modal="true" data-testid="feature-demo-ended">
           <div className="w-full max-w-xs rounded-2xl bg-white p-5 text-center shadow-xl">
             <h3 className="text-base font-bold text-slate-900">演示结束</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500 [text-wrap:balance]">
               {guest
-                ? '免费注册即送 3 个月 VIP，行情、换基、通知都能直接用，数据保存在你的账号里。'
-                : `喜欢${label ? `「${label}」` : '这个功能'}的话，开通 ${roleLabel} 后就能一直使用，数据也会保存在你的账号里。`}
+                ? '免费注册即送 3 个月 VIP，行情、换基、通知都能直接用。'
+                : `喜欢${label ? `「${label}」` : '这个功能'}的话，开通 ${roleLabel} 后就能一直使用。`}
             </p>
+            <p className="mt-1 text-xs leading-5 text-amber-700 [text-wrap:balance]">演示内容保留 {RETAIN_MINUTES} 分钟，{guest ? '注册' : '升级'}后自动带入你的账号。</p>
             {onUpgrade ? (
               <button type="button" className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600" onClick={() => onUpgrade()}>
-                {guest ? <LogIn className="h-4 w-4" aria-hidden="true" /> : <Coffee className="h-4 w-4" aria-hidden="true" />}
-                {guest ? '免费注册，领 3 个月 VIP' : '打赏开通'}
+                <CtaIcon className="h-4 w-4" aria-hidden="true" />
+                {ctaLong}
               </button>
             ) : null}
             <button type="button" className="mt-2 w-full rounded-xl px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800" onClick={exitDemo}>

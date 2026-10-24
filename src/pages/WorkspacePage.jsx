@@ -22,7 +22,7 @@ import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, isPai
 import { resolveMenuIcon } from '../components/rbac/menu-icons.js';
 import { AccessGuardPage } from '../components/rbac/access-guard-page.jsx';
 import { FeatureDemo } from '../components/rbac/feature-demo.jsx';
-import { consumeDemoQuota, demoFeatureFor, demoQuotaFor } from '../app/demo/featureDemo.js';
+import { consumeDemoQuota, demoFeatureFor, demoQuotaFor, importDemoSessions, isFeatureDemoActive, readDemoSession } from '../app/demo/featureDemo.js';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
@@ -408,7 +408,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const handleDemoUpgrade = demoAsGuest
     ? () => openAccountAuth({ mode: 'register', source: 'feature-demo', trigger: activeTab })
     : () => { setQrPurpose('upgrade'); setShowQrModal(true); };
-  const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), minutes: Math.round(demoFeature.durationSec / 60), pitch: demoFeature.pitch } : null;
+  const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), minutes: Math.round(demoFeature.durationSec / 60), pitch: demoFeature.pitch, retainedUntil: readDemoSession(activeTab)?.expiresAt || 0 } : null;
   const demoActive = Boolean(demoFeature) && demoTab === activeTab;
   function startFeatureDemo() {
     if (consumeDemoQuota(activeTab)) setDemoTab(activeTab);
@@ -417,6 +417,12 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   useEffect(() => {
     if (demoTab && demoTab !== activeTab) setDemoTab('');
   }, [activeTab, demoTab]);
+  // 注册 / 升级后：15 分钟内的演示内容自动带入账号（写回真实存储，由云同步推送）。
+  useEffect(() => {
+    if (!rbac?.loggedIn || isFeatureDemoActive()) return;
+    const imported = importDemoSessions({ canAccess: (tab) => evaluateTabAccess(rbac, tab).status === 'ok' });
+    if (imported.length) showToast({ title: '已保留演示内容', description: '演示中保存的内容已带入你的账号。', tone: 'emerald' });
+  }, [rbac]);
 
   useEffect(() => {
     document.title = heroTitle;

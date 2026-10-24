@@ -61,6 +61,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
             </button>
           </div>
           {demo ? <p className="mt-3 text-xs text-slate-400">{demo.remaining > 0 ? `今日还可体验 ${demo.remaining} 次` : '今日体验次数已用完'}</p> : null}
+          {demo?.retainedUntil ? <p className="mt-1 text-xs font-medium text-amber-700" data-testid="access-guard-retained">演示内容保留至 {new Date(demo.retainedUntil).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' })}，注册 后自动带入账号</p> : null}
         </>
       ) : isPaid ? (
         <>
@@ -103,6 +104,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
           <p className="mt-3 text-xs text-slate-400">
             {demo ? (demo.remaining > 0 ? `今日还可体验 ${demo.remaining} 次 · ` : '今日体验次数已用完 · ') : ''}开通后刷新页面即可使用
           </p>
+          {demo?.retainedUntil ? <p className="mt-1 text-xs font-medium text-amber-700" data-testid="access-guard-retained">演示内容保留至 {new Date(demo.retainedUntil).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' })}，升级 后自动带入账号</p> : null}
         </>
       ) : (
         <>

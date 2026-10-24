@@ -134,6 +134,7 @@ export function hasSeenAnyConversionPrompt() {
 export function triggerConversionPrompt(trigger, meta = {}) {
   if (typeof window === 'undefined') return false;
   if (loadCloudSession()?.accessToken) return false;
+  if (window.__AI_DCA_FEATURE_DEMO__) return false; // 付费功能演示期间不弹转化提示
   const normalizedTrigger = String(trigger || '').trim();
   const config = getConversionPromptConfig(normalizedTrigger);
   if (!config) return false;

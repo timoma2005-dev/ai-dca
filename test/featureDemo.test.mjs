@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEMO_FEATURES, DEMO_READONLY_CODE, consumeDemoQuota, createDemoFetch, createStorageSandbox,
-  demoFeatureFor, demoQuotaFor, installFeatureDemo, isDemoBlockedWrite,
+  demoFeatureFor, demoQuotaFor, importDemoSessions, installFeatureDemo, isDemoBlockedWrite, isFeatureDemoActive, readDemoSession,
+  DEMO_RETAIN_MS,
 } from '../src/app/demo/featureDemo.js';
 
 class FakeStorage {
@@ -99,4 +100,29 @@ test('only ready features offer a demo; install/uninstall swaps fetch and storag
   env.uninstall();
   assert.equal(win.fetch, realFetch);
   assert.equal(storage.getItem('k'), 'real');
+});
+
+test('demo content is kept 15 minutes, resumes in the next demo, and is imported after upgrade', () => {
+  const storage = new FakeStorage({ 'markets:watchlist:v1': 'real' });
+  const win = { fetch: async () => new Response('{}'), localStorage: storage, location: { origin: 'https://fast.example' } };
+  const env = installFeatureDemo('markets', { win });
+  assert.equal(isFeatureDemoActive(win), true);
+  storage.setItem('markets:watchlist:v1', 'demo-list');
+  storage.setItem('aiDcaSomethingElse', 'x'); // 非 keepKeys：不保留
+  env.uninstall();
+  assert.equal(isFeatureDemoActive(win), false);
+  assert.equal(storage.getItem('markets:watchlist:v1'), 'real');
+  const kept = readDemoSession('markets', { storage });
+  assert.deepEqual(kept.entries, [['markets:watchlist:v1', 'demo-list']]);
+  assert.equal(readDemoSession('markets', { storage, now: Date.now() + DEMO_RETAIN_MS + 1000 }), null, 'expires');
+
+  const again = installFeatureDemo('markets', { win });
+  assert.equal(again.resumed, true);
+  assert.equal(storage.getItem('markets:watchlist:v1'), 'demo-list', 'resumes the kept content');
+  again.uninstall();
+
+  assert.deepEqual(importDemoSessions({ storage, canAccess: () => false }), []);
+  assert.deepEqual(importDemoSessions({ storage, canAccess: (tab) => tab === 'markets' }), ['markets']);
+  assert.equal(storage.getItem('markets:watchlist:v1'), 'demo-list');
+  assert.equal(readDemoSession('markets', { storage }), null);
 });

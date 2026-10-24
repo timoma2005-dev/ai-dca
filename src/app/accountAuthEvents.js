@@ -7,6 +7,8 @@ function normalizeMode(mode = '') {
 
 export function openAccountAuth({ mode = 'register', source = '', trigger = '' } = {}) {
   if (typeof window === 'undefined') return;
+  // 付费功能演示期间不弹注册 / 登录（演示条上的「注册」按钮除外）。
+  if (window.__AI_DCA_FEATURE_DEMO__ && source !== 'feature-demo') return;
   const detail = {
     mode: normalizeMode(mode),
     source: String(source || '').slice(0, 80),
