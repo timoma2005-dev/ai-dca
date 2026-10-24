@@ -39,7 +39,13 @@ export const DEMO_FEATURES = {
     // mock 方案配置与快照 GET；保存 / 测试 / 自动填充等写入由演示框架拦截。回测生成的换基偏好保留并在注册/升级后带入。
     load: () => import('./fixtures/fundSwitch.js'),
   },
-  notify: { ready: false, durationSec: 300, pitch: '' },
+  notify: {
+    ready: true,
+    durationSec: 300,
+    pitch: 'Bark / Server酱³ / 邮件 / PC 多渠道推送：纳指 QDII ETF 溢价预警、换基切换信号与每日持仓收益，送达记录一目了然。',
+    // mock 渠道状态、推送记录、持仓规则与换基方案 GET；保存 / 启停 / 测试 / 同步等写入由演示框架拦截。
+    load: () => import('./fixtures/notify.js'),
+  },
   adminRadar: {
     ready: true,
     durationSec: 300,

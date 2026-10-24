@@ -1,3 +1,5 @@
+import { isFeatureDemoActive } from '../app/demo/demoMode.js';
+
 export function assertNotifyTestDelivered(payload = {}, fallbackMessage = '测试通知发送失败') {
   // 异步投递模式：服务端已接收任务，最终送达结果写入通知历史。
   if (payload?.accepted === true && payload?.deferred === true) return;
@@ -25,4 +27,9 @@ export function getAvailableNotifyPlatforms(surface = {}) {
   if (surface.isNativeAndroid) return [['serverchan3', 'Android'], ['email', 'Email']];
   if (surface.isMobileWeb) return [['ios', 'iOS'], ['serverchan3', 'Android'], ['email', 'Email']];
   return [['ios', 'iOS'], ['serverchan3', 'Android'], ['pc', 'PC 浏览器'], ['email', 'Email']];
+}
+
+/** 通知页按已登录渲染：有账号会话，或处于功能演示中（游客走演示占位令牌，请求只命中 mock）。 */
+export function hasNotifySession(session) {
+  return Boolean(session?.accessToken && session?.username) || isFeatureDemoActive();
 }

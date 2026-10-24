@@ -15,7 +15,7 @@ import { StatCard, cx } from '../components/experience-ui.jsx';
 import { formatEventTimeLabel, resolveEventStatusMeta } from '../app/tradePlansHelpers.js';
 import { normalizeBarkDeviceKey } from '../app/notifyParsers.js';
 import { getVisibleNotifyEvents, humanizeNotifyError } from './notifyHistoryHelpers.js';
-import { assertNotifyTestDelivered, detectNotifySurface, getAvailableNotifyPlatforms } from './notifySurfaceHelpers.js';
+import { assertNotifyTestDelivered, detectNotifySurface, getAvailableNotifyPlatforms, hasNotifySession } from './notifySurfaceHelpers.js';
 import { AlertRuleDialog } from '../components/AlertRuleDialog.jsx';
 import { useNotifyAlertRules } from './notify/useNotifyAlertRules.js';
 import { useSwitchNotifyRules } from './notify/useSwitchNotifyRules.js';
@@ -32,7 +32,7 @@ export function NotifyExperience({ embedded = false }) {
   const availablePlatforms = useMemo(() => getAvailableNotifyPlatforms(notifySurface), [notifySurface]);
   const pcFeaturesAvailable = availablePlatforms.some(([key]) => key === 'pc');
   const [cloudSession, setCloudSession] = useState(() => loadCloudSession());
-  const isLoggedIn = Boolean(cloudSession?.accessToken && cloudSession?.username);
+  const isLoggedIn = hasNotifySession(cloudSession);
   const {
     marketAlerts,
     holdingAlerts,
