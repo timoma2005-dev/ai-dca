@@ -13,7 +13,8 @@ import {
   Wrench
 } from 'lucide-react';
 import { loadCloudSession } from '../app/authSession.js';
-import { detectFundKind, isGhostTransaction, normalizeFundCode } from '../app/holdingsLedgerBasics.js';
+import { fillExchangeNames, loadFundDictionary, scanLedgerHealth, writeLedgerRow } from '../app/dataRepairSources.js';
+import { detectFundKind, isGhostTransaction } from '../app/holdingsLedgerBasics.js';
 import { showActionToast } from '../app/toast.js';
 
 export function DataRepairExperience({ onNavigateToHoldings } = {}) {
@@ -40,36 +41,8 @@ export function DataRepairExperience({ onNavigateToHoldings } = {}) {
     let localLedger = {};
     try {
       localLedger = JSON.parse(localStorage.getItem('aiDcaFundHoldingsLedger') || '{}');
-    } catch {}
-    const txs = Array.isArray(localLedger.transactions) ? localLedger.transactions : [];
-
-    let ghostCount = 0;
-    let placeholderNameCount = 0;
-    let missingDateCount = 0;
-    let mismatchedKindCount = 0;
-
-    for (const tx of txs) {
-      if (isGhostTransaction(tx)) ghostCount++;
-      if (!tx.date) missingDateCount++;
-      const name = String(tx.name || '').trim();
-      if (!name || name === 'QDII基金' || name === '场内基金' || name === '场外基金' || name === '买入') {
-        placeholderNameCount++;
-      }
-      const expectedKind = detectFundKind(tx.code, tx.name);
-      if (tx.code && expectedKind && tx.kind !== expectedKind) {
-        mismatchedKindCount++;
-      }
-    }
-
-    setReport({
-      totalTxs: txs.length,
-      ghostCount,
-      placeholderNameCount,
-      missingDateCount,
-      mismatchedKindCount,
-      hasCloud: Boolean(session?.accessToken),
-      healthy: ghostCount === 0 && placeholderNameCount === 0 && missingDateCount === 0 && mismatchedKindCount === 0
-    });
+    } catch { /* 本地底账损坏时按空账本处理 */ }
+    setReport({ ...scanLedgerHealth(localLedger.transactions), hasCloud: Boolean(session?.accessToken) });
   }, [session]);
 
   useEffect(() => {
@@ -88,31 +61,8 @@ export function DataRepairExperience({ onNavigateToHoldings } = {}) {
 
     try {
       addLog('正在连接天天基金官方库拉取全量标的字典 (1.8万+)...', 'process');
-      await new Promise((resolve, reject) => {
-        if (window.r && Array.isArray(window.r) && window.r.length > 5000) {
-          resolve();
-          return;
-        }
-        const s = document.createElement('script');
-        s.src = 'https://fund.eastmoney.com/js/fundcode_search.js';
-        s.charset = 'utf-8';
-        s.onload = resolve;
-        s.onerror = () => reject(new Error('加载官方字典失败，请检查网络连接'));
-        document.head.appendChild(s);
-      });
-
-      if (!window.r || !Array.isArray(window.r)) {
-        throw new Error('官方基金字典解析失败');
-      }
-
-      const fundMap = new Map();
-      for (const item of window.r) {
-        if (item && item[0]) {
-          const c = String(item[0]).padStart(6, '0');
-          fundMap.set(c, { name: item[2], type: item[3] });
-        }
-      }
-      addLog(`官方字典就绪，已装载 ${fundMap.size} 只基金标的。`, 'success');
+      const { fundMap, demo } = await loadFundDictionary();
+      addLog(`官方字典就绪，已装载 ${fundMap.size} 只基金标的${demo ? '（演示字典）' : ''}。`, 'success');
 
       // 阶段 2: 云端读取
       setCurrentStep(2);
@@ -141,7 +91,7 @@ export function DataRepairExperience({ onNavigateToHoldings } = {}) {
       let localLedger = {};
       try {
         localLedger = JSON.parse(localStorage.getItem('aiDcaFundHoldingsLedger') || '{"transactions":[]}');
-      } catch {}
+      } catch { /* 本地底账损坏时按空账本处理 */ }
       const localTxs = Array.isArray(localLedger.transactions) ? localLedger.transactions : [];
 
       const allCodes = new Set();
@@ -155,14 +105,7 @@ export function DataRepairExperience({ onNavigateToHoldings } = {}) {
       if (missingCodes.length > 0) {
         addLog(`正在为 ${missingCodes.length} 只场内标的请求腾讯行情接口...`, 'process');
         try {
-          const qList = missingCodes.map((c) => (c.startsWith('5') || c.startsWith('6') ? `s_sh${c}` : `s_sz${c}`));
-          const resp = await fetch(`https://qt.gtimg.cn/q=${qList.join(',')}`);
-          const text = await resp.text();
-          for (const line of text.split(';')) {
-            const m = line.match(/v_s_s[hz](\d+)="[^~]*~([^~]+)~/);
-            if (m) fundMap.set(m[1], { name: m[2], type: detectFundKind(m[1], m[2]) });
-          }
-          addLog('场内标的行情补充完毕。', 'success');
+          if (await fillExchangeNames(missingCodes, fundMap)) addLog('场内标的行情补充完毕。', 'success');
         } catch (err) {
           addLog('场内行情接口请求超时，将沿用现有字典匹配。', 'warn');
         }
@@ -184,16 +127,9 @@ export function DataRepairExperience({ onNavigateToHoldings } = {}) {
 
           if (ghost) {
             addLog(`[云端] 🗑️ 删除异常幽灵记录: [${code}] (ID: ${id})`, 'warn');
-            await fetch(`${base}/holdings/ledger/items/${encodeURIComponent(id)}`, {
-              method: 'DELETE',
-              headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'If-Match': `"${row.revision}"`
-              },
-              body: JSON.stringify({ baseRevision: row.revision, force: false, end: { id: 'browser', type: 'DataRepair' } })
-            });
-            delete syncState.rows[id];
+            const { demoReadonly } = await writeLedgerRow({ base, token, row });
+            if (demoReadonly) addLog(`[演示] 云端未改动：${id} 仅在演示本地底账中清理`, 'info');
+            else delete syncState.rows[id];
             diffs.push({ code, oldName: row.data?.name || '买入', newName: '—', action: 'delete' });
             deletedCount++;
             continue;
@@ -218,18 +154,9 @@ export function DataRepairExperience({ onNavigateToHoldings } = {}) {
               kind: targetKind,
               tags: targetKind === 'qdii' ? ['qdii', 'otc'] : [targetKind]
             };
-            const putResp = await fetch(`${base}/holdings/ledger/items/${encodeURIComponent(id)}`, {
-              method: 'PUT',
-              headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'If-Match': `"${row.revision}"`
-              },
-              body: JSON.stringify({ data: updatedData, baseRevision: row.revision, force: false, end: { id: 'browser', type: 'DataRepair' } })
-            });
-            const putJson = await putResp.json();
-            const newRev = Number(putJson?.rowRevision || row.revision + 1);
-            syncState.rows[id] = { revision: newRev, contentHash: putJson?.contentHash || '', localHash: '', pending: false, deleted: false };
+            const { demoReadonly, json: putJson } = await writeLedgerRow({ base, token, row, data: updatedData });
+            if (demoReadonly) addLog(`[演示] 云端未改动：${normCode} 仅在演示本地底账中修正`, 'info');
+            else syncState.rows[id] = { revision: Number(putJson?.rowRevision || row.revision + 1), contentHash: putJson?.contentHash || '', localHash: '', pending: false, deleted: false };
             diffs.push({
               code: normCode,
               oldName: `${row.data?.kind ? `[${row.data.kind}] ` : ''}${row.data?.name || '(空)'}`,

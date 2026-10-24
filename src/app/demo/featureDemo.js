@@ -69,7 +69,13 @@ export const DEMO_FEATURES = {
     // 本地 seed 加仓 / 定投计划，mock 账号计划资源与通知状态 GET；演示中不云同步。新建的计划保留并在注册/升级后按 id 带入。
     load: () => import('./fixtures/tradePlans.js'),
   },
-  dataRepair: { ready: false, durationSec: 300, pitch: '' },
+  dataRepair: {
+    ready: true,
+    durationSec: 300,
+    pitch: '一键体检持仓流水：揪出日期错位的幽灵记录、补齐导入时的占位名称、纠正场内 / 场外 / QDII 类别，修复前后逐笔对比。',
+    // 演示账本（同持仓演示）混入待修复问题，mock 基金字典与云端交易行 GET；修复只改演示本地底账，退出即丢弃，云端写入由演示框架 403。
+    load: () => import('./fixtures/dataRepair.js'),
+  },
 };
 
 export async function loadDemoModule(tab) {
