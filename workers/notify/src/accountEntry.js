@@ -15,7 +15,25 @@ import { processSwitchMatchJob, runDecoupledSwitchPipeline } from './switchDecou
 import { runSwitchConfigDryRun } from './switchDryRun.js';
 import { requeueStaleTriggerOutbox } from './notifyReliabilityStorage.js';
 import { runMarketDataPush } from './marketDataPush.js';
-import { computeNasdaqRadar, getNasdaqRadar } from './nasdaqRadar.js';
+import { computeNasdaqRadar, getNasdaqRadar, getNasdaqRadarFeatureHistory } from './nasdaqRadar.js';
+function radarProxyKeyOk(request, env) {
+  const expected = String(env?.RADAR_PROXY_KEY || '');
+  if (!expected) return true;
+  const given = String(request.headers.get('x-radar-key') || '');
+  if (given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < given.length; i += 1) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+/** 只取每日逐只溢价（回测用），不下发其它特征。 */
+function premiumHistoryFromFeatures(history) {
+  return (Array.isArray(history) ? history : []).map((day) => ({
+    date: day?.date,
+    premiums: Object.fromEntries(Object.entries(day?.etfs || {})
+      .filter(([, v]) => Number.isFinite(Number(v?.premium)))
+      .map(([code, v]) => [code, Number(v.premium)])),
+  })).filter((d) => d.date && Object.keys(d.premiums).length);
+}
 
 export { WsHub } from './index.js';
 export async function stripDeviceIdentityFromAccountTestRequest(request) {
@@ -47,20 +65,18 @@ function scheduleOutboxRecovery(env, ctx) {
 export default {
   async fetch(request, env, ctx) {
     const fastSocket = await handleFastWebSocketConnect(request, env); if (fastSocket) return fastSocket;
-    // 纳指雷达测试接口：前端已做 isAnalyticsAdmin 隔离，测试阶段直接放行
-    // TODO: 正式上线前改为管理员 token 认证
+    // 纳指雷达：Worker 直连不再公开。只有带 X-Radar-Key（= secret RADAR_PROXY_KEY）的请求可读，
+    // 由 cn 主机 nginx（已做 RBAC auth_request）和 cn-data 演示预告接口在服务端附加；密钥未配置时保持旧行为。
     {
       const url = new URL(request.url); const method = request.method;
-      if ((method === 'GET' && url.pathname === '/api/notify/nasdaq-radar') ||
-          (method === 'POST' && url.pathname === '/api/notify/nasdaq-radar/compute')) {
+      const isRadarRead = method === 'GET' && (url.pathname === '/api/notify/nasdaq-radar' || url.pathname === '/api/notify/nasdaq-radar/features');
+      const isRadarCompute = method === 'POST' && url.pathname === '/api/notify/nasdaq-radar/compute';
+      if (isRadarRead || isRadarCompute) {
+        if (!radarProxyKeyOk(request, env)) return jsonResponse({ ok: false, code: 'FORBIDDEN', error: 'forbidden' }, { status: 403 });
         try {
-          if (method === 'GET') {
-            const data = await getNasdaqRadar(env);
-            return jsonResponse({ ok: true, data });
-          } else {
-            const result = await computeNasdaqRadar(env, { force: true });
-            return jsonResponse({ ok: true, data: result });
-          }
+          if (isRadarCompute) return jsonResponse({ ok: true, data: await computeNasdaqRadar(env, { force: true }) });
+          if (url.pathname.endsWith('/features')) return jsonResponse({ ok: true, data: premiumHistoryFromFeatures(await getNasdaqRadarFeatureHistory(env)) });
+          return jsonResponse({ ok: true, data: await getNasdaqRadar(env) });
         } catch (err) {
           return jsonResponse({ ok: false, error: err?.message || String(err) });
         }

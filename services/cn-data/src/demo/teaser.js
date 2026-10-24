@@ -9,6 +9,18 @@ import { request as httpsRequest } from 'node:https';
 
 export const TEASER_PREFIX = '/api/notify/demo-teaser/';
 const RADAR_UPSTREAM = process.env.DEMO_TEASER_RADAR_URL || 'https://api.freebacktrack.tech/api/notify/nasdaq-radar';
+const FEATURES_UPSTREAM = `${RADAR_UPSTREAM}/features`;
+// Worker 直连需要共享密钥（CF secret RADAR_PROXY_KEY），服务端文件只有 root 可读
+const RADAR_KEY_FILE = process.env.DEMO_TEASER_RADAR_KEY_FILE || '/etc/ai-dca/radar-proxy-key';
+
+function radarKey() {
+  try { return readFileSync(RADAR_KEY_FILE, 'utf8').trim(); } catch { return ''; }
+}
+
+function upstreamHeaders() {
+  const key = radarKey();
+  return key ? { accept: 'application/json', 'x-radar-key': key } : { accept: 'application/json' };
+}
 const CACHE_MS = 10 * 60 * 1000;
 export const TEASER_TOP_N = 3;
 export const SWITCH_PAIRS_PER_DAY = 3;
@@ -33,9 +45,9 @@ export function resetTeaserState() {
 }
 
 // 服务器到 CF 的 IPv4 建连常需数秒，fetch 的 happy-eyeballs（每地址 250ms）会误判超时，故用 https + family 4。
-function httpsGetJson(target, timeoutMs = 12000) {
+function httpsGetJson(target, timeoutMs = 25000) {
   return new Promise((resolve, reject) => {
-    const req = httpsRequest(target, { method: 'GET', family: 4, timeout: timeoutMs, headers: { accept: 'application/json' } }, (res) => {
+    const req = httpsRequest(target, { method: 'GET', family: 4, timeout: timeoutMs, headers: upstreamHeaders() }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
@@ -49,18 +61,25 @@ function httpsGetJson(target, timeoutMs = 12000) {
   });
 }
 
+async function getUpstream(fetchImpl, target) {
+  if (!fetchImpl) return httpsGetJson(target);
+  const res = await fetchImpl(target, { headers: upstreamHeaders() });
+  if (!res.ok) throw new Error(`radar upstream ${res.status}`);
+  return res.json();
+}
+
 async function fetchRadar(fetchImpl) {
-  let json;
-  if (fetchImpl) {
-    const res = await fetchImpl(RADAR_UPSTREAM, { headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error(`radar upstream ${res.status}`);
-    json = await res.json();
-  } else {
-    json = await httpsGetJson(RADAR_UPSTREAM);
-  }
+  // 逐日逐只溢价只在服务端用于回测，不下发；与快照并行取（服务器到 CF 单次常要 5–10 秒）
+  const featuresPromise = getUpstream(fetchImpl, FEATURES_UPSTREAM).catch((error) => {
+    console.warn('[cn-data] demo teaser features failed:', error?.message || error);
+    return null;
+  });
+  const json = await getUpstream(fetchImpl, RADAR_UPSTREAM);
   const data = json?.data;
   if (!data || !Array.isArray(data.etfs) || data.etfs.length < 2) throw new Error('radar upstream empty');
-  return data;
+  const features = await featuresPromise;
+  const premiumHistory = Array.isArray(features?.data) ? features.data : (cache.data?.premiumHistory || []);
+  return { ...data, premiumHistory };
 }
 
 const DISK_CACHE = process.env.DEMO_TEASER_CACHE_FILE || '/var/lib/ai-dca-cn-data/demo-teaser-radar.json';
@@ -142,6 +161,35 @@ export function buildRadarTeaser(data) {
   };
 }
 
+/**
+ * 两只之间的轮动回测（服务端计算，只下发结论）：从持有 sell 开始，持有标的比另一只溢价高出 ≥ 阈值时换过去。
+ * 收益按期末盯市、相对「一直拿着 sell」计算（假设两只跟踪同一指数、净值同涨跌）：
+ *   每次换基份额按 (1+p_from)/(1+p_to) 放大，期末再乘 (1+p_持有)/(1+p_sell)。未计手续费与冲击成本。
+ */
+export function backtestPair(history, sell, buy, threshold = SWITCH_THRESHOLD) {
+  const days = (Array.isArray(history) ? history : [])
+    .filter((d) => Number.isFinite(Number(d?.premiums?.[sell])) && Number.isFinite(Number(d?.premiums?.[buy])))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  if (days.length < 5) return null;
+  let holding = sell;
+  let switches = 0;
+  let units = 1;
+  for (const day of days) {
+    const other = holding === sell ? buy : sell;
+    const from = Number(day.premiums[holding]);
+    const to = Number(day.premiums[other]);
+    if (from - to >= threshold) {
+      units *= (1 + from / 100) / (1 + to / 100);
+      switches += 1;
+      holding = other;
+    }
+  }
+  const last = days[days.length - 1].premiums;
+  const relative = units * (1 + Number(last[holding]) / 100) / (1 + Number(last[sell]) / 100) - 1;
+  const gainPct = +(relative * 100).toFixed(2);
+  return { days: days.length, from: days[0].date, to: days[days.length - 1].date, switches, gainPct, per100k: Math.round(relative * 100000) };
+}
+
 export function buildSwitchTeaser(data, sell, buy) {
   const map = new Map(ranked(data).map((e) => [e.code, e]));
   const a = map.get(sell);
@@ -159,6 +207,7 @@ export function buildSwitchTeaser(data, sell, buy) {
     per100k: Math.round(Math.max(0, spread) * 1000),
     // 与当日最优组合的差距（只给差值，不给最优组合是谁）
     gapToBest: Number.isFinite(best) ? +(best - spread).toFixed(2) : null,
+    backtest: backtestPair(data.premiumHistory, a.code, b.code),
   };
 }
 

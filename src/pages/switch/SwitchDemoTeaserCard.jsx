@@ -81,6 +81,17 @@ export function SwitchDemoTeaserCard({ onUpgrade }) {
             {result.triggered ? '，已达到换基阈值' : `，未达到 ${result.threshold}% 阈值`}。
           </div>
           {result.spread > 0 ? <div>10 万元本金换一次约多换回 <b className="text-rose-600">{formatYuan(result.per100k)}</b> 的溢价差。</div> : null}
+          {result.backtest ? (
+            <div className="mt-1">
+              回测 {result.backtest.from} 至 {result.backtest.to}（{result.backtest.days} 个交易日）：按 {result.threshold}% 阈值来回切换 {result.backtest.switches} 次，
+              {result.backtest.per100k >= 0 ? (
+                <>10 万元比一直拿着不动多赚 <b className="text-rose-600">{formatYuan(result.backtest.per100k)}</b>（{result.backtest.gainPct.toFixed(2)}%）。</>
+              ) : (
+                <>这一组反而少赚 <b className="text-emerald-700">{formatYuan(-result.backtest.per100k)}</b>，选对组合很关键。</>
+              )}
+              <span className="text-[11px] text-slate-400">（未计手续费）</span>
+            </div>
+          ) : null}
           {result.gapToBest > 0 ? (
             <div className="mt-1 text-indigo-700">
               今天的最优组合比你选的还高 <b>{result.gapToBest.toFixed(2)}%</b>。

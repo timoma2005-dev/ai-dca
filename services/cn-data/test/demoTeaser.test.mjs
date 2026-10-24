@@ -53,6 +53,23 @@ test('route caches upstream and limits switch pairs per IP per day', async () =>
   assert.equal(again.body.ok, true, 'repeating a used pair does not consume quota');
   const over = await handleDemoTeaserRoute('GET', new URL('http://x/api/notify/demo-teaser/switch?sell=159501&buy=159513'), headers, { fetchImpl });
   assert.equal(over.status, 429);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2, 'radar + features fetched once');
   assert.equal(await handleDemoTeaserRoute('GET', new URL('http://x/api/notify/switch/config'), headers, { fetchImpl }), null);
+});
+
+test('pair backtest rotates on threshold and only returns totals', async () => {
+  const { backtestPair } = await import('../src/demo/teaser.js');
+  const h = [
+    { date: '2026-10-01', premiums: { A: 10, B: 8 } },
+    { date: '2026-10-02', premiums: { A: 9, B: 9.5 } },
+    { date: '2026-10-03', premiums: { A: 8, B: 10 } },
+    { date: '2026-10-04', premiums: { A: 8, B: 8.5 } },
+    { date: '2026-10-05', premiums: { A: 7, B: 9 } },
+  ];
+  const r = backtestPair(h, 'A', 'B');
+  assert.equal(r.switches, 2);
+  // 10/1 A→B ×1.10/1.08，10/3 B→A ×1.10/1.08，期末持有 A：相对一直拿 A 为 (1.10/1.08)^2 - 1
+  assert.equal(r.gainPct, +(((1.1 / 1.08) ** 2 - 1) * 100).toFixed(2));
+  assert.deepEqual(Object.keys(r).sort(), ['days', 'from', 'gainPct', 'per100k', 'switches', 'to']);
+  assert.equal(backtestPair(h.slice(0, 3), 'A', 'B'), null);
 });
