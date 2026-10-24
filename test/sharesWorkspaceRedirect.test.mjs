@@ -81,7 +81,8 @@ test('tab selection: guests clicking a locked menu get the login dialog instead 
   const select = new Function('nextTab', 'options', 'tabAccessOf', 'normalizeWorkspaceTab', 'openAccountAuth', 'demoFeatureFor',
     source.slice(start, end) + '\nreturn true;\n}\nreturn handleSelectTab(nextTab, options);');
   for (const [state, tab, hash, navigates, opensLogin] of [
-    ['guest', 'holdings', undefined, false, true],
+    ['guest', 'adminAuction', undefined, false, true], // 无演示的付费功能：弹登录
+    ['guest', 'holdings', undefined, true, false], // 持仓总览有演示：进入守卫页先体验
     ['guest', 'home', undefined, true, false],
     ['guest', 'markets', undefined, true, false], // 有演示的付费功能：进入守卫页先体验
     ['guest', 'adminRadar', '#shares', true, false],

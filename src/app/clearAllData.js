@@ -1,6 +1,7 @@
 import { clearMarketHistoryCache } from './marketHistoryCache.js';
 import { MARKET_LOCAL_STORAGE_CACHE_KEYS } from './marketCacheKeys.js';
 import { clearNavHistoryCache } from './navHistoryClient.js';
+import { isFeatureDemoActive } from './demo/demoMode.js';
 
 /**
  * 清除所有本地数据
@@ -43,6 +44,8 @@ export function clearAllLocalData() {
 
 export async function clearAllLocalDataAsync() {
   const local = clearAllLocalData();
+  // 功能演示中只清存储覆盖层，不动真实的行情 / 净值 IndexedDB 缓存。
+  if (isFeatureDemoActive()) return { ...local, marketHistoryCleared: false, navHistoryCleared: false };
   const [marketHistoryCleared, navHistoryCleared] = await Promise.all([
     clearMarketHistoryCache().catch(() => false),
     clearNavHistoryCache().then(() => true).catch(() => false)

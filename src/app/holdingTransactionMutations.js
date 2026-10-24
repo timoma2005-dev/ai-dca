@@ -1,5 +1,6 @@
 import { runAccountUserAction } from './accountLoadingState.js';
 import { loadCloudSession } from './authSession.js';
+import { isFeatureDemoActive } from './demo/demoMode.js';
 import { persistLedgerState } from './holdingsLedger.js';
 import { areHoldingTransactionsEqual } from './holdingTransactionEventState.js';
 import {
@@ -140,7 +141,8 @@ export async function persistHoldingTransactionMutation(
     });
     // mutation epoch：让在途远端读取流程识别「拉取期间发生过本地保存」。
     markHoldingTransactionMutation();
-    if (!session?.accessToken) {
+    // 匿名态与功能演示中只写本地（演示中是存储覆盖层），不推送云端。
+    if (!session?.accessToken || isFeatureDemoActive()) {
       return { cloudAttempted: false, failed: [], pushed: [], deleted: [], expectedCount: 0 };
     }
 

@@ -18,11 +18,18 @@ import { areHoldingTransactionsEqual } from './holdingTransactionEventState.js';
 import { holdingTransactionMutationEpoch, pullHoldingTransactions } from './holdingTransactionsSync.js';
 import { normalizeLedgerState, readLedgerState } from './holdingsLedger.js';
 import { setAccountRuntimeStorageRaw } from './accountRuntimeStore.js';
+import { isFeatureDemoActive } from './demo/demoMode.js';
 import { readTradeLedger } from './tradeLedger.js';
 
 const LEDGER_STORAGE_KEY = 'aiDcaFundHoldingsLedger';
 const ACCOUNT_STORAGE_KEY = 'aiDcaAccountAllocationSettings';
 const TRADE_LEDGER_STORAGE_KEY = 'aiDcaTradeLedger';
+
+// 演示中经 localStorage 写（落在演示存储覆盖层），不改真实账号 runtime。
+function writeAccountRuntime(key, raw) {
+  if (isFeatureDemoActive()) window.localStorage.setItem(key, raw);
+  else setAccountRuntimeStorageRaw(key, raw);
+}
 
 export function holdingsRemoteSessionIdentity(session = loadCloudSession()) {
   return `${String(session?.userId || '')}:${String(session?.accessToken || '')}`;
@@ -117,8 +124,8 @@ export function createHoldingsRemoteSource({ setLedger, setAccountSettings, setT
       }
       const accountSettings = normalizeAccountAllocationSettings(rawAccountSettings);
       const tradeLedgerEntries = Array.isArray(rawTradeLedger) ? rawTradeLedger : [];
-      setAccountRuntimeStorageRaw(ACCOUNT_STORAGE_KEY, JSON.stringify(accountSettings));
-      setAccountRuntimeStorageRaw(TRADE_LEDGER_STORAGE_KEY, JSON.stringify(tradeLedgerEntries));
+      writeAccountRuntime(ACCOUNT_STORAGE_KEY, JSON.stringify(accountSettings));
+      writeAccountRuntime(TRADE_LEDGER_STORAGE_KEY, JSON.stringify(tradeLedgerEntries));
       let transactions = Array.isArray(transactionResult?.transactions)
         ? transactionResult.transactions
         : readLedgerState().transactions;

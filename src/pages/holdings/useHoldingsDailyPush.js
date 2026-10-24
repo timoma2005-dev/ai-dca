@@ -15,10 +15,7 @@ import { readLedgerState } from '../../app/holdingsLedger.js';
 import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession } from '../../app/authClient.js';
 import { showActionToast } from '../../app/toast.js';
 import { trackActionResult, trackFeatureEvent } from '../../app/analytics.js';
-
-function isLoggedInSession(session) {
-  return Boolean(session?.accessToken && session?.username);
-}
+import { hasNotifySession as isLoggedInSession } from '../notifySurfaceHelpers.js'; // 演示中游客也按已登录加载（只命中 mock）
 
 function buildLatestHoldingsDigest() {
   try {

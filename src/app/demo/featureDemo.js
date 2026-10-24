@@ -18,11 +18,12 @@ export { DEMO_ACCESS_TOKEN, DEMO_ACTIVE_FLAG, isFeatureDemoActive };
 // 演示功能注册表（轻量元数据）。重的 mock 数据在 src/app/demo/fixtures/<tab>.js，开始演示时才动态加载。
 // fixtures 模块约定（default export，全部可选）：
 //   keepKeys: string[]                         演示中保存、保留 15 分钟并在注册/升级后带入账号的 localStorage key
-//   seed(): [key, string][]                    演示开始时放进存储覆盖层的 mock 本地数据（不落盘）
+//   seed(): [key, string | null][]             演示开始时放进存储覆盖层的 mock 本地数据（不落盘；null 表示演示中视为不存在）
 //   createFixtures({ state }): { routes, getState }
 //       routes: { 'METHOD /path': body | ({ url, method, init, body }) => body }，按 pathname 匹配（忽略域名）
 //       getState(): 可序列化的 mock 服务端状态（如演示中新建的通知规则），随演示内容一起保留 15 分钟
-//   prepareImport(entries, { seed }): 带入账号前过滤 keepKeys 内容（例如去掉 seed 的示例条目）
+//   pruneKept(entries, { seed }): 演示结束时过滤要保留的 keepKeys 内容（返回空数组则不保留）
+//   prepareImport(entries, { seed, storage }): 带入账号前过滤 keepKeys 内容（例如去掉 seed 的示例条目、并入账号现有数据）
 //   importState(state, { fetch }): 升级后把 mock 服务端状态写到真实接口（可选）
 // ready=false 的功能暂不提供演示（守卫页不显示体验按钮）。
 export const DEMO_FEATURES = {
@@ -54,7 +55,13 @@ export const DEMO_FEATURES = {
     load: () => import('./fixtures/adminRadar.js'),
   },
   adminAuction: { ready: false, durationSec: 300, pitch: '' },
-  holdings: { ready: false, durationSec: 300, pitch: '' },
+  holdings: {
+    ready: true,
+    durationSec: 300,
+    pitch: '纳指 QDII ETF 与场外联接一屏总览：市值、浮盈与已实现收益，513100 ⇄ 513110 / 159513 换基配对逐笔追踪，收益曲线与今日换基信号。',
+    // 游客读 seed 的本地账本；已登录走 mock 交易行 / 资金配置接口。演示中不推送；新增的自洽交易保留并在注册/升级后并入账号。
+    load: () => import('./fixtures/holdings.js'),
+  },
   tradePlans: { ready: false, durationSec: 300, pitch: '' },
   dataRepair: { ready: false, durationSec: 300, pitch: '' },
 };
@@ -288,7 +295,7 @@ export async function importDemoSessions({ canAccess, storage = globalThis.local
     const keep = mod.keepKeys || [];
     let entries = (item.entries || []).filter(([key, value]) => keep.includes(key) && typeof value === 'string');
     if (typeof mod.prepareImport === 'function') {
-      try { entries = mod.prepareImport(entries, { seed: typeof mod.seed === 'function' ? mod.seed() : [] }) || []; } catch { entries = []; }
+      try { entries = mod.prepareImport(entries, { seed: typeof mod.seed === 'function' ? mod.seed() : [], storage }) || []; } catch { entries = []; }
     }
     for (const [key, value] of entries) {
       try { storage.setItem(key, value); } catch { /* ignore */ }
@@ -330,7 +337,8 @@ export function installFeatureDemo(tab, { win = globalThis.window, onBlocked, mo
     uninstall() {
       if (done) return;
       done = true;
-      const kept = sandbox.entries(keepKeys).filter(([key, value]) => seedMap.get(key) !== value);
+      let kept = sandbox.entries(keepKeys).filter(([key, value]) => seedMap.get(key) !== value);
+      if (typeof mod.pruneKept === 'function') { try { kept = mod.pruneKept(kept, { seed: seeded }) || []; } catch { kept = []; } }
       let state = null;
       try { state = typeof created.getState === 'function' ? created.getState() : null; } catch { state = null; }
       win.fetch = realFetch;

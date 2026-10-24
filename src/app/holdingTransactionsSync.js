@@ -12,6 +12,7 @@
 import { loadCloudSession } from './authSession.js';
 import { getAccountLoadingSnapshot } from './accountLoadingState.js';
 import { fetchLegacyMigrationStatus } from './accountApi.js';
+import { isFeatureDemoActive } from './demo/demoMode.js';
 import { isLikelyDateFundCode, sanitizeTransactions } from './holdingsLedgerBasics.js';
 import {
   deleteHoldingTransaction,
@@ -388,6 +389,7 @@ async function runPendingJournalRecovery(session, signal) {
 
   const upsertIds = entryIds.filter((id) => String(journal.entries[id]?.kind || '') === 'upsert');
   const deletedIds = entryIds.filter((id) => String(journal.entries[id]?.kind || '') === 'delete');
+  if (isFeatureDemoActive()) return { recovered: true, upsertIds, deletedIds, remaining: entryIds.length }; // 演示中不推送
   try {
     await runPushHoldingTransactionRows({ session, upsertIds, deletedIds });
   } catch {
@@ -779,7 +781,7 @@ function isHoldingUserActionBusy() {
 }
 
 function schedulePush(delay = PUSH_DEBOUNCE_MS) {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined' || isFeatureDemoActive()) return false; // 功能演示中不自动推送 / 拉取
   const session = loadCloudSession();
   if (!session?.accessToken) return false;
   window.clearTimeout(pushTimer);
@@ -800,7 +802,7 @@ export function scheduleHoldingTransactionRetry(delay = PUSH_DEBOUNCE_MS) {
   return schedulePush(delay);
 }
 function schedulePull(delay = PULL_DEBOUNCE_MS) {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined' || isFeatureDemoActive()) return false;
   const session = loadCloudSession();
   if (!session?.accessToken) return false;
   window.clearTimeout(pullTimer);
