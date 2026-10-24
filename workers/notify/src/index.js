@@ -1,5 +1,6 @@
 import { handleInternalSyncRules } from './internalSyncRules.js';
 import { handlePcfSignal } from './pcfSignalHandler.js';
+import { handlePcfAtLimit } from './pcfAtLimitHandler.js';
 import { evaluatePositionDigest, evaluateSellPlanSignals, evaluateVixSignal, runNotificationCycle } from './evaluator.js';
 import { readSettings, writeSettings } from './notifyStorage.js';
 import { compileNotifyRules, normalizeNotifyPayload } from './rules.js';
@@ -280,6 +281,7 @@ export default {
     try {
       if (request.method === 'POST' && url.pathname === '/api/notify/internal/sync-rules') return handleInternalSyncRules(request, env, origin);
       if (request.method === 'POST' && url.pathname === '/api/notify/internal/pcf-signal') return handlePcfSignal(request, env);
+      if (request.method === 'POST' && url.pathname === '/api/notify/internal/pcf-at-limit') return handlePcfAtLimit(request, env);
       if (requiresNotifyAccountAuth(request)) {
         request = await authenticateNotifyAccountRequest(request, env);
       }
