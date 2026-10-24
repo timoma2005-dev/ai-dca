@@ -420,8 +420,9 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   // 注册 / 升级后：15 分钟内的演示内容自动带入账号（写回真实存储，由云同步推送）。
   useEffect(() => {
     if (!rbac?.loggedIn || isFeatureDemoActive()) return;
-    const imported = importDemoSessions({ canAccess: (tab) => evaluateTabAccess(rbac, tab).status === 'ok' });
-    if (imported.length) showToast({ title: '已保留演示内容', description: '演示中保存的内容已带入你的账号。', tone: 'emerald' });
+    importDemoSessions({ canAccess: (tab) => evaluateTabAccess(rbac, tab).status === 'ok' }).then((imported) => {
+      if (imported.length) showToast({ title: '已保留演示内容', description: '演示中保存的内容已带入你的账号。', tone: 'emerald' });
+    }).catch(() => {});
   }, [rbac]);
 
   useEffect(() => {

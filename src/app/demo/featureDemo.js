@@ -13,20 +13,38 @@ export const DEMO_RETAIN_MS = 15 * 60 * 1000;
 export const DEMO_SESSION_KEY = 'aiDcaFeatureDemoSession';
 export const DEMO_ACTIVE_FLAG = '__AI_DCA_FEATURE_DEMO__';
 
+// 演示功能注册表（轻量元数据）。重的 mock 数据在 src/app/demo/fixtures/<tab>.js，开始演示时才动态加载。
+// fixtures 模块约定（default export，全部可选）：
+//   keepKeys: string[]                         演示中保存、保留 15 分钟并在注册/升级后带入账号的 localStorage key
+//   seed(): [key, string][]                    演示开始时放进存储覆盖层的 mock 本地数据（不落盘）
+//   createFixtures({ state }): { routes, getState }
+//       routes: { 'METHOD /path': body | ({ url, method, init, body }) => body }，按 pathname 匹配（忽略域名）
+//       getState(): 可序列化的 mock 服务端状态（如演示中新建的通知规则），随演示内容一起保留 15 分钟
+//   prepareImport(entries, { seed }): 带入账号前过滤 keepKeys 内容（例如去掉 seed 的示例条目）
+//   importState(state, { fetch }): 升级后把 mock 服务端状态写到真实接口（可选）
 // ready=false 的功能暂不提供演示（守卫页不显示体验按钮）。
 export const DEMO_FEATURES = {
   markets: {
     ready: true,
     durationSec: 300,
     pitch: '实时行情、溢价与净值走势，多只基金同屏对比。',
-    keepKeys: ['markets:watchlist:v1'],
-    fixtures: {},
+    load: async () => ({ default: { keepKeys: ['markets:watchlist:v1'] } }),
   },
-  fundSwitch: { ready: false, durationSec: 300, pitch: '', fixtures: {} },
-  notify: { ready: false, durationSec: 300, pitch: '', fixtures: {} },
-  adminRadar: { ready: false, durationSec: 300, pitch: '', fixtures: {} },
-  adminAuction: { ready: false, durationSec: 300, pitch: '', fixtures: {} },
+  fundSwitch: { ready: false, durationSec: 300, pitch: '' },
+  notify: { ready: false, durationSec: 300, pitch: '' },
+  adminRadar: { ready: false, durationSec: 300, pitch: '' },
+  adminAuction: { ready: false, durationSec: 300, pitch: '' },
+  holdings: { ready: false, durationSec: 300, pitch: '' },
+  tradePlans: { ready: false, durationSec: 300, pitch: '' },
+  dataRepair: { ready: false, durationSec: 300, pitch: '' },
 };
+
+export async function loadDemoModule(tab) {
+  const feature = DEMO_FEATURES[tab];
+  if (!feature?.load) return {};
+  const mod = await feature.load();
+  return (mod && (mod.default || mod)) || {};
+}
 
 // 演示期间禁止写入的用户数据接口（GET 照常放行，命中 fixtures 的除外）。
 const WRITE_BLOCKED_PREFIXES = ['/api/sync', '/sync', '/api/account', '/api/notify', '/api/holdings/ocr', '/api/ocr'];
@@ -146,9 +164,12 @@ export function createDemoFetch({ realFetch, fixtures = {}, onBlocked, origin = 
     const { url, method } = parts;
     const fixture = fixtures[`${method} ${url.pathname}`];
     if (fixture !== undefined) {
-      const value = typeof fixture === 'function' ? await fixture({ url, method, init }) : fixture;
-      const body = value && typeof value === 'object' && typeof value.file === 'string' ? await loadFile(value.file) : value;
-      return body == null ? jsonResponse({ ok: false, error: '示例数据暂不可用' }, 503) : jsonResponse(body);
+      let body = typeof init?.body === 'string' ? init.body : null;
+      if (body == null && typeof Request !== 'undefined' && input instanceof Request) body = await input.clone().text().catch(() => null);
+      const value = typeof fixture === 'function' ? await fixture({ url, method, init, body }) : fixture;
+      const payload = value && typeof value === 'object' && typeof value.file === 'string' ? await loadFile(value.file) : value;
+      if (payload instanceof Response) return payload;
+      return payload == null ? jsonResponse({ ok: false, error: '示例数据暂不可用' }, 503) : jsonResponse(payload);
     }
     if (isDemoBlockedWrite(method, url.pathname)) {
       onBlocked?.(`${method} ${url.pathname}`);
@@ -178,73 +199,96 @@ function writeSessions(storage, sessions) {
   } catch { /* ignore */ }
 }
 
-/** 未过期的演示内容：{ entries, expiresAt } 或 null。 */
-export function readDemoSession(tab, { storage = globalThis.localStorage, now = Date.now() } = {}) {
-  const item = readSessions(storage)[tab];
-  if (!item || !(Number(item.expiresAt) > now) || !Array.isArray(item.entries) || !item.entries.length) return null;
-  return { entries: item.entries, expiresAt: Number(item.expiresAt) };
+function hasContent(item) {
+  return (Array.isArray(item?.entries) && item.entries.length > 0) || (item?.state != null);
 }
 
-export function saveDemoSession(tab, entries, { storage = globalThis.localStorage, now = Date.now() } = {}) {
+/** 未过期的演示内容：{ entries, state, expiresAt } 或 null。 */
+export function readDemoSession(tab, { storage = globalThis.localStorage, now = Date.now() } = {}) {
+  const item = readSessions(storage)[tab];
+  if (!item || !(Number(item.expiresAt) > now) || !hasContent(item)) return null;
+  return { entries: Array.isArray(item.entries) ? item.entries : [], state: item.state ?? null, expiresAt: Number(item.expiresAt) };
+}
+
+export function saveDemoSession(tab, entries, { state = null, storage = globalThis.localStorage, now = Date.now() } = {}) {
   const sessions = readSessions(storage);
   for (const [key, item] of Object.entries(sessions)) if (!(Number(item?.expiresAt) > now)) delete sessions[key];
-  if (entries.length) sessions[tab] = { entries, expiresAt: now + DEMO_RETAIN_MS };
+  const item = { entries, state: state ?? null, expiresAt: now + DEMO_RETAIN_MS };
+  if (hasContent(item)) sessions[tab] = item;
   else delete sessions[tab];
   writeSessions(storage, sessions);
 }
 
 /**
  * 注册 / 升级后：把有权限的功能的演示内容写回真实存储（经由正常的 setItem，云同步会照常推送），并清掉已过期的。
- * 返回带入的功能 tab 列表。
+ * 返回 [{ tab, state }]：state 为 mock 服务端状态，由调用方再交给 importDemoState 写到真实接口。
  */
-export function importDemoSessions({ canAccess, storage = globalThis.localStorage, now = Date.now() } = {}) {
+export async function importDemoSessions({ canAccess, storage = globalThis.localStorage, now = Date.now(), fetchImpl } = {}) {
   const sessions = readSessions(storage);
   const imported = [];
   for (const [tab, item] of Object.entries(sessions)) {
     if (!(Number(item?.expiresAt) > now)) { delete sessions[tab]; continue; }
     if (!canAccess?.(tab)) continue;
-    const keep = DEMO_FEATURES[tab]?.keepKeys || [];
-    for (const [key, value] of item.entries || []) {
-      if (keep.includes(key) && typeof value === 'string') {
-        try { storage.setItem(key, value); } catch { /* ignore */ }
-      }
-    }
     delete sessions[tab];
-    imported.push(tab);
+    imported.push({ tab, item });
   }
   writeSessions(storage, sessions);
-  return imported;
+  const done = [];
+  for (const { tab, item } of imported) {
+    let mod = {};
+    try { mod = await loadDemoModule(tab); } catch { mod = {}; }
+    const keep = mod.keepKeys || [];
+    let entries = (item.entries || []).filter(([key, value]) => keep.includes(key) && typeof value === 'string');
+    if (typeof mod.prepareImport === 'function') {
+      try { entries = mod.prepareImport(entries, { seed: typeof mod.seed === 'function' ? mod.seed() : [] }) || []; } catch { entries = []; }
+    }
+    for (const [key, value] of entries) {
+      try { storage.setItem(key, value); } catch { /* ignore */ }
+    }
+    if (item.state != null && typeof mod.importState === 'function') {
+      try { await mod.importState(item.state, { fetch: fetchImpl || globalThis.fetch?.bind(globalThis) }); } catch { /* 写入失败不影响本地内容 */ }
+    }
+    done.push(tab);
+  }
+  return done;
 }
 
-/** 安装演示环境；dirty 表示演示期间有过本地写入或被拦截的写请求（退出时需刷新页面丢弃内存状态）。 */
-export function installFeatureDemo(tab, { win = globalThis.window, onBlocked } = {}) {
-  const feature = DEMO_FEATURES[tab] || { fixtures: {} };
-  const keepKeys = feature.keepKeys || [];
+/** 安装演示环境（module 为 loadDemoModule 的结果）；dirty 表示演示期间有过本地写入或被拦截的写请求（退出时需刷新页面丢弃内存状态）。 */
+export function installFeatureDemo(tab, { win = globalThis.window, onBlocked, module: mod = {} } = {}) {
+  const keepKeys = mod.keepKeys || [];
   const resumed = readDemoSession(tab, { storage: win?.localStorage });
-  const sandbox = createStorageSandbox(win?.localStorage, resumed ? resumed.entries.filter(([k]) => keepKeys.includes(k)) : []);
+  const seeded = typeof mod.seed === 'function' ? (mod.seed() || []) : [];
+  const initial = new Map(seeded);
+  for (const [key, value] of resumed?.entries || []) if (keepKeys.includes(key)) initial.set(key, value);
+  const sandbox = createStorageSandbox(win?.localStorage, [...initial.entries()]);
+  const created = typeof mod.createFixtures === 'function' ? (mod.createFixtures({ state: resumed?.state ?? null }) || {}) : {};
+  const routes = created.routes || {};
   const realFetch = win.fetch;
   let blocked = 0;
   sandbox.install();
   win[DEMO_ACTIVE_FLAG] = tab;
   win.fetch = createDemoFetch({
     realFetch: realFetch.bind(win),
-    fixtures: feature.fixtures,
+    fixtures: routes,
     origin: win.location?.origin,
     onBlocked: (key) => { blocked += 1; onBlocked?.(key); },
   });
+  const seedMap = new Map(seeded);
   let done = false;
   return {
     resumed: Boolean(resumed),
     get dirty() { return sandbox.writes > 0 || blocked > 0; },
-    /** 卸载沙箱，并把 keepKeys 内容保存 15 分钟（写在真实存储里，不进任何业务 key）。 */
+    /** 卸载沙箱，并把用户改动过的 keepKeys 内容与 mock 服务端状态保存 15 分钟（写在真实存储的 DEMO_SESSION_KEY 里）。 */
     uninstall() {
       if (done) return;
       done = true;
-      const kept = sandbox.entries(keepKeys);
+      const kept = sandbox.entries(keepKeys).filter(([key, value]) => seedMap.get(key) !== value);
+      let state = null;
+      try { state = typeof created.getState === 'function' ? created.getState() : null; } catch { state = null; }
       win.fetch = realFetch;
       sandbox.uninstall();
       delete win[DEMO_ACTIVE_FLAG];
-      if (kept.length || resumed) saveDemoSession(tab, kept, { storage: win?.localStorage });
+      if (kept.length || state != null || resumed) saveDemoSession(tab, kept, { state, storage: win?.localStorage });
     },
   };
 }

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEMO_FEATURES, DEMO_READONLY_CODE, consumeDemoQuota, createDemoFetch, createStorageSandbox,
-  demoFeatureFor, demoQuotaFor, importDemoSessions, installFeatureDemo, isDemoBlockedWrite, isFeatureDemoActive, readDemoSession,
+  demoFeatureFor, demoQuotaFor, importDemoSessions, loadDemoModule, installFeatureDemo, isDemoBlockedWrite, isFeatureDemoActive, readDemoSession,
   DEMO_RETAIN_MS,
 } from '../src/app/demo/featureDemo.js';
 
@@ -102,10 +102,11 @@ test('only ready features offer a demo; install/uninstall swaps fetch and storag
   assert.equal(storage.getItem('k'), 'real');
 });
 
-test('demo content is kept 15 minutes, resumes in the next demo, and is imported after upgrade', () => {
+test('demo content is kept 15 minutes, resumes in the next demo, and is imported after upgrade', async () => {
   const storage = new FakeStorage({ 'markets:watchlist:v1': 'real' });
   const win = { fetch: async () => new Response('{}'), localStorage: storage, location: { origin: 'https://fast.example' } };
-  const env = installFeatureDemo('markets', { win });
+  const module = await loadDemoModule('markets');
+  const env = installFeatureDemo('markets', { win, module });
   assert.equal(isFeatureDemoActive(win), true);
   storage.setItem('markets:watchlist:v1', 'demo-list');
   storage.setItem('aiDcaSomethingElse', 'x'); // 非 keepKeys：不保留
@@ -116,13 +117,45 @@ test('demo content is kept 15 minutes, resumes in the next demo, and is imported
   assert.deepEqual(kept.entries, [['markets:watchlist:v1', 'demo-list']]);
   assert.equal(readDemoSession('markets', { storage, now: Date.now() + DEMO_RETAIN_MS + 1000 }), null, 'expires');
 
-  const again = installFeatureDemo('markets', { win });
+  const again = installFeatureDemo('markets', { win, module });
   assert.equal(again.resumed, true);
   assert.equal(storage.getItem('markets:watchlist:v1'), 'demo-list', 'resumes the kept content');
   again.uninstall();
 
-  assert.deepEqual(importDemoSessions({ storage, canAccess: () => false }), []);
-  assert.deepEqual(importDemoSessions({ storage, canAccess: (tab) => tab === 'markets' }), ['markets']);
+  assert.deepEqual(await importDemoSessions({ storage, canAccess: () => false }), []);
+  assert.deepEqual(await importDemoSessions({ storage, canAccess: (tab) => tab === 'markets' }), ['markets']);
   assert.equal(storage.getItem('markets:watchlist:v1'), 'demo-list');
   assert.equal(readDemoSession('markets', { storage }), null);
+});
+
+test('fixtures module contract: seed is mock-only, mock server state is kept and imported, seed-equal values are not kept', async () => {
+  const storage = new FakeStorage();
+  const win = { fetch: async () => new Response('{"real":true}'), localStorage: storage, location: { origin: 'https://fast.example' } };
+  const imported = [];
+  const module = {
+    keepKeys: ['ledger'],
+    seed: () => [['ledger', 'seed'], ['other', 'mock']],
+    createFixtures: ({ state }) => {
+      const rules = state?.rules ? [...state.rules] : [];
+      return {
+        routes: {
+          'GET /api/notify/rules': () => ({ ok: true, rules }),
+          'POST /api/notify/rules': ({ body }) => { rules.push(JSON.parse(body).name); return { ok: true }; },
+        },
+        getState: () => (rules.length ? { rules } : null),
+      };
+    },
+    importState: async (state) => { imported.push(state); },
+  };
+  let env = installFeatureDemo('notifyX', { win, module });
+  assert.equal(storage.getItem('ledger'), 'seed');
+  assert.equal(storage.getItem('other'), 'mock');
+  await win.fetch('/api/notify/rules', { method: 'POST', body: '{"name":"r1"}' });
+  env.uninstall();
+  assert.equal(storage.getItem('ledger'), null, 'seed never reaches real storage');
+  assert.deepEqual(readDemoSession('notifyX', { storage }).entries, [], 'unchanged seed is not kept');
+  env = installFeatureDemo('notifyX', { win, module });
+  assert.deepEqual(await (await win.fetch('/api/notify/rules')).json(), { ok: true, rules: ['r1'] }, 'mock state resumes');
+  env.uninstall();
+  assert.deepEqual(readDemoSession('notifyX', { storage }).state, { rules: ['r1'] });
 });

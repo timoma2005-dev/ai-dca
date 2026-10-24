@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Coffee, LogIn, PlayCircle, X } from 'lucide-react';
-import { DEMO_FEATURES, DEMO_READONLY_MESSAGE, DEMO_RETAIN_MS, installFeatureDemo } from '../../app/demo/featureDemo.js';
+import { DEMO_FEATURES, DEMO_READONLY_MESSAGE, DEMO_RETAIN_MS, installFeatureDemo, loadDemoModule } from '../../app/demo/featureDemo.js';
 import { showToast } from '../../app/toast.js';
 
 const RETAIN_MINUTES = Math.round(DEMO_RETAIN_MS / 60000);
@@ -24,18 +24,25 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
 
   useLayoutEffect(() => {
     let lastToast = 0;
-    envRef.current = installFeatureDemo(tab, {
-      onBlocked: () => {
-        const now = Date.now();
-        if (now - lastToast < 3000) return;
-        lastToast = now;
-        showToast({ title: '演示模式', description: DEMO_READONLY_MESSAGE, tone: 'amber' });
-      },
+    let cancelled = false;
+    // 先加载该功能的 mock 模块，再安装沙箱、渲染页面（页面首个请求就能命中 mock）。
+    loadDemoModule(tab).catch(() => ({})).then((mod) => {
+      if (cancelled) return;
+      envRef.current = installFeatureDemo(tab, {
+        module: mod,
+        onBlocked: () => {
+          const now = Date.now();
+          if (now - lastToast < 3000) return;
+          lastToast = now;
+          showToast({ title: '演示模式', description: DEMO_READONLY_MESSAGE, tone: 'amber' });
+        },
+      });
+      setReady(true);
     });
-    setReady(true);
     const onUnload = () => envRef.current?.uninstall();
     window.addEventListener('pagehide', onUnload);
     return () => {
+      cancelled = true;
       window.removeEventListener('pagehide', onUnload);
       const env = envRef.current;
       envRef.current = null;
