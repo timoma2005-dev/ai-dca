@@ -7,7 +7,7 @@ function DemoPoints({ demo, tone }) {
   const points = Array.isArray(demo?.points) ? demo.points.filter(Boolean) : demo?.pitch ? [demo.pitch] : [];
   if (!points.length) return null;
   return (
-    <ul className="mx-auto mt-3 w-full max-w-xs space-y-2 text-left text-sm font-medium leading-6 text-slate-700" data-testid="access-guard-points">
+    <ul className="mx-auto mt-3 w-fit max-w-xs space-y-2 text-left text-sm font-medium leading-6 text-slate-700" data-testid="access-guard-points">
       {points.map((point) => (
         <li key={point} className="flex items-start gap-2">
           <Check className={`mt-1 h-4 w-4 shrink-0 ${tone}`} aria-hidden="true" />
