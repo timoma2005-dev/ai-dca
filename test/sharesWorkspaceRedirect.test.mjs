@@ -81,7 +81,7 @@ test('tab selection: guests clicking a locked menu get the login dialog instead 
   const select = new Function('nextTab', 'options', 'tabAccessOf', 'normalizeWorkspaceTab', 'openAccountAuth', 'demoFeatureFor',
     source.slice(start, end) + '\nreturn true;\n}\nreturn handleSelectTab(nextTab, options);');
   for (const [state, tab, hash, navigates, opensLogin] of [
-    ['guest', 'adminAuction', undefined, false, true], // 无演示的付费功能：弹登录
+    ['guest', 'adminAuction', undefined, true, false], // 竞价看板有演示（模拟行情演示页）：进入守卫页先体验
     ['guest', 'holdings', undefined, true, false], // 持仓总览有演示：进入守卫页先体验
     ['guest', 'home', undefined, true, false],
     ['guest', 'markets', undefined, true, false], // 有演示的付费功能：进入守卫页先体验
@@ -95,6 +95,10 @@ test('tab selection: guests clicking a locked menu get the login dialog instead 
     assert.equal(prompts.length > 0, opensLogin, `${state} ${tab} login prompt`);
     if (opensLogin) assert.equal(prompts[0].mode, 'login');
   }
+  // 无演示的锁定功能：弹登录、不切换
+  const prompts = [];
+  assert.equal(select('adminAuction', {}, tabAccessFor('guest'), (v) => v, (detail) => prompts.push(detail), () => null), undefined);
+  assert.equal(prompts[0]?.mode, 'login');
 });
 
 const panelSource = source.match(/ {2}function renderActivePanel\([^)]*\) \{[\s\S]*?\n {2}\}\n/)[0];

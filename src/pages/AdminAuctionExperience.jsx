@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readLedgerState } from '../app/holdingsLedger.js';
 import { getActiveHoldingCodeList } from '../app/holdingsLedgerCore.js';
 import { loadCloudSession } from '../app/authSession.js';
 import { pullHoldingTransactions } from '../app/holdingTransactionsSync.js';
+import { isFeatureDemoActive } from '../app/demo/demoMode.js';
 
 // 竞价看板静态页（public/auction-board.html）的持仓由账户自动判断：
 // 读取当前用户的交易流水，取净份额 > 0 的基金代码，通过同源 postMessage 推给 iframe。
@@ -42,17 +43,22 @@ export function readAuctionRounds(codes = readAuctionHeldCodes()) {
 }
 
 const HELD_REFRESH_MS = 60000;
+// 正式页受 nginx auth_request（menu:adminAuction:access）保护；功能演示改嵌构建生成的演示页（模拟时钟 + 模拟行情 + 演示持仓），
+// 演示中不读账户流水、不推送持仓。
+export const AUCTION_BOARD_SRC = '/auction-board.html';
+export const AUCTION_BOARD_DEMO_SRC = '/auction-board-demo.html';
 
 export default function AdminAuctionExperience() {
   const frameRef = useRef(null);
   const readyRef = useRef(false);
+  const [demo] = useState(() => isFeatureDemoActive());
 
   const pushHeld = useCallback(() => {
     const target = frameRef.current && frameRef.current.contentWindow;
-    if (!target || !readyRef.current) return;
+    if (demo || !target || !readyRef.current) return;
     const codes = readAuctionHeldCodes();
     target.postMessage({ type: 'ai-dca-auction-held', codes, rounds: readAuctionRounds(codes) }, window.location.origin);
-  }, []);
+  }, [demo]);
 
   const loadHoldings = useCallback(async () => {
     const session = loadCloudSession();
@@ -68,6 +74,7 @@ export default function AdminAuctionExperience() {
   }, [pushHeld]);
 
   useEffect(() => {
+    if (demo) return undefined;
     const onMessage = (event) => {
       if (event.origin !== window.location.origin) return;
       if (event.data && event.data.type === 'ai-dca-auction-ready') pushHeld();
@@ -81,7 +88,7 @@ export default function AdminAuctionExperience() {
       window.removeEventListener('storage', pushHeld);
       window.clearInterval(timer);
     };
-  }, [pushHeld, loadHoldings]);
+  }, [demo, pushHeld, loadHoldings]);
 
   return (
     <section
@@ -91,7 +98,7 @@ export default function AdminAuctionExperience() {
       <iframe
         ref={frameRef}
         title="纳指期指与ETF竞价看板"
-        src="/auction-board.html"
+        src={demo ? AUCTION_BOARD_DEMO_SRC : AUCTION_BOARD_SRC}
         className="h-full w-full border-0"
         loading="eager"
         referrerPolicy="strict-origin-when-cross-origin"

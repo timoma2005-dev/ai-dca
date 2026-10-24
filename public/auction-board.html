@@ -281,6 +281,9 @@
     </div>
     <script>
       (function () {
+        // 演示页 auction-board-demo.html 由本文件构建生成（scripts/vite/auctionBoardDemoPage.mjs），先注入 window.AUCTION_BOARD_ENV：
+        // 模拟时钟 now、模拟行情 load、演示持仓 held/rounds、localStorage 键前缀 keyPrefix。正式页无 ENV，行为不变。
+        var ENV = window.AUCTION_BOARD_ENV || {}, NOW = ENV.now || Date.now, KP = ENV.keyPrefix || "";
         var ETFS = [
           ["sh513100", "国泰"], ["sz159501", "嘉实"], ["sz159941", "广发"], ["sz159696", "易方达"],
           ["sz159659", "招商"], ["sz159632", "华安"], ["sh513300", "华夏"], ["sh513870", "富国"],
@@ -293,26 +296,26 @@
         var S = { nq: null, nqStale: false, etf: {}, etfTime: null, etfStale: false, haveEtf: false,
           busy: false, timer: null, sort: { k: "dev", d: 1 }, thr: 0.2, lo: 0.5, phaseKey: null, held: {}, haltThr: 10, nav: {},
           rounds: {}, filter: "all", prevSig: null, log: [], logDay: "" };
-        try { var hs = (window.localStorage && localStorage.getItem("nqHeld")) || ""; } catch (e) { hs = ""; }
+        try { var hs = (window.localStorage && localStorage.getItem(KP + "nqHeld")) || ""; } catch (e) { hs = ""; }
         if (!hs && location.hash.indexOf("held=") >= 0) hs = decodeURIComponent(location.hash.split("held=")[1].split("&")[0]);
         hs.split(",").forEach(function (c) { if (c) S.held[c] = true; });
         try {
-          var cfg = JSON.parse(localStorage.getItem("nqCfg") || "{}");
+          var cfg = JSON.parse(localStorage.getItem(KP + "nqCfg") || "{}");
           if (cfg.thr >= 0) S.thr = cfg.thr;
           if (cfg.lo > 0) S.lo = cfg.lo;
           if (cfg.haltThr > 0) S.haltThr = cfg.haltThr;
         } catch (e) {}
-        function saveCfg() { try { localStorage.setItem("nqCfg", JSON.stringify({ thr: S.thr, lo: S.lo, haltThr: S.haltThr })); } catch (e) {} }
+        function saveCfg() { try { localStorage.setItem(KP + "nqCfg", JSON.stringify({ thr: S.thr, lo: S.lo, haltThr: S.haltThr })); } catch (e) {} }
         function saveHeld() {
           var v = Object.keys(S.held).filter(function (k) { return S.held[k]; }).join(",");
-          try { localStorage.setItem("nqHeld", v); } catch (e) {}
+          try { localStorage.setItem(KP + "nqHeld", v); } catch (e) {}
           try { history.replaceState(null, "", "#held=" + v); } catch (e) { try { location.hash = "held=" + v; } catch (e2) {} }
         }
         var $ = function (id) { return document.getElementById(id); };
 
         /* ---------- Beijing time ---------- */
         function bj(ms) {
-          var d = new Date((ms == null ? Date.now() : ms) + 8 * 3600 * 1000);
+          var d = new Date((ms == null ? NOW() : ms) + 8 * 3600 * 1000);
           return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(),
             mi: d.getUTCMinutes(), s: d.getUTCSeconds(), wd: d.getUTCDay() };
         }
@@ -334,6 +337,7 @@
         }
         function inWin(b) { var t = secs(b); return weekday(b) && t >= 33300 && t < 54000; }
         function interval() {
+          if (ENV.interval) return ENV.interval;
           var b = bj(), t = secs(b);
           return weekday(b) && t >= 33000 && t <= 54300 ? 3000 : 30000;
         }
@@ -668,13 +672,13 @@
         function pushLog(b, text) {
           S.log.unshift({ t: p2(b.h) + ":" + p2(b.mi), text: text });
           if (S.log.length > 60) S.log.length = 60;
-          try { localStorage.setItem("nqLog", JSON.stringify({ day: S.logDay, log: S.log })); } catch (e) {}
+          try { localStorage.setItem(KP + "nqLog", JSON.stringify({ day: S.logDay, log: S.log })); } catch (e) {}
         }
         function trackSignals(list, b) {
           var day = b.y + "-" + p2(b.mo) + "-" + p2(b.d);
           if (S.logDay !== day) {
             S.logDay = day; S.log = []; S.prevSig = null;
-            try { var sv = JSON.parse(localStorage.getItem("nqLog") || "{}"); if (sv.day === day && Array.isArray(sv.log)) S.log = sv.log; } catch (e) {}
+            try { var sv = JSON.parse(localStorage.getItem(KP + "nqLog") || "{}"); if (sv.day === day && Array.isArray(sv.log)) S.log = sv.log; } catch (e) {}
           }
           if (!inWin(b) || !S.haveEtf || !S.nq) return;
           var cur = {};
@@ -835,12 +839,19 @@
         }
 
         /* ---------- cycle ---------- */
+        function loadEnv() {
+          return Promise.resolve(ENV.load()).then(function (d) {
+            S.nq = d.nq; S.nqStale = false; S.etf = d.etf; S.nav = d.nav; S.etfTime = d.etfTime; S.haveEtf = true; S.etfStale = false;
+            dotSet("s-em", "ok"); dotSet("s-qq", "ok");
+            return [true, true];
+          });
+        }
         function cycle() {
           if (S.busy) return;
           S.busy = true;
           clearTimeout(S.timer);
           $("refresh").textContent = "刷新中…";
-          Promise.all([loadNQ(), loadETF(), loadFM()]).then(function (ok) {
+          (ENV.load ? loadEnv() : Promise.all([loadNQ(), loadETF(), loadFM()])).then(function (ok) {
             if (ok[0] || ok[1]) $("updated").textContent = hms(bj());
             renderNQ();
             renderETF();
@@ -881,19 +892,23 @@
         $("halt-thr").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { S.haltThr = v; saveCfg(); renderETF(); } });
         // 嵌在 ai-dca 里时，父页面按用户账户持仓（交易流水净份额>0）推送持有代码与本轮买入，自动判断持仓
         S.acct = false;
-        window.addEventListener("message", function (ev) {
-          if (ev.origin !== location.origin) return;
-          var m = ev.data;
-          if (!m || m.type !== "ai-dca-auction-held" || !Array.isArray(m.codes)) return;
+        function applyHeld(m, label) {
           var pool = {}; ETFS.forEach(function (e) { pool[e[0].slice(2)] = true; });
           S.acct = true; S.held = {}; S.rounds = {};
           m.codes.forEach(function (c) { c = String(c); if (pool[c]) S.held[c] = true; });
           (Array.isArray(m.rounds) ? m.rounds : []).forEach(function (x) {
             if (x && pool[String(x.code)]) S.rounds[String(x.code)] = { date: String(x.date || ""), price: +x.price || 0, fromCode: x.fromCode ? String(x.fromCode) : "", fromPrice: +x.fromPrice || 0 };
           });
-          $("hold-src").textContent = "按账户持仓自动识别";
+          $("hold-src").textContent = label || "按账户持仓自动识别";
           renderETF();
+        }
+        window.addEventListener("message", function (ev) {
+          if (ev.origin !== location.origin || ENV.held) return;
+          var m = ev.data;
+          if (!m || m.type !== "ai-dca-auction-held" || !Array.isArray(m.codes)) return;
+          applyHeld(m);
         });
+        if (ENV.held) applyHeld({ codes: ENV.held, rounds: ENV.rounds }, ENV.heldLabel);
         try { if (window.parent !== window) window.parent.postMessage({ type: "ai-dca-auction-ready" }, location.origin); } catch (e) {}
         function onChk(ev) {
           var c = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-code");
@@ -906,7 +921,7 @@
         $("m-items").addEventListener("change", onChk);
 
         tick();
-        setInterval(tick, 1000);
+        setInterval(tick, ENV.tickMs || 1000);
         cycle();
       })();
     </script>

@@ -88,3 +88,11 @@
 - 今日信号：交易时段内记录进入/离开买入区、持仓回归、偏贵、停牌/复牌，按日存 localStorage。
 - 父页面额外推送 `rounds`（每个持仓最近一笔 BUY 的日期/价格，及同 `switchPairId` 的配对卖出代码/价格），看板据此显示本轮买入与相对卖出标的的相对收益。
 - 验收：测试新增响应式/设置/买入区断言；ESLint、`git diff --check`、vite build；上线后 PC 与手机宽度分别用 lovexl 验收。
+
+## 2026-10-24 竞价看板功能演示（不受鉴权的演示页）
+
+- 正式页 `/auction-board.html` 受 nginx `auth_request`（menu:adminAuction:access）保护，演示改用新路径 `/auction-board-demo.html`：构建时由 `scripts/vite/auctionBoardDemoPage.mjs`（Vite 插件，dev 中间件 + generateBundle）从 `public/auction-board.html` 生成，只在唯一的内联看板脚本前插入 `public/auction-board-demo.js`，两页共用同一份渲染/判定逻辑。
+- 看板脚本新增 `window.AUCTION_BOARD_ENV` 钩子（now / load / interval / tickMs / keyPrefix / held / rounds / heldLabel）；正式页无 ENV，行为与键名不变。演示 ENV 下不调用 loadNQ/loadETF/loadFM，忽略父页面持仓消息，localStorage 键加 `demo_` 前缀。
+- 演示引擎：模拟交易日（最近工作日，周一基准取上周五 15:00）从 09:15 起加速（默认 1 秒 = 60 秒，集合竞价半速、午休 10 倍速，约 4 分 44 秒播完到 15:05，可 ×30/×60/×120、暂停、重播，`?speed=` 可调）；12 只 ETF 溢价 = 雷达演示中枢 − 4.7（排序与价差一致，仅嘉实/国泰 >10%），嘉实 09:30–10:30 真实停牌；偏离剧本覆盖持仓回归→切换、候选进出买入区、偏贵无候选→卖出等回 0、收盘。持仓 513100、本轮买入同持仓演示。
+- `featureDemo` 中 `adminAuction` 置 `ready: true`；`AdminAuctionExperience` 在演示中 iframe 指向演示页，不读账户流水、不推送持仓。
+- nginx：`location = /auction-board.html` 为精确匹配，新路径走 `location /`，线上现行配置已放行，无需改动。

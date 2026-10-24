@@ -54,7 +54,12 @@ export const DEMO_FEATURES = {
     // 只读演示：mock 雷达快照 GET，计算按钮仍仅管理员可见（POST 被演示框架拦截）。
     load: () => import('./fixtures/adminRadar.js'),
   },
-  adminAuction: { ready: false, durationSec: 300, pitch: '' },
+  adminAuction: {
+    ready: true,
+    durationSec: 300,
+    pitch: '12 只纳指 QDII ETF 竞价看板：模拟交易日从 09:15 集合竞价加速播放到收盘，偏离度进出买入区、持仓回归与切换建议、溢价超 10% 停牌逐一出现。',
+    // 演示 tab 内 iframe 改指 /auction-board-demo.html（与正式页同一渲染逻辑的模拟行情 / 时钟，不请求真实行情，localStorage 用 demo_ 前缀）。
+  },
   holdings: {
     ready: true,
     durationSec: 300,

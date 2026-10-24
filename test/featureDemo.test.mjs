@@ -89,7 +89,8 @@ test('daily quota: 3 runs per feature per Beijing day', () => {
 test('only ready features offer a demo; install/uninstall swaps fetch and storage back', async () => {
   assert.ok(demoFeatureFor('markets'));
   for (const tab of Object.keys(DEMO_FEATURES)) assert.equal(Boolean(demoFeatureFor(tab)), DEMO_FEATURES[tab].ready, tab);
-  assert.equal(demoFeatureFor('adminAuction'), null);
+  assert.equal(demoFeatureFor('noSuchTab'), null);
+  assert.ok(demoFeatureFor('adminAuction'), 'auction board demo uses the simulated demo page');
   const storage = new FakeStorage({ k: 'real' });
   const realFetch = async () => new Response('{}');
   const win = { fetch: realFetch, localStorage: storage, location: { origin: 'https://fast.example' } };

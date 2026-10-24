@@ -52,7 +52,8 @@ test('radar is a single panel without shares, auction or hash tabs; gated by RBA
 test('auction iframe embeds the static board eagerly with an accessible title', () => {
   assert.match(auctionSource, /export default function AdminAuctionExperience\(\)/);
   assert.match(auctionSource, /<section\b[^>]*aria-label="竞价看板"/);
-  assert.match(auctionSource, /<iframe\b[^>]*title="纳指期指与ETF竞价看板"[^>]*src="\/auction-board\.html"[^>]*loading="eager"/);
+  assert.match(auctionSource, /<iframe\b[^>]*title="纳指期指与ETF竞价看板"[^>]*src=\{demo \? AUCTION_BOARD_DEMO_SRC : AUCTION_BOARD_SRC\}[^>]*loading="eager"/);
+  assert.match(auctionSource, /export const AUCTION_BOARD_SRC = '\/auction-board\.html';/);
   assert.match(auctionSource, /referrerPolicy="strict-origin-when-cross-origin"/);
 });
 
