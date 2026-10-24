@@ -159,3 +159,19 @@ test('fixtures module contract: seed is mock-only, mock server state is kept and
   env.uninstall();
   assert.deepEqual(readDemoSession('notifyX', { storage }).state, { rules: ['r1'] });
 });
+
+test('prefix routes and demo-token requests never reach the network', async () => {
+  const { createDemoFetch, matchFixture, DEMO_ACCESS_TOKEN } = await import('../src/app/demo/featureDemo.js');
+  const routes = { 'PUT /api/account/v1/plans/store/items/*': { ok: true, id: 'x' }, 'GET /api/a/*': 1, 'GET /api/a/b/*': 2 };
+  assert.equal(matchFixture(routes, 'GET', '/api/a/b/c'), 2);
+  assert.equal(matchFixture(routes, 'GET', '/api/a/z'), 1);
+  let hits = 0;
+  const f = createDemoFetch({ realFetch: async () => { hits += 1; return new Response('{}'); }, fixtures: routes, origin: 'https://x.example' });
+  assert.equal((await f('/api/account/v1/plans/store/items/abc', { method: 'PUT', body: '{}' })).status, 200);
+  const auth = { headers: { authorization: `Bearer ${DEMO_ACCESS_TOKEN}` } };
+  assert.equal((await f('/api/notify/status', auth)).status, 503);
+  assert.equal((await f('/api/markets/x', { method: 'POST', ...auth })).status, 403);
+  assert.equal(hits, 0);
+  await f('/api/markets/public');
+  assert.equal(hits, 1);
+});

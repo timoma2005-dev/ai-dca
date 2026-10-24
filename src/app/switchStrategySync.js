@@ -2,6 +2,7 @@
 // 所有持久化配置都由 Bearer Token 对应的登录账号归属，浏览器 clientId 只用于设备通道。
 // 本地 localStorage 仅作为离线预填缓存。
 
+import { demoAccessToken } from './demo/demoMode.js';
 import { loadCloudSession } from './authClient.js';
 import { apiUrlWithFallback, fetchWithFallback } from './apiBase.js';
 
@@ -393,7 +394,7 @@ async function readJsonResponse(response) {
 async function requestSwitch(path, { method = 'GET', body = null } = {}) {
   const headers = new Headers({ 'content-type': 'application/json' });
   const session = loadCloudSession();
-  const accessToken = String(session?.accessToken || '').trim();
+  const accessToken = String(demoAccessToken(session?.accessToken) || '').trim();
   if (!accessToken) {
     const error = new Error('请先登录账户后配置通知。');
     error.status = 401;

@@ -1,3 +1,4 @@
+import { demoAccessToken } from './demo/demoMode.js';
 import { normalizeBarkDeviceKey } from './notifyParsers.js';
 import { readDcaList, readDcaState } from './dca.js';
 import { readPlanList } from './plan.js';
@@ -310,7 +311,7 @@ async function requestNotify(path, init = {}) {
   const headers = new Headers(init.headers || {});
   const clientSecret = normalizeNotifyClientSecret(init.clientConfig?.clientSecret);
   const session = loadCloudSession();
-  const accessToken = String(session?.accessToken || '').trim();
+  const accessToken = String(demoAccessToken(session?.accessToken) || '').trim();
 
   if (!accessToken) {
     const error = new Error('请先登录账户后配置通知。');

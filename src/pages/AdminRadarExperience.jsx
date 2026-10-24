@@ -5,9 +5,10 @@
  */
 import { canAccessMenuFromSession, isAnalyticsAdmin } from '../app/analytics.js';
 import RadarPanel from './radar/RadarPanel.jsx';
+import { isFeatureDemoActive } from '../app/demo/demoMode.js';
 
 export function AdminRadarExperience({ session }) {
-  if (!isAnalyticsAdmin(session) && !canAccessMenuFromSession(session, 'adminRadar')) {
+  if (!isAnalyticsAdmin(session) && !canAccessMenuFromSession(session, 'adminRadar') && !isFeatureDemoActive()) {
     return <p className="p-5 text-sm text-slate-500">当前账号没有雷达权限（需要 VIP）。</p>;
   }
   return (

@@ -1,3 +1,4 @@
+import { demoAccessToken } from './demo/demoMode.js';
 import { loadCloudSession } from './authClient.js';
 import { apiUrl } from './apiBase.js';
 import { normalizeSwitchConfigShape } from './switchStrategySync.js';
@@ -26,7 +27,7 @@ export async function testSwitchConfig(config) {
   if (showFeedback) emitFeedback({ status: 'loading' });
   try {
     const session = loadCloudSession();
-    const accessToken = String(session?.accessToken || '').trim();
+    const accessToken = String(demoAccessToken(session?.accessToken) || '').trim();
     if (!accessToken) {
       const error = new Error('请先登录账户后测试换基配置。');
       error.status = 401;

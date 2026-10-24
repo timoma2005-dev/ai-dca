@@ -4,6 +4,7 @@
 // 所有账号请求（列表加载 / 删除 / 保存 / 迁移）只能从本文件的 request 出口发出：
 // 底层统一走 apiTransport 的 fetchWithGetRetry，并统一登记 accountLoadingState 的加载态。
 
+import { demoAccessToken } from './demo/demoMode.js';
 import { loadCloudSession } from './authSession.js';
 import { apiUrl, apiUrlDirect, fetchWithFallback } from './apiBase.js';
 import { fetchWithGetRetry } from './apiTransport.js';
@@ -66,7 +67,7 @@ export function sendAccountApiRequest(path, options = {}) {
 }
 
 function requireToken(session) {
-  const token = session?.accessToken || '';
+  const token = demoAccessToken(session?.accessToken || '');
   if (!token) throw new Error('请先登录账户');
   return token;
 }

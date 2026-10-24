@@ -2,11 +2,12 @@
 // 每次交易行请求前都实时检查 migrations/legacy，避免任何调用方绕过迁移门禁。
 // 统一复用 accountApi 的转发层出口（sendAccountApiRequest）：底层走 apiTransport 的 fetchWithGetRetry，
 // 并自动登记 accountLoadingState 的统一加载态，因此本文件不再自行拼 base / fetch / 错误解析。
+import { demoAccessToken } from './demo/demoMode.js';
 import { loadCloudSession } from './authSession.js';
 import { assertLegacyMigrationSettled, sendAccountApiRequest } from './accountApi.js';
 
 async function request(path, { method = 'GET', session = loadCloudSession(), body = null, headers = {}, signal } = {}) {
-  const token = session?.accessToken || '';
+  const token = demoAccessToken(session?.accessToken || '');
   if (!token) throw new Error('请先登录账户');
   await assertLegacyMigrationSettled(session, { signal });
   return sendAccountApiRequest(path, { method, token, body, headers, signal });

@@ -11,7 +11,9 @@ export const DEMO_READONLY_MESSAGE = '演示模式下不会保存，开通后即
 // 演示中保存的内容（keepKeys）在演示结束后保留 15 分钟：期间注册 / 升级会自动带入账号，再次体验也会接着用。
 export const DEMO_RETAIN_MS = 15 * 60 * 1000;
 export const DEMO_SESSION_KEY = 'aiDcaFeatureDemoSession';
-export const DEMO_ACTIVE_FLAG = '__AI_DCA_FEATURE_DEMO__';
+import { DEMO_ACCESS_TOKEN, DEMO_ACTIVE_FLAG, isFeatureDemoActive } from './demoMode.js';
+
+export { DEMO_ACCESS_TOKEN, DEMO_ACTIVE_FLAG, isFeatureDemoActive };
 
 // 演示功能注册表（轻量元数据）。重的 mock 数据在 src/app/demo/fixtures/<tab>.js，开始演示时才动态加载。
 // fixtures 模块约定（default export，全部可选）：
@@ -146,6 +148,32 @@ export function isDemoBlockedWrite(method, pathname) {
   return WRITE_BLOCKED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`) || pathname.startsWith(`${prefix}?`));
 }
 
+/** 路由匹配：先精确 "METHOD /path"，再前缀 "METHOD /path/*"（取最长前缀）。 */
+export function matchFixture(fixtures, method, pathname) {
+  const exact = fixtures[`${method} ${pathname}`];
+  if (exact !== undefined) return exact;
+  let best;
+  let bestLen = -1;
+  for (const key of Object.keys(fixtures)) {
+    if (!key.endsWith('*') || !key.startsWith(`${method} `)) continue;
+    const prefix = key.slice(method.length + 1, -1);
+    if (pathname.startsWith(prefix) && prefix.length > bestLen) {
+      best = fixtures[key];
+      bestLen = prefix.length;
+    }
+  }
+  return best;
+}
+
+function carriesDemoToken(input, init) {
+  try {
+    const headers = new Headers(init?.headers || (typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined));
+    return String(headers.get('authorization') || '').includes(DEMO_ACCESS_TOKEN);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * fixtures：{ 'GET /api/notify/switch/config': body | (ctx) => body | { file: '/demo/x.json' } }
  * 按 pathname 匹配（忽略域名，兼容 apiUrlWithFallback 的备用域名）。
@@ -162,7 +190,7 @@ export function createDemoFetch({ realFetch, fixtures = {}, onBlocked, origin = 
     let parts;
     try { parts = requestParts(input, init, origin); } catch { return realFetch(input, init); }
     const { url, method } = parts;
-    const fixture = fixtures[`${method} ${url.pathname}`];
+    const fixture = matchFixture(fixtures, method, url.pathname);
     if (fixture !== undefined) {
       let body = typeof init?.body === 'string' ? init.body : null;
       if (body == null && typeof Request !== 'undefined' && input instanceof Request) body = await input.clone().text().catch(() => null);
@@ -171,16 +199,18 @@ export function createDemoFetch({ realFetch, fixtures = {}, onBlocked, origin = 
       if (payload instanceof Response) return payload;
       return payload == null ? jsonResponse({ ok: false, error: '示例数据暂不可用' }, 503) : jsonResponse(payload);
     }
+    if (carriesDemoToken(input, init)) {
+      // 游客演示的占位令牌：没有 mock 的请求一律不发到真实服务器。
+      if (method === 'GET' || method === 'HEAD') return jsonResponse({ ok: false, code: 'DEMO_NO_FIXTURE', error: '演示数据暂不可用' }, 503);
+      onBlocked?.(`${method} ${url.pathname}`);
+      return jsonResponse({ ok: false, code: DEMO_READONLY_CODE, error: DEMO_READONLY_MESSAGE }, 403);
+    }
     if (isDemoBlockedWrite(method, url.pathname)) {
       onBlocked?.(`${method} ${url.pathname}`);
       return jsonResponse({ ok: false, code: DEMO_READONLY_CODE, error: DEMO_READONLY_MESSAGE }, 403);
     }
     return realFetch(input, init);
   };
-}
-
-export function isFeatureDemoActive(win = globalThis.window) {
-  return Boolean(win && win[DEMO_ACTIVE_FLAG]);
 }
 
 function readSessions(storage) {

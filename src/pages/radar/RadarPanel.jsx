@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { canAccessMenuFromSession, isAnalyticsAdmin } from '../../app/analytics.js';
 import { countdownView, radarSession, snapshotFreshness } from '../../app/radarModel.js';
 import { cx } from '../../components/experience-ui.jsx';
+import { isFeatureDemoActive } from '../../app/demo/demoMode.js';
 import { RADAR_COMPUTE_STATE, useRadarData } from './useRadarData.js';
 import { useRadarClock } from './useRadarClock.js';
 import RadarFreshnessBanner from './RadarFreshnessBanner.jsx';
@@ -47,7 +48,8 @@ function RadarSkeleton() {
 
 export default function RadarPanel({ session }) {
   // 读取：menu:adminRadar:access（VIP 及以上）；手动计算：管理员（服务端 api:nasdaq-radar-compute 再次校验）。
-  const isAdmin = isAnalyticsAdmin(session) || canAccessMenuFromSession(session, 'adminRadar');
+  // 演示模式：只读可见（计算按钮仍只给管理员，见 canCompute）。
+  const isAdmin = isAnalyticsAdmin(session) || canAccessMenuFromSession(session, 'adminRadar') || isFeatureDemoActive();
   const canCompute = isAnalyticsAdmin(session);
   const clockNow = useRadarClock({ enabled: isAdmin });
   const radar = useRadarData({ enabled: isAdmin });

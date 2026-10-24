@@ -1,3 +1,4 @@
+import { demoAccessToken } from '../../app/demo/demoMode.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   loadSwitchConfigFromWorker,
@@ -268,7 +269,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
     // 对手方选择与阈值计算全部由后端 /api/notify/switch/recommend 完成，
     // 前端不再做客户端回测与硬编码兜底，避免选出固定对手方。
     const session = loadCloudSession();
-    const accessToken = String(session?.accessToken || '').trim();
+    const accessToken = String(demoAccessToken(session?.accessToken) || '').trim();
     if (!accessToken) {
       const error = new Error('请先登录账户后使用自动填充。');
       error.status = 401;
