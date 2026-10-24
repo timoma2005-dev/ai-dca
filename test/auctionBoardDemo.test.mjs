@@ -229,7 +229,7 @@ test('adminAuction feature demo is ready and embeds the demo page instead of the
   const src = read('src/pages/AdminAuctionExperience.jsx');
   assert.match(src, /export const AUCTION_BOARD_SRC = '\/auction-board\.html';/);
   assert.match(src, /export const AUCTION_BOARD_DEMO_SRC = '\/auction-board-demo\.html';/);
-  assert.match(src, /const \[demo\] = useState\(\(\) => isFeatureDemoActive\(\)\);/);
+  assert.match(src, /const demo = useDemoActive\(\);/);
   assert.match(src, /src=\{demo \? AUCTION_BOARD_DEMO_SRC : AUCTION_BOARD_SRC\}/);
   assert.match(src, /if \(demo \|\| !target \|\| !readyRef\.current\) return;/);
   assert.match(src, /if \(demo\) return undefined;/);

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { canAccessMenuFromSession, isAnalyticsAdmin } from '../../app/analytics.js';
 import { countdownView, radarSession, snapshotFreshness } from '../../app/radarModel.js';
 import { cx } from '../../components/experience-ui.jsx';
-import { isFeatureDemoActive } from '../../app/demo/demoMode.js';
+import { useDemoActive, useRequiredRoleLabel } from '../../components/rbac/demo-lock.jsx';
 import { RADAR_COMPUTE_STATE, useRadarData } from './useRadarData.js';
 import { useRadarClock } from './useRadarClock.js';
 import RadarFreshnessBanner from './RadarFreshnessBanner.jsx';
@@ -47,9 +47,11 @@ function RadarSkeleton() {
 }
 
 export default function RadarPanel({ session }) {
-  // 读取：menu:adminRadar:access（VIP 及以上）；手动计算：管理员（服务端 api:nasdaq-radar-compute 再次校验）。
+  // 读取：menu:adminRadar:access（所需角色见服务端菜单 requiredRole，当前 SVIP）；手动计算：管理员（服务端 api:nasdaq-radar-compute 再次校验）。
   // 演示模式：只读可见（计算按钮仍只给管理员，见 canCompute）。
-  const isAdmin = isAnalyticsAdmin(session) || canAccessMenuFromSession(session, 'adminRadar') || isFeatureDemoActive();
+  const demo = useDemoActive();
+  const roleLabel = useRequiredRoleLabel('adminRadar', 'SVIP');
+  const isAdmin = isAnalyticsAdmin(session) || canAccessMenuFromSession(session, 'adminRadar') || demo;
   const canCompute = isAnalyticsAdmin(session);
   const clockNow = useRadarClock({ enabled: isAdmin });
   const radar = useRadarData({ enabled: isAdmin });
@@ -74,7 +76,7 @@ export default function RadarPanel({ session }) {
   }, [sessionInfo.key, radar.isDialogOpen, canCompute]);
 
   if (!isAdmin) {
-    return <p className="p-5 text-sm text-slate-500">当前账号没有雷达权限（需要 VIP）。</p>;
+    return <p className="p-5 text-sm text-slate-500">当前账号没有雷达权限（需要 {roleLabel}）。</p>;
   }
 
   const leftColumn = firstLoading ? (

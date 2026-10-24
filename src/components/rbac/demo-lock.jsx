@@ -1,5 +1,8 @@
 import { createContext, useContext } from 'react';
 import { Lock } from 'lucide-react';
+import { isFeatureDemoActive } from '../../app/demo/demoMode.js';
+import { findMenu, requiredRoleLabel } from '../../app/rbac/menuModel.js';
+import { readRbacState } from '../../app/rbac/rbacStore.js';
 
 /**
  * 演示上下文（FeatureDemo 提供）：{ tab, limit, visibleRows, guest, roleLabel, onUpgrade }。不在演示中时为 null。
@@ -9,6 +12,23 @@ export const FeatureDemoContext = createContext(null);
 
 export function useFeatureDemo() {
   return useContext(FeatureDemoContext);
+}
+
+/** 是否处于功能演示：演示上下文或全局沙箱 flag 任一成立（页面组件一律用它判断，不要只读全局 flag）。 */
+export function useDemoActive() {
+  return Boolean(useFeatureDemo()) || isFeatureDemoActive();
+}
+
+/** 菜单所需角色名（与服务端 requiredRole 一致）；演示中用上下文的 roleLabel，否则读 RBAC 菜单缓存，最后用 fallback。 */
+export function useRequiredRoleLabel(menuKey, fallback = 'VIP') {
+  const demo = useFeatureDemo();
+  if (demo?.roleLabel) return demo.roleLabel;
+  try {
+    const role = findMenu(readRbacState()?.menus, menuKey)?.requiredRole;
+    return role ? requiredRoleLabel(role) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /** 当前演示允许渲染的真实条数；不在 count 类演示中时为 Infinity。 */
@@ -26,7 +46,7 @@ export function DemoUnlockOverlay({ demo, compact = false }) {
   return (
     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/40 px-3 text-center" data-testid="demo-lock-overlay">
       {compact ? null : <Lock className="h-4 w-4 text-amber-600" aria-hidden="true" />}
-      <span className="text-xs font-semibold text-slate-700">注册/升级 VIP 查看全部</span>
+      <span className="text-xs font-semibold text-slate-700">注册/升级 {demo?.roleLabel || 'VIP'} 查看全部</span>
       {demo?.onUpgrade ? (
         <button type="button" className="rounded-lg bg-amber-500 px-3 py-1 text-xs font-bold text-white shadow-sm hover:bg-amber-600" onClick={() => demo.onUpgrade()}>
           {demoUnlockLabel(demo)}

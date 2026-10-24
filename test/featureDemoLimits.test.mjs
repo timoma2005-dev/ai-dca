@@ -131,7 +131,7 @@ test('radar ranking in a count demo renders only the first 3 ETFs; the rest are 
   }
   assert.equal((html.match(/aria-pressed=/g) || []).length, 3, 'only 3 real rows');
   assert.match(html, new RegExp(`data-locked-count="${RANKED.length - 3}"`));
-  assert.match(html, /注册\/升级 VIP 查看全部/);
+  assert.match(html, /注册\/升级 S?VIP 查看全部/);
   assert.match(html, /注册查看全部/);
   // 未在演示中：全部渲染、无遮罩
   const full = mod.render('RadarRanking', { data: DATA, selectedCode: null });

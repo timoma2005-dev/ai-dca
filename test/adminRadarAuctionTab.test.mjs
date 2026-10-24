@@ -44,7 +44,8 @@ test('legacy radar shares hash renders SharesExperience before the radar panel',
 test('radar is a single panel without shares, auction or hash tabs; gated by RBAC menu permission', () => {
   assert.doesNotMatch(radarSource, /份额新增|SharesExperience|PageTabs|AuctionBoardPanel|竞价看板|getRadarTabFromHash|hashchange|activeTab|useState|useEffect/);
   assert.match(radarSource, /import \{ canAccessMenuFromSession, isAnalyticsAdmin \} from '\.\.\/app\/analytics\.js';/);
-  assert.match(radarSource, /if \(!isAnalyticsAdmin\(session\) && !canAccessMenuFromSession\(session, 'adminRadar'\) && !isFeatureDemoActive\(\)\) \{\s*return <p[^>]*>当前账号没有雷达权限（需要 VIP）。<\/p>;/);
+  assert.match(radarSource, /const demo = useDemoActive\(\);/);
+  assert.match(radarSource, /if \(!isAnalyticsAdmin\(session\) && !canAccessMenuFromSession\(session, 'adminRadar'\) && !demo\) \{\s*return <p[^>]*>当前账号没有雷达权限（需要 \{roleLabel\}）。<\/p>;/);
   assert.match(radarSource, /<div className="mx-auto max-w-6xl min-w-0 p-4">\s*<RadarPanel session=\{session\} \/>\s*<\/div>/);
   assert.equal(fs.existsSync(path.resolve(testDir, '../src/pages/radar/AuctionBoardPanel.jsx')), false);
 });

@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Coffee, LogIn, PlayCircle } from 'lucide-react';
 import { DEMO_READONLY_MESSAGE, DEMO_RETAIN_MS, demoBannerNote, demoLimitOf, installFeatureDemo, loadDemoModule } from '../../app/demo/featureDemo.js';
 import { showToast } from '../../app/toast.js';
+import { DEMO_ACTIVE_FLAG } from '../../app/demo/demoMode.js';
 import { FeatureDemoContext } from './demo-lock.jsx';
 
 const RETAIN_MINUTES = Math.round(DEMO_RETAIN_MS / 60000);
@@ -16,6 +17,8 @@ function formatClock(totalSec) {
  * 限制方式见 featureDemo.js 的 limit：只有 time 类显示倒计时并在到时弹出结束弹窗；count / save 类不计时。
  * 结束演示（按钮 / 到时 / 离开 tab / 刷新）：卸载沙箱（keepKeys 内容保留 15 分钟）并刷新页面，丢弃内存状态。
  * 布局：外层 flex 列 + h-full，内容区 flex-1 可滚动，兼容行情这类自带 h-full 布局的页面。
+ * 内容区自带 Suspense：lazy 页面首次挂起时不会让外层 Suspense 隐藏本组件（隐藏会触发 layout effect 清理、卸载沙箱）；
+ * 渲染 children 前同时要求 ready 且全局沙箱 flag 仍是本 tab，沙箱被卸载后绝不在无 mock 的环境里渲染页面。
  */
 export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false, onUpgrade, children }) {
   const limitInfo = demoLimitOf(tab);
@@ -53,6 +56,7 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
       const env = envRef.current;
       envRef.current = null;
       env?.uninstall();
+      setReady(false);
       // 演示期间有写入：刷新页面，丢弃各模块里的内存状态。
       if (env?.dirty) window.setTimeout(() => window.location.reload(), 0);
     };
@@ -77,6 +81,7 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
     window.location.reload();
   }
 
+  const live = ready && typeof window !== 'undefined' && window[DEMO_ACTIVE_FLAG] === tab;
   const ctaShort = guest ? '注册' : '升级';
   const ctaLong = guest ? '免费注册，领 3 个月 VIP' : '打赏开通';
   const CtaIcon = guest ? LogIn : Coffee;
@@ -104,7 +109,9 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
             结束演示
           </button>
         </div>
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">{ready ? children : null}</div>
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+          <Suspense fallback={<p className="p-5 text-center text-xs text-slate-400">正在加载演示…</p>}>{live ? children : null}</Suspense>
+        </div>
         {ended ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-6" role="dialog" aria-modal="true" data-testid="feature-demo-ended">
             <div className="w-full max-w-xs rounded-2xl bg-white p-5 text-center shadow-xl">

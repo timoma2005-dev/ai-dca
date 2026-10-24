@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { readLedgerState } from '../app/holdingsLedger.js';
 import { getActiveHoldingCodeList } from '../app/holdingsLedgerCore.js';
 import { loadCloudSession } from '../app/authSession.js';
 import { pullHoldingTransactions } from '../app/holdingTransactionsSync.js';
-import { isFeatureDemoActive } from '../app/demo/demoMode.js';
+import { useDemoActive } from '../components/rbac/demo-lock.jsx';
 
 // 竞价看板静态页（public/auction-board.html）的持仓由账户自动判断：
 // 读取当前用户的交易流水，取净份额 > 0 的基金代码，通过同源 postMessage 推给 iframe。
@@ -51,7 +51,7 @@ export const AUCTION_BOARD_DEMO_SRC = '/auction-board-demo.html';
 export default function AdminAuctionExperience() {
   const frameRef = useRef(null);
   const readyRef = useRef(false);
-  const [demo] = useState(() => isFeatureDemoActive());
+  const demo = useDemoActive(); // 上下文或全局 flag：首帧即为演示地址，绝不先渲染受保护的正式页
 
   const pushHeld = useCallback(() => {
     const target = frameRef.current && frameRef.current.contentWindow;
