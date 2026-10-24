@@ -9,7 +9,7 @@ import { TARGET_CODES } from './etfPcfShares.js';
 import { handleEtfPcfEvents, handleEtfPcfLimit } from './etfPcfRoutes.js';
 import { runEtfPcfScheduledRefresh } from './etfPcfUniverse.js';
 import { refreshSsePcfLimitCache } from './ssePcfLimit.js';
-import { sendPcfSignalNotifications } from './pcfSignalNotify.js';
+import { sendPcfSignalNotifications, sendPcfAtLimitNotifications } from './pcfSignalNotify.js';
 import { emptyResponse, jsonResponse } from './util.js';
 import { isTradingDayShanghai } from '../../../shared/etfPcfTradingCalendar.js';
 
@@ -57,6 +57,7 @@ export async function runEtfPcfDailyRefresh({
       szse: { ok: false, reason: 'invalid_scheduled_time' },
       events: { ok: false, reason: 'invalid_scheduled_time' },
       pcfSignal: null,
+      pcfAtLimit: null,
       jobDurationMs: Date.now() - startMs
     };
   }
@@ -87,7 +88,18 @@ export async function runEtfPcfDailyRefresh({
       pcfSignal = { ok: false, reason: 'notification_error' };
     }
   }
-  return { sse, szse, events, pcfSignal, jobDurationMs: Date.now() - startMs };
+  let pcfAtLimit = null;
+  if (events?.ok && Array.isArray(events.detectedEvents) && events.detectedEvents.some(
+    event => event?.signal_type === 'net_creation_near_total_limit' && event.basis === 'total'
+  )) {
+    try {
+      pcfAtLimit = await sendPcfAtLimitNotifications(env, events.detectedEvents);
+    } catch (e) {
+      console.log('[etf-pcf][pcf-at-limit] notification failed: ' + ((e && e.message) || e));
+      pcfAtLimit = { ok: false, reason: 'notification_error' };
+    }
+  }
+  return { sse, szse, events, pcfSignal, pcfAtLimit, jobDurationMs: Date.now() - startMs };
 }
 
 export default {
