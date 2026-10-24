@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Coffee, Lock, LogIn, ShieldAlert, Sparkles } from 'lucide-react';
+import { Coffee, Lock, LogIn, PlayCircle, ShieldAlert, Sparkles } from 'lucide-react';
 import { isPaidRole, requiredRoleLabel } from '../../app/rbac/menuModel.js';
 
 /**
@@ -8,7 +8,7 @@ import { isPaidRole, requiredRoleLabel } from '../../app/rbac/menuModel.js';
  * - status=forbidden + VIP/SVIP：付费功能，引导打赏并备注账号名，由管理员开通（onUpgrade 打开打赏二维码）；
  * - status=forbidden + 管理员：仅管理员可访问。
  */
-export function AccessGuardPage({ status, requiredRole, menuLabel = '', username = '', onLogin, onUpgrade, onBack, autoPromptLogin = true }) {
+export function AccessGuardPage({ status, requiredRole, menuLabel = '', username = '', onLogin, onUpgrade, onBack, demo = null, onDemo, autoPromptLogin = true }) {
   const promptedRef = useRef(false);
   useEffect(() => {
     if (status !== 'login' || !autoPromptLogin || promptedRef.current) return;
@@ -48,6 +48,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
         <>
           <div className="mt-4 inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700">{roleLabel} 专享</div>
           <h2 className="mt-2 text-lg font-bold text-slate-900">{menuLabel || '此功能'}为 {roleLabel} 会员功能</h2>
+          {demo?.pitch ? <p className="mt-1 max-w-xs text-sm font-medium leading-6 text-slate-700 [text-wrap:balance]" data-testid="access-guard-pitch">{demo.pitch}</p> : null}
           <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500 [text-wrap:balance]">
             如需使用该功能，请随意打赏并备注账号名，管理员看到后会尽快为您开通。
           </p>
@@ -57,17 +58,33 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
               <span className="truncate font-semibold text-slate-800">{username}</span>
             </div>
           ) : null}
-          {onUpgrade ? (
-            <button
-              type="button"
-              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-600"
-              onClick={() => onUpgrade()}
-            >
-              <Coffee className="h-4 w-4" aria-hidden="true" />
-              打赏开通
-            </button>
-          ) : null}
-          <p className="mt-3 text-xs text-slate-400">开通后刷新页面即可使用</p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            {demo && onDemo ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-bold text-amber-700 shadow-sm hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => onDemo()}
+                disabled={demo.remaining <= 0}
+                data-testid="access-guard-demo"
+              >
+                <PlayCircle className="h-4 w-4" aria-hidden="true" />
+                免费体验 {demo.minutes} 分钟
+              </button>
+            ) : null}
+            {onUpgrade ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-600"
+                onClick={() => onUpgrade()}
+              >
+                <Coffee className="h-4 w-4" aria-hidden="true" />
+                打赏开通
+              </button>
+            ) : null}
+          </div>
+          <p className="mt-3 text-xs text-slate-400">
+            {demo ? (demo.remaining > 0 ? `今日还可体验 ${demo.remaining} 次 · ` : '今日体验次数已用完 · ') : ''}开通后刷新页面即可使用
+          </p>
         </>
       ) : (
         <>

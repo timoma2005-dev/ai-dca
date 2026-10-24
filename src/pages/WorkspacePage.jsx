@@ -18,9 +18,11 @@ import { ConversionPromptCard } from '../components/conversion-prompt-card.jsx';
 import { ACCOUNT_AUTH_OPEN_EVENT, openAccountAuth } from '../app/accountAuthEvents.js';
 import { loadAccountMenu } from '../app/loadAccountMenu.js';
 import { useRbac } from '../app/rbac/useRbac.js';
-import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, splitSidebarMenus } from '../app/rbac/menuModel.js';
+import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, isPaidRole, requiredRoleLabel, splitSidebarMenus } from '../app/rbac/menuModel.js';
 import { resolveMenuIcon } from '../components/rbac/menu-icons.js';
 import { AccessGuardPage } from '../components/rbac/access-guard-page.jsx';
+import { FeatureDemo } from '../components/rbac/feature-demo.jsx';
+import { consumeDemoQuota, demoFeatureFor, demoQuotaFor } from '../app/demo/featureDemo.js';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
@@ -190,6 +192,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [mobileBottomSheetHidden, setMobileBottomSheetHidden] = useState(() => isMobileBottomSheetOpen());
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrPurpose, setQrPurpose] = useState('coffee');
+  const [demoTab, setDemoTab] = useState('');
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [cloudSession, setCloudSession] = useState(() => loadCloudSession());
   const [conversionPrompt, setConversionPrompt] = useState(null);
@@ -399,6 +402,17 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   // ?tab= 路由守卫：无权限时不再静默回退到默认 tab，而是渲染登录 / 403 守卫页（见 renderActivePanel）。
   const activeAccess = tabAccessOf(activeTab, typeof window !== 'undefined' ? window.location.hash || '' : '');
+  // 付费功能演示：未开通 VIP/SVIP 时可先体验（每天限次、限时，见 app/demo/featureDemo.js）。
+  const demoFeature = activeAccess.status === 'forbidden' && isPaidRole(activeAccess.requiredRole) ? demoFeatureFor(activeTab) : null;
+  const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), minutes: Math.round(demoFeature.durationSec / 60), pitch: demoFeature.pitch } : null;
+  const demoActive = Boolean(demoFeature) && demoTab === activeTab;
+  function startFeatureDemo() {
+    if (consumeDemoQuota(activeTab)) setDemoTab(activeTab);
+    else showToast({ title: '今日体验次数已用完', description: '明天可以再来体验，或打赏开通后不限次使用。', tone: 'amber' });
+  }
+  useEffect(() => {
+    if (demoTab && demoTab !== activeTab) setDemoTab('');
+  }, [activeTab, demoTab]);
 
   useEffect(() => {
     document.title = heroTitle;
@@ -584,9 +598,9 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function renderActivePanel() {
+  function renderActivePanel({ demo = false } = {}) {
     const sharedProps = { links, inPagesDir, embedded: true };
-    if (activeAccess.status !== 'ok') {
+    if (activeAccess.status !== 'ok' && !demo) {
       return (
         <AccessGuardPage
           status={activeAccess.status}
@@ -595,6 +609,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           username={accountUsername}
           onLogin={() => openAccountAuth({ mode: 'login', source: 'rbac-route-guard', trigger: activeTab })}
           onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+          demo={demoOffer}
+          onDemo={startFeatureDemo}
           onBack={() => handleSelectTab('home')}
         />
       );
@@ -680,7 +696,18 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           </div>
         ) : null}
         <div className={activeTab === 'markets' ? 'h-full min-h-0' : activeTab === 'holdings' ? '' : 'pt-4'}>
-          <Suspense fallback={<TabLoadingFallback />}>{renderActivePanel()}</Suspense>
+          <Suspense fallback={<TabLoadingFallback />}>
+            {demoActive ? (
+              <FeatureDemo
+                tab={activeTab}
+                label={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
+                roleLabel={requiredRoleLabel(activeAccess.requiredRole)}
+                onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+              >
+                {renderActivePanel({ demo: true })}
+              </FeatureDemo>
+            ) : renderActivePanel()}
+          </Suspense>
         </div>
       </ConsoleLayout>
       <MobileBottomNav

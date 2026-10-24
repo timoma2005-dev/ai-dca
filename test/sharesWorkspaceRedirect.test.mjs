@@ -94,17 +94,17 @@ test('tab selection: guests clicking a locked menu get the login dialog instead 
   }
 });
 
-const panelSource = source.match(/ {2}function renderActivePanel\(\) \{[\s\S]*?\n {2}\}\n/)[0];
+const panelSource = source.match(/ {2}function renderActivePanel\([^)]*\) \{[\s\S]*?\n {2}\}\n/)[0];
 const panelCode = (await transformWithOxc(panelSource, 'panel.jsx', { lang: 'jsx', jsx: { runtime: 'classic' } })).code;
 const renderPanel = new Function('activeTab', 'activeAccess', 'window', 'links', 'inPagesDir', 'React', 'WORKSPACE_TAB_META',
   'openAccountAuth', 'handleSelectTab', 'AccessGuardPage',
-  'SharesExperience', 'AdminRadarExperience', 'AdminAuctionExperience', 'HoldingsExperience', 'AdminRbacExperience', 'accountUsername',
+  'SharesExperience', 'AdminRadarExperience', 'AdminAuctionExperience', 'HoldingsExperience', 'AdminRbacExperience', 'accountUsername', 'demoOffer', 'startFeatureDemo',
   `${panelCode}\nreturn renderActivePanel();`);
 const resolvePanel = (state, tab, hash = '') => {
   const element = renderPanel(tab, tabAccessFor(state)(tab, hash), { location: { hash } }, {}, false,
     { createElement: (component, props) => (component === 'guard' ? `guard:${props.status}:${props.requiredRole?.code || ''}` : component) },
     WORKSPACE_TAB_META, () => {}, () => {}, 'guard',
-    'shares', 'radar', 'auction', 'holdings', 'rbac', '');
+    'shares', 'radar', 'auction', 'holdings', 'rbac', '', null, () => {});
   return element;
 };
 
