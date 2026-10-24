@@ -8,6 +8,7 @@ import { handleNotifyRoute } from './notify/routes.js';
 import { badRequest, handleDataRoute } from './routes/data.js';
 import { enforceRoutePermission } from './rbacGuard.js';
 import { handleDemoTeaserRoute } from './demo/teaser.js';
+import { startAuctionRecorder } from './demo/auctionReplay.js';
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const cors = {
@@ -77,6 +78,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const db = openDb();
   const port = Number(process.env.CN_DATA_PORT || 8081);
   const server = createServer(createApp(db));
+  // 交易日 09:14:30–09:31 录制集合竞价真实行情，供竞价看板演示实时 / 回放（见 demo/auctionReplay.js）
+  if (process.env.DEMO_AUCTION_RECORDER !== '0') startAuctionRecorder();
   server.listen(port, '127.0.0.1', () => console.log(`[cn-data] listening on 127.0.0.1:${port}`));
   const shutdown = () => server.close(() => closeDb(db));
   process.once('SIGTERM', shutdown);

@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { request as httpsRequest } from 'node:https';
+import { auctionTeaser } from './auctionReplay.js';
 
 // 付费功能演示的「公开数据预告」接口（游客可访问，只下发结论型数字）。
 // 设计原则：真实数据证明功能有效，但不下发足以手动算出可操作结论的完整数据：
@@ -230,6 +231,12 @@ export async function handleDemoTeaserRoute(method, url, headers, { fetchImpl = 
   if (method !== 'GET') return { status: 405, body: { ok: false, error: 'Method not allowed' } };
   const name = url.pathname.slice(TEASER_PREFIX.length);
   const cacheHeaders = { 'Cache-Control': 'no-store' };
+  if (name === 'auction') {
+    const result = auctionTeaser({ now });
+    return result
+      ? { body: { ok: true, data: result }, headers: cacheHeaders }
+      : { status: 503, body: { ok: false, code: 'TEASER_UNAVAILABLE', error: '暂无已录制的集合竞价' } };
+  }
   let data;
   try {
     data = await loadRadar({ fetchImpl, now });

@@ -16,7 +16,7 @@ const DEMO_JS = read('public/auction-board-demo.js');
 const boardScript = (html) => html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 // 极简 DOM：只够看板脚本 / 演示引擎运行，并记录一切可能发出网络请求的入口。
-function createPage({ demo, date = '2026-10-23', speed }) {
+function createPage({ demo, date = '2026-10-23', speed, real: realData }) {
   const net = [];
   const store = new Map();
   const writes = [];
@@ -60,7 +60,12 @@ function createPage({ demo, date = '2026-10-23', speed }) {
     location: { origin: 'https://demo.test', hash: '', search: speed ? `?speed=${speed}` : '', reload() {} },
     history: { replaceState() {} },
     fetch: () => { net.push('fetch'); return Promise.reject(new Error('blocked')); },
-    XMLHttpRequest: function XMLHttpRequest() { net.push('xhr'); },
+    // 演示引擎只允许同步读一次服务端录制的竞价（/api/notify/demo-teaser/auction）；这里返回 503，走模拟行情
+    XMLHttpRequest: function XMLHttpRequest() {
+      this.status = 0;
+      this.open = (method, url) => { this.url = url; };
+      this.send = () => { net.push(this.url === '/api/notify/demo-teaser/auction' ? 'teaser' : `xhr:${this.url}`); this.status = 503; };
+    },
     Image: function Image() { net.push('image'); },
     setTimeout: (fn) => { timers.timeouts.push(fn); return timers.timeouts.length; },
     clearTimeout() {},
@@ -70,7 +75,7 @@ function createPage({ demo, date = '2026-10-23', speed }) {
   };
   ctx.window = ctx;
   ctx.parent = ctx;
-  if (demo) ctx.AUCTION_BOARD_DEMO_OPTIONS = { date, realNow: () => real };
+  if (demo) ctx.AUCTION_BOARD_DEMO_OPTIONS = { date, realNow: () => real, ...(realData ? { real: realData } : {}) };
   vm.createContext(ctx);
   const html = demo ? buildAuctionBoardDemoHtml(BOARD_HTML) : BOARD_HTML;
   if (demo) vm.runInContext(DEMO_JS, ctx, { filename: 'auction-board-demo.js' });
@@ -112,7 +117,7 @@ test('demo page never requests real market data and only writes demo_ storage ke
   const page = createPage({ demo: true });
   for (const hm of ['09:16', '09:45', '10:40', '13:10', '14:58', '15:03']) await page.at(hm);
   page.$('thr').listeners.input[0].call({ value: '0.25' });
-  assert.deepEqual(page.net, []);
+  assert.deepEqual(page.net, ['teaser'], 'only the server-side auction teaser is asked, never a quote provider');
   assert.ok(page.writes.length > 0);
   assert.ok(page.writes.every((k) => k.startsWith('demo_')), page.writes.join(','));
   assert.ok(!page.store.has('nqCfg') && !page.store.has('nqLog') && !page.store.has('nqHeld'));
@@ -233,4 +238,31 @@ test('adminAuction feature demo is ready and embeds the demo page instead of the
   assert.match(src, /src=\{demo \? AUCTION_BOARD_DEMO_SRC : AUCTION_BOARD_SRC\}/);
   assert.match(src, /if \(demo \|\| !target \|\| !readyRef\.current\) return;/);
   assert.match(src, /if \(demo\) return undefined;/);
+});
+
+test('real replay: server frames drive the board (top 3 only), clock covers 09:15 → 09:31, no demo holding', async () => {
+  const q = (code, cur, pre) => ({ full: code, code, cur, pre, open: cur, b1: cur, b1v: 10, a1: cur, a1v: 8, t: '20261026092000', vol: 100, flag: '' });
+  const frame = (s, cur) => ({ s, etfTime: '20261026092000', nqLast: { t: '2026-10-26 09:20', p: 101 }, etf: { sh513100: q('513100', cur, 2), sz159513: q('159513', 1.8, 1.8) } });
+  const real = {
+    mode: 'replay', date: '2026-10-26', topN: 3, total: 12,
+    nq: { pts: [{ t: '2026-10-23 15:00', p: 100 }], base: { t: '2026-10-23 15:00', p: 100, approx: false }, src: 'x' },
+    nav: { 513100: { nav: 1.9, date: 'd', src: 'fm' } },
+    frames: [frame(33300, 2.0), frame(34000, 2.02), frame(34260, 2.04)],
+  };
+  const page = createPage({ demo: true, real });
+  const env = page.ctx.AUCTION_BOARD_ENV;
+  const demo = page.ctx.AUCTION_BOARD_DEMO;
+  assert.equal(env.real, 'replay');
+  assert.equal(demo.day, '2026-10-26');
+  assert.equal(env.held.length, 0);
+  assert.equal(demo.simSec(), 33300);
+  assert.equal(env.load().etf.sh513100.cur, 2.0);
+  demo.seek(34100);
+  const snap = env.load();
+  assert.equal(snap.etf.sh513100.cur, 2.02);
+  assert.equal(Object.keys(snap.etf).length, 2);
+  assert.equal(snap.nq.pts.at(-1).p, 101);
+  page.advance(600_000);
+  assert.equal(demo.simSec(), 34260, 'stops at the last recorded frame');
+  assert.deepEqual(page.net, [], 'replay data was handed in, nothing fetched');
 });

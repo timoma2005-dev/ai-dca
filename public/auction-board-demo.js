@@ -54,11 +54,28 @@
   Object.keys(DEV).forEach(function (c) { DEV_S[c] = DEV[c].map(function (k) { return [hm2s(k[0]), k[1]]; }); });
   function hash(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 
+  /* ---------- 真实行情（服务端录制的集合竞价）：竞价时段实时、其它时间回放最近一个交易日；每帧只含偏离最大的前 3 只。
+   * 拿不到（未部署 / 尚无录制 / 非浏览器）时退回下面的模拟行情。 ---------- */
+  var REAL_URL = OPT.realUrl || "/api/notify/demo-teaser/auction";
+  function fetchReal() {
+    if (OPT.noReal || typeof root.XMLHttpRequest !== "function") return null;
+    try {
+      var x = new root.XMLHttpRequest();
+      x.open("GET", REAL_URL, false); // 同步：在看板脚本运行前定下交易日与时钟
+      x.send(null);
+      if (x.status !== 200) return null;
+      var j = JSON.parse(x.responseText), d = j && j.ok && j.data;
+      return d && d.frames && d.frames.length && d.date ? d : null;
+    } catch { return null; }
+  }
+  var REAL = OPT.real || fetchReal();
+  var LIVE = Boolean(REAL && REAL.mode === "live");
+
   /* ---------- 模拟交易日：默认取北京时间最近一个工作日（周末也能看），可用 ?date=YYYY-MM-DD 指定 ---------- */
   function ymd(ms) { var d = new Date(ms); return d.getUTCFullYear() + "-" + p2(d.getUTCMonth() + 1) + "-" + p2(d.getUTCDate()); }
   function pickDay() {
     var q = /[?&]date=(\d{4}-\d\d-\d\d)/.exec((root.location && root.location.search) || "");
-    var ds = OPT.date || (q && q[1]);
+    var ds = (REAL && REAL.date) || OPT.date || (q && q[1]);
     if (!ds) {
       var ms = Date.now() + 8 * 3600000;
       while ([0, 6].indexOf(new Date(ms).getUTCDay()) >= 0) ms -= 86400000;
@@ -77,12 +94,16 @@
 
   /* ---------- 模拟时钟：集合竞价半速、午休 10 倍速，其余按 speed（默认 1 秒 = 120 秒：09:15 → 15:05 约 2 分 22 秒，
    * 在演示 3 分钟限时内播完；DEFAULT_SPEED 改动需同步 test/auctionBoardDemo.test.mjs 的时长断言） ---------- */
-  var DEFAULT_SPEED = 120;
+  var DEFAULT_SPEED = REAL ? (LIVE ? 1 : 8) : 120; // 真实回放 09:15–09:31 约 2 分钟播完；实时 = 1 倍速
+  if (REAL) {
+    START = Math.min(START, REAL.frames[0].s);
+    END = Math.max(REAL.frames[REAL.frames.length - 1].s, LIVE ? 33300 : START + 60);
+  }
   var realNow = OPT.realNow || function () { return Date.now(); };
   var sp = /[?&]speed=(\d+(?:\.\d+)?)/.exec((root.location && root.location.search) || "");
   var clock = { sim: START, real: realNow(), speed: +(OPT.speed || (sp && sp[1]) || DEFAULT_SPEED), paused: false };
-  function rate(s) { return s < OPEN ? clock.speed / 2 : s >= NOON && s < PM ? clock.speed * 10 : clock.speed; }
-  function nextEdge(s) { return s < OPEN ? OPEN : s < NOON ? NOON : s < PM ? PM : END; }
+  function rate(s) { if (REAL) return clock.speed; return s < OPEN ? clock.speed / 2 : s >= NOON && s < PM ? clock.speed * 10 : clock.speed; }
+  function nextEdge(s) { if (REAL) return END; return s < OPEN ? OPEN : s < NOON ? NOON : s < PM ? PM : END; }
   function advance() {
     var r = realNow(), dt = (r - clock.real) / 1000;
     clock.real = r;
@@ -93,7 +114,8 @@
     }
     if (clock.sim > END) clock.sim = END;
   }
-  function simSec() { advance(); return clock.sim; }
+  function liveSec() { var d = new Date(realNow() + 8 * 3600000); return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds(); }
+  function simSec() { if (LIVE) { clock.sim = liveSec(); return clock.sim; } advance(); return clock.sim; }
   function now() { return MIDNIGHT + Math.floor(simSec() * 1000); }
 
   /* ---------- 模拟行情 ---------- */
@@ -122,13 +144,40 @@
     return { nq: { pts: pts, base: { t: pts[0].t, p: pts[0].p, approx: false }, src: "演示 NQ00Y（模拟）" }, etf: etf, nav: nav, etfTime: stampOf(s) };
   }
 
+  /* ---------- 真实行情帧 → 看板快照 ---------- */
+  function realFrameAt(s) {
+    var fr = REAL.frames, pick = fr[0];
+    for (var i = 0; i < fr.length && fr[i].s <= s; i++) pick = fr[i];
+    return pick;
+  }
+  function realSnapshot(s) {
+    var f = realFrameAt(s), base = REAL.nq && REAL.nq.base, pts = ((REAL.nq && REAL.nq.pts) || []).slice();
+    if (f.nqLast && (!pts.length || f.nqLast.t >= pts[pts.length - 1].t)) {
+      if (pts.length && pts[pts.length - 1].t === f.nqLast.t) pts[pts.length - 1] = f.nqLast; else pts.push(f.nqLast);
+    }
+    return { nq: { pts: pts, base: base || (pts[0] ? { t: pts[0].t, p: pts[0].p, approx: true } : null), src: "东方财富 NQ00Y" },
+      etf: f.etf || {}, nav: REAL.nav || {}, etfTime: f.etfTime };
+  }
+  function refreshLive() {
+    if (!root.fetch) return Promise.resolve();
+    return root.fetch(REAL_URL, { headers: { accept: "application/json" } }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && j.ok && j.data && j.data.frames && j.data.frames.length) REAL = j.data; })
+      .catch(function () {});
+  }
+  function loadSnap() {
+    if (!REAL) return snapshot(simSec());
+    if (LIVE) return refreshLive().then(function () { return realSnapshot(simSec()); });
+    return realSnapshot(simSec());
+  }
+
   /* ---------- 演示条 ---------- */
   function fmt(s) { var x = Math.floor(s); return p2(Math.floor(x / 3600)) + ":" + p2(Math.floor(x / 60) % 60); }
   var bar = null;
   function renderBar() {
     if (!bar) return;
     var s = clock.sim, lbl = bar.querySelector ? bar.querySelector("[data-demo-clock]") : null;
-    if (lbl) lbl.textContent = "模拟 " + fmt(s) + (s >= END ? " · 已播完" : clock.paused ? " · 已暂停" : " · 1秒=" + clock.speed + "秒");
+    if (lbl && REAL) lbl.textContent = LIVE ? "实时 " + fmt(s) : "回放 " + fmt(s) + (s >= END ? " · 已播完" : clock.paused ? " · 已暂停" : " · 1秒=" + clock.speed + "秒");
+    else if (lbl) lbl.textContent = "模拟 " + fmt(s) + (s >= END ? " · 已播完" : clock.paused ? " · 已暂停" : " · 1秒=" + clock.speed + "秒");
     [].forEach.call((bar.querySelectorAll && bar.querySelectorAll("[data-speed]")) || [], function (b) {
       b.style.background = +b.getAttribute("data-speed") === clock.speed ? "#92400e" : "transparent";
       b.style.color = +b.getAttribute("data-speed") === clock.speed ? "#fff" : "#92400e";
@@ -144,11 +193,16 @@
     bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:7px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;font-size:12px;line-height:1.5";
     var btn = "border:1px solid #f59e0b;border-radius:6px;padding:1px 8px;font-size:12px;cursor:pointer;background:transparent;color:#92400e";
     bar.innerHTML = '<b style="background:#f59e0b;color:#fff;border-radius:6px;padding:1px 8px">演示数据</b>' +
-      '<span>模拟行情与交易时钟（09:15 起加速播放），不是真实行情，不请求任何行情接口</span>' +
+      (REAL ? '<span>' + (LIVE ? "实时集合竞价（真实行情）" : "真实行情回放：" + DAY + " 集合竞价到开盘") + '，异动只显示偏离最大的前 ' + (REAL.topN || 3) + ' 只，升级 SVIP 查看全部</span>'
+        : '<span>模拟行情与交易时钟（09:15 起加速播放），不是真实行情，不请求任何行情接口</span>') +
       '<span data-demo-clock style="font-weight:600"></span><span style="flex:1"></span>' +
-      '<button type="button" data-speed="60" style="' + btn + '">×60</button><button type="button" data-speed="120" style="' + btn + '">×120</button>' +
-      '<button type="button" data-speed="240" style="' + btn + '">×240</button><button type="button" data-demo="pause" style="' + btn + '">暂停/继续</button>' +
-      '<button type="button" data-demo="restart" style="' + btn + '">重播</button>';
+      (LIVE ? "" : REAL
+        ? '<button type="button" data-speed="4" style="' + btn + '">×4</button><button type="button" data-speed="8" style="' + btn + '">×8</button>' +
+          '<button type="button" data-speed="16" style="' + btn + '">×16</button><button type="button" data-demo="pause" style="' + btn + '">暂停/继续</button>' +
+          '<button type="button" data-demo="restart" style="' + btn + '">重播</button>'
+        : '<button type="button" data-speed="60" style="' + btn + '">×60</button><button type="button" data-speed="120" style="' + btn + '">×120</button>' +
+          '<button type="button" data-speed="240" style="' + btn + '">×240</button><button type="button" data-demo="pause" style="' + btn + '">暂停/继续</button>' +
+          '<button type="button" data-demo="restart" style="' + btn + '">重播</button>');
     bar.addEventListener("click", function (ev) {
       var t = ev.target, s = t && t.getAttribute && t.getAttribute("data-speed"), a = t && t.getAttribute && t.getAttribute("data-demo");
       if (s) api.setSpeed(+s); else if (a === "pause") (clock.paused ? api.resume : api.pause)(); else if (a === "restart") api.restart();
@@ -183,12 +237,13 @@
     demo: true,
     keyPrefix: KEY_PREFIX,
     now: now,
-    load: function () { return snapshot(simSec()); },
+    load: loadSnap,
+    real: REAL ? (LIVE ? "live" : "replay") : null,
     defaultSpeed: DEFAULT_SPEED,
-    interval: 1000,
+    interval: LIVE ? 3000 : 1000,
     tickMs: 250,
-    held: ["513100"],
-    rounds: ROUNDS,
+    held: REAL ? [] : ["513100"], // 真实行情下不放演示持仓
+    rounds: REAL ? [] : ROUNDS,
     heldLabel: "演示持仓"
   };
   mountBar();
