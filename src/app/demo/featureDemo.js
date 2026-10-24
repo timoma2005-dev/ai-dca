@@ -34,7 +34,13 @@ export const DEMO_FEATURES = {
   },
   fundSwitch: { ready: false, durationSec: 300, pitch: '' },
   notify: { ready: false, durationSec: 300, pitch: '' },
-  adminRadar: { ready: false, durationSec: 300, pitch: '' },
+  adminRadar: {
+    ready: true,
+    durationSec: 300,
+    pitch: '12 只纳指 QDII ETF 溢价排行、最优套利对与历史分位，每日收盘后自动计算。',
+    // 只读演示：mock 雷达快照 GET，计算按钮仍仅管理员可见（POST 被演示框架拦截）。
+    load: () => import('./fixtures/adminRadar.js'),
+  },
   adminAuction: { ready: false, durationSec: 300, pitch: '' },
   holdings: { ready: false, durationSec: 300, pitch: '' },
   tradePlans: { ready: false, durationSec: 300, pitch: '' },

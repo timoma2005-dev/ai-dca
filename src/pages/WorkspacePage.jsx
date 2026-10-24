@@ -22,7 +22,8 @@ import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, isPai
 import { resolveMenuIcon } from '../components/rbac/menu-icons.js';
 import { AccessGuardPage } from '../components/rbac/access-guard-page.jsx';
 import { FeatureDemo } from '../components/rbac/feature-demo.jsx';
-import { consumeDemoQuota, demoFeatureFor, demoQuotaFor, importDemoSessions, isFeatureDemoActive, readDemoSession } from '../app/demo/featureDemo.js';
+import { consumeDemoQuota, demoFeatureFor, demoQuotaFor, readDemoSession } from '../app/demo/featureDemo.js';
+import { useDemoSessionImport } from '../app/demo/useDemoSessionImport.js';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
@@ -166,6 +167,9 @@ function preserveTabQueryParams(url, tab) {
   });
   return url;
 }
+
+// 演示内容带入账号时的权限判断（模块级，保持引用稳定供 hook 依赖）。
+const canAccessDemoTab = (rbac, tab) => evaluateTabAccess(rbac, tab).status === 'ok';
 
 function TabLoadingFallback() {
   return (
@@ -417,13 +421,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   useEffect(() => {
     if (demoTab && demoTab !== activeTab) setDemoTab('');
   }, [activeTab, demoTab]);
-  // 注册 / 升级后：15 分钟内的演示内容自动带入账号（写回真实存储，由云同步推送）。
-  useEffect(() => {
-    if (!rbac?.loggedIn || isFeatureDemoActive()) return;
-    importDemoSessions({ canAccess: (tab) => evaluateTabAccess(rbac, tab).status === 'ok' }).then((imported) => {
-      if (imported.length) showToast({ title: '已保留演示内容', description: '演示中保存的内容已带入你的账号。', tone: 'emerald' });
-    }).catch(() => {});
-  }, [rbac]);
+  // 注册 / 升级后：15 分钟内的演示内容自动带入账号（写回真实存储，由云同步推送），await 完成后弹提示。
+  useDemoSessionImport(rbac, canAccessDemoTab);
 
   useEffect(() => {
     document.title = heroTitle;
