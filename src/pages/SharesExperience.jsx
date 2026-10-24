@@ -17,6 +17,7 @@ import {
   freshnessMessage
 } from '../app/etfPcfSharesClient.js';
 import { pcfDetailClient, pcfDetailSections, formatPcfShares } from '../app/etfPcfDetailClient.js';
+import { usePcfAtLimitCodes } from '../app/usePcfAtLimitCodes.js';
 import './shares-experience.css';
 import SharesBoard from './SharesBoard.jsx';
 
@@ -486,6 +487,7 @@ function SharesPanel() {
   const limitBaseline =
     data?.limitDate ||
     records.reduce((max, r) => (r.limitDate && (!max || r.limitDate > max) ? r.limitDate : max), null);
+  const atLimitCodes = usePcfAtLimitCodes(limitBaseline);
   const szCount = records.filter(isSz).length;
   // 净增对比条分母固定为完整快照有效 delta 的 max(1, abs)：筛选、搜索、排序不改变尺度。
   const maxAbsDelta = records.reduce(
@@ -735,7 +737,12 @@ function SharesPanel() {
                               {isSz(r) ? '深市' : '沪市'}
                             </span>
                           </span>
-                          <span className="symbol-name">{r.name}</span>
+                          <span className="symbol-name">
+                            {r.name}
+                            {atLimitCodes.has(r.code) && (
+                              <> <span className="market-tag sz" title="当日净申购达总限额（≥90%）">顶格</span></>
+                            )}
+                          </span>
                         </td>
                         <td className="sh-delta">
                           <DeltaSharesCell row={r} maxAbsDelta={maxAbsDelta} />

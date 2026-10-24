@@ -215,10 +215,11 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
   const bundle = await build({
     stdin: { contents: `import React from 'react';
       import { createRoot } from 'react-dom/client';
-      import SharesExperience from './src/pages/SharesExperience.jsx';
+      import SharesBoardExperience, { LegacySharesPanel } from './src/pages/SharesExperience.jsx';
       import Admin from './src/pages/AdminRadarExperience.jsx';
       import { sharesClient } from './src/app/etfPcfSharesClient.js';
       import { pcfDetailClient } from './src/app/etfPcfDetailClient.js';
+      const SharesExperience = () => location.search.includes('old-panel') ? <LegacySharesPanel /> : <SharesBoardExperience />;
       const data = ${JSON.stringify(data)};
       const calm = ${JSON.stringify(calm)};
       const legacy = ${JSON.stringify(legacy)};
@@ -229,13 +230,17 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
         const q = location.search;
         if (q.includes('empty')) return { promise: Promise.resolve({ state: 'empty' }), release() {} };
         if (q.includes('error')) return { promise: Promise.resolve({ state: 'error' }), release() {} };
-        const snapshot = q.includes('legacy') ? legacy : window.__calm ? calm : data;
+        const snapshot = q.includes('legacy') ? legacy : window.__calm ? calm : window.__snapshot;
         return { promise: Promise.resolve({ state: q.includes('stale') ? 'stale' : 'partial', data: snapshot, receivedAt: Date.now() }), release() {} };
       };
       function TestWorkspace() {
         const params = new URLSearchParams(location.search);
         const activeTab = params.get('tab') || 'shares';
         const isAdminUser = !params.has('denied');
+        const activeAccess = !isAdminUser && activeTab === 'adminRadar' && location.hash !== '#shares'
+          ? { status: 'forbidden' } : { status: 'ok' };
+        const WORKSPACE_TAB_META = {};
+        const AccessGuardPage = () => <p role="alert">需要 VIP 权限</p>;
         const links = {};
         const inPagesDir = false;
         const AdminRadarExperience = () => <Admin session={{ isAdmin: isAdminUser }} />;
@@ -264,18 +269,26 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
   const base = `http://127.0.0.1:${server.address().port}`;
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
-  async function setup(t, query = '', width = 1280) {
+  async function setup(t, query = '', width = 1280, { events = [], eventsMode = 'ready' } = {}) {
     // 每例独立 JS 模块、localStorage、客户端 memory/inflight 与网络计数。
     const context = await browser.newContext({ viewport: { width, height: 844 }, serviceWorkers: 'block' });
     t.after(() => context.close());
     await context.addInitScript(() => localStorage.removeItem('etf-shares:view-mode'));
     const page = await context.newPage();
+    page.on('pageerror', error => console.error('[shares-ui]', error.message));
     page.setDefaultTimeout(10000);
-    const requests = [], escaped = [], pending = [], failed = [];
+    const requests = [], escaped = [], pending = [], failed = [], eventRequests = [], eventPending = [];
     page.on('requestfailed', request => failed.push(request.url()));
-    const state = { mode: 'ready' };
+    const state = { mode: 'ready', eventsMode, events };
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
+      if (url.pathname === '/api/etf-pcf-events') {
+        const date = url.searchParams.get('date');
+        eventRequests.push(date);
+        if (state.eventsMode === 'pending') { eventPending.push({ route, date }); return; }
+        if (state.eventsMode === 'error') return route.fulfill({ status: 503, json: {} });
+        return route.fulfill({ json: { source: 'szse_pcf_events', date, events: state.events } });
+      }
       if (url.pathname === '/api/etf-pcf-limit') {
         const code = url.searchParams.get('code'), date = url.searchParams.get('date');
         requests.push({ code, date });
@@ -314,8 +327,83 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
       await page.getByRole('button', { name: '关闭', exact: true }).click();
       await page.getByRole('dialog').waitFor({ state: 'detached' });
     };
-    return { page, card, requests, state, pending, failed, open, close };
+    return { page, card, requests, state, pending, failed, open, close, eventRequests, eventPending };
   }
+
+  const atLimitEvent = code => ({ code, signal_type: 'net_creation_near_total_limit', basis: 'total' });
+  const badge = '[title="当日净申购达总限额（≥90%）"]';
+
+  await t.test('顶格事件按限额基准日标记对应基金，卡片、表格、手机复用且不改份额或列', async t => {
+    const { page, card, requests, eventRequests } = await setup(t, '', 1280, {
+      events: [atLimitEvent('159632'), { code: '159501', signal_type: 'limit_relaxation' }]
+    });
+    await expect(card('159632').locator(badge)).toHaveText('顶格');
+    assert.deepEqual(eventRequests, ['2026-10-13'], 'use top-level limit date, not statistics date or maximum row date');
+    assert.equal(await page.locator(badge).count(), 1);
+    assert.equal(await card('159501').locator(badge).count(), 0, 'atLimit row field alone must not add the event badge');
+    assert.equal(await card('159632').locator('.nx-delta').textContent(), '-100万份');
+    await page.getByRole('button', { name: '表格', exact: true }).click();
+    const row = page.locator('.nx-table tbody tr').filter({ hasText: '159632' });
+    await expect(row.locator('.nx-td-name').locator(badge)).toHaveText('顶格');
+    assert.equal(await row.locator('td').count(), 9);
+    assert.equal(await page.locator('.nx-table tbody tr').filter({ hasText: '159501' }).locator(badge).count(), 0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileRow = page.locator('.nx-m-row').filter({ hasText: '159632' });
+    await expect(mobileRow.locator('.nx-m-l1').locator(badge)).toHaveText('顶格');
+    assert.equal(await page.locator(badge).count(), 1);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    assert.deepEqual(eventRequests, ['2026-10-13']);
+    assert.equal(requests.length, 0, 'event badges must not load PCF detail');
+  });
+
+  await t.test('事件请求与份额加载解耦；基准日变化即清掉旧标记并重拉，旧快照用各行最大限额日', async t => {
+    const { page, card, state, eventRequests, eventPending } = await setup(t, '', 1280, {
+      events: [atLimitEvent('159632')], eventsMode: 'pending'
+    });
+    await card('159632').waitFor();
+    await expect.poll(() => eventPending.length).toBe(1);
+    assert.equal(await page.locator(badge).count(), 0);
+    assert.equal(await page.evaluate(() => window.__sharesSubs), 1);
+    await eventPending[0].route.fulfill({ json: { source: 'szse_pcf_events', date: '2026-10-13', events: state.events } });
+    await expect(card('159632').locator(badge)).toHaveText('顶格');
+    await page.evaluate(() => { delete window.__snapshot.limitDate; });
+    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await card('159632').waitFor();
+    await expect.poll(() => eventPending.length).toBe(2);
+    assert.deepEqual(eventRequests, ['2026-10-13', '2026-10-16']);
+    assert.equal(await page.locator(badge).count(), 0);
+    await eventPending[1].route.fulfill({ json: { source: 'szse_pcf_events', date: '2026-10-16', events: [atLimitEvent('159659')] } });
+    await expect(card('159659').locator(badge)).toHaveText('顶格');
+    assert.equal(await card('159632').locator(badge).count(), 0);
+    await page.evaluate(() => {
+      for (const row of window.__snapshot.records) row.limitDate = null;
+    });
+    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await card('159632').waitFor();
+    assert.equal(await page.locator(badge).count(), 0);
+    assert.equal(eventRequests.length, 2, 'no baseline means no request');
+  });
+
+  for (const eventsMode of ['ready', 'error']) {
+    await t.test(`无事件或请求失败静默降级（${eventsMode}），页面继续显示全部行`, async t => {
+      const { page, card, eventRequests, requests } = await setup(t, '', 1280, { eventsMode });
+      await card('159632').waitFor();
+      await expect.poll(() => eventRequests.length).toBe(1);
+      assert.equal(await page.locator('.nx-card').count(), 13);
+      assert.equal(await page.locator(badge).count(), 0);
+      assert.equal(await page.getByRole('alert').count(), 0);
+      assert.equal(requests.length, 0);
+    });
+  }
+
+  await t.test('保留的旧表格也只在事件命中的基金名称旁显示顶格', async t => {
+    const { page, eventRequests } = await setup(t, '?old-panel', 1280, { events: [atLimitEvent('159632')] });
+    const row = code => page.locator('.shares-row').filter({ hasText: code });
+    await expect(row('159632').locator('.symbol-name').locator(badge)).toHaveText('顶格');
+    assert.equal(await row('159501').locator(badge).count(), 0);
+    assert.equal(await row('159632').locator('td').count(), 5);
+    assert.deepEqual(eventRequests, ['2026-10-13']);
+  });
 
   await t.test('直接映射：四类限额、日期、统计；替代：九列表格、结论排序、delta/总份额/额度用满', async t => {
     const { page, card, requests } = await setup(t);
@@ -584,7 +672,7 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
       history.replaceState(history.state, '', '#radar');
       dispatchEvent(new HashChangeEvent('hashchange'));
     });
-    await page.getByText('持仓兜底', { exact: true }).waitFor();
+    await page.getByText('需要 VIP 权限', { exact: true }).waitFor();
     assert.equal(await page.locator('.shares-panel').count(), 0);
     assert.equal(requests.length, 0);
   });

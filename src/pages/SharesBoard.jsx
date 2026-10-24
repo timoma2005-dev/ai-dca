@@ -12,6 +12,7 @@ import { Search, RefreshCw, Inbox, CircleAlert, X } from 'lucide-react';
 import { previousSession } from '../../shared/etfPcfSharesSchema.js';
 import { sharesClient, shanghaiAccessDay } from '../app/etfPcfSharesClient.js';
 import { pcfDetailClient } from '../app/etfPcfDetailClient.js';
+import { usePcfAtLimitCodes } from '../app/usePcfAtLimitCodes.js';
 import './shares-board.css';
 
 const isSz = (r) => r.code.startsWith('159');
@@ -230,7 +231,11 @@ function LimitCell({ label, after, change }) {
   );
 }
 
-function BoardCard({ row, calendar, onOpen, onOverall }) {
+function AtLimitBadge() {
+  return <span className="nx-pill tight" title="当日净申购达总限额（≥90%）">顶格</span>;
+}
+
+function BoardCard({ row, calendar, onOpen, onOverall, atLimit }) {
   const info = useReportOverall(row, onOverall, calendar);
   const ov = info.overall;
   const delta = deltaView(row.deltaShares, '无变化');
@@ -238,9 +243,12 @@ function BoardCard({ row, calendar, onOpen, onOverall }) {
     <article className={`nx-card ${rowClass(ov)}`}>
       <div className="nx-card-head">
         <div className="nx-head-row">
-          <span className="nx-name" title={row.name}>
-            {row.name}
-          </span>
+          <div className="nx-title-line">
+            <span className="nx-name" title={row.name}>
+              {row.name}
+            </span>
+            {atLimit && <AtLimitBadge />}
+          </div>
           <span className={`nx-pill ${CLS[ov] || ''}`}>{overallLabel(ov)}</span>
         </div>
         <CodePills row={row} />
@@ -269,14 +277,14 @@ function BoardCard({ row, calendar, onOpen, onOverall }) {
   );
 }
 
-function BoardRow({ row, calendar, onOpen, onOverall }) {
+function BoardRow({ row, calendar, onOpen, onOverall, atLimit }) {
   const info = useReportOverall(row, onOverall, calendar);
   const ov = info.overall;
   const delta = deltaView(row.deltaShares, '无变化');
   return (
     <tr className={rowClass(ov)}>
       <td>
-        <div className="nx-td-name">{row.name}</div>
+        <div className="nx-td-name">{row.name}{atLimit && <> <AtLimitBadge /></>}</div>
         <CodePills row={row} />
       </td>
       <td>
@@ -315,7 +323,7 @@ function BoardRow({ row, calendar, onOpen, onOverall }) {
 
 // 手机端三行条目：代码+名称/结论；限额（变动在前）；盘前份额变化 · 额度用满 · 总份额。
 const compact = (s) => s.replace(/,/g, '').replace(/份$/, '');
-function MobileRow({ row, calendar, shareRange, onOpen, onOverall }) {
+function MobileRow({ row, calendar, shareRange, onOpen, onOverall, atLimit }) {
   const info = useReportOverall(row, onOverall, calendar);
   const ov = info.overall;
   const moved = [],
@@ -349,10 +357,13 @@ function MobileRow({ row, calendar, shareRange, onOpen, onOverall }) {
   return (
     <button type="button" className={`nx-m-row ${rowClass(ov)}`} onClick={onOpen} aria-haspopup="dialog">
       <div className="nx-m-l1">
-        <span className="nx-m-name">
-          <b>{row.code}</b>
-          {` ${row.name}`}
-        </span>
+        <div className="nx-title-line">
+          <span className="nx-m-name">
+            <b>{row.code}</b>
+            {` ${row.name}`}
+          </span>
+          {atLimit && <AtLimitBadge />}
+        </div>
         <span className={`nx-m-status ${CLS[ov] || ''}`}>{overallLabel(ov)}</span>
       </div>
       <div className="nx-m-l2">
@@ -564,6 +575,7 @@ export default function SharesBoard({ DetailDrawer }) {
   const refresh = () => setTick((x) => x + 1);
   const limitDate =
     (c && c.limitDate) || rows.reduce((a, r) => (r.limitDate && (!a || r.limitDate > a) ? r.limitDate : a), null);
+  const atLimitCodes = usePcfAtLimitCodes(limitDate);
   const prevLimitDate = (c && c.prevLimitDate) || (limitDate && c ? previousSession(limitDate, c.calendar) : null);
   const nTight = rows.filter((r) => ov[r.code] === 'tightened' || ov[r.code] === 'mixed').length;
   const nRelax = rows.filter((r) => ov[r.code] === 'relaxed' || ov[r.code] === 'mixed').length;
@@ -623,6 +635,7 @@ export default function SharesBoard({ DetailDrawer }) {
                 shareRange={`${md(c.prevDate)}→${md(c.date)}`}
                 onOpen={open(r)}
                 onOverall={onOverall}
+                atLimit={atLimitCodes.has(r.code)}
               />
             ))}
           </div>
@@ -736,7 +749,7 @@ export default function SharesBoard({ DetailDrawer }) {
               </thead>
               <tbody>
                 {list.map((r) => (
-                  <BoardRow key={r.code} row={r} calendar={c.calendar} onOpen={open(r)} onOverall={onOverall} />
+                  <BoardRow key={r.code} row={r} calendar={c.calendar} onOpen={open(r)} onOverall={onOverall} atLimit={atLimitCodes.has(r.code)} />
                 ))}
               </tbody>
             </table>
@@ -744,7 +757,7 @@ export default function SharesBoard({ DetailDrawer }) {
         ) : (
           <div className="nx-grid">
             {list.map((r) => (
-              <BoardCard key={r.code} row={r} calendar={c.calendar} onOpen={open(r)} onOverall={onOverall} />
+              <BoardCard key={r.code} row={r} calendar={c.calendar} onOpen={open(r)} onOverall={onOverall} atLimit={atLimitCodes.has(r.code)} />
             ))}
           </div>
         ))}
