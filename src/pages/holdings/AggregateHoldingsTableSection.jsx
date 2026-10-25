@@ -10,6 +10,7 @@ import {
   formatSignedPercent
 } from '../../app/holdingsHelpers.js';
 import { cx, primaryButtonClass } from '../../components/experience-ui.jsx';
+import { FollowAlongHint } from '../../components/onboarding/FollowAlongHint.jsx';
 
 export function AggregateHoldingsTableSection({
   table,
@@ -34,7 +35,7 @@ export function AggregateHoldingsTableSection({
         <p className="mb-6 max-w-xs text-sm leading-6 text-slate-500">{aggregates.length === 0 ? '添加你的第一笔交易，开始追踪投资组合收益与风险敞口。' : emptyHint}</p>
         {aggregates.length === 0 ? (
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <button type="button" className={primaryButtonClass} onClick={onCreateFirstTransaction}>
+            <button type="button" className={primaryButtonClass} data-onboarding="holding-create" onClick={onCreateFirstTransaction}>
               <Plus className="h-4 w-4" />录入第一笔交易
             </button>
             {onInstallDemoData ? (
@@ -48,6 +49,7 @@ export function AggregateHoldingsTableSection({
             ) : null}
           </div>
         ) : null}
+        {aggregates.length === 0 ? <div className="mt-4"><FollowAlongHint flow="holdings" text="不知道怎么填？跟着做，约 1 分钟" /></div> : null}
       </div>
     );
   }

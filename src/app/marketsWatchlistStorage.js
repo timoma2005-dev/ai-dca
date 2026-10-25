@@ -1,3 +1,4 @@
+import { markOnboardingTask } from './onboarding/state.js';
 // Watchlist (localStorage). Stored per market for convenience.
 const WATCHLIST_KEY = 'markets:watchlist:v1';
 const WATCHLIST_ETF_DEFAULTS_VERSION = 7;
@@ -268,6 +269,7 @@ export function addToWatchlist(market, symbol, listId = null) {
   target.updatedAt = new Date().toISOString();
   const saved = normalizeWatchlist({ ...next, lists, activeListId: target.id });
   saveWatchlist(saved);
+  markOnboardingTask('watchlist');
   return saved;
 }
 

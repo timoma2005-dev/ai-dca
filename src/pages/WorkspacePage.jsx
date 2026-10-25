@@ -25,6 +25,9 @@ import { FeatureDemo } from '../components/rbac/feature-demo.jsx';
 import { consumeDemoQuota, demoFeatureFor, demoQuotaFor, readDemoSession } from '../app/demo/featureDemo.js';
 import { useDemoSessionImport } from '../app/demo/useDemoSessionImport.js';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
+import { GettingStartedEntry, GettingStartedSlot } from '../components/onboarding/GettingStartedSlot.jsx';
+import { StepHintHost } from '../components/onboarding/StepHintHost.jsx';
+import { ONBOARDING_OPEN_EVENT, isOnboardingHintActive, writeOnboardingState } from '../app/onboarding/state.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
 // 各主 tab 使用 React.lazy 按需加载，在 Vite 中会被拆成独立 chunk。
@@ -247,6 +250,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   useEffect(() => {
     function handleConversionPrompt(event) {
       if (loadCloudSession()?.accessToken) return;
+      // 新手入门步骤提示进行中时不叠加注册提示（同一时刻只出现一个主要提示）。
+      if (isOnboardingHintActive()) return;
       setConversionPrompt(event?.detail || null);
     }
     window.addEventListener(CONVERSION_PROMPT_EVENT, handleConversionPrompt);
@@ -264,6 +269,16 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   useEffect(() => {
     if (cloudSession?.accessToken) setConversionPrompt(null);
   }, [cloudSession?.accessToken]);
+
+  // 账号菜单 / 侧栏「新手入门」：重新展开首页任务卡并回到首页。
+  useEffect(() => {
+    function handleOpenOnboarding() {
+      writeOnboardingState({ dismissed: false, celebrated: false });
+      window.dispatchEvent(new CustomEvent('workspace:navigate', { detail: { tab: 'home' } }));
+    }
+    window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpenOnboarding);
+    return () => window.removeEventListener(ONBOARDING_OPEN_EVENT, handleOpenOnboarding);
+  }, []);
 
   useEffect(() => {
     function handleHashChange() {
@@ -628,7 +643,20 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     }
     switch (activeTab) {
       case 'home':
-        return <CnHomeExperience {...sharedProps} />;
+        return (
+          <CnHomeExperience
+            {...sharedProps}
+            topSlot={(
+              <GettingStartedSlot
+                loggedIn={Boolean(cloudSession?.accessToken)}
+                accessOf={tabAccessOf}
+                demoActive={demo}
+                onRegister={() => openAccountAuth({ mode: 'register', source: 'onboarding', trigger: 'home' })}
+                onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+              />
+            )}
+          />
+        );
       case 'articles':
         return <ArticlesExperience {...sharedProps} />;
       case 'tradePlans':
@@ -681,6 +709,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         onSelectNav={handleSelectTab}
         showMobileBar={false}
         autoCollapseOnActiveKeyChange
+        sidebarFooter={cloudSession?.accessToken ? <GettingStartedEntry loggedIn accessOf={tabAccessOf} variant="sidebar" /> : null}
       >
         {demoMeta ? (
           <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
@@ -783,6 +812,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         </Suspense>
       ) : null}
       <ConversionPromptCard prompt={conversionPrompt} onClose={() => setConversionPrompt(null)} />
+      <StepHintHost paused={demoActive || mobileBottomSheetHidden} />
       {showQrModal ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/70 p-4" role="dialog" aria-modal="true" aria-label="Buy me coffee 二维码" onClick={() => setShowQrModal(false)}>
           <div className="relative w-full max-w-sm" onClick={(e) => e.stopPropagation()}>

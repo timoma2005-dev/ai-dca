@@ -12,6 +12,7 @@ import { apiUrlWithFallback, fetchWithFallback } from './apiBase.js';
 import { deleteAccountResourceItem, fetchAccountResource, putAccountResourceItem } from './accountApi.js';
 import { readMarketAlerts, readHoldingAlerts } from './alertRules.js';
 import { loadCloudSession } from './authClient.js';
+import { markOnboardingTask } from './onboarding/state.js';
 
 const NOTIFY_ENDPOINT = '/api/notify';
 const NOTIFY_CLIENT_CONFIG_KEY = 'aiDcaNotifyClientConfig';
@@ -477,6 +478,7 @@ export function sendNotifyTest(payload = {}) {
     ? payload.serverChan3
     : (serverChan3Uid && serverChan3SendKey ? { uid: serverChan3Uid, sendKey: serverChan3SendKey } : undefined);
 
+  // 测试请求成功即视为「接通通知」完成（是否真正收到由用户自行确认）。
   return requestNotify('/test', {
     method: 'POST',
     headers: {
@@ -490,6 +492,9 @@ export function sendNotifyTest(payload = {}) {
       summary: String(payload.summary || '测试通知'),
       ruleId: String(payload.ruleId || 'test')
     })
+  }).then((result) => {
+    markOnboardingTask('notify');
+    return result;
   });
 }
 

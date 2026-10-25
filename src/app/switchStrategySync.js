@@ -5,6 +5,8 @@
 import { demoAccessToken } from './demo/demoMode.js';
 import { loadCloudSession } from './authClient.js';
 import { apiUrlWithFallback, fetchWithFallback } from './apiBase.js';
+import { markOnboardingTask } from './onboarding/state.js';
+import { hasSavedSwitchRule } from './onboarding/signals.js';
 
 const NOTIFY_ENDPOINT = '/api/notify';
 const LOCAL_CACHE_KEY = 'aiDcaSwitchStrategyWorkerConfig';
@@ -448,6 +450,7 @@ export async function saveSwitchConfigToWorker(config) {
   });
   const stored = normalizeSwitchConfigShape(payload?.config || next);
   writeSwitchConfigCache(stored);
+  if (hasSavedSwitchRule(stored)) markOnboardingTask('switch');
   const candidateCount = (stored.rules || []).reduce((acc, rule) => {
     const benchSet = new Set(rule.benchmarkCodes || []);
     return acc + (rule.enabledCodes || []).filter((c) => c && !benchSet.has(c)).length;

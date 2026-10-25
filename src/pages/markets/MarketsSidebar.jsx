@@ -270,6 +270,7 @@ export function MarketsSidebar({
                 <button
                   type="button"
                   onClick={onOpenSectorSearch}
+                  data-onboarding="market-search"
                   aria-label="搜索并添加自选"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--market-text-muted)] hover:bg-[var(--market-surface-muted)]"
                 >
@@ -435,6 +436,7 @@ export function MarketsSidebar({
                     type="button"
                     title="搜索并添加自选"
                     aria-label="搜索并添加自选"
+                    data-onboarding="market-search"
                     onClick={onOpenSectorSearch}
                     className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--market-text-muted)] hover:bg-white"
                   >

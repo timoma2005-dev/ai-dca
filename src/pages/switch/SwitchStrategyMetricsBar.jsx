@@ -66,6 +66,7 @@ export function SwitchStrategyMetricsBar({
         <button
           type="button"
           onClick={onCreate}
+          data-onboarding="switch-create"
           className="shrink-0 flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg text-xs font-medium shadow-xs shadow-indigo-200 transition-all cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />

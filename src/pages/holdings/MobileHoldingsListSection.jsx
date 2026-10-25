@@ -10,6 +10,7 @@ import {
   formatSignedPercent,
 } from '../../app/holdingsHelpers.js';
 import { cx } from '../../components/experience-ui.jsx';
+import { FollowAlongHint } from '../../components/onboarding/FollowAlongHint.jsx';
 
 const KIND_FILTERS = [
   { key: 'all', label: '全部' },
@@ -134,6 +135,7 @@ function MobileEmptyState({ hasRows, onCreateFirstTransaction, onInstallDemoData
           <button
             type="button"
             onClick={onCreateFirstTransaction}
+            data-onboarding="holding-create"
             className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
           >
             录入第一笔交易
@@ -149,6 +151,7 @@ function MobileEmptyState({ hasRows, onCreateFirstTransaction, onInstallDemoData
           ) : null}
         </div>
       ) : null}
+      {!hasRows ? <div className="mt-4"><FollowAlongHint flow="holdings" text="不知道怎么填？跟着做，约 1 分钟" /></div> : null}
     </div>
   );
 }

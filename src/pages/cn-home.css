@@ -392,3 +392,8 @@
   .cn-home-quota-trend{margin:0 24px 16px;padding:14px 16px}
   .cn-home-trend-row{font-size:14px}
 }
+
+/* 新手入门任务卡：手机在首屏顶部，桌面两栏布局时横跨两列 */
+.cn-home-onboarding{margin:0 0 14px}
+@media (min-width:1024px){.cn-home-onboarding{margin:0}}
+@media (min-width:1280px){.cn-home-onboarding{grid-column:1 / -1}}

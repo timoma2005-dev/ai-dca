@@ -250,6 +250,7 @@ export function SwitchStrategyRuleModal({
                     setAutoError('');
                     setAutoMessage('');
                   }}
+                  data-onboarding="switch-autofill"
                   className="shrink-0 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 shadow-xs"
                 >
                   {autoPanelOpen ? '收起' : '自动填充'}
@@ -397,7 +398,7 @@ export function SwitchStrategyRuleModal({
 
         <DialogFooter className="border-t border-slate-100 px-5 py-4">
           <button type="button" onClick={onClose} className={secondaryButtonClass}>取消</button>
-          <button ref={saveButtonRef} type="button" onClick={submit} disabled={Boolean(validation) || saving} className={primaryButtonClass}>
+          <button ref={saveButtonRef} type="button" data-onboarding="switch-save" onClick={submit} disabled={Boolean(validation) || saving} className={primaryButtonClass}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             保存方案
           </button>

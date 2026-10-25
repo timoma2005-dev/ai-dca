@@ -18,6 +18,7 @@ import { SwitchStrategyTable } from './SwitchStrategyTable.jsx';
 import { SwitchStrategyRuleModal } from './SwitchStrategyRuleModal.jsx';
 import { SwitchDemoTeaserCard } from './SwitchDemoTeaserCard.jsx';
 import { useDemoActive, useFeatureDemo } from '../../components/rbac/demo-lock.jsx';
+import { FollowAlongHint } from '../../components/onboarding/FollowAlongHint.jsx';
 
 function isFundCode(value) {
   return /^\d{6}$/.test(String(value || '').trim());
@@ -301,6 +302,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
   return (
     <div className="space-y-3 sm:space-y-4">
       {demoActive ? <SwitchDemoTeaserCard onUpgrade={featureDemo?.onUpgrade} /> : null}
+      {!demoActive && rows.length === 0 ? <FollowAlongHint flow="switch" text="第一次用？跟着做，约 1 分钟设好一个切换提醒" /> : null}
       {/* 统计概览与操作栏 */}
       <SwitchStrategyMetricsBar
         total={rows.length}
