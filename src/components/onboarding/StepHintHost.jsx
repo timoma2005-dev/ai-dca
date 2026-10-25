@@ -50,7 +50,10 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
   // requireInputs：目标里标了 data-onboarding-required 的输入框都填了，才能点「下一步」。
   const [inputsReady, setInputsReady] = useState(true);
   const flow = run ? ONBOARDING_FLOWS[run.flowId] : null;
-  const step = flow ? flow.steps[run.index] : null;
+  // run.steps：选了分支后的实际步骤（见 branches）；没有就用 catalog 的。
+  const steps = run?.steps || flow?.steps || [];
+  const step = flow ? steps[run.index] : null;
+  const autoAdvancedRef = useRef('');
   // 付费功能演示进行中只展示专为演示写的引导（inDemo），其它引导暂停。
   const paused = pausedProp || (demoActive && !flow?.inDemo);
 
@@ -62,11 +65,13 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
     });
   }, []);
 
-  const next = useCallback(() => {
+  const next = useCallback((branchKey) => {
     setRun((current) => {
       if (!current) return null;
-      const steps = ONBOARDING_FLOWS[current.flowId]?.steps || [];
-      if (current.index + 1 < steps.length) return { ...current, index: current.index + 1 };
+      let steps = current.steps || ONBOARDING_FLOWS[current.flowId]?.steps || [];
+      const branch = steps[current.index]?.branches?.[branchKey];
+      if (branch) steps = [...steps.slice(0, current.index + 1), ...branch];
+      if (current.index + 1 < steps.length) return { ...current, steps, index: current.index + 1 };
       trackFeatureEvent('onboarding', 'flow_end', { flowId: current.flowId, stepIndex: current.index, reason: 'complete', version: 2 });
       emitComplete(current);
       return null;
@@ -78,6 +83,7 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
       const flowId = event?.detail?.flow;
       if (!flowId || !ONBOARDING_FLOWS[flowId]) return;
       trackFeatureEvent('onboarding', 'flow_start', { flowId, version: 2 });
+      autoAdvancedRef.current = "";
       setRun({ flowId, index: 0, startedAt: Date.now() });
     }
     window.addEventListener(ONBOARDING_START_EVENT, handleStart);
@@ -138,25 +144,35 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         const rect = el.getBoundingClientRect();
         setPlacementBox((prev) => (prev && Math.abs(prev.top - rect.top) < 1 && Math.abs(prev.left - rect.left) < 1 && Math.abs(prev.height - rect.height) < 1 ? prev : rect));
       }
+      const vv = window.visualViewport;
+      const kbOpen = Boolean(vv && vv.height < window.innerHeight * 0.75);
+      setKeyboardOpen(kbOpen);
       if (step.requireInputs) {
         const required = el ? [...el.querySelectorAll('[data-onboarding-required="true"]')].filter(isVisible) : [];
-        setInputsReady(required.every((input) => String(input.value || '').trim()));
+        const ready = required.length > 0 && required.every((input) => String(input.value || '').trim());
+        setInputsReady(ready || required.length === 0);
+        // 填好且离开输入框（手机上收起键盘）后自动进入下一步。
+        if (ready && step.advanceWhenFilled && !kbOpen && !required.includes(document.activeElement) && autoAdvancedRef.current !== step.id) {
+          autoAdvancedRef.current = step.id;
+          next();
+          return;
+        }
       } else {
         setInputsReady(true);
       }
-      const vv = window.visualViewport;
-      setKeyboardOpen(Boolean(vv && vv.height < window.innerHeight * 0.75));
       frame = window.setTimeout(tick, 200);
     };
     frame = window.setTimeout(tick, 200);
     return () => window.clearTimeout(frame);
-  }, [step, paused]);
+  }, [step, paused, next]);
 
   // 用户点了目标本身：原点击照常生效，教程进入下一步。
   useEffect(() => {
     if (!step?.advanceOnClick || paused) return undefined;
     function handleClick(event) {
-      if (event.target?.closest?.(`[data-onboarding="${step.target}"]`)) window.setTimeout(next, 0);
+      if (!event.target?.closest?.(`[data-onboarding="${step.target}"]`)) return;
+      const branchKey = event.target.closest('[data-onboarding-branch]')?.getAttribute('data-onboarding-branch') || '';
+      window.setTimeout(() => next(branchKey), 0);
     }
     document.addEventListener('click', handleClick, true);
     return () => document.removeEventListener('click', handleClick, true);
@@ -177,7 +193,7 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
 
   if (!visible || typeof document === 'undefined') return null;
   const pos = computeHintPosition(placementBox, { width: window.innerWidth, height: window.innerHeight }, { placement: step.placement });
-  const total = flow.steps.length;
+  const total = steps.length;
   const style = { left: pos.left, width: pos.width, pointerEvents: 'auto' };
   if (pos.mode === 'above') style.bottom = pos.bottom; else style.top = pos.top;
   const last = run.index + 1 >= total;
@@ -209,14 +225,14 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         </div>
         <div className="mt-0.5 text-sm font-extrabold">{step.title}</div>
         <p className="mt-1 text-xs leading-5 text-slate-300">{step.body}</p>
-        {step.requireInputs && !inputsReady ? <p className="mt-1 text-[11px] font-semibold text-amber-300">先把输入框填好，再点「下一步」</p> : null}
+        {step.requireInputs && !inputsReady ? <p className="mt-1 text-[11px] font-semibold text-amber-300">先把输入框填好</p> : null}
         <div className="mt-2.5 flex items-center justify-between">
           <button type="button" className="text-xs text-slate-400 hover:text-slate-200" onClick={() => end('later')}>稍后继续</button>
           <button
             type="button"
             className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-extrabold hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={Boolean(step.requireInputs) && !inputsReady}
-            onClick={step.advanceOnClick ? () => setQuietStepId(step.id) : last ? () => end('complete') : next}
+            onClick={step.advanceOnClick ? () => setQuietStepId(step.id) : last ? () => end('complete') : () => next()}
           >
             {step.advanceOnClick || last ? '知道了' : '下一步'}
           </button>

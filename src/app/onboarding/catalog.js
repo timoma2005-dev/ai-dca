@@ -79,6 +79,30 @@ export const USER_TASKS = [
 // 每个步骤指向一个 data-onboarding 目标；advanceOnClick 表示用户点了目标即进入下一步。
 // 步骤只做讲解，从不替用户保存、生成或发送任何东西。
 // 接通手机通知：选渠道 → 填 Key → 发送测试（真实账号与演示共用）。
+// 通知教程：第一步选渠道后，按点的渠道（data-onboarding-branch）接上对应的步骤。
+const KEY_FILLED = { requireInputs: true, advanceWhenFilled: true, waitMs: 15000 };
+const NOTIFY_BRANCHES = {
+  ios: [
+    { id: 'notify.bark.key', target: 'notify-key', title: '第二步：粘贴 Bark 链接', body: '打开 Bark App，复制首页的推送链接（https://api.day.app/…）粘贴进来。填好会自动进入下一步。', ...KEY_FILLED },
+    { id: 'notify.bark.test', target: 'notify-test', title: '第三步：发送测试', body: '点「发送测试」，iPhone 收到推送就说明接通了。', advanceOnClick: true, waitMs: 15000 },
+    { id: 'notify.bark.save', target: 'notify-save', title: '最后：保存并连接', body: '点「保存并连接」，之后溢价拉开的换基信号都会推到这台 iPhone。', advanceOnClick: true, waitMs: 15000 }
+  ],
+  serverchan3: [
+    { id: 'notify.sc3.key', target: 'notify-key', title: '第二步：填 UID 和 SendKey', body: '在 Server酱³ App 里找到 UID 和 SendKey，两个都填上。填好会自动进入下一步。', ...KEY_FILLED },
+    { id: 'notify.sc3.test', target: 'notify-test', title: '第三步：发送测试', body: '点「发送测试」，手机收到推送就说明接通了。', advanceOnClick: true, waitMs: 15000 },
+    { id: 'notify.sc3.save', target: 'notify-save', title: '最后：保存并连接', body: '点「保存并连接」，之后溢价拉开的换基信号都会推到这台手机。', advanceOnClick: true, waitMs: 15000 }
+  ],
+  email: [
+    { id: 'notify.email.address', target: 'notify-email-address', title: '第二步：填邮箱地址', body: 'QQ、163、Gmail 都可以。填好会自动进入下一步。', ...KEY_FILLED },
+    { id: 'notify.email.send', target: 'notify-send-code', title: '第三步：发送验证码', body: '点「发送验证码」，验证码会发到你刚填的邮箱。', advanceOnClick: true, waitMs: 15000 },
+    { id: 'notify.email.code', target: 'notify-email-code', title: '第四步：填验证码', body: '把邮件里的 6 位验证码填进来（演示里随便填 6 位数字）。', ...KEY_FILLED },
+    { id: 'notify.email.verify', target: 'notify-test', title: '最后：验证并开启', body: '点「验证并开启」，之后溢价拉开的换基信号都会发到这个邮箱。', advanceOnClick: true, waitMs: 15000 }
+  ],
+  pc: [
+    { id: 'notify.pc.grant', target: 'notify-pc', title: '第二步：授权浏览器通知', body: '点「授权浏览器通知」并在浏览器弹窗里允许，再点「发送测试」看看。', waitMs: 15000 }
+  ]
+};
+
 const NOTIFY_STEPS = [
   {
     id: 'notify.channel',
@@ -86,25 +110,19 @@ const NOTIFY_STEPS = [
     title: '第一步：选一种通知方式',
     body: '安卓手机选 Server酱³，iPhone 选 Bark，也可以用邮箱。点一张卡片开始设置。',
     advanceOnClick: true,
-    waitMs: 15000
-  },
-  {
-    id: 'notify.key',
-    target: 'notify-key',
-    title: '第二步：填推送 Key',
-    requireInputs: true,
-    body: 'Server酱³ 填 App 里的 UID 和 SendKey；Bark 粘贴 App 里复制的链接；邮箱填地址后点「发送验证码」（演示里验证码随便填 6 位数字）。',
-    waitMs: 15000
-  },
-  {
-    id: 'notify.test',
-    target: 'notify-test',
-    title: '第三步：发送测试',
-    body: 'Server酱³ / Bark 点「发送测试」，手机收到就算接通；邮箱点「验证并开启」。之后溢价拉开的换基信号都会推到这里。',
-    advanceOnClick: true,
+    branches: NOTIFY_BRANCHES,
     waitMs: 15000
   }
 ];
+
+/** 给通知教程的步骤 id 换前缀（演示版用 notifyDemo.*）。 */
+function prefixNotifySteps(steps, prefix) {
+  return steps.map((step) => ({
+    ...step,
+    id: step.id.replace('notify.', `${prefix}.`),
+    ...(step.branches ? { branches: Object.fromEntries(Object.entries(step.branches).map(([key, list]) => [key, prefixNotifySteps(list, prefix)])) } : {})
+  }));
+}
 
 export const ONBOARDING_FLOWS = {
   holdings: {
@@ -187,7 +205,7 @@ export const ONBOARDING_FLOWS = {
     inDemo: true,
     seenKey: 'seenNotifyDemo',
     doneTitle: '通知配置好了 ✓',
-    steps: NOTIFY_STEPS.map((step) => ({ ...step, id: step.id.replace('notify.', 'notifyDemo.') }))
+    steps: prefixNotifySteps(NOTIFY_STEPS, 'notifyDemo')
   },
   watchlist: {
     task: 'watchlist',

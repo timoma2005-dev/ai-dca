@@ -192,9 +192,15 @@ test('游客「看看怎么接通手机通知」进通知演示：选渠道 → 
   assert.equal(task.tab, 'notify');
   assert.equal(task.flow, 'notifyDemo');
   assert.equal(ONBOARDING_FLOWS.notifyDemo.inDemo, true);
-  assert.deepEqual(ONBOARDING_FLOWS.notifyDemo.steps.map((step) => step.target), ['notify-channel-cards', 'notify-key', 'notify-test']);
+  assert.deepEqual(ONBOARDING_FLOWS.notifyDemo.steps.map((step) => step.target), ['notify-channel-cards']);
+  const branches = ONBOARDING_FLOWS.notifyDemo.steps[0].branches;
+  assert.deepEqual(branches.email.map((step) => step.target), ['notify-email-address', 'notify-send-code', 'notify-email-code', 'notify-test']);
+  assert.deepEqual(branches.ios.map((step) => step.target), ['notify-key', 'notify-test', 'notify-save']);
+  assert.deepEqual(branches.serverchan3.map((step) => step.target), ['notify-key', 'notify-test', 'notify-save']);
+  assert.ok(branches.email.every((step) => step.id.startsWith('notifyDemo.')));
   const card = read('src/pages/NotifyConfigCard.jsx');
-  for (const target of ['notify-channel-cards', 'notify-key', 'notify-test']) assert.match(card, new RegExp(`data-onboarding="${target}"`));
+  for (const target of ['notify-channel-cards', 'notify-key', 'notify-test', 'notify-save', 'notify-email-address', 'notify-send-code', 'notify-email-code', 'notify-pc']) assert.match(card, new RegExp(`data-onboarding="${target}"`));
+  assert.match(card, /data-onboarding-branch=\{channel\.key\}/);
   const mod = await import('../src/app/demo/fixtures/notify.js');
   const routes = mod.createNotifySetupFixtures([], Date.now());
   const url = (path) => new globalThis.URL(`https://x.test${path}`);
@@ -226,8 +232,9 @@ test('演示教程走完才记完成：sessionStorage 标记 → 回首页后写
 });
 
 test('填 Key 这一步要先填好输入框才能下一步；游客演示走完先提醒注册', () => {
-  const keyStep = ONBOARDING_FLOWS.notifyDemo.steps.find((step) => step.target === 'notify-key');
+  const keyStep = ONBOARDING_FLOWS.notifyDemo.steps[0].branches.email[0];
   assert.equal(keyStep.requireInputs, true);
+  assert.equal(keyStep.advanceWhenFilled, true);
   const card = read('src/pages/NotifyConfigCard.jsx');
   assert.ok((card.match(/data-onboarding-required/g) || []).length >= 4);
   const host = read('src/components/onboarding/StepHintHost.jsx');
