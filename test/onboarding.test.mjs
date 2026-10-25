@@ -224,3 +224,15 @@ test('演示教程走完才记完成：sessionStorage 标记 → 回首页后写
   assert.equal(ONBOARDING_FLOWS.switchDemo.seenKey, 'seenDemo');
   assert.equal(ONBOARDING_FLOWS.notifyDemo.seenKey, 'seenNotifyDemo');
 });
+
+test('填 Key 这一步要先填好输入框才能下一步；游客演示走完先提醒注册', () => {
+  const keyStep = ONBOARDING_FLOWS.notifyDemo.steps.find((step) => step.target === 'notify-key');
+  assert.equal(keyStep.requireInputs, true);
+  const card = read('src/pages/NotifyConfigCard.jsx');
+  assert.ok((card.match(/data-onboarding-required/g) || []).length >= 4);
+  const host = read('src/components/onboarding/StepHintHost.jsx');
+  assert.match(host, /disabled=\{Boolean\(step\.requireInputs\) && !inputsReady\}/);
+  const page = read('src/pages/WorkspacePage.jsx');
+  assert.match(page, /flow\.inDemo && demoAsGuest/);
+  assert.match(read('src/components/onboarding/DemoDoneDialog.jsx'), /第二天就清空了/);
+});

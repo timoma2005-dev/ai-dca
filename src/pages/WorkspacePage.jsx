@@ -22,6 +22,7 @@ import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, isPai
 import { resolveMenuIcon } from '../components/rbac/menu-icons.js';
 import { AccessGuardPage } from '../components/rbac/access-guard-page.jsx';
 import { FeatureDemo } from '../components/rbac/feature-demo.jsx';
+import { DemoDoneDialog } from '../components/onboarding/DemoDoneDialog.jsx';
 import { consumeDemoQuota, demoFeatureFor, demoQuotaFor, readDemoSession } from '../app/demo/featureDemo.js';
 import { useDemoSessionImport } from '../app/demo/useDemoSessionImport.js';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
@@ -201,6 +202,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrPurpose, setQrPurpose] = useState('coffee');
   const [demoTab, setDemoTab] = useState('');
+  const [demoDoneFlow, setDemoDoneFlow] = useState(null);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [cloudSession, setCloudSession] = useState(() => loadCloudSession());
   const [conversionPrompt, setConversionPrompt] = useState(null);
@@ -600,25 +602,31 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     return () => window.removeEventListener('workspace:navigate', handleWorkspaceNavigate);
   });
 
+  function returnHomeFromDemo() {
+    window.__AI_DCA_DEMO_VARIANT__ = '';
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', 'home');
+      window.history.replaceState(window.history.state, '', url.toString());
+    } catch { /* 地址改不了就停在原页刷新 */ }
+    window.location.reload();
+  }
+
   // 教程走完：提示一下，回到首页的新手入门卡。演示里的教程先记到 sessionStorage，回首页刷新后再落进度。
   useEffect(() => {
     consumeOnboardingDemoCompleted();
     function handleFlowComplete(event) {
       const flow = ONBOARDING_FLOWS[event?.detail?.flow];
       if (!flow) return;
+      if (flow.inDemo) markOnboardingDemoCompleted(flow.seenKey);
+      // 游客：先提醒注册（演示内容第二天清空），等用户选。
+      if (flow.inDemo && demoAsGuest) {
+        window.setTimeout(() => setDemoDoneFlow(flow), 1200);
+        return;
+      }
       showToast({ title: '这个教程完成了 ✓', description: '马上回到新手入门' });
       window.setTimeout(() => {
-        if (flow.inDemo) {
-          markOnboardingDemoCompleted(flow.seenKey);
-          window.__AI_DCA_DEMO_VARIANT__ = '';
-          try {
-            const url = new URL(window.location.href);
-            url.searchParams.set('tab', 'home');
-            window.history.replaceState(window.history.state, '', url.toString());
-          } catch { /* 地址改不了就停在原页刷新 */ }
-          window.location.reload();
-          return;
-        }
+        if (flow.inDemo) { returnHomeFromDemo(); return; }
         writeOnboardingState({ dismissed: false });
         handleSelectTab('home');
       }, 1800);
@@ -806,6 +814,11 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           </Suspense>
         </div>
       </ConsoleLayout>
+      <DemoDoneDialog
+        flow={demoDoneFlow}
+        onRegister={() => { setDemoDoneFlow(null); handleDemoUpgrade(); }}
+        onBack={() => { setDemoDoneFlow(null); returnHomeFromDemo(); }}
+      />
       <MobileBottomNav
         activeKey={activeTab}
         hidden={mobileBottomSheetHidden}

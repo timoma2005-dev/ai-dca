@@ -92,6 +92,7 @@ const NOTIFY_STEPS = [
     id: 'notify.key',
     target: 'notify-key',
     title: '第二步：填推送 Key',
+    requireInputs: true,
     body: 'Server酱³ 填 App 里的 UID 和 SendKey；Bark 粘贴 App 里复制的链接；邮箱填地址后点「发送验证码」（演示里验证码随便填 6 位数字）。',
     waitMs: 15000
   },
@@ -150,6 +151,7 @@ export const ONBOARDING_FLOWS = {
     task: 'switch',
     inDemo: true,
     seenKey: 'seenDemo',
+    doneTitle: '切换方案建好了 ✓',
     steps: [
       {
         id: 'switchDemo.create',
@@ -184,6 +186,7 @@ export const ONBOARDING_FLOWS = {
     task: 'notify',
     inDemo: true,
     seenKey: 'seenNotifyDemo',
+    doneTitle: '通知配置好了 ✓',
     steps: NOTIFY_STEPS.map((step) => ({ ...step, id: step.id.replace('notify.', 'notifyDemo.') }))
   },
   watchlist: {

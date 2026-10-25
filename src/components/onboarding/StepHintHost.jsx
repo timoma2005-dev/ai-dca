@@ -47,6 +47,8 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
   const [locateNonce, setLocateNonce] = useState(0);
   // 「知道了」后只收起气泡、保留高亮，等用户自己点目标再进入下一步。
   const [quietStepId, setQuietStepId] = useState('');
+  // requireInputs：目标里标了 data-onboarding-required 的输入框都填了，才能点「下一步」。
+  const [inputsReady, setInputsReady] = useState(true);
   const flow = run ? ONBOARDING_FLOWS[run.flowId] : null;
   const step = flow ? flow.steps[run.index] : null;
   // 付费功能演示进行中只展示专为演示写的引导（inDemo），其它引导暂停。
@@ -136,6 +138,12 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         const rect = el.getBoundingClientRect();
         setPlacementBox((prev) => (prev && Math.abs(prev.top - rect.top) < 1 && Math.abs(prev.left - rect.left) < 1 && Math.abs(prev.height - rect.height) < 1 ? prev : rect));
       }
+      if (step.requireInputs) {
+        const required = el ? [...el.querySelectorAll('[data-onboarding-required="true"]')].filter(isVisible) : [];
+        setInputsReady(required.every((input) => String(input.value || '').trim()));
+      } else {
+        setInputsReady(true);
+      }
       const vv = window.visualViewport;
       setKeyboardOpen(Boolean(vv && vv.height < window.innerHeight * 0.75));
       frame = window.setTimeout(tick, 200);
@@ -201,11 +209,13 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         </div>
         <div className="mt-0.5 text-sm font-extrabold">{step.title}</div>
         <p className="mt-1 text-xs leading-5 text-slate-300">{step.body}</p>
+        {step.requireInputs && !inputsReady ? <p className="mt-1 text-[11px] font-semibold text-amber-300">先把输入框填好，再点「下一步」</p> : null}
         <div className="mt-2.5 flex items-center justify-between">
           <button type="button" className="text-xs text-slate-400 hover:text-slate-200" onClick={() => end('later')}>稍后继续</button>
           <button
             type="button"
-            className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-extrabold hover:bg-indigo-400"
+            className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-extrabold hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={Boolean(step.requireInputs) && !inputsReady}
             onClick={step.advanceOnClick ? () => setQuietStepId(step.id) : last ? () => end('complete') : next}
           >
             {step.advanceOnClick || last ? '知道了' : '下一步'}
