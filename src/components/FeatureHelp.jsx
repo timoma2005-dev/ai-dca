@@ -68,7 +68,7 @@ const HELP_CONTENT = {
         heading: '下载哪个',
         steps: [
           '本产品没有安卓应用商店 App，安卓系统通知靠「Server酱³」客户端转发。',
-          '在「通知」页切到「Andriod」标签，点「安卓客户端下载地址」安装 Server酱³ 客户端：https://sc3.ft07.com/client',
+          '在「通知」页切到「Android」标签，点「安卓客户端下载地址」安装 Server酱³ 客户端：https://sc3.ft07.com/client',
           '想用网页版本身：直接用安卓浏览器打开网站，并「添加到主屏幕」，即可像 App 一样使用。'
         ]
       },
@@ -76,7 +76,7 @@ const HELP_CONTENT = {
         heading: '怎么配置',
         steps: [
           '打开「安卓配置设置地址」获取你的 UID 与 SendKey：https://sc3.ft07.com/sendkey',
-          '回到「Andriod」面板，把 UID、SendKey 填进去，点「保存 Server酱³」。',
+          '回到「Android」面板，把 UID、SendKey 填进去，点「保存 Server酱³」。',
           '保存后点「测试」，安卓客户端收到推送即配置成功。',
           '注意：Server酱³ 是第三方服务，请勿泄漏自己的 UID 与 SendKey。'
         ]
