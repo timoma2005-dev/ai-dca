@@ -1,5 +1,5 @@
 /* global URL */
-// WorkspacePage 路由守卫（RBAC）：?tab= 不再静默回退；游客点锁住的菜单弹登录；角色不足显示 403；旧份额链接保持公开。
+// WorkspacePage 路由守卫（RBAC）：?tab= 不再静默回退；游客点锁住的菜单弹登录；角色不足显示 403；旧份额链接与份额新增同权限（VIP）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -54,11 +54,12 @@ test('route guard: no silent fallback effect remains', () => {
   assert.match(source, /const activeAccess = tabAccessOf\(activeTab,/);
 });
 
-test('route guard decisions per role (legacy #shares link stays public)', () => {
+test('route guard decisions per role (legacy #shares link follows the shares permission)', () => {
   const cases = [
     ['guest', 'home', '', 'ok'],
-    ['guest', 'holdings', '', 'login'],
-    ['guest', 'adminRadar', '#shares', 'ok'],
+    ['guest', 'holdings', '', 'ok'],
+    ['guest', 'shares', '', 'login'],
+    ['guest', 'adminRadar', '#shares', 'login'],
     ['guest', 'adminRadar', '', 'login'],
     ['user', 'holdings', '', 'ok'],
     ['user', 'adminRadar', '', 'forbidden'],
@@ -82,10 +83,10 @@ test('tab selection: guests clicking a locked menu get the login dialog instead 
     source.slice(start, end) + '\nreturn true;\n}\nreturn handleSelectTab(nextTab, options);');
   for (const [state, tab, hash, navigates, opensLogin] of [
     ['guest', 'adminAuction', undefined, true, false], // 竞价看板有演示（模拟行情演示页）：进入守卫页先体验
-    ['guest', 'holdings', undefined, true, false], // 持仓总览有演示：进入守卫页先体验
+    ['guest', 'holdings', undefined, true, false], // 持仓总览对游客开放
     ['guest', 'home', undefined, true, false],
     ['guest', 'markets', undefined, true, false], // 有演示的付费功能：进入守卫页先体验
-    ['guest', 'adminRadar', '#shares', true, false],
+    ['guest', 'shares', undefined, false, true], // 份额新增需 VIP、无演示：弹登录、不切换
     ['user', 'adminRadar', undefined, true, false], // 角色不足：照常切换，由 403 页展示
     ['user', 'holdings', undefined, true, false],
   ]) {
@@ -116,17 +117,20 @@ const resolvePanel = (state, tab, hash = '') => {
 };
 
 test('panel rendering: guard page replaces the panel instead of silently showing holdings', () => {
-  assert.equal(resolvePanel('guest', 'holdings'), 'guard:login:user');
+  assert.equal(resolvePanel('guest', 'holdings'), 'holdings');
+  assert.equal(resolvePanel('guest', 'markets'), 'guard:login:vip');
   assert.equal(resolvePanel('user', 'adminRadar'), 'guard:forbidden:vip');
   assert.equal(resolvePanel('user', 'adminAuction'), 'guard:forbidden:svip');
   assert.equal(resolvePanel('auctionOnly', 'adminAuction'), 'auction');
   assert.equal(resolvePanel('auctionOnly', 'adminRbac'), 'guard:forbidden:', 'hidden menu: forbidden without a role hint');
   assert.equal(resolvePanel('admin', 'adminRadar'), 'radar');
   assert.equal(resolvePanel('admin', 'adminRbac'), 'rbac');
-  for (const state of ['guest', 'user', 'auctionOnly', 'admin']) {
+  for (const state of ['user', 'auctionOnly', 'admin']) {
     assert.equal(resolvePanel(state, 'adminRadar', '#shares'), 'shares', `${state} legacy shares link`);
     assert.equal(resolvePanel(state, 'shares'), 'shares');
   }
+  assert.equal(resolvePanel('guest', 'shares'), 'guard:login:vip');
+  assert.equal(resolvePanel('guest', 'adminRadar', '#shares'), 'guard:login:vip');
   assert.match(source, /const SharesExperience = lazy\(\(\) => import\('\.\/SharesExperience\.jsx'\)\);/);
   assert.match(source, /case 'shares':\s*return <SharesExperience \/>;/);
 });

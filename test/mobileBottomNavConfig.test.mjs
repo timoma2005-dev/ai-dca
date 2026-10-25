@@ -28,10 +28,10 @@ test('only menus returned by the server appear; dataRepair stays desktop-only', 
   assert.equal(items.find((item) => item.key === 'adminRadar').requiredRole.code, 'vip');
 });
 
-test('guest menus: user features are visible but locked, VIP features absent', () => {
+test('guest menus: holdings/plans open, VIP features (incl. shares) visible but locked, SVIP features absent', () => {
   const items = resolveMobileBottomNavItems(flattenMenus(buildGuestFallback().menus));
   assert.deepEqual(items.map((item) => item.key), ['home', 'markets', 'holdings', 'tradePlans', 'shares', 'fundSwitch', 'notify', 'articles']);
-  assert.deepEqual(items.filter((item) => item.locked).map((item) => item.key), ['markets', 'holdings', 'tradePlans', 'fundSwitch', 'notify']);
+  assert.deepEqual(items.filter((item) => item.locked).map((item) => item.key), ['markets', 'shares', 'fundSwitch', 'notify']);
 });
 
 test('scenario visible list still filters known tabs; unknown server menus are appended by sort', () => {

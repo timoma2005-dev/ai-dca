@@ -215,8 +215,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const accountUsername = cloudSession?.accessToken ? cloudSession.username || '' : '';
   const isAdminUser = isAdminState(rbac);
   const tabAccessOf = useCallback((tabKey, hash = '') => {
-    // 旧的 ?tab=adminRadar#shares 份额链接保持公开。
-    if (tabKey === 'adminRadar' && hash === '#shares') return { status: 'ok', menu: null, requiredRole: null };
+    // 旧的 ?tab=adminRadar#shares 份额链接按「份额新增」的权限判断（VIP）。
+    if (tabKey === 'adminRadar' && hash === '#shares') return evaluateTabAccess(rbac, 'shares');
     return evaluateTabAccess(rbac, tabKey);
   }, [rbac]);
   const flatMenus = useMemo(() => flattenMenus(rbac.menus).filter((menu) => isWorkspaceGroup(menu.key)), [rbac.menus]);

@@ -35,13 +35,13 @@ const USER_STATE = {
   permVersion: 'v1',
 };
 
-test('guest fallback mirrors the server seed: public menus open, user menus locked, VIP menus hidden', () => {
+test('guest fallback mirrors the server tiers: free menus open, VIP menus locked, SVIP/admin menus hidden', () => {
   const guest = buildGuestFallback();
   const byKey = Object.fromEntries(flattenMenus(guest.menus).map((m) => [m.key, m]));
-  for (const key of ['home', 'shares', 'articles']) assert.equal(byKey[key].locked, false, key);
-  for (const key of ['markets', 'holdings', 'tradePlans', 'fundSwitch', 'notify', 'dataRepair']) {
+  for (const key of ['home', 'articles', 'holdings', 'tradePlans', 'dataRepair']) assert.equal(byKey[key].locked, false, key);
+  for (const key of ['markets', 'shares', 'fundSwitch', 'notify']) {
     assert.equal(byKey[key].locked, true, key);
-    assert.equal(byKey[key].requiredRole.code, 'user');
+    assert.equal(byKey[key].requiredRole.code, 'vip');
   }
   for (const key of ['adminRadar', 'adminAuction', 'adminQuant', 'adminRbac']) assert.equal(byKey[key], undefined);
   assert.equal(guest.loggedIn, false);
@@ -51,7 +51,8 @@ test('guest fallback mirrors the server seed: public menus open, user menus lock
 test('route guard: guest → login, insufficient role → forbidden with requiredRole, allowed → ok', () => {
   const guest = buildGuestFallback();
   assert.equal(evaluateTabAccess(guest, 'home').status, 'ok');
-  assert.equal(evaluateTabAccess(guest, 'holdings').status, 'login');
+  assert.equal(evaluateTabAccess(guest, 'holdings').status, 'ok', 'holdings is open to guests (local data)');
+  assert.equal(evaluateTabAccess(guest, 'shares').status, 'login');
   assert.equal(evaluateTabAccess(guest, 'adminRadar').status, 'login', 'hidden managed tab also asks guests to log in');
   assert.equal(evaluateTabAccess(USER_STATE, 'holdings').status, 'ok');
   const radar = evaluateTabAccess(USER_STATE, 'adminRadar');
