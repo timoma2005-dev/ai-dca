@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { GraduationCap } from 'lucide-react';
 import { GettingStartedCard } from './GettingStartedCard.jsx';
+import { VipExpiryNotice } from './VipExpiryNotice.jsx';
 import { useOnboarding } from '../../app/onboarding/useOnboarding.js';
 import { shouldShowGettingStarted } from '../../app/onboarding/catalog.js';
 import { ONBOARDING_OPEN_EVENT, ONBOARDING_START_EVENT, writeOnboardingState } from '../../app/onboarding/state.js';
@@ -14,10 +15,10 @@ function navigate(tab) {
  * 首页任务卡：把任务点击翻译成导航 + 步骤提示。
  * onRegister / onUpgrade 由工作台提供（打开注册框 / 打赏开通二维码）。
  */
-export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, demoActive = false }) {
+export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, demoActive = false, roles = [] }) {
   const { state, tasks } = useOnboarding({ loggedIn, accessOf });
   const handleAction = useCallback((task) => {
-    trackFeatureEvent('onboarding', 'task_click', { taskId: task.id, status: task.status, version: 1 });
+    trackFeatureEvent('onboarding', 'task_click', { taskId: task.id, status: task.status, version: 2 });
     if (task.action === 'register') { onRegister?.(); return; }
     if (task.status === 'locked') { onUpgrade?.(); return; }
     if (task.action === 'demo') {
@@ -31,13 +32,17 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
       window.setTimeout(() => window.dispatchEvent(new CustomEvent(ONBOARDING_START_EVENT, { detail: { flow: task.flow } })), 0);
     }
   }, [onRegister, onUpgrade]);
-  if (!shouldShowGettingStarted({ tasks, state, demoActive })) return null;
+  const expiry = loggedIn ? <VipExpiryNotice roles={roles} onUpgrade={onUpgrade} demoActive={demoActive} /> : null;
+  if (!shouldShowGettingStarted({ tasks, state, demoActive })) {
+    return expiry ? <div className="cn-home-onboarding">{expiry}</div> : null;
+  }
   return (
-    <div className="cn-home-onboarding">
+    <div className="cn-home-onboarding flex flex-col gap-3">
+      {expiry}
       <GettingStartedCard
         tasks={tasks}
         onAction={handleAction}
-        onDismiss={() => { trackFeatureEvent('onboarding', 'dismiss', { doneCount: tasks.doneCount, mode: tasks.mode, version: 1 }); writeOnboardingState({ dismissed: true }); }}
+        onDismiss={() => { trackFeatureEvent('onboarding', 'dismiss', { doneCount: tasks.doneCount, mode: tasks.mode, version: 2 }); writeOnboardingState({ dismissed: true }); }}
         onFinish={() => writeOnboardingState({ celebrated: true, dismissed: true })}
       />
     </div>
@@ -63,7 +68,7 @@ export function GettingStartedEntry({ loggedIn, accessOf, variant = 'menu', onOp
       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[10px] font-extrabold text-indigo-600">{tasks.doneCount}/{tasks.total}</span>
     </span>
   );
-  const onClick = () => { trackFeatureEvent('onboarding', 'entry_open', { variant, version: 1 }); openGettingStarted(); onOpened?.(); };
+  const onClick = () => { trackFeatureEvent('onboarding', 'entry_open', { variant, version: 2 }); openGettingStarted(); onOpened?.(); };
   if (variant === 'sidebar') {
     return (
       <button type="button" className="flex w-full items-center gap-2.5 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-left hover:bg-indigo-50" onClick={onClick} data-onboarding-entry="sidebar">

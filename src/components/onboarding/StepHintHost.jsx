@@ -44,7 +44,7 @@ export function StepHintHost({ paused = false }) {
 
   const end = useCallback((reason) => {
     setRun((current) => {
-      if (current) trackFeatureEvent('onboarding', 'flow_end', { flowId: current.flowId, stepIndex: current.index, reason, version: 1 });
+      if (current) trackFeatureEvent('onboarding', 'flow_end', { flowId: current.flowId, stepIndex: current.index, reason, version: 2 });
       return null;
     });
   }, []);
@@ -54,7 +54,7 @@ export function StepHintHost({ paused = false }) {
       if (!current) return null;
       const steps = ONBOARDING_FLOWS[current.flowId]?.steps || [];
       if (current.index + 1 < steps.length) return { ...current, index: current.index + 1 };
-      trackFeatureEvent('onboarding', 'flow_end', { flowId: current.flowId, stepIndex: current.index, reason: 'complete', version: 1 });
+      trackFeatureEvent('onboarding', 'flow_end', { flowId: current.flowId, stepIndex: current.index, reason: 'complete', version: 2 });
       return null;
     });
   }, []);
@@ -63,7 +63,7 @@ export function StepHintHost({ paused = false }) {
     function handleStart(event) {
       const flowId = event?.detail?.flow;
       if (!flowId || !ONBOARDING_FLOWS[flowId]) return;
-      trackFeatureEvent('onboarding', 'flow_start', { flowId, version: 1 });
+      trackFeatureEvent('onboarding', 'flow_start', { flowId, version: 2 });
       setRun({ flowId, index: 0, startedAt: Date.now() });
     }
     window.addEventListener(ONBOARDING_START_EVENT, handleStart);
@@ -87,12 +87,12 @@ export function StepHintHost({ paused = false }) {
         if (rect.top < 64 || rect.bottom > window.innerHeight - BOTTOM_NAV_ALLOWANCE) {
           el.scrollIntoView?.({ block: rect.height > window.innerHeight * 0.5 ? 'start' : 'center', behavior: 'smooth' });
         }
-        trackFeatureEvent('onboarding', 'step_view', { flowId: run.flowId, stepId: step.id, version: 1 });
+        trackFeatureEvent('onboarding', 'step_view', { flowId: run.flowId, stepId: step.id, version: 2 });
         setPlacementBox(el.getBoundingClientRect());
         return;
       }
       if (Date.now() - startedAt > waitMs) {
-        trackFeatureEvent('onboarding', 'target_missing', { flowId: run.flowId, stepId: step.id, version: 1 });
+        trackFeatureEvent('onboarding', 'target_missing', { flowId: run.flowId, stepId: step.id, version: 2 });
         end('target_missing');
         return;
       }

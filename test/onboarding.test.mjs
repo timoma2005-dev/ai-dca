@@ -71,23 +71,29 @@ test('信号：演示持仓不算真实录入；没有存储时全部未完成',
   assert.deepEqual(readOnboardingSignals({ storage: memoryStorage() }), { holdings: false, switch: false, notify: false });
 });
 
-test('任务卡：游客第一项是注册，登录用户按 持仓 → 切换提醒 → 通知 → 自选（可选）', () => {
+test('任务卡：游客第一项是注册，登录用户按 切换方案 → 通知 → 持仓（可选）', () => {
   const guest = buildOnboardingTasks({ loggedIn: false });
   assert.equal(guest.mode, 'guest');
   assert.deepEqual(guest.items.map((item) => item.id), ['register', 'demo']);
   const user = buildOnboardingTasks({ loggedIn: true, signals: { holdings: true } });
-  assert.deepEqual(user.items.map((item) => item.id), ['holdings', 'switch', 'notify', 'watchlist']);
-  assert.equal(user.doneCount, 1);
-  assert.equal(user.activated, true);
-  assert.equal(user.allDone, false);
-  assert.equal(user.items.find((item) => item.id === 'watchlist').optional, true);
+  assert.deepEqual(user.items.map((item) => item.id), ['switch', 'notify', 'holdings']);
+  assert.equal(user.items.find((item) => item.id === 'holdings').optional, true);
+  assert.equal(user.total, 2, '可选的持仓不计入进度');
+  assert.equal(user.doneCount, 0);
+  assert.equal(user.activated, false);
+  const half = buildOnboardingTasks({ loggedIn: true, signals: { switch: true } });
+  assert.equal(half.doneCount, 1);
+  assert.equal(half.activated, false, '切换方案和通知两步都完成才算用起来');
+  const both = buildOnboardingTasks({ loggedIn: true, signals: { switch: true, notify: true } });
+  assert.equal(both.activated, true);
+  assert.equal(both.allDone, true);
 });
 
 test('任务卡：无权限的任务显示为锁定（打赏开通），可选任务不影响全部完成', () => {
   const accessOf = (tab) => ({ status: tab === 'fundSwitch' ? 'forbidden' : 'ok' });
   const tasks = buildOnboardingTasks({ loggedIn: true, signals: {}, accessOf });
   assert.equal(tasks.items.find((item) => item.id === 'switch').status, 'locked');
-  const done = buildOnboardingTasks({ loggedIn: true, signals: { holdings: true, switch: true }, state: { done: { notify: 1 } } });
+  const done = buildOnboardingTasks({ loggedIn: true, signals: { switch: true }, state: { done: { notify: 1 } } });
   assert.equal(done.allDone, true);
   assert.equal(shouldShowGettingStarted({ tasks: done, state: {} }), true, '全部完成先展示一次庆祝');
   assert.equal(shouldShowGettingStarted({ tasks: done, state: { celebrated: true } }), false);
@@ -144,4 +150,19 @@ test('computeHintPosition：默认在下方；下方被底部导航挡住时放�
   const edge = computeHintPosition({ top: 100, bottom: 130, left: 360, width: 24, height: 30 }, viewport);
   assert.ok(edge.left + edge.width <= 378);
   assert.ok(edge.arrowLeft <= edge.width - 30);
+});
+
+test('VIP 到期提醒：到期前 7 天内提醒，永久或更高角色覆盖时不提醒', async () => {
+  const { vipExpiryNotice, formatExpiryDate } = await import('../src/app/onboarding/vipExpiry.js');
+  const now = Date.parse('2027-01-20T00:00:00Z');
+  const vip = { code: 'vip', name: 'VIP', expiresAt: '2027-01-24T15:59:59Z' };
+  const notice = vipExpiryNotice([{ code: 'user', expiresAt: null }, vip], now);
+  assert.equal(notice.code, 'vip');
+  assert.equal(notice.daysLeft, 5);
+  assert.equal(formatExpiryDate(vip.expiresAt), '1月24日');
+  assert.equal(vipExpiryNotice([vip], Date.parse('2027-01-10T00:00:00Z')), null, '超过 7 天不提醒');
+  assert.equal(vipExpiryNotice([vip], Date.parse('2027-01-25T00:00:00Z')), null, '已过期不提醒');
+  assert.equal(vipExpiryNotice([vip, { code: 'svip', expiresAt: null }], now), null);
+  assert.equal(vipExpiryNotice([vip, { code: 'vip', expiresAt: '2027-04-24T15:59:59Z' }], now), null);
+  assert.equal(vipExpiryNotice([{ code: 'user', expiresAt: null }], now), null);
 });

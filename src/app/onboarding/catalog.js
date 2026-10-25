@@ -4,14 +4,14 @@ export const GUEST_TASKS = [
   {
     id: 'register',
     title: '注册账号，领 3 个月 VIP',
-    description: '行情、基金切换提醒、通知全部解锁',
+    description: '溢价拉开时推送换基信号，近 6 周已推送 9,000+ 条',
     cta: '去注册',
     action: 'register'
   },
   {
     id: 'demo',
     title: '先看看能做什么',
-    description: '用示例数据体验切换提醒，不会保存',
+    description: '用示例数据看看切换方案怎么提醒，不会保存',
     cta: '体验',
     badge: '无需注册',
     badgeTone: 'muted',
@@ -20,21 +20,13 @@ export const GUEST_TASKS = [
   }
 ];
 
+// 核心价值是「溢价拉开时把换基信号推到手机」：切换方案 + 通知两步都完成才算用起来。
+// 持仓是配角（自动算每一轮换基赚了多少），可选，不计入进度。
 export const USER_TASKS = [
   {
-    id: 'holdings',
-    title: '录入我的持仓',
-    description: '手动录入或上传截图识别，约 1 分钟',
-    doneDescription: '已录入持仓',
-    cta: '去录入',
-    tab: 'holdings',
-    flow: 'holdings',
-    activation: true
-  },
-  {
     id: 'switch',
-    title: '设置切换提醒',
-    description: '溢价拉开时提醒你换到更划算的那只',
+    title: '设一个切换方案',
+    description: '填你现在持有的基金代码，自动生成方案和阈值',
     doneDescription: '已保存切换方案',
     cta: '去设置',
     badge: 'VIP',
@@ -46,22 +38,25 @@ export const USER_TASKS = [
   {
     id: 'notify',
     title: '接通手机通知',
-    description: 'Bark / Android / 邮件，选一种并发送测试',
+    description: 'Bark / Server酱³ / 邮件选一种，发条测试确认能收到',
     doneDescription: '通知通道已接通',
     cta: '去接通',
+    badge: 'VIP',
+    badgeTone: 'vip',
     tab: 'notify',
-    flow: 'notify'
+    flow: 'notify',
+    activation: true
   },
   {
-    id: 'watchlist',
-    title: '加一只自选',
-    description: '在行情里关注你常看的基金',
-    doneDescription: '已添加自选',
-    cta: '去添加',
+    id: 'holdings',
+    title: '录入持仓',
+    description: '自动算出每一轮换基赚了多少',
+    doneDescription: '已录入持仓',
+    cta: '去录入',
     badge: '可选',
     badgeTone: 'muted',
-    tab: 'markets',
-    flow: 'watchlist',
+    tab: 'holdings',
+    flow: 'holdings',
     optional: true
   }
 ];
@@ -115,7 +110,7 @@ export const ONBOARDING_FLOWS = {
         id: 'notify.channel',
         target: 'notify-channel',
         title: '选一种通知方式',
-        body: 'iPhone 用 Bark，Android 用 Server酱³，也可以绑定邮箱。配好后点「发送测试」确认能收到。',
+        body: 'iPhone 用 Bark，Android 用 Server酱³，也可以绑定邮箱。配好后点「发送测试」，手机收到了才算接通，之后换基信号就推到这里。',
         placement: 'top'
       }
     ]
@@ -159,14 +154,15 @@ export function buildOnboardingTasks({ loggedIn, signals = {}, state = {}, acces
     return { ...task, status: 'todo' };
   });
   const required = items.filter((item) => !item.optional);
-  const doneCount = items.filter((item) => item.status === 'done').length;
+  const doneCount = required.filter((item) => item.status === 'done').length;
+  const activationItems = items.filter((item) => item.activation);
   return {
     mode: 'user',
     items,
     doneCount,
-    total: items.length,
+    total: required.length,
     allDone: required.every((item) => item.status === 'done'),
-    activated: items.some((item) => item.activation && item.status === 'done')
+    activated: activationItems.length > 0 && activationItems.every((item) => item.status === 'done')
   };
 }
 

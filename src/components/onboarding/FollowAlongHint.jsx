@@ -10,7 +10,7 @@ export function FollowAlongHint({ flow, text = '跟着做，约 1 分钟' }) {
       data-onboarding-follow={flow}
       className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
       onClick={() => {
-        trackFeatureEvent('onboarding', 'follow_along', { flowId: flow, version: 1 });
+        trackFeatureEvent('onboarding', 'follow_along', { flowId: flow, version: 2 });
         window.dispatchEvent(new CustomEvent(ONBOARDING_START_EVENT, { detail: { flow } }));
       }}
     >

@@ -651,6 +651,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
                 loggedIn={Boolean(cloudSession?.accessToken)}
                 accessOf={tabAccessOf}
                 demoActive={demo}
+                roles={rbac.roles}
                 onRegister={() => openAccountAuth({ mode: 'register', source: 'onboarding', trigger: 'home' })}
                 onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
               />

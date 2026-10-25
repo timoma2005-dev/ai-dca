@@ -55,13 +55,13 @@ function TaskRow({ task, onAction }) {
   );
 }
 
-/** 首页「先完成一件小事」任务卡。只负责展示和把点击交给调用方；完成状态来自真实数据。 */
+/** 首页新手入门任务卡（「2 步收到第一条换基信号」）。只负责展示和把点击交给调用方；完成状态来自真实数据。 */
 export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
   const tracked = useRef(false);
   useEffect(() => {
     if (tracked.current || !tasks) return;
     tracked.current = true;
-    trackFeatureEvent('onboarding', 'card_view', { mode: tasks.mode, doneCount: tasks.doneCount, version: 1 });
+    trackFeatureEvent('onboarding', 'card_view', { mode: tasks.mode, doneCount: tasks.doneCount, version: 2 });
   }, [tasks]);
   if (!tasks) return null;
   const guest = tasks.mode === 'guest';
@@ -73,8 +73,8 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><PartyPopper className="h-5 w-5" aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-extrabold text-slate-900">全部完成</h2>
-            <p className="text-xs text-slate-500">持仓、切换提醒和通知都已就绪，之后有提醒会第一时间推给你。</p>
+            <h2 className="text-base font-extrabold text-slate-900">已经用起来了</h2>
+            <p className="text-xs text-slate-500">切换方案和通知都已就绪，溢价拉开时会第一时间推到你手机。</p>
           </div>
           <button type="button" className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50" onClick={onFinish}>收起</button>
         </div>
@@ -86,9 +86,9 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
     <section className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-[0_6px_24px_-12px_rgba(79,70,229,0.35)]" data-testid="getting-started-card" data-mode={tasks.mode}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-extrabold text-slate-900">先完成一件小事</h2>
+          <h2 className="text-base font-extrabold text-slate-900">{guest ? '溢价拉开，第一时间提醒你换基' : '2 步收到第一条换基信号'}</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            {guest ? '按你的需要开始，随时可以继续' : `已完成 ${tasks.doneCount}/${tasks.total} · 做完一件就能用起来`}
+            {guest ? '同一指数的几只基金溢价拉开时，推送提醒你从贵的换到便宜的' : `已完成 ${tasks.doneCount}/${tasks.total} · 两步都做完才能收到信号`}
           </p>
         </div>
         <button type="button" aria-label="关闭新手入门" title="关闭（可在账号菜单「新手入门」重新打开）" className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600" onClick={onDismiss}>
@@ -100,7 +100,7 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
           <div className="h-full rounded-full bg-indigo-600 transition-[width]" style={{ width: `${pct}%` }} />
         </div>
       ) : null}
-      <ul className={cx('mt-2', guest ? 'lg:grid lg:grid-cols-2 lg:gap-2' : 'lg:grid lg:grid-cols-4 lg:gap-2')}>
+      <ul className={cx('mt-2', guest ? 'lg:grid lg:grid-cols-2 lg:gap-2' : 'lg:grid lg:grid-cols-3 lg:gap-2')}>
         {tasks.items.map((task) => <TaskRow key={task.id} task={task} onAction={onAction} />)}
       </ul>
       {guest ? (
