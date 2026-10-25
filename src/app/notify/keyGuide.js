@@ -9,7 +9,7 @@ export const NOTIFY_KEY_GUIDES = {
   ios: {
     trigger: '怎么拿 Bark 链接？看图教程',
     title: 'Bark 接通教程（iPhone）',
-    description: '三步搞定，大约 1 分钟。',
+    description: '两步拿到链接，大约 1 分钟。',
     steps: [
       {
         title: '安装 Bark',
@@ -21,14 +21,13 @@ export const NOTIFY_KEY_GUIDES = {
         title: '复制推送链接',
         body: '打开 Bark，首页「使用示例」里有一条 https://api.day.app/… 的链接，点「复制」，整段粘贴到输入框就行（会自动提取 Device Key）。',
         image: '/notify-guide/bark-2.webp'
-      },
-      { title: '发送测试，再保存', body: '点「发送测试」，iPhone 收到推送后点「保存并连接」。' }
+      }
     ]
   },
   serverchan3: {
     trigger: '怎么拿 UID 和 SendKey？看图教程',
     title: 'Server酱³ 接通教程（安卓）',
-    description: '安卓推送通过 Server酱³ 转发，四步搞定。',
+    description: '安卓推送通过 Server酱³ 转发，三步拿到 UID 和 SendKey。',
     steps: [
       {
         title: '安装 Server酱³ App',
@@ -45,11 +44,6 @@ export const NOTIFY_KEY_GUIDES = {
         body: '在电脑上打开 SendKey 页面，右上角微信登录，再用 App 扫页面上的二维码。页面里红框的 SendKey 和 UID 就是要填的。',
         link: { label: '打开 SendKey 页面', href: SERVERCHAN3_SENDKEY_URL },
         image: '/notify-guide/sc3-3.webp'
-      },
-      {
-        title: '发送测试，再保存',
-        body: '填好后点「发送测试」，手机收到这样的消息就接通了，再点「保存并连接」。',
-        image: '/notify-guide/sc3-4.webp'
       }
     ]
   }
