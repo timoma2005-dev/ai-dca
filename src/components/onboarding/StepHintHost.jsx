@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { GraduationCap, Minus, X } from 'lucide-react';
 import { ONBOARDING_FLOWS } from '../../app/onboarding/catalog.js';
 import { ONBOARDING_FLOW_COMPLETE_EVENT, ONBOARDING_START_EVENT, setOnboardingHintActive } from '../../app/onboarding/state.js';
 import { trackFeatureEvent } from '../../app/analytics.js';
 import { BOTTOM_NAV_ALLOWANCE, computeHintPosition } from '../../app/onboarding/hintPosition.js';
-import { openNotifyKeyGuide } from '../../app/notify/keyGuide.js';
+import { NOTIFY_KEY_GUIDE_STATE_EVENT, openNotifyKeyGuide } from '../../app/notify/keyGuide.js';
 
 const DEFAULT_WAIT_MS = 8000;
 const completedRuns = new Set();
@@ -34,6 +34,17 @@ export function findOnboardingTarget(target, root = typeof document !== 'undefin
   return null;
 }
 
+/** 气泡下面真正在滚的容器（弹窗里的滚动区或整页）。 */
+export function findScrollParent(el) {
+  let node = el?.parentElement || null;
+  while (node && node !== document.body && node !== document.documentElement) {
+    const style = window.getComputedStyle(node);
+    if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) return node;
+    node = node.parentElement;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
 const ACTIVE_STYLE = `[data-onboarding-active="true"]{outline:3px solid #6366f1!important;outline-offset:3px;box-shadow:0 0 0 9px rgba(99,102,241,.18)!important;border-radius:12px;transition:outline-color .2s}`;
 
 /**
@@ -50,6 +61,10 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
   const [quietStepId, setQuietStepId] = useState('');
   // requireInputs：目标里标了 data-onboarding-required 的输入框都填了，才能点「下一步」。
   const [inputsReady, setInputsReady] = useState(true);
+  // 「收起」/「稍后继续」：气泡缩成左下角小胶囊，点一下展开；看图教程打开时也自动收起。
+  const [minimized, setMinimized] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const touchRef = useRef(null);
   const flow = run ? ONBOARDING_FLOWS[run.flowId] : null;
   // run.steps：选了分支后的实际步骤（见 branches）；没有就用 catalog 的。
   const steps = run?.steps || flow?.steps || [];
@@ -85,10 +100,28 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
       if (!flowId || !ONBOARDING_FLOWS[flowId]) return;
       trackFeatureEvent('onboarding', 'flow_start', { flowId, version: 2 });
       autoAdvancedRef.current = "";
+      setMinimized(false);
       setRun({ flowId, index: 0, startedAt: Date.now() });
     }
     window.addEventListener(ONBOARDING_START_EVENT, handleStart);
     return () => window.removeEventListener(ONBOARDING_START_EVENT, handleStart);
+  }, []);
+
+  // 进入新的一步时重新展开气泡。
+  useEffect(() => { setMinimized(false); }, [step?.id]);
+
+  useEffect(() => {
+    function handleGuide(event) { setGuideOpen(Boolean(event?.detail?.open)); }
+    window.addEventListener(NOTIFY_KEY_GUIDE_STATE_EVENT, handleGuide);
+    return () => window.removeEventListener(NOTIFY_KEY_GUIDE_STATE_EVENT, handleGuide);
+  }, []);
+
+  // 手指 / 滚轮落在气泡上时，照样滚动气泡下面的页面或弹窗（气泡不挡滑动）。
+  const scrollUnder = useCallback((dy) => {
+    if (!dy) return;
+    const scroller = findScrollParent(targetRef.current);
+    if (scroller === document.scrollingElement || scroller === document.documentElement) window.scrollBy(0, dy);
+    else scroller.scrollTop += dy;
   }, []);
 
   // 找目标：轮询等待懒加载页面 / 弹窗挂载，超时结束（不算完成）。
@@ -191,18 +224,47 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
     return () => window.removeEventListener('keydown', onKey);
   }, [run, end]);
 
-  const visible = Boolean(step && placementBox && !paused && !keyboardOpen && quietStepId !== step.id);
+  const collapsed = Boolean(step && (minimized || quietStepId === step.id));
+  const visible = Boolean(step && placementBox && !paused && !keyboardOpen && !collapsed && !guideOpen);
+  const showPill = Boolean(step && !paused && !keyboardOpen && collapsed && !guideOpen);
   useLayoutEffect(() => {
     setOnboardingHintActive(Boolean(run));
     return () => setOnboardingHintActive(false);
   }, [run]);
 
-  if (!visible || typeof document === 'undefined') return null;
-  const pos = computeHintPosition(placementBox, { width: window.innerWidth, height: window.innerHeight }, { placement: step.placement });
+  if (typeof document === 'undefined' || (!visible && !showPill)) return null;
   const total = steps.length;
-  const style = { left: pos.left, width: pos.width, pointerEvents: 'auto' };
+  if (!visible) {
+    return createPortal(
+      <>
+        <style>{ACTIVE_STYLE}</style>
+        <div
+          data-onboarding-pill="true"
+          className="fixed left-3 z-[140] flex items-center gap-1 rounded-full bg-slate-900 py-1 pl-1 pr-1 text-white shadow-[0_10px_24px_-8px_rgba(15,23,42,0.6)]"
+          style={{ bottom: BOTTOM_NAV_ALLOWANCE + 12, pointerEvents: 'auto' }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-extrabold hover:bg-white/10"
+            onClick={() => { trackFeatureEvent('onboarding', 'hint_expand', { flowId: run.flowId, stepId: step.id, version: 2 }); setQuietStepId(''); setMinimized(false); }}
+          >
+            <GraduationCap className="h-4 w-4 text-indigo-300" aria-hidden="true" />
+            新手入门{total > 1 ? ` ${run.index + 1}/${total}` : ''} · 继续
+          </button>
+          <button type="button" aria-label="结束新手入门" className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => end('close')}>
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      </>,
+      document.body
+    );
+  }
+  const pos = computeHintPosition(placementBox, { width: window.innerWidth, height: window.innerHeight }, { placement: step.placement });
+  const style = { left: pos.left, width: pos.width, pointerEvents: 'auto', touchAction: 'none' };
   if (pos.mode === 'above') style.bottom = pos.bottom; else style.top = pos.top;
   const last = run.index + 1 >= total;
+  const minimize = (reason) => { trackFeatureEvent('onboarding', 'hint_minimize', { flowId: run.flowId, stepId: step.id, reason, version: 2 }); setMinimized(true); };
   return createPortal(
     <>
       <style>{ACTIVE_STYLE}</style>
@@ -215,6 +277,15 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         style={style}
         onPointerDown={(event) => event.stopPropagation()}
         onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); }}
+        onTouchStart={(event) => { touchRef.current = event.touches[0]?.clientY ?? null; }}
+        onTouchMove={(event) => {
+          const y = event.touches[0]?.clientY;
+          if (touchRef.current == null || y == null) return;
+          scrollUnder(touchRef.current - y);
+          touchRef.current = y;
+        }}
+        onTouchEnd={() => { touchRef.current = null; }}
+        onWheel={(event) => scrollUnder(event.deltaY)}
       >
         {pos.arrowLeft != null ? (
           <span
@@ -225,9 +296,14 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         ) : null}
         <div className="flex items-start justify-between gap-2">
           <div className="text-[11px] font-bold text-indigo-300">{total > 1 ? `第 ${run.index + 1} 步 / 共 ${total} 步` : '新手入门'}</div>
-          <button type="button" aria-label="关闭提示" className="-mr-1 -mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => end('close')}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+          <div className="-mr-1 -mt-0.5 flex items-center gap-0.5">
+            <button type="button" aria-label="收起提示" title="收起（左下角可再展开）" className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => minimize('button')}>
+              <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button type="button" aria-label="关闭提示" className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => end('close')}>
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
         </div>
         <div className="mt-0.5 text-sm font-extrabold">{step.title}</div>
         <p className="mt-1 text-xs leading-5 text-slate-300">{step.body}</p>
@@ -236,7 +312,7 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         ) : null}
         {step.requireInputs && !inputsReady ? <p className="mt-1 text-[11px] font-semibold text-amber-300">先把输入框填好</p> : null}
         <div className="mt-2.5 flex items-center justify-between">
-          <button type="button" className="text-xs text-slate-400 hover:text-slate-200" onClick={() => end('later')}>稍后继续</button>
+          <button type="button" className="text-xs text-slate-400 hover:text-slate-200" onClick={() => minimize('later')}>稍后继续</button>
           <button
             type="button"
             className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-extrabold hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"

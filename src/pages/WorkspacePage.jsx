@@ -276,7 +276,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   // 账号菜单 / 侧栏「新手入门」：重新展开首页任务卡并回到首页。
   useEffect(() => {
     function handleOpenOnboarding() {
-      writeOnboardingState({ dismissed: false, celebrated: false });
+      // 全部完成后再打开：显示任务列表（可「再看一遍」），不再重播恭喜。
+      writeOnboardingState({ dismissed: false, celebrated: false, replay: true });
       window.dispatchEvent(new CustomEvent('workspace:navigate', { detail: { tab: 'home' } }));
     }
     window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpenOnboarding);

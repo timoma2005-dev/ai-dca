@@ -363,6 +363,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
                     {authMode === 'register' ? '注册并登录' : '登录'}
                   </button>
                   {authDisabledReason ? <div className="text-xs text-slate-400">{authDisabledReason}</div> : null}
+                  <GettingStartedEntry loggedIn={false} accessOf={(tab) => evaluateTabAccess(rbac, tab)} variant="auth" onOpened={closeMenu} />
                 </div>
             </div>
           </div>

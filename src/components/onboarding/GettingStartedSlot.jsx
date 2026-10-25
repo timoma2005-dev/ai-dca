@@ -31,7 +31,10 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
       window.setTimeout(() => window.dispatchEvent(new CustomEvent(ONBOARDING_START_EVENT, { detail: { flow: task.flow } })), 0);
     }
   }, [onRegister, onUpgrade]);
-  const dismiss = () => { trackFeatureEvent('onboarding', 'dismiss', { doneCount: tasks.doneCount, mode: tasks.mode, takeover, version: 2 }); writeOnboardingState({ dismissed: true }); };
+  const dismiss = () => {
+    trackFeatureEvent('onboarding', 'dismiss', { doneCount: tasks.doneCount, mode: tasks.mode, takeover, version: 2 });
+    writeOnboardingState(tasks.allDone ? { dismissed: true, celebrated: true, replay: false } : { dismissed: true, replay: false });
+  };
   const expiry = loggedIn ? <VipExpiryNotice roles={roles} onUpgrade={onUpgrade} demoActive={demoActive} /> : null;
   if (!shouldShowGettingStarted({ tasks, state, demoActive })) {
     return expiry ? <div className="cn-home-onboarding">{expiry}</div> : null;
@@ -42,8 +45,9 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
       <GettingStartedCard
         tasks={tasks}
         onAction={handleAction}
+        replay={state.replay}
         onDismiss={dismiss}
-        onFinish={() => writeOnboardingState({ celebrated: true, dismissed: true })}
+        onFinish={() => writeOnboardingState({ celebrated: true, dismissed: true, replay: false })}
       />
       {takeover ? (
         <button type="button" className="mx-auto px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-600" onClick={dismiss} data-onboarding-skip="true">
@@ -67,8 +71,9 @@ export function openGettingStarted() {
 
 export function GettingStartedEntry({ loggedIn, accessOf, variant = 'menu', onOpened }) {
   const { tasks, state } = useOnboarding({ loggedIn, accessOf });
-  if (!tasks || tasks.mode !== 'user') return null;
-  if (tasks.allDone && state.celebrated) return null;
+  if (!tasks) return null;
+  // 游客只在登录框里给入口（variant=auth）；全部完成后入口保留，可以再看一遍。
+  if (tasks.mode !== 'user' && variant !== 'auth') return null;
   const pct = tasks.total ? tasks.doneCount / tasks.total : 0;
   const ring = (
     <span
@@ -80,6 +85,14 @@ export function GettingStartedEntry({ loggedIn, accessOf, variant = 'menu', onOp
     </span>
   );
   const onClick = () => { trackFeatureEvent('onboarding', 'entry_open', { variant, version: 2 }); openGettingStarted(); onOpened?.(); };
+  if (variant === 'auth') {
+    return (
+      <button type="button" className="inline-flex w-full items-center justify-center gap-1.5 py-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700" onClick={onClick} data-onboarding-entry="auth">
+        <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
+        {tasks.allDone ? '再看一遍新手入门' : `新手入门（${tasks.doneCount}/${tasks.total}）`}
+      </button>
+    );
+  }
   if (variant === 'sidebar') {
     return (
       <button type="button" className="flex w-full items-center gap-2.5 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-left hover:bg-indigo-50" onClick={onClick} data-onboarding-entry="sidebar">
@@ -95,7 +108,7 @@ export function GettingStartedEntry({ loggedIn, accessOf, variant = 'menu', onOp
     <button type="button" className="flex w-full items-center gap-2.5 rounded-xl bg-indigo-50 px-3 py-2 text-left hover:bg-indigo-100" onClick={onClick} data-onboarding-entry="menu">
       {ring}
       <span className="flex-1 text-sm font-bold text-indigo-900">新手入门</span>
-      <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600"><GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />{state.dismissed ? '重新打开' : '继续'}</span>
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600"><GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />{tasks.allDone ? '再看一遍' : state.dismissed ? '重新打开' : '继续'}</span>
     </button>
   );
 }

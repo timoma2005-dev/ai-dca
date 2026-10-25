@@ -60,3 +60,10 @@ export function openNotifyKeyGuide(channel) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(NOTIFY_KEY_GUIDE_EVENT, { detail: { channel } }));
 }
+
+/** 看图教程弹窗开 / 关（新手入门气泡据此收起 / 恢复）。 */
+export const NOTIFY_KEY_GUIDE_STATE_EVENT = 'notify-key-guide:state';
+export function setNotifyKeyGuideOpen(open) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(NOTIFY_KEY_GUIDE_STATE_EVENT, { detail: { open: Boolean(open) } }));
+}

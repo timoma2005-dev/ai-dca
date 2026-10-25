@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Check, ChevronRight, Lock, PartyPopper, X } from 'lucide-react';
 import { trackFeatureEvent } from '../../app/analytics.js';
+import { flyToAccount } from '../../app/onboarding/flyToAccount.js';
 
 function cx(...parts) {
   return parts.filter(Boolean).join(' ');
@@ -14,7 +15,9 @@ const BADGE_TONE = {
 function TaskRow({ task, onAction }) {
   const done = task.status === 'done';
   const locked = task.status === 'locked';
-  const clickable = !done;
+  // 已完成的演示 / 引导可以再看一遍。
+  const replayable = done && Boolean(task.flow || task.action === 'demo');
+  const clickable = !done || replayable;
   const body = (
     <>
       <span
@@ -37,7 +40,7 @@ function TaskRow({ task, onAction }) {
       </span>
       {clickable ? (
         <span className={cx('inline-flex shrink-0 items-center text-xs font-bold lg:mt-auto', locked ? 'text-amber-700' : 'text-indigo-600')}>
-          {locked ? '打赏开通' : task.cta}
+          {locked ? '打赏开通' : replayable ? '再看一遍' : task.cta}
           <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
       ) : null}
@@ -75,8 +78,15 @@ function Confetti() {
 }
 
 /** 首页新手入门任务卡（「2 步收到第一条换基信号」）。只负责展示和把点击交给调用方；完成状态来自真实数据。 */
-export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
+export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish, replay = false }) {
   const tracked = useRef(false);
+  const sectionRef = useRef(null);
+  // 收起时：「新手入门」飞向右上角个人中心，提示随时可以再看。
+  const finish = () => {
+    const rect = sectionRef.current?.getBoundingClientRect?.();
+    if (rect) flyToAccount({ fromRect: rect });
+    onFinish?.();
+  };
   useEffect(() => {
     if (tracked.current || !tasks) return;
     tracked.current = true;
@@ -86,9 +96,9 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
   const guest = tasks.mode === 'guest';
   const pct = tasks.total ? Math.round((tasks.doneCount / tasks.total) * 100) : 0;
 
-  if (tasks.allDone) {
+  if (tasks.allDone && !replay) {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm" data-testid="getting-started-card" data-state="all-done" data-mode={tasks.mode}>
+      <section ref={sectionRef} className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm" data-testid="getting-started-card" data-state="all-done" data-mode={tasks.mode}>
         <Confetti />
         <div className="relative flex items-center gap-3">
           <span className="gs-pop flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600" style={{ animation: 'gs-pop .6s ease-out both' }}><PartyPopper className="h-5 w-5" aria-hidden="true" /></span>
@@ -96,7 +106,7 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
             <h2 className="text-base font-extrabold text-slate-900">{guest ? '恭喜，教程都完成了 🎉' : '恭喜，全部完成 🎉'}</h2>
             <p className="text-xs text-slate-500">{guest ? '注册就送 3 个月 VIP，把切换方案和手机通知用到你自己的账户上。' : '切换方案和通知都已就绪，溢价拉开时会第一时间推到你手机。'}</p>
           </div>
-          <button type="button" className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50" onClick={onFinish}>收起</button>
+          <button type="button" className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50" onClick={finish}>收起</button>
         </div>
         {guest ? (
           <button type="button" className="relative mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-indigo-600 text-sm font-extrabold text-white hover:bg-indigo-700" onClick={() => onAction(tasks.items[0])}>
@@ -108,7 +118,7 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
   }
 
   return (
-    <section className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-[0_6px_24px_-12px_rgba(79,70,229,0.35)]" data-testid="getting-started-card" data-mode={tasks.mode}>
+    <section ref={sectionRef} className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-[0_6px_24px_-12px_rgba(79,70,229,0.35)]" data-testid="getting-started-card" data-mode={tasks.mode}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-extrabold text-slate-900">{guest ? '溢价拉开，第一时间提醒你换基' : '2 步收到第一条换基信号'}</h2>

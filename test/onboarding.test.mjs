@@ -48,7 +48,7 @@ test('markOnboardingTask 只记录首次完成时间，重复事件不改写', (
 
 test('损坏的进度数据回退为空状态', () => {
   const ls = memoryStorage({ [`${ONBOARDING_STORAGE_PREFIX}a`]: '{oops' });
-  assert.deepEqual(readOnboardingState('a', ls), { dismissed: false, celebrated: false, seenDemo: false, seenNotifyDemo: false, done: {} });
+  assert.deepEqual(readOnboardingState('a', ls), { dismissed: false, celebrated: false, replay: false, seenDemo: false, seenNotifyDemo: false, done: {} });
 });
 
 test('信号：持仓、已保存切换方案、通知通道按真实本地数据判断', () => {
@@ -257,4 +257,24 @@ test('Bark / Server酱³ 填 Key 有看图教程（含下载链接），教程�
   assert.equal(branches.ios[0].guide, 'ios');
   assert.equal(branches.serverchan3[0].guide, 'serverchan3');
   assert.match(read('src/pages/NotifyConfigCard.jsx'), /<NotifyKeyGuide channel="ios" \/>/);
+});
+
+test('新手入门气泡：可收起成左下角胶囊、稍后继续不结束、看图教程打开时自动收起、气泡上滑动会滚动下面的页面', () => {
+  const src = read('src/components/onboarding/StepHintHost.jsx');
+  assert.match(src, /data-onboarding-pill/);
+  assert.match(src, /onClick=\{\(\) => minimize\('later'\)\}>稍后继续/);
+  assert.match(src, /NOTIFY_KEY_GUIDE_STATE_EVENT/);
+  assert.match(src, /onTouchMove=/);
+  const guide = read('src/components/notify/NotifyKeyGuide.jsx');
+  assert.match(guide, /看完了，回去填写/);
+  assert.match(guide, /overflow-hidden p-0/);
+});
+
+test('全部完成收起时飞向个人中心；入口完成后保留「再看一遍」，游客在登录框里也有入口', () => {
+  assert.match(read('src/components/onboarding/GettingStartedCard.jsx'), /flyToAccount\(\{ fromRect: rect \}\)/);
+  assert.match(read('src/app/onboarding/flyToAccount.js'), /data-account-trigger/);
+  const slot = read('src/components/onboarding/GettingStartedSlot.jsx');
+  assert.doesNotMatch(slot, /tasks\.allDone && state\.celebrated\) return null/);
+  assert.match(slot, /再看一遍新手入门/);
+  assert.match(read('src/components/account-menu.jsx'), /variant="auth"/);
 });
