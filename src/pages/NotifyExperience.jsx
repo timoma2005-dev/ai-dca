@@ -607,11 +607,11 @@ export function NotifyExperience({ embedded = false }) {
         eventId: `notify-channel-test-serverchan3-${Date.now()}`,
         eventType: 'notify-channel-test',
         ruleId: 'notify-channel-test-serverchan3',
-        symbol: 'Andriod Server酱³',
+        symbol: 'Android Server酱³',
         strategyName: '消息推送配置',
-        title: 'Andriod 消息测试通知',
-        summary: 'Andriod 消息测试',
-        body: '这是一条用于检查 Andriod Server酱³ 配置是否正确的测试通知。',
+        title: 'Android 消息测试通知',
+        summary: 'Android 消息测试',
+        body: '这是一条用于检查 Android Server酱³ 配置是否正确的测试通知。',
         triggerCondition: '手动测试'
       });
       assertNotifyTestDelivered(payload, 'Server酱³ 测试通知发送失败，请检查 UID 或 SendKey');
@@ -633,8 +633,8 @@ export function NotifyExperience({ embedded = false }) {
         }
       });
       await refreshNotifyEvents();
-      setNotifyMessage('Andriod 消息测试通知已发送。');
-      showActionToast('Andriod 消息测试通知', 'success', { description: '请在 Server酱³ 安卓客户端检查是否收到。' });
+      setNotifyMessage('Android 消息测试通知已发送。');
+      showActionToast('Android 消息测试通知', 'success', { description: '请在 Server酱³ 安卓客户端检查是否收到。' });
       trackActionResult('notify', 'serverchan3_test', 'success', {
         ...notifyMeta(),
         durationMs: Date.now() - startedAt
@@ -643,7 +643,7 @@ export function NotifyExperience({ embedded = false }) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Server酱³ 测试通知发送失败';
       setNotifyError(message);
-      showActionToast('Andriod 消息测试通知', 'error', { description: message });
+      showActionToast('Android 消息测试通知', 'error', { description: message });
       trackActionResult('notify', 'serverchan3_test', 'error', {
         ...notifyMeta(),
         durationMs: Date.now() - startedAt,

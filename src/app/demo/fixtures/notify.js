@@ -337,6 +337,9 @@ export function createNotifySetupFixtures(events, startedAt = Date.now()) {
     'POST /api/notify/test': ({ body }) => {
       const input = parseJsonBody(body);
       const channel = String(input.targetChannel || 'bark');
+      // 演示里「发送测试」成功即视为接通（真实页面测试成功后也会把渠道记成已配置）。
+      if (channel === 'serverchan3' && input.serverChan3?.uid) applyItem('channel:serverchan3', { serverChan3Uid: input.serverChan3.uid, serverChan3SendKey: input.serverChan3.sendKey || channels.serverChan3.sendKey });
+      if (channel === 'bark' && input.barkDeviceKey) applyItem('channel:bark', { barkDeviceKey: input.barkDeviceKey });
       return {
         ok: true,
         summary: {
