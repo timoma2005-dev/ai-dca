@@ -27,7 +27,8 @@ import { useDemoSessionImport } from '../app/demo/useDemoSessionImport.js';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import { GettingStartedEntry, GettingStartedSlot, OnboardingHomeGate } from '../components/onboarding/GettingStartedSlot.jsx';
 import { StepHintHost } from '../components/onboarding/StepHintHost.jsx';
-import { ONBOARDING_OPEN_EVENT, ONBOARDING_START_DEMO_EVENT, ONBOARDING_START_EVENT, isOnboardingHintActive, writeOnboardingState } from '../app/onboarding/state.js';
+import { ONBOARDING_FLOW_COMPLETE_EVENT, ONBOARDING_OPEN_EVENT, ONBOARDING_START_DEMO_EVENT, ONBOARDING_START_EVENT, consumeOnboardingDemoCompleted, isOnboardingHintActive, markOnboardingDemoCompleted, writeOnboardingState } from '../app/onboarding/state.js';
+import { ONBOARDING_FLOWS } from '../app/onboarding/catalog.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
 // 各主 tab 使用 React.lazy 按需加载，在 Vite 中会被拆成独立 chunk。
@@ -597,6 +598,33 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     }
     window.addEventListener('workspace:navigate', handleWorkspaceNavigate);
     return () => window.removeEventListener('workspace:navigate', handleWorkspaceNavigate);
+  });
+
+  // 教程走完：提示一下，回到首页的新手入门卡。演示里的教程先记到 sessionStorage，回首页刷新后再落进度。
+  useEffect(() => {
+    consumeOnboardingDemoCompleted();
+    function handleFlowComplete(event) {
+      const flow = ONBOARDING_FLOWS[event?.detail?.flow];
+      if (!flow) return;
+      showToast({ title: '这个教程完成了 ✓', description: '马上回到新手入门' });
+      window.setTimeout(() => {
+        if (flow.inDemo) {
+          markOnboardingDemoCompleted(flow.seenKey);
+          window.__AI_DCA_DEMO_VARIANT__ = '';
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', 'home');
+            window.history.replaceState(window.history.state, '', url.toString());
+          } catch { /* 地址改不了就停在原页刷新 */ }
+          window.location.reload();
+          return;
+        }
+        writeOnboardingState({ dismissed: false });
+        handleSelectTab('home');
+      }, 1800);
+    }
+    window.addEventListener(ONBOARDING_FLOW_COMPLETE_EVENT, handleFlowComplete);
+    return () => window.removeEventListener(ONBOARDING_FLOW_COMPLETE_EVENT, handleFlowComplete);
   });
 
   // 新手入门「先看看」：切到对应页并直接开始演示（跳过守卫页），然后启动演示专用的步骤提示。

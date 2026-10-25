@@ -92,14 +92,14 @@ const NOTIFY_STEPS = [
     id: 'notify.key',
     target: 'notify-key',
     title: '第二步：填推送 Key',
-    body: 'Server酱³ 填 App 里的 UID 和 SendKey；Bark 粘贴 App 里复制的链接。邮箱填地址收验证码。',
+    body: 'Server酱³ 填 App 里的 UID 和 SendKey；Bark 粘贴 App 里复制的链接；邮箱填地址后点「发送验证码」（演示里验证码随便填 6 位数字）。',
     waitMs: 15000
   },
   {
     id: 'notify.test',
     target: 'notify-test',
-    title: '第三步：点「发送测试」',
-    body: '手机收到测试消息就算接通了，之后溢价拉开的换基信号都会推到这里。',
+    title: '第三步：发送测试',
+    body: 'Server酱³ / Bark 点「发送测试」，手机收到就算接通；邮箱点「验证并开启」。之后溢价拉开的换基信号都会推到这里。',
     advanceOnClick: true,
     waitMs: 15000
   }
@@ -149,6 +149,7 @@ export const ONBOARDING_FLOWS = {
   switchDemo: {
     task: 'switch',
     inDemo: true,
+    seenKey: 'seenDemo',
     steps: [
       {
         id: 'switchDemo.create',
@@ -182,6 +183,7 @@ export const ONBOARDING_FLOWS = {
   notifyDemo: {
     task: 'notify',
     inDemo: true,
+    seenKey: 'seenNotifyDemo',
     steps: NOTIFY_STEPS.map((step) => ({ ...step, id: step.id.replace('notify.', 'notifyDemo.') }))
   },
   watchlist: {
@@ -209,11 +211,14 @@ export const ONBOARDING_FLOWS = {
 export function buildOnboardingTasks({ loggedIn, signals = {}, state = {}, accessOf } = {}) {
   const done = state.done || {};
   if (!loggedIn) {
+    // 游客的「教程」= 两个演示；走完最后一步才记为完成（见 markOnboardingDemoCompleted）。
     const items = GUEST_TASKS.map((task) => ({
       ...task,
-      status: task.seenKey && state[task.seenKey] ? 'seen' : 'todo'
+      status: task.seenKey && state[task.seenKey] ? 'done' : 'todo'
     }));
-    return { mode: 'guest', items, doneCount: 0, total: items.length, allDone: false, activated: false };
+    const demos = items.filter((item) => item.action === 'demo');
+    const doneCount = demos.filter((item) => item.status === 'done').length;
+    return { mode: 'guest', items, doneCount, total: demos.length, allDone: demos.length > 0 && doneCount === demos.length, activated: false };
   }
   const items = USER_TASKS.map((task) => {
     const isDone = Boolean(signals[task.id]) || Boolean(done[task.id]);

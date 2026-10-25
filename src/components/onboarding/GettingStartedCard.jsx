@@ -55,6 +55,25 @@ function TaskRow({ task, onAction }) {
   );
 }
 
+const CONFETTI_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ec4899', '#0ea5e9'];
+const CONFETTI_STYLE = '@keyframes gs-confetti{0%{transform:translate3d(0,-12px,0) rotate(0);opacity:1}100%{transform:translate3d(var(--gs-dx),190px,0) rotate(600deg);opacity:0}}@keyframes gs-pop{0%{transform:scale(.4)}60%{transform:scale(1.15)}100%{transform:scale(1)}}@media (prefers-reduced-motion:reduce){.gs-confetti{display:none}.gs-pop{animation:none!important}}';
+
+/** 全部完成时的彩带动画（纯 CSS，播两轮后消失）。 */
+function Confetti() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+      <style>{CONFETTI_STYLE}</style>
+      {Array.from({ length: 30 }, (_, i) => (
+        <span
+          key={i}
+          className="gs-confetti absolute top-0 block h-2.5 w-1.5 rounded-sm"
+          style={{ left: `${(i * 37) % 100}%`, background: CONFETTI_COLORS[i % CONFETTI_COLORS.length], animation: `gs-confetti ${1.3 + (i % 5) * 0.25}s ease-out ${(i % 7) * 0.09}s 2 both`, '--gs-dx': `${((i * 53) % 70) - 35}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** 首页新手入门任务卡（「2 步收到第一条换基信号」）。只负责展示和把点击交给调用方；完成状态来自真实数据。 */
 export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
   const tracked = useRef(false);
@@ -69,15 +88,21 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish }) {
 
   if (tasks.allDone) {
     return (
-      <section className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm" data-testid="getting-started-card" data-state="all-done">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><PartyPopper className="h-5 w-5" aria-hidden="true" /></span>
+      <section className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm" data-testid="getting-started-card" data-state="all-done" data-mode={tasks.mode}>
+        <Confetti />
+        <div className="relative flex items-center gap-3">
+          <span className="gs-pop flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600" style={{ animation: 'gs-pop .6s ease-out both' }}><PartyPopper className="h-5 w-5" aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-extrabold text-slate-900">已经用起来了</h2>
-            <p className="text-xs text-slate-500">切换方案和通知都已就绪，溢价拉开时会第一时间推到你手机。</p>
+            <h2 className="text-base font-extrabold text-slate-900">{guest ? '恭喜，教程都完成了 🎉' : '恭喜，全部完成 🎉'}</h2>
+            <p className="text-xs text-slate-500">{guest ? '注册就送 3 个月 VIP，把切换方案和手机通知用到你自己的账户上。' : '切换方案和通知都已就绪，溢价拉开时会第一时间推到你手机。'}</p>
           </div>
           <button type="button" className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50" onClick={onFinish}>收起</button>
         </div>
+        {guest ? (
+          <button type="button" className="relative mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-indigo-600 text-sm font-extrabold text-white hover:bg-indigo-700" onClick={() => onAction(tasks.items[0])}>
+            免费注册，领 3 个月 VIP
+          </button>
+        ) : null}
       </section>
     );
   }

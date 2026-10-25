@@ -2,11 +2,19 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ONBOARDING_FLOWS } from '../../app/onboarding/catalog.js';
-import { ONBOARDING_START_EVENT, setOnboardingHintActive } from '../../app/onboarding/state.js';
+import { ONBOARDING_FLOW_COMPLETE_EVENT, ONBOARDING_START_EVENT, setOnboardingHintActive } from '../../app/onboarding/state.js';
 import { trackFeatureEvent } from '../../app/analytics.js';
 import { BOTTOM_NAV_ALLOWANCE, computeHintPosition } from '../../app/onboarding/hintPosition.js';
 
 const DEFAULT_WAIT_MS = 8000;
+const completedRuns = new Set();
+
+/** 教程最后一步完成：通知工作台（回到新手入门 / 演示记完成）。同一次运行只发一次。 */
+function emitComplete(run) {
+  if (!run || completedRuns.has(run.startedAt)) return;
+  completedRuns.add(run.startedAt);
+  window.setTimeout(() => window.dispatchEvent(new CustomEvent(ONBOARDING_FLOW_COMPLETE_EVENT, { detail: { flow: run.flowId } })), 0);
+}
 
 function isVisible(el) {
   if (!el || !el.isConnected) return false;
@@ -47,6 +55,7 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
   const end = useCallback((reason) => {
     setRun((current) => {
       if (current) trackFeatureEvent('onboarding', 'flow_end', { flowId: current.flowId, stepIndex: current.index, reason, version: 2 });
+      if (current && reason === 'complete') emitComplete(current);
       return null;
     });
   }, []);
@@ -57,6 +66,7 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
       const steps = ONBOARDING_FLOWS[current.flowId]?.steps || [];
       if (current.index + 1 < steps.length) return { ...current, index: current.index + 1 };
       trackFeatureEvent('onboarding', 'flow_end', { flowId: current.flowId, stepIndex: current.index, reason: 'complete', version: 2 });
+      emitComplete(current);
       return null;
     });
   }, []);

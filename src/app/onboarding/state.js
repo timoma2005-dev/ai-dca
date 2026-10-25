@@ -104,3 +104,27 @@ export function setOnboardingHintActive(value) {
 export function isOnboardingHintActive() {
   return hintActive;
 }
+
+// 演示里走完一个教程：演示期间 localStorage 被沙箱覆盖、退出会刷新页面，
+// 所以先把「完成了哪个」记到 sessionStorage，刷新回首页后再写进新手进度。
+const DEMO_DONE_SESSION_KEY = 'aiDcaOnboardingDemoDone';
+const DEMO_SEEN_KEYS = ['seenDemo', 'seenNotifyDemo'];
+export const ONBOARDING_FLOW_COMPLETE_EVENT = 'onboarding:flow-complete';
+
+export function markOnboardingDemoCompleted(seenKey, ss = typeof window !== 'undefined' ? window.sessionStorage : null) {
+  if (!DEMO_SEEN_KEYS.includes(seenKey)) return;
+  try { ss?.setItem(DEMO_DONE_SESSION_KEY, seenKey); } catch { /* 隐私模式忽略 */ }
+}
+
+export function consumeOnboardingDemoCompleted(ss = typeof window !== 'undefined' ? window.sessionStorage : null, account, ls) {
+  let key = '';
+  try {
+    key = String(ss?.getItem(DEMO_DONE_SESSION_KEY) || '');
+    if (key) ss.removeItem(DEMO_DONE_SESSION_KEY);
+  } catch {
+    return '';
+  }
+  if (!DEMO_SEEN_KEYS.includes(key)) return '';
+  writeOnboardingState({ [key]: true, dismissed: false, celebrated: false }, account, ls);
+  return key;
+}

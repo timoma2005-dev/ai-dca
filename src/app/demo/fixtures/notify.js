@@ -295,6 +295,10 @@ function isSetupVariant() {
 function parseJsonBody(body) {
   try { return JSON.parse(body || '{}') || {}; } catch { return {}; }
 }
+function maskEmail(address) {
+  const [name = '', domain = ''] = String(address || '').split('@');
+  return domain ? `${name.slice(0, 2)}***@${domain}` : name;
+}
 function maskKey(key) {
   const text = String(key || '');
   return text.length > 10 ? `${text.slice(0, 6)}...${text.slice(-4)}` : text ? `${text.slice(0, 2)}...` : '';
@@ -302,21 +306,27 @@ function maskKey(key) {
 
 /** notify-setup 变体：可变的渠道状态 + 保存 / 测试 / 账号资源接口 mock。 */
 export function createNotifySetupFixtures(events, startedAt = Date.now()) {
-  const channels = { barkDeviceKey: '', serverChan3: { uid: '', sendKey: '' } };
+  const channels = { barkDeviceKey: '', barkEnabled: true, serverChan3: { uid: '', sendKey: '', enabled: true }, email: { address: '', verified: false, enabled: false } };
   const summary = () => {
     const base = buildNotifyDemoStatusSummary(events, startedAt);
     const sc = channels.serverChan3;
     base.data.channels = {
-      bark: { deviceKey: channels.barkDeviceKey, enabled: Boolean(channels.barkDeviceKey), configured: Boolean(channels.barkDeviceKey) },
-      serverChan3: { uid: sc.uid, sendKeyMasked: maskKey(sc.sendKey), configured: Boolean(sc.uid), enabled: Boolean(sc.uid) },
-      email: { maskedAddress: '', verified: false, verifiedAt: '', enabled: false, configured: false },
+      bark: { deviceKey: channels.barkDeviceKey, enabled: Boolean(channels.barkDeviceKey) && channels.barkEnabled, configured: Boolean(channels.barkDeviceKey) },
+      serverChan3: { uid: sc.uid, sendKeyMasked: maskKey(sc.sendKey), configured: Boolean(sc.uid), enabled: Boolean(sc.uid) && sc.enabled !== false },
+      email: {
+        maskedAddress: channels.email.verified ? maskEmail(channels.email.address) : '',
+        verified: channels.email.verified,
+        verifiedAt: channels.email.verified ? new Date(startedAt).toISOString() : '',
+        enabled: channels.email.verified && channels.email.enabled,
+        configured: channels.email.verified,
+      },
       webWs: { configured: false },
     };
     return base;
   };
   const applyItem = (itemId, item = {}) => {
     if (itemId === 'channel:bark') channels.barkDeviceKey = String(item.barkDeviceKey || '').trim();
-    if (itemId === 'channel:serverchan3') channels.serverChan3 = { uid: String(item.serverChan3Uid || '').trim(), sendKey: String(item.serverChan3SendKey || '').trim() };
+    if (itemId === 'channel:serverchan3') channels.serverChan3 = { uid: String(item.serverChan3Uid || '').trim(), sendKey: String(item.serverChan3SendKey || '').trim(), enabled: true };
   };
   const itemIdOf = (url) => decodeURIComponent(url.pathname.slice(ACCOUNT_NOTIFY_ITEMS_PATH.length));
   return {
@@ -334,6 +344,26 @@ export function createNotifySetupFixtures(events, startedAt = Date.now()) {
       applyItem(itemIdOf(url), {});
       return { ok: true };
     },
+    'POST /api/notify/email/send-code': ({ body }) => {
+      channels.email.address = String(parseJsonBody(body).email || '').trim();
+      return { ok: true, message: '演示：验证码不会真的发出，随便填 6 位数字即可' };
+    },
+    'POST /api/notify/email/verify': ({ body }) => {
+      const input = parseJsonBody(body);
+      if (!/^\d{6}$/.test(String(input.code || ''))) return new Response(JSON.stringify({ ok: false, error: '请输入 6 位数字验证码' }), { status: 400, headers: { 'content-type': 'application/json' } });
+      channels.email = { address: String(input.email || channels.email.address).trim(), verified: true, enabled: true };
+      return { ok: true, verified: true };
+    },
+    'POST /api/notify/email/save': ({ body }) => {
+      channels.email = { address: String(parseJsonBody(body).email || channels.email.address).trim(), verified: true, enabled: true };
+      return { ok: true };
+    },
+    'POST /api/notify/email/enable': () => { channels.email.enabled = true; return { ok: true }; },
+    'POST /api/notify/email/disable': () => { channels.email.enabled = false; return { ok: true }; },
+    'POST /api/notify/channels/bark/enable': () => { channels.barkEnabled = true; return { ok: true }; },
+    'POST /api/notify/channels/bark/disable': () => { channels.barkEnabled = false; return { ok: true }; },
+    'POST /api/notify/channels/serverchan3/enable': () => { channels.serverChan3.enabled = true; return { ok: true }; },
+    'POST /api/notify/channels/serverchan3/disable': () => { channels.serverChan3.enabled = false; return { ok: true }; },
     'POST /api/notify/test': ({ body }) => {
       const input = parseJsonBody(body);
       const channel = String(input.targetChannel || 'bark');

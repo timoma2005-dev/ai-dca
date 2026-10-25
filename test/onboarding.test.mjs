@@ -204,3 +204,23 @@ test('游客「看看怎么接通手机通知」进通知演示：选渠道 → 
   const test = routes['POST /api/notify/test']({ body: JSON.stringify({ targetChannel: 'serverchan3' }) });
   assert.equal(test.summary.deliveredCount, 1);
 });
+
+test('演示教程走完才记完成：sessionStorage 标记 → 回首页后写进度；两个都完成 = 游客 allDone（显示恭喜）', async () => {
+  const { markOnboardingDemoCompleted, consumeOnboardingDemoCompleted } = await import('../src/app/onboarding/state.js');
+  const ss = memoryStorage();
+  const ls = memoryStorage();
+  markOnboardingDemoCompleted('seenDemo', ss);
+  assert.equal(consumeOnboardingDemoCompleted(ss, 'guest', ls), 'seenDemo');
+  assert.equal(consumeOnboardingDemoCompleted(ss, 'guest', ls), '');
+  let state = readOnboardingState('guest', ls);
+  let tasks = buildOnboardingTasks({ loggedIn: false, state });
+  assert.equal(tasks.items.find((item) => item.id === 'demo').status, 'done');
+  assert.equal(tasks.allDone, false);
+  markOnboardingDemoCompleted('seenNotifyDemo', ss);
+  consumeOnboardingDemoCompleted(ss, 'guest', ls);
+  state = readOnboardingState('guest', ls);
+  tasks = buildOnboardingTasks({ loggedIn: false, state });
+  assert.equal(tasks.allDone, true);
+  assert.equal(ONBOARDING_FLOWS.switchDemo.seenKey, 'seenDemo');
+  assert.equal(ONBOARDING_FLOWS.notifyDemo.seenKey, 'seenNotifyDemo');
+});
