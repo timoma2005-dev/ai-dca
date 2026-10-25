@@ -155,8 +155,8 @@ test.describe('workspace smoke', () => {
     await waitForWorkspace(page, '消息推送配置');
     await ensureNotifyConfigExpanded(page);
 
-    await page.getByRole('tab', { name: /^Andriod$/ }).click();
-    await expect(page.getByRole('tab', { name: /^Andriod$/ })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tab', { name: /^Android$/ }).click();
+    await expect(page.getByRole('tab', { name: /^Android$/ })).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('button', { name: /查看「安卓：下载哪个 & 怎么配置」使用帮助/ }).click();
     const serverChan3TipDialog = page.getByRole('dialog', { name: '安卓：下载哪个 & 怎么配置' });
     await expect(serverChan3TipDialog).toBeVisible();
