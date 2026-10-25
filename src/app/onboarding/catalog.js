@@ -85,12 +85,12 @@ const NOTIFY_BRANCHES = {
   ios: [
     { id: 'notify.bark.key', target: 'notify-key', title: '第二步：粘贴 Bark 链接', body: '打开 Bark App，复制首页的推送链接（https://api.day.app/…）粘贴进来。填好会自动进入下一步。', ...KEY_FILLED },
     { id: 'notify.bark.test', target: 'notify-test', title: '第三步：发送测试', body: '点「发送测试」，iPhone 收到推送就说明接通了。', advanceOnClick: true, waitMs: 15000 },
-    { id: 'notify.bark.save', target: 'notify-save', title: '最后：保存并连接', body: '点「保存并连接」，之后溢价拉开的换基信号都会推到这台 iPhone。', advanceOnClick: true, waitMs: 15000 }
+    { id: 'notify.bark.save', target: 'notify-save', title: '最后：保存并连接', body: '点「保存并连接」，之后溢价拉开的换基信号都会推到这台 iPhone。', advanceOnClick: true, completeWhenGone: true, waitMs: 15000 }
   ],
   serverchan3: [
     { id: 'notify.sc3.key', target: 'notify-key', title: '第二步：填 UID 和 SendKey', body: '在 Server酱³ App 里找到 UID 和 SendKey，两个都填上。填好会自动进入下一步。', ...KEY_FILLED },
     { id: 'notify.sc3.test', target: 'notify-test', title: '第三步：发送测试', body: '点「发送测试」，手机收到推送就说明接通了。', advanceOnClick: true, waitMs: 15000 },
-    { id: 'notify.sc3.save', target: 'notify-save', title: '最后：保存并连接', body: '点「保存并连接」，之后溢价拉开的换基信号都会推到这台手机。', advanceOnClick: true, waitMs: 15000 }
+    { id: 'notify.sc3.save', target: 'notify-save', title: '最后：保存并连接', body: '点「保存并连接」，之后溢价拉开的换基信号都会推到这台手机。', advanceOnClick: true, completeWhenGone: true, waitMs: 15000 }
   ],
   email: [
     { id: 'notify.email.address', target: 'notify-email-address', title: '第二步：填邮箱地址', body: 'QQ、163、Gmail 都可以。填好会自动进入下一步。', ...KEY_FILLED },

@@ -111,6 +111,11 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         setPlacementBox(el.getBoundingClientRect());
         return;
       }
+      // 「保存并连接」这类按钮：渠道已经存好（比如发送测试时一并保存了）就不再显示，算这一步完成。
+      if (step.completeWhenGone && Date.now() - startedAt > 800) {
+        next();
+        return;
+      }
       if (Date.now() - startedAt > waitMs) {
         trackFeatureEvent('onboarding', 'target_missing', { flowId: run.flowId, stepId: step.id, version: 2 });
         end('target_missing');
@@ -128,7 +133,7 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
     };
     // run.flowId 随 step 变化，step 引用来自静态 catalog
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, paused, locateNonce, end]);
+  }, [step, paused, locateNonce, end, next]);
 
   // 跟随滚动 / 尺寸变化；目标被重新渲染掉时重新定位。
   useEffect(() => {

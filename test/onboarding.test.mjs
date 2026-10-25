@@ -198,6 +198,8 @@ test('游客「看看怎么接通手机通知」进通知演示：选渠道 → 
   assert.deepEqual(branches.ios.map((step) => step.target), ['notify-key', 'notify-test', 'notify-save']);
   assert.deepEqual(branches.serverchan3.map((step) => step.target), ['notify-key', 'notify-test', 'notify-save']);
   assert.ok(branches.email.every((step) => step.id.startsWith('notifyDemo.')));
+  assert.equal(branches.ios.at(-1).completeWhenGone, true);
+  assert.equal(branches.serverchan3.at(-1).completeWhenGone, true);
   const card = read('src/pages/NotifyConfigCard.jsx');
   for (const target of ['notify-channel-cards', 'notify-key', 'notify-test', 'notify-save', 'notify-email-address', 'notify-send-code', 'notify-email-code', 'notify-pc']) assert.match(card, new RegExp(`data-onboarding="${target}"`));
   assert.match(card, /data-onboarding-branch=\{channel\.key\}/);
