@@ -376,7 +376,7 @@ export function SwitchStrategyRuleModal({
             </Field>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2" data-onboarding="switch-threshold">
             <Field label="L→H 切回阈值" rightLabel="%" helper="溢价差回落到该值以下时提醒切回 H 组">
               <TextInput value={lowerPct} inputMode="decimal" placeholder="0.10" onChange={(event) => setLowerPct(sanitizePctInput(event.target.value))} />
             </Field>

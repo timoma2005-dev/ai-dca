@@ -7,6 +7,8 @@ export const ONBOARDING_STORAGE_PREFIX = `aiDcaOnboarding:v${ONBOARDING_VERSION}
 export const ONBOARDING_CHANGED_EVENT = 'onboarding:changed';
 export const ONBOARDING_OPEN_EVENT = 'onboarding:open';
 export const ONBOARDING_START_EVENT = 'onboarding:start';
+// 游客「先看看」：直接进入付费功能演示，再在演示里跑一遍步骤提示（detail: { tab, flow }）。
+export const ONBOARDING_START_DEMO_EVENT = 'onboarding:start-demo';
 const SESSION_KEY = 'aiDcaCloudSyncSession';
 
 function storage() {

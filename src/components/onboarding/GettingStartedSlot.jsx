@@ -4,7 +4,7 @@ import { GettingStartedCard } from './GettingStartedCard.jsx';
 import { VipExpiryNotice } from './VipExpiryNotice.jsx';
 import { useOnboarding } from '../../app/onboarding/useOnboarding.js';
 import { shouldShowGettingStarted } from '../../app/onboarding/catalog.js';
-import { ONBOARDING_OPEN_EVENT, ONBOARDING_START_EVENT, writeOnboardingState } from '../../app/onboarding/state.js';
+import { ONBOARDING_OPEN_EVENT, ONBOARDING_START_DEMO_EVENT, ONBOARDING_START_EVENT, writeOnboardingState } from '../../app/onboarding/state.js';
 import { trackFeatureEvent } from '../../app/analytics.js';
 
 function navigate(tab) {
@@ -15,7 +15,7 @@ function navigate(tab) {
  * 首页任务卡：把任务点击翻译成导航 + 步骤提示。
  * onRegister / onUpgrade 由工作台提供（打开注册框 / 打赏开通二维码）。
  */
-export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, demoActive = false, roles = [] }) {
+export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, demoActive = false, takeover = false, roles = [] }) {
   const { state, tasks } = useOnboarding({ loggedIn, accessOf });
   const handleAction = useCallback((task) => {
     trackFeatureEvent('onboarding', 'task_click', { taskId: task.id, status: task.status, version: 2 });
@@ -23,7 +23,7 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
     if (task.status === 'locked') { onUpgrade?.(); return; }
     if (task.action === 'demo') {
       writeOnboardingState({ seenDemo: true });
-      navigate(task.tab);
+      window.dispatchEvent(new CustomEvent(ONBOARDING_START_DEMO_EVENT, { detail: { tab: task.tab, flow: task.flow } }));
       return;
     }
     if (task.tab) navigate(task.tab);
@@ -32,6 +32,7 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
       window.setTimeout(() => window.dispatchEvent(new CustomEvent(ONBOARDING_START_EVENT, { detail: { flow: task.flow } })), 0);
     }
   }, [onRegister, onUpgrade]);
+  const dismiss = () => { trackFeatureEvent('onboarding', 'dismiss', { doneCount: tasks.doneCount, mode: tasks.mode, takeover, version: 2 }); writeOnboardingState({ dismissed: true }); };
   const expiry = loggedIn ? <VipExpiryNotice roles={roles} onUpgrade={onUpgrade} demoActive={demoActive} /> : null;
   if (!shouldShowGettingStarted({ tasks, state, demoActive })) {
     return expiry ? <div className="cn-home-onboarding">{expiry}</div> : null;
@@ -42,11 +43,22 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
       <GettingStartedCard
         tasks={tasks}
         onAction={handleAction}
-        onDismiss={() => { trackFeatureEvent('onboarding', 'dismiss', { doneCount: tasks.doneCount, mode: tasks.mode, version: 2 }); writeOnboardingState({ dismissed: true }); }}
+        onDismiss={dismiss}
         onFinish={() => writeOnboardingState({ celebrated: true, dismissed: true })}
       />
+      {takeover ? (
+        <button type="button" className="mx-auto px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-600" onClick={dismiss} data-onboarding-skip="true">
+          跳过，先看市场首页
+        </button>
+      ) : null}
     </div>
   );
+}
+
+/** 首页门控：新手入门任务卡还要展示时，首页只显示任务卡（takeover），关掉后才出现原有首页内容。 */
+export function OnboardingHomeGate({ loggedIn, accessOf, demoActive = false, children }) {
+  const { state, tasks } = useOnboarding({ loggedIn, accessOf });
+  return children(shouldShowGettingStarted({ tasks, state, demoActive }));
 }
 
 /** 账号菜单 / 侧栏里的常驻入口：重新打开首页任务卡。 */

@@ -31,7 +31,7 @@ const ACTIVE_STYLE = `[data-onboarding-active="true"]{outline:3px solid #6366f1!
  * 步骤提示宿主：监听 onboarding:start，按 catalog 的步骤依次找到 data-onboarding 目标，
  * 轻度高亮并在旁边显示气泡。不加全屏遮罩、不替用户执行任何操作；目标找不到就安静结束。
  */
-export function StepHintHost({ paused = false }) {
+export function StepHintHost({ paused: pausedProp = false, demoActive = false }) {
   const [run, setRun] = useState(null);
   const [placementBox, setPlacementBox] = useState(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
@@ -41,6 +41,8 @@ export function StepHintHost({ paused = false }) {
   const [quietStepId, setQuietStepId] = useState('');
   const flow = run ? ONBOARDING_FLOWS[run.flowId] : null;
   const step = flow ? flow.steps[run.index] : null;
+  // 付费功能演示进行中只展示专为演示写的引导（inDemo），其它引导暂停。
+  const paused = pausedProp || (demoActive && !flow?.inDemo);
 
   const end = useCallback((reason) => {
     setRun((current) => {

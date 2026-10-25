@@ -166,3 +166,22 @@ test('VIP 到期提醒：到期前 7 天内提醒，永久或更高角色覆盖�
   assert.equal(vipExpiryNotice([vip, { code: 'vip', expiresAt: '2027-04-24T15:59:59Z' }], now), null);
   assert.equal(vipExpiryNotice([{ code: 'user', expiresAt: null }], now), null);
 });
+
+test('游客「先看看」直接进演示并跑演示专用引导：新建方案 → 填阈值 → 保存', () => {
+  const guest = buildOnboardingTasks({ loggedIn: false });
+  const demoTask = guest.items.find((item) => item.id === 'demo');
+  assert.equal(demoTask.flow, 'switchDemo');
+  const flow = ONBOARDING_FLOWS.switchDemo;
+  assert.equal(flow.inDemo, true);
+  assert.deepEqual(flow.steps.map((step) => step.target), ['switch-create', 'switch-threshold', 'switch-save']);
+  const slot = read('src/components/onboarding/GettingStartedSlot.jsx');
+  assert.match(slot, /ONBOARDING_START_DEMO_EVENT/);
+  const workspace = read('src/pages/WorkspacePage.jsx');
+  assert.match(workspace, /handleStartDemo[\s\S]*setDemoTab\(tab\)/);
+  assert.match(read('src/components/onboarding/StepHintHost.jsx'), /demoActive && !flow\?\.inDemo/);
+});
+
+test('新手入门未关闭时首页只显示任务卡', () => {
+  assert.match(read('src/pages/CnHomeExperience.jsx'), /if \(takeover && topSlot\) return/);
+  assert.match(read('src/pages/WorkspacePage.jsx'), /<OnboardingHomeGate[\s\S]*takeover=\{takeover\}/);
+});

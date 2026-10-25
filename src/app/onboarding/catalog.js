@@ -16,7 +16,8 @@ export const GUEST_TASKS = [
     badge: '无需注册',
     badgeTone: 'muted',
     action: 'demo',
-    tab: 'fundSwitch'
+    tab: 'fundSwitch',
+    flow: 'switchDemo'
   }
 ];
 
@@ -100,6 +101,35 @@ export const ONBOARDING_FLOWS = {
         title: '核对后再保存',
         body: '看一下 H/L 两组基金和阈值是否合理，确认无误再点「保存方案」。自动生成的结果不会自动保存。',
         waitMs: 30000
+      }
+    ]
+  },
+  // 演示里的引导：新建方案 → 填阈值 → 保存（保存的是演示数据，只留在本机）。inDemo 表示演示进行中也展示。
+  switchDemo: {
+    task: 'switch',
+    inDemo: true,
+    steps: [
+      {
+        id: 'switchDemo.create',
+        target: 'switch-create',
+        title: '第一步：点「新建方案」',
+        body: '方案就是一组跟踪同一指数的基金，分成 H、L 两组。溢价差够大时提醒你从贵的换到便宜的。',
+        advanceOnClick: true,
+        waitMs: 15000
+      },
+      {
+        id: 'switchDemo.threshold',
+        target: 'switch-threshold',
+        title: '第二步：填切换阈值',
+        body: '溢价差扩大到「切出阈值」以上，提醒你从 H 组换到 L 组；回落到「切回阈值」以下再换回来。示例已填好 0.10% / 0.90%，可以改改试试。',
+        waitMs: 15000
+      },
+      {
+        id: 'switchDemo.save',
+        target: 'switch-save',
+        title: '第三步：点「保存方案」',
+        body: '保存后方案就开始盯盘，溢价拉开时会推送到你手机。演示里保存的是示例数据，注册后可以带进账号。',
+        advanceOnClick: true
       }
     ]
   },

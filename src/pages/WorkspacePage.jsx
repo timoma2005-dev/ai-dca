@@ -25,9 +25,9 @@ import { FeatureDemo } from '../components/rbac/feature-demo.jsx';
 import { consumeDemoQuota, demoFeatureFor, demoQuotaFor, readDemoSession } from '../app/demo/featureDemo.js';
 import { useDemoSessionImport } from '../app/demo/useDemoSessionImport.js';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
-import { GettingStartedEntry, GettingStartedSlot } from '../components/onboarding/GettingStartedSlot.jsx';
+import { GettingStartedEntry, GettingStartedSlot, OnboardingHomeGate } from '../components/onboarding/GettingStartedSlot.jsx';
 import { StepHintHost } from '../components/onboarding/StepHintHost.jsx';
-import { ONBOARDING_OPEN_EVENT, isOnboardingHintActive, writeOnboardingState } from '../app/onboarding/state.js';
+import { ONBOARDING_OPEN_EVENT, ONBOARDING_START_DEMO_EVENT, ONBOARDING_START_EVENT, isOnboardingHintActive, writeOnboardingState } from '../app/onboarding/state.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 
 // 各主 tab 使用 React.lazy 按需加载，在 Vite 中会被拆成独立 chunk。
@@ -598,6 +598,24 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     return () => window.removeEventListener('workspace:navigate', handleWorkspaceNavigate);
   });
 
+  // 新手入门「先看看」：切到对应页并直接开始演示（跳过守卫页），然后启动演示专用的步骤提示。
+  useEffect(() => {
+    function handleStartDemo(event) {
+      const tab = normalizeWorkspaceTab(event?.detail?.tab || '');
+      if (!tab || !demoFeatureFor(tab)) return;
+      handleSelectTab(tab);
+      if (!consumeDemoQuota(tab)) {
+        showToast({ title: '今日体验次数已用完', description: '明天可以再来体验，或注册后直接使用。', tone: 'amber' });
+        return;
+      }
+      setDemoTab(tab);
+      const flow = event?.detail?.flow;
+      if (flow) window.setTimeout(() => window.dispatchEvent(new CustomEvent(ONBOARDING_START_EVENT, { detail: { flow } })), 0);
+    }
+    window.addEventListener(ONBOARDING_START_DEMO_EVENT, handleStartDemo);
+    return () => window.removeEventListener(ONBOARDING_START_DEMO_EVENT, handleStartDemo);
+  });
+
   function handleWorkspaceBack() {
     const previousTab = tabHistory[tabHistory.length - 1];
     if (!previousTab) return;
@@ -644,19 +662,25 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     switch (activeTab) {
       case 'home':
         return (
-          <CnHomeExperience
-            {...sharedProps}
-            topSlot={(
-              <GettingStartedSlot
-                loggedIn={Boolean(cloudSession?.accessToken)}
-                accessOf={tabAccessOf}
-                demoActive={demo}
-                roles={rbac.roles}
-                onRegister={() => openAccountAuth({ mode: 'register', source: 'onboarding', trigger: 'home' })}
-                onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+          <OnboardingHomeGate loggedIn={Boolean(cloudSession?.accessToken)} accessOf={tabAccessOf} demoActive={demo}>
+            {(takeover) => (
+              <CnHomeExperience
+                {...sharedProps}
+                takeover={takeover}
+                topSlot={(
+                  <GettingStartedSlot
+                    loggedIn={Boolean(cloudSession?.accessToken)}
+                    accessOf={tabAccessOf}
+                    demoActive={demo}
+                    takeover={takeover}
+                    roles={rbac.roles}
+                    onRegister={() => openAccountAuth({ mode: 'register', source: 'onboarding', trigger: 'home' })}
+                    onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+                  />
+                )}
               />
             )}
-          />
+          </OnboardingHomeGate>
         );
       case 'articles':
         return <ArticlesExperience {...sharedProps} />;
@@ -813,7 +837,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         </Suspense>
       ) : null}
       <ConversionPromptCard prompt={conversionPrompt} onClose={() => setConversionPrompt(null)} />
-      <StepHintHost paused={demoActive || mobileBottomSheetHidden} />
+      <StepHintHost paused={mobileBottomSheetHidden} demoActive={demoActive} />
       {showQrModal ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/70 p-4" role="dialog" aria-modal="true" aria-label="Buy me coffee 二维码" onClick={() => setShowQrModal(false)}>
           <div className="relative w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
