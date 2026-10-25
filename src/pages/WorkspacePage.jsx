@@ -430,6 +430,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), points: demoFeature.points, pitch: demoFeature.pitch, retainedUntil: readDemoSession(activeTab)?.expiresAt || 0 } : null;
   const demoActive = Boolean(demoFeature) && demoTab === activeTab;
   function startFeatureDemo() {
+    window.__AI_DCA_DEMO_VARIANT__ = '';
     if (consumeDemoQuota(activeTab)) setDemoTab(activeTab);
     else showToast({ title: '今日体验次数已用完', description: '明天可以再来体验，或打赏开通后不限次使用。', tone: 'amber' });
   }
@@ -608,6 +609,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         showToast({ title: '今日体验次数已用完', description: '明天可以再来体验，或注册后直接使用。', tone: 'amber' });
         return;
       }
+      window.__AI_DCA_DEMO_VARIANT__ = event?.detail?.variant || '';
       setDemoTab(tab);
       const flow = event?.detail?.flow;
       if (flow) window.setTimeout(() => window.dispatchEvent(new CustomEvent(ONBOARDING_START_EVENT, { detail: { flow } })), 0);

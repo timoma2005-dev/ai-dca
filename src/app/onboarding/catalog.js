@@ -10,14 +10,28 @@ export const GUEST_TASKS = [
   },
   {
     id: 'demo',
-    title: '先看看能做什么',
-    description: '用示例数据看看切换方案怎么提醒，不会保存',
+    title: '看看怎么设切换方案',
+    description: '用示例数据新建一个方案、填阈值，不会保存',
     cta: '体验',
     badge: '无需注册',
     badgeTone: 'muted',
     action: 'demo',
     tab: 'fundSwitch',
-    flow: 'switchDemo'
+    flow: 'switchDemo',
+    seenKey: 'seenDemo'
+  },
+  {
+    id: 'demoNotify',
+    title: '看看怎么接通手机通知',
+    description: '演示 Server酱³ / Bark 怎么配，测试消息只模拟发送',
+    cta: '体验',
+    badge: '无需注册',
+    badgeTone: 'muted',
+    action: 'demo',
+    tab: 'notify',
+    flow: 'notifyDemo',
+    variant: 'notify-setup',
+    seenKey: 'seenNotifyDemo'
   }
 ];
 
@@ -64,6 +78,33 @@ export const USER_TASKS = [
 
 // 每个步骤指向一个 data-onboarding 目标；advanceOnClick 表示用户点了目标即进入下一步。
 // 步骤只做讲解，从不替用户保存、生成或发送任何东西。
+// 接通手机通知：选渠道 → 填 Key → 发送测试（真实账号与演示共用）。
+const NOTIFY_STEPS = [
+  {
+    id: 'notify.channel',
+    target: 'notify-channel-cards',
+    title: '第一步：选一种通知方式',
+    body: '安卓手机选 Server酱³，iPhone 选 Bark，也可以用邮箱。点一张卡片开始设置。',
+    advanceOnClick: true,
+    waitMs: 15000
+  },
+  {
+    id: 'notify.key',
+    target: 'notify-key',
+    title: '第二步：填推送 Key',
+    body: 'Server酱³ 填 App 里的 UID 和 SendKey；Bark 粘贴 App 里复制的链接。邮箱填地址收验证码。',
+    waitMs: 15000
+  },
+  {
+    id: 'notify.test',
+    target: 'notify-test',
+    title: '第三步：点「发送测试」',
+    body: '手机收到测试消息就算接通了，之后溢价拉开的换基信号都会推到这里。',
+    advanceOnClick: true,
+    waitMs: 15000
+  }
+];
+
 export const ONBOARDING_FLOWS = {
   holdings: {
     task: 'holdings',
@@ -135,15 +176,13 @@ export const ONBOARDING_FLOWS = {
   },
   notify: {
     task: 'notify',
-    steps: [
-      {
-        id: 'notify.channel',
-        target: 'notify-channel',
-        title: '选一种通知方式',
-        body: 'iPhone 用 Bark，Android 用 Server酱³，也可以绑定邮箱。配好后点「发送测试」，手机收到了才算接通，之后换基信号就推到这里。',
-        placement: 'top'
-      }
-    ]
+    steps: NOTIFY_STEPS
+  },
+  // 演示里的同一套引导：渠道是空的，保存 / 测试走模拟接口（fixtures/notify.js 的 notify-setup 变体）。
+  notifyDemo: {
+    task: 'notify',
+    inDemo: true,
+    steps: NOTIFY_STEPS.map((step) => ({ ...step, id: step.id.replace('notify.', 'notifyDemo.') }))
   },
   watchlist: {
     task: 'watchlist',
@@ -172,7 +211,7 @@ export function buildOnboardingTasks({ loggedIn, signals = {}, state = {}, acces
   if (!loggedIn) {
     const items = GUEST_TASKS.map((task) => ({
       ...task,
-      status: task.id === 'demo' && state.seenDemo ? 'seen' : 'todo'
+      status: task.seenKey && state[task.seenKey] ? 'seen' : 'todo'
     }));
     return { mode: 'guest', items, doneCount: 0, total: items.length, allDone: false, activated: false };
   }

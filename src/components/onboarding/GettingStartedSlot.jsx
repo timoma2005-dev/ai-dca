@@ -22,8 +22,8 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
     if (task.action === 'register') { onRegister?.(); return; }
     if (task.status === 'locked') { onUpgrade?.(); return; }
     if (task.action === 'demo') {
-      writeOnboardingState({ seenDemo: true });
-      window.dispatchEvent(new CustomEvent(ONBOARDING_START_DEMO_EVENT, { detail: { tab: task.tab, flow: task.flow } }));
+      writeOnboardingState({ [task.seenKey || 'seenDemo']: true });
+      window.dispatchEvent(new CustomEvent(ONBOARDING_START_DEMO_EVENT, { detail: { tab: task.tab, flow: task.flow, variant: task.variant || '' } }));
       return;
     }
     if (task.tab) navigate(task.tab);

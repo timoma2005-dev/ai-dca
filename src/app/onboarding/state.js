@@ -31,7 +31,7 @@ export function currentOnboardingAccount(ls = storage()) {
 }
 
 export function emptyOnboardingState() {
-  return { dismissed: false, celebrated: false, seenDemo: false, done: {} };
+  return { dismissed: false, celebrated: false, seenDemo: false, seenNotifyDemo: false, done: {} };
 }
 
 export function normalizeOnboardingState(raw) {
@@ -48,6 +48,7 @@ export function normalizeOnboardingState(raw) {
     dismissed: Boolean(raw.dismissed),
     celebrated: Boolean(raw.celebrated),
     seenDemo: Boolean(raw.seenDemo),
+    seenNotifyDemo: Boolean(raw.seenNotifyDemo),
     done
   };
 }

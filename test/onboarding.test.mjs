@@ -48,7 +48,7 @@ test('markOnboardingTask 只记录首次完成时间，重复事件不改写', (
 
 test('损坏的进度数据回退为空状态', () => {
   const ls = memoryStorage({ [`${ONBOARDING_STORAGE_PREFIX}a`]: '{oops' });
-  assert.deepEqual(readOnboardingState('a', ls), { dismissed: false, celebrated: false, seenDemo: false, done: {} });
+  assert.deepEqual(readOnboardingState('a', ls), { dismissed: false, celebrated: false, seenDemo: false, seenNotifyDemo: false, done: {} });
 });
 
 test('信号：持仓、已保存切换方案、通知通道按真实本地数据判断', () => {
@@ -74,7 +74,7 @@ test('信号：演示持仓不算真实录入；没有存储时全部未完成',
 test('任务卡：游客第一项是注册，登录用户按 切换方案 → 通知 → 持仓（可选）', () => {
   const guest = buildOnboardingTasks({ loggedIn: false });
   assert.equal(guest.mode, 'guest');
-  assert.deepEqual(guest.items.map((item) => item.id), ['register', 'demo']);
+  assert.deepEqual(guest.items.map((item) => item.id), ['register', 'demo', 'demoNotify']);
   const user = buildOnboardingTasks({ loggedIn: true, signals: { holdings: true } });
   assert.deepEqual(user.items.map((item) => item.id), ['switch', 'notify', 'holdings']);
   assert.equal(user.items.find((item) => item.id === 'holdings').optional, true);
@@ -184,4 +184,23 @@ test('游客「先看看」直接进演示并跑演示专用引导：新建方�
 test('新手入门未关闭时首页只显示任务卡', () => {
   assert.match(read('src/pages/CnHomeExperience.jsx'), /if \(takeover && topSlot\) return/);
   assert.match(read('src/pages/WorkspacePage.jsx'), /<OnboardingHomeGate[\s\S]*takeover=\{takeover\}/);
+});
+
+test('游客「看看怎么接通手机通知」进通知演示：选渠道 → 填 Key → 发送测试，渠道从空开始', async () => {
+  const guest = buildOnboardingTasks({ loggedIn: false });
+  const task = guest.items.find((item) => item.id === 'demoNotify');
+  assert.equal(task.tab, 'notify');
+  assert.equal(task.flow, 'notifyDemo');
+  assert.equal(ONBOARDING_FLOWS.notifyDemo.inDemo, true);
+  assert.deepEqual(ONBOARDING_FLOWS.notifyDemo.steps.map((step) => step.target), ['notify-channel-cards', 'notify-key', 'notify-test']);
+  const card = read('src/pages/NotifyConfigCard.jsx');
+  for (const target of ['notify-channel-cards', 'notify-key', 'notify-test']) assert.match(card, new RegExp(`data-onboarding="${target}"`));
+  const mod = await import('../src/app/demo/fixtures/notify.js');
+  const routes = mod.createNotifySetupFixtures([], Date.now());
+  const url = (path) => new globalThis.URL(`https://x.test${path}`);
+  assert.equal(routes['GET /api/notify/status']({ url: url('/api/notify/status?view=summary') }).data.channels.serverChan3.configured, false);
+  routes['PUT /api/account/v1/notify/client-config/items/*']({ url: url('/api/account/v1/notify/client-config/items/channel%3Aserverchan3'), body: JSON.stringify({ item: { serverChan3Uid: '123', serverChan3SendKey: 'sctp123abc456' } }) });
+  assert.equal(routes['GET /api/notify/status']({ url: url('/api/notify/status?view=summary') }).data.channels.serverChan3.configured, true);
+  const test = routes['POST /api/notify/test']({ body: JSON.stringify({ targetChannel: 'serverchan3' }) });
+  assert.equal(test.summary.deliveredCount, 1);
 });

@@ -285,14 +285,78 @@ export function buildNotifyDemoMarketAlerts(now = Date.now()) {
   ];
 }
 
+// 新手入门「看看怎么接通手机通知」进入的演示（window.__AI_DCA_DEMO_VARIANT__ = 'notify-setup'）：
+// 渠道从空开始，保存渠道 / 发送测试走下面的内存 mock，只改本次演示的状态，不会真的发送。
+export const NOTIFY_SETUP_VARIANT = 'notify-setup';
+const ACCOUNT_NOTIFY_ITEMS_PATH = '/api/account/v1/notify/client-config/items/';
+function isSetupVariant() {
+  return typeof globalThis !== 'undefined' && globalThis.__AI_DCA_DEMO_VARIANT__ === NOTIFY_SETUP_VARIANT;
+}
+function parseJsonBody(body) {
+  try { return JSON.parse(body || '{}') || {}; } catch { return {}; }
+}
+function maskKey(key) {
+  const text = String(key || '');
+  return text.length > 10 ? `${text.slice(0, 6)}...${text.slice(-4)}` : text ? `${text.slice(0, 2)}...` : '';
+}
+
+/** notify-setup 变体：可变的渠道状态 + 保存 / 测试 / 账号资源接口 mock。 */
+export function createNotifySetupFixtures(events, startedAt = Date.now()) {
+  const channels = { barkDeviceKey: '', serverChan3: { uid: '', sendKey: '' } };
+  const summary = () => {
+    const base = buildNotifyDemoStatusSummary(events, startedAt);
+    const sc = channels.serverChan3;
+    base.data.channels = {
+      bark: { deviceKey: channels.barkDeviceKey, enabled: Boolean(channels.barkDeviceKey), configured: Boolean(channels.barkDeviceKey) },
+      serverChan3: { uid: sc.uid, sendKeyMasked: maskKey(sc.sendKey), configured: Boolean(sc.uid), enabled: Boolean(sc.uid) },
+      email: { maskedAddress: '', verified: false, verifiedAt: '', enabled: false, configured: false },
+      webWs: { configured: false },
+    };
+    return base;
+  };
+  const applyItem = (itemId, item = {}) => {
+    if (itemId === 'channel:bark') channels.barkDeviceKey = String(item.barkDeviceKey || '').trim();
+    if (itemId === 'channel:serverchan3') channels.serverChan3 = { uid: String(item.serverChan3Uid || '').trim(), sendKey: String(item.serverChan3SendKey || '').trim() };
+  };
+  const itemIdOf = (url) => decodeURIComponent(url.pathname.slice(ACCOUNT_NOTIFY_ITEMS_PATH.length));
+  return {
+    [`GET ${NOTIFY_STATUS_PATH}`]: ({ url }) => (url.searchParams.get('view') === 'details' ? buildNotifyDemoStatusDetails(events) : summary()),
+    'GET /api/account/v1/migrations/legacy': () => ({ ok: true, status: 'no-legacy', legacy: { exists: false } }),
+    'GET /api/account/v1/notify/client-config': () => ({
+      ok: true,
+      data: { barkDeviceKey: channels.barkDeviceKey, serverChan3Uid: channels.serverChan3.uid, serverChan3SendKey: channels.serverChan3.sendKey },
+    }),
+    [`PUT ${ACCOUNT_NOTIFY_ITEMS_PATH}*`]: ({ url, body }) => {
+      applyItem(itemIdOf(url), parseJsonBody(body).item || {});
+      return { ok: true };
+    },
+    [`DELETE ${ACCOUNT_NOTIFY_ITEMS_PATH}*`]: ({ url }) => {
+      applyItem(itemIdOf(url), {});
+      return { ok: true };
+    },
+    'POST /api/notify/test': ({ body }) => {
+      const input = parseJsonBody(body);
+      const channel = String(input.targetChannel || 'bark');
+      return {
+        ok: true,
+        summary: {
+          deliveredCount: 1,
+          events: [{ status: 'delivered', channels: [{ channel, status: 'delivered', detail: '演示：已模拟发送，不会真的推送' }] }],
+        },
+      };
+    },
+  };
+}
+
 export default {
   keepKeys: [],
   // 首屏读本地缓存时就显示演示账号的渠道、规则与预设（不闪出账号里原有的缓存）。
   seed() {
+    const setup = isSetupVariant();
     return [
       [NOTIFY_CLIENT_CONFIG_KEY, JSON.stringify({
-        barkDeviceKey: NOTIFY_DEMO_BARK_KEY,
-        serverChan3Uid: NOTIFY_DEMO_SERVERCHAN3.uid,
+        barkDeviceKey: setup ? '' : NOTIFY_DEMO_BARK_KEY,
+        serverChan3Uid: setup ? '' : NOTIFY_DEMO_SERVERCHAN3.uid,
         serverChan3SendKey: '',
         notifyClientId: 'web:demo-console',
         notifyClientLabel: 'Web 控制台 · 演示',
@@ -316,6 +380,7 @@ export default {
         [`GET ${NOTIFY_EVENTS_PATH}`]: () => ({ events: events.map((event) => ({ ...event, channels: event.channels.map((item) => ({ ...item })) })) }),
         [`GET ${NOTIFY_HOLDINGS_RULE_PATH}`]: () => buildNotifyDemoHoldingsRule(startedAt),
         [`GET ${SWITCH_CONFIG_PATH}`]: () => ({ ok: true, clientId: SWITCH_DEMO_CLIENT_ID, config: buildSwitchDemoConfig() }),
+        ...(isSetupVariant() ? createNotifySetupFixtures(events, startedAt) : {}),
       },
     };
   },
