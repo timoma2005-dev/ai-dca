@@ -5,6 +5,7 @@ import { ONBOARDING_FLOWS } from '../../app/onboarding/catalog.js';
 import { ONBOARDING_FLOW_COMPLETE_EVENT, ONBOARDING_START_EVENT, setOnboardingHintActive } from '../../app/onboarding/state.js';
 import { trackFeatureEvent } from '../../app/analytics.js';
 import { BOTTOM_NAV_ALLOWANCE, computeHintPosition } from '../../app/onboarding/hintPosition.js';
+import { openNotifyKeyGuide } from '../../app/notify/keyGuide.js';
 
 const DEFAULT_WAIT_MS = 8000;
 const completedRuns = new Set();
@@ -230,6 +231,9 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
         </div>
         <div className="mt-0.5 text-sm font-extrabold">{step.title}</div>
         <p className="mt-1 text-xs leading-5 text-slate-300">{step.body}</p>
+        {step.guide ? (
+          <button type="button" className="mt-1.5 rounded-md bg-white/10 px-2 py-1 text-[11px] font-bold text-indigo-200 hover:bg-white/20" onClick={() => openNotifyKeyGuide(step.guide)}>看图教程</button>
+        ) : null}
         {step.requireInputs && !inputsReady ? <p className="mt-1 text-[11px] font-semibold text-amber-300">先把输入框填好</p> : null}
         <div className="mt-2.5 flex items-center justify-between">
           <button type="button" className="text-xs text-slate-400 hover:text-slate-200" onClick={() => end('later')}>稍后继续</button>

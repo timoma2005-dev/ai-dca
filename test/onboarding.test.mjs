@@ -245,3 +245,16 @@ test('填 Key 这一步要先填好输入框才能下一步；游客演示走完
   assert.match(page, /flow\.inDemo && demoAsGuest/);
   assert.match(read('src/components/onboarding/DemoDoneDialog.jsx'), /第二天就清空了/);
 });
+
+test('Bark / Server酱³ 填 Key 有看图教程（含下载链接），教程气泡可打开', async () => {
+  const { NOTIFY_KEY_GUIDES, BARK_APP_STORE_URL, SERVERCHAN3_ANDROID_URL } = await import('../src/app/notify/keyGuide.js');
+  assert.equal(NOTIFY_KEY_GUIDES.ios.steps[0].link.href, BARK_APP_STORE_URL);
+  assert.equal(NOTIFY_KEY_GUIDES.serverchan3.steps[0].link.href, SERVERCHAN3_ANDROID_URL);
+  for (const guide of Object.values(NOTIFY_KEY_GUIDES)) {
+    for (const step of guide.steps) if (step.image) assert.ok(fs.existsSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", `public${step.image}`)), step.image);
+  }
+  const branches = ONBOARDING_FLOWS.notifyDemo.steps[0].branches;
+  assert.equal(branches.ios[0].guide, 'ios');
+  assert.equal(branches.serverchan3[0].guide, 'serverchan3');
+  assert.match(read('src/pages/NotifyConfigCard.jsx'), /<NotifyKeyGuide channel="ios" \/>/);
+});
