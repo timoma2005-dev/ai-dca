@@ -613,8 +613,9 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   }
 
   // 教程走完：提示一下，回到首页的新手入门卡。演示里的教程先记到 sessionStorage，回首页刷新后再落进度。
+  // 只在刷新回来时落一次进度（每次渲染都跑会在演示里把刚记下的标记吃掉）。
+  useEffect(() => { consumeOnboardingDemoCompleted(); }, []);
   useEffect(() => {
-    consumeOnboardingDemoCompleted();
     function handleFlowComplete(event) {
       const flow = ONBOARDING_FLOWS[event?.detail?.flow];
       if (!flow) return;

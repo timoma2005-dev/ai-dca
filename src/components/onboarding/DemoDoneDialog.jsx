@@ -4,11 +4,12 @@ import { CheckCircle2 } from 'lucide-react';
 /**
  * 游客走完演示教程：提醒演示里填的内容不会保存（第二天就清空），引导注册保留。
  * 已登录用户不弹（直接回新手入门）。
+ * 渠道设置弹窗（radix 模态）可能还开着，它会给 body 设 pointer-events:none，所以这里显式恢复可点击。
  */
 export function DemoDoneDialog({ flow, onRegister, onBack }) {
   if (!flow || typeof document === 'undefined') return null;
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-end justify-center bg-slate-900/45 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label={flow.doneTitle || '教程完成'} data-testid="demo-done-dialog">
+    <div className="fixed inset-0 z-[150] flex items-end justify-center bg-slate-900/45 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label={flow.doneTitle || '教程完成'} data-testid="demo-done-dialog" style={{ pointerEvents: 'auto' }}>
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
         <div className="flex items-center gap-2 text-emerald-600">
           <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
