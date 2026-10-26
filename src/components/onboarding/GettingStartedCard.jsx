@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Check, ChevronRight, Lock, PartyPopper, X } from 'lucide-react';
+import { ArrowRight, Check, ChevronRight, Lock, PartyPopper, Sparkles, X } from 'lucide-react';
 import { trackFeatureEvent } from '../../app/analytics.js';
 import { flyToAccount } from '../../app/onboarding/flyToAccount.js';
 
@@ -12,7 +12,7 @@ const BADGE_TONE = {
   muted: 'bg-slate-100 text-slate-500'
 };
 
-function TaskRow({ task, onAction }) {
+function TaskRow({ task, index, onAction, large = false }) {
   const done = task.status === 'done';
   const locked = task.status === 'locked';
   // 已完成的演示 / 引导可以再看一遍。
@@ -23,11 +23,11 @@ function TaskRow({ task, onAction }) {
       <span
         className={cx(
           'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2',
-          done ? 'border-emerald-500 bg-emerald-500 text-white' : locked ? 'border-dashed border-slate-300 text-slate-400' : 'border-slate-300'
+          done ? 'border-emerald-500 bg-emerald-500 text-white' : locked ? 'border-dashed border-slate-300 text-slate-400' : 'border-indigo-200 bg-indigo-50 text-[11px] font-extrabold text-indigo-600'
         )}
         aria-hidden="true"
       >
-        {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : locked ? <Lock className="h-3 w-3" /> : null}
+        {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : locked ? <Lock className="h-3 w-3" /> : index + 1}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-1.5">
@@ -46,11 +46,15 @@ function TaskRow({ task, onAction }) {
       ) : null}
     </>
   );
-  const rowClass = 'flex w-full items-center gap-3 py-3 text-left lg:h-full lg:flex-col lg:items-start lg:gap-2 lg:rounded-xl lg:border lg:border-slate-100 lg:p-3';
+  const rowClass = cx(
+    'flex w-full items-center gap-3 py-3 text-left lg:h-full lg:flex-col lg:items-start lg:gap-2 lg:rounded-xl lg:border lg:p-3',
+    large && 'lg:p-4',
+    done ? 'lg:border-slate-100 lg:bg-slate-50/60' : 'lg:border-slate-200'
+  );
   return (
     <li className="border-t border-slate-100 first:border-t-0 lg:border-t-0" data-onboarding-task={task.id} data-status={task.status}>
       {clickable ? (
-        <button type="button" className={cx(rowClass, 'transition-colors hover:bg-slate-50')} onClick={() => onAction(task)}>{body}</button>
+        <button type="button" className={cx(rowClass, 'transition-colors hover:bg-slate-50', !done && 'lg:hover:border-indigo-300 lg:hover:bg-indigo-50/40 lg:hover:shadow-sm')} onClick={() => onAction(task)}>{body}</button>
       ) : (
         <div className={rowClass}>{body}</div>
       )}
@@ -78,7 +82,7 @@ function Confetti() {
 }
 
 /** 首页新手入门任务卡（「2 步收到第一条换基信号」）。只负责展示和把点击交给调用方；完成状态来自真实数据。 */
-export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish, replay = false }) {
+export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish, onSkip, replay = false }) {
   const tracked = useRef(false);
   const sectionRef = useRef(null);
   // 收起时：「新手入门」飞向右上角个人中心，提示随时可以再看。
@@ -95,6 +99,7 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish, repla
   if (!tasks) return null;
   const guest = tasks.mode === 'guest';
   const pct = tasks.total ? Math.round((tasks.doneCount / tasks.total) * 100) : 0;
+  const takeover = typeof onSkip === 'function';
 
   if (tasks.allDone && !replay) {
     return (
@@ -118,11 +123,16 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish, repla
   }
 
   return (
-    <section ref={sectionRef} className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-[0_6px_24px_-12px_rgba(79,70,229,0.35)]" data-testid="getting-started-card" data-mode={tasks.mode}>
+    <section ref={sectionRef} className={cx('rounded-2xl border border-indigo-100 bg-white p-4 shadow-[0_6px_24px_-12px_rgba(79,70,229,0.35)]', takeover && 'lg:p-7')} data-testid="getting-started-card" data-mode={tasks.mode} data-takeover={takeover ? 'true' : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-extrabold text-slate-900">{guest ? '溢价拉开，第一时间提醒你换基' : '2 步收到第一条换基信号'}</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          {takeover ? (
+            <span className="mb-2 hidden items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600 lg:inline-flex">
+              <Sparkles className="h-3 w-3" aria-hidden="true" />新手入门
+            </span>
+          ) : null}
+          <h2 className={cx('text-base font-extrabold text-slate-900', takeover && 'lg:text-xl')}>{guest ? '溢价拉开，第一时间提醒你换基' : '2 步收到第一条换基信号'}</h2>
+          <p className={cx('mt-0.5 text-xs text-slate-500', takeover && 'lg:mt-1 lg:text-sm')}>
             {guest ? '同一指数的几只基金溢价拉开时，推送提醒你从贵的换到便宜的' : `已完成 ${tasks.doneCount}/${tasks.total} · 两步都做完才能收到信号`}
           </p>
         </div>
@@ -131,17 +141,25 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish, repla
         </button>
       </div>
       {!guest ? (
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-indigo-50" role="progressbar" aria-valuemin={0} aria-valuemax={tasks.total} aria-valuenow={tasks.doneCount} aria-label="新手入门进度">
+        <div className={cx('mt-3 h-1.5 overflow-hidden rounded-full bg-indigo-50', takeover && 'lg:mt-5')} role="progressbar" aria-valuemin={0} aria-valuemax={tasks.total} aria-valuenow={tasks.doneCount} aria-label="新手入门进度">
           <div className="h-full rounded-full bg-indigo-600 transition-[width]" style={{ width: `${pct}%` }} />
         </div>
       ) : null}
-      <ul className={cx('mt-2', guest ? 'lg:grid lg:grid-cols-2 lg:gap-2' : 'lg:grid lg:grid-cols-3 lg:gap-2')}>
-        {tasks.items.map((task) => <TaskRow key={task.id} task={task} onAction={onAction} />)}
+      <ul className={cx('mt-2', guest ? 'lg:grid lg:grid-cols-2 lg:gap-2' : 'lg:grid lg:grid-cols-3 lg:gap-2', takeover && 'lg:mt-4 lg:gap-3')}>
+        {tasks.items.map((task, index) => <TaskRow key={task.id} task={task} index={index} onAction={onAction} large={takeover} />)}
       </ul>
       {guest ? (
         <button type="button" className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-xl bg-indigo-600 text-sm font-extrabold text-white hover:bg-indigo-700 lg:hidden" onClick={() => onAction(tasks.items[0])}>
           免费注册
         </button>
+      ) : null}
+      {takeover ? (
+        <div className="mt-4 flex flex-col-reverse items-center gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-between lg:mt-6 lg:pt-4">
+          <span className="text-[11px] text-slate-400">关掉后可在右上角头像菜单「新手入门」重新打开</span>
+          <button type="button" className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-700" onClick={onSkip} data-onboarding-skip="true">
+            跳过，先看市场首页<ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
       ) : null}
     </section>
   );

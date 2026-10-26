@@ -48,12 +48,8 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
         replay={state.replay}
         onDismiss={dismiss}
         onFinish={() => writeOnboardingState({ celebrated: true, dismissed: true, replay: false })}
+        onSkip={takeover ? dismiss : undefined}
       />
-      {takeover ? (
-        <button type="button" className="mx-auto px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-600" onClick={dismiss} data-onboarding-skip="true">
-          跳过，先看市场首页
-        </button>
-      ) : null}
     </div>
   );
 }

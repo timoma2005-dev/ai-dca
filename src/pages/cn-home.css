@@ -397,3 +397,6 @@
 .cn-home-onboarding{margin:0 0 14px}
 @media (min-width:1024px){.cn-home-onboarding{margin:0}}
 @media (min-width:1280px){.cn-home-onboarding{grid-column:1 / -1}}
+
+/* 新手入门接管首页：不参与两栏网格，整块居中 */
+.cn-home.cn-home-takeover{display:block;max-width:none}
