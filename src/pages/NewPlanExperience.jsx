@@ -564,19 +564,19 @@ export function NewPlanExperience({ links, inPagesDir = false, embedded = false,
     let syncFailed = false;
     try {
       await putAccountResourceItem('plans/store', persisted.id, persisted);
-    } catch {
-      // The local strategy has already been saved. Keep navigation responsive.
-      syncFailed = true;
+    } catch (error) {
+      // The local strategy has already been saved. Keep navigation responsive. 登录合并待确认时被拦截：只提示未同步。
+      syncFailed = error?.code === 'LOGIN_SYNC_PENDING' ? error.message : true;
     } finally {
       showToast({
         title: isEditing ? '加仓计划已更新' : '加仓计划已保存',
-        description: syncFailed ? '计划已保存，本次账号数据同步失败。' : '计划已保存，已保存到账号。',
+        description: typeof syncFailed === 'string' ? `计划已保存在本机，${syncFailed}。` : (syncFailed ? '计划已保存，本次账号数据同步失败。' : '计划已保存，已保存到账号。'),
         tone: syncFailed ? 'amber' : 'emerald',
         persist: true
       });
       trackActionResult('new_plan', isEditing ? 'edit_save' : 'create', syncFailed ? 'partial' : 'success', {
         ...newPlanMeta(),
-        syncFailed,
+        syncFailed: Boolean(syncFailed),
         durationMs: Date.now() - startedAt
       });
       if (typeof onBack === 'function') {

@@ -2,6 +2,7 @@ import { runAccountUserAction } from './accountLoadingState.js';
 import { loadCloudSession } from './authSession.js';
 import { isFeatureDemoActive } from './demo/demoMode.js';
 import { persistLedgerState } from './holdingsLedger.js';
+import { isLoginSyncBlockedError, LOGIN_SYNC_BLOCKED_MESSAGE } from './loginSyncGate.js';
 import { areHoldingTransactionsEqual } from './holdingTransactionEventState.js';
 import {
   cancelScheduledHoldingTransactionPush,
@@ -155,6 +156,8 @@ export async function persistHoldingTransactionMutation(
         deletedIds,
         signal: controller?.signal
       });
+      // 登录合并待确认：底层已拦截，本地保存保留、行保持 pending，不算同步失败。
+      if (syncResult?.blocked) return { cloudAttempted: false, blocked: true, failed: [], pushed: [], deleted: [], expectedCount };
       if (syncResult.failed.length) scheduleHoldingTransactionRetry();
       else cancelScheduledHoldingTransactionPush();
       return {
@@ -165,6 +168,7 @@ export async function persistHoldingTransactionMutation(
         expectedCount
       };
     } catch (error) {
+      if (isLoginSyncBlockedError(error)) return { cloudAttempted: false, blocked: true, failed: [], pushed: [], deleted: [], expectedCount };
       scheduleHoldingTransactionRetry();
       const timedOut = Boolean(controller?.signal?.aborted);
       return {
@@ -198,6 +202,7 @@ export function persistDeletedHoldingTransaction({ ledger, txId, setLedger } = {
 
 export function describeHoldingTransactionSync(syncResult, localDescription, localOnlyDescription = '已保存至本地。') {
   const failed = Array.isArray(syncResult?.failed) ? syncResult.failed : [];
+  if (syncResult?.blocked) return `${localDescription}，${LOGIN_SYNC_BLOCKED_MESSAGE}。`;
   if (failed.length) return `${localDescription}，云端同步失败：${failed[0]?.message || '稍后自动重试'}`;
   if (syncResult?.cloudAttempted) {
     const confirmed = (syncResult?.pushed?.length || 0) + (syncResult?.deleted?.length || 0);

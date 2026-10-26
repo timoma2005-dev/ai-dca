@@ -545,8 +545,8 @@ export function TradePlansExperience({ links, inPagesDir = false, embedded = fal
       if (!removed) return;
       try {
         await deleteAccountResourceItem('plans/store', row.sourceId);
-      } catch {
-        showActionToast('账号数据同步失败', 'warning', { description: '加仓计划已从本地删除。' });
+      } catch (error) {
+        showActionToast(error?.code === 'LOGIN_SYNC_PENDING' ? '数据未同步' : '账号数据同步失败', 'warning', { description: error?.code === 'LOGIN_SYNC_PENDING' ? `加仓计划已从本地删除，${error.message}。` : '加仓计划已从本地删除。' });
       }
       showActionToast('删除加仓计划', 'success');
     } else {

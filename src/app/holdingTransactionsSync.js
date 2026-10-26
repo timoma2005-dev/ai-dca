@@ -13,7 +13,7 @@ import { loadCloudSession } from './authSession.js';
 import { getAccountLoadingSnapshot } from './accountLoadingState.js';
 import { fetchLegacyMigrationStatus } from './accountApi.js';
 import { isFeatureDemoActive } from './demo/demoMode.js';
-import { isLoginSyncPending } from './loginSyncGate.js';
+import { isLoginSyncPending, isLoginSyncWriteBlocked } from './loginSyncGate.js';
 import { isLikelyDateFundCode, sanitizeTransactions } from './holdingsLedgerBasics.js';
 import {
   deleteHoldingTransaction,
@@ -133,6 +133,20 @@ function writeSyncState(state) {
   const next = { ...state, savedAt: nowIsoText() };
   if (ls) ls.setItem(HOLDING_TRANSACTION_SYNC_STATE_KEY, JSON.stringify(next));
   return next;
+}
+
+// 登录合并门禁打开：不发任何请求，变化行保持 pending（journal 已登记），确认合并后按用户选择处理。
+function holdingPushBlockedResult(session, ids = []) {
+  assertSameHoldingSyncSession(session);
+  const previous = readSyncState();
+  const localMap = mapById(readLocalTransactions());
+  for (const id of ids) {
+    const local = localMap.get(id);
+    if (local) previous.rows[id] = { ...(previous.rows[id] || {}), localHash: hashValue(local), pending: true, deleted: false };
+  }
+  const state = writeSyncState({ ...previous, pendingLocalIds: Array.from(new Set([...(previous.pendingLocalIds || []), ...ids])) });
+  dirty = true;
+  return { blocked: true, pushed: [], deleted: [], failed: [], pendingLocalIds: state.pendingLocalIds };
 }
 
 async function fetchAllRemoteRows(session, signal) {
@@ -322,6 +336,11 @@ export function registerPendingHoldingTransactionChanges({
   return { registered: true, count };
 }
 
+/** 登录合并确认时清空该账号的 pending journal：以用户在差异对话框中的选择为准，避免被拦截的改动绕过选择回推。 */
+export function clearHoldingTransactionPendingJournal(userId) {
+  return writePendingJournal(String(userId || '').trim(), {});
+}
+
 /** 只清理「未被更新mutation覆盖」的 journal 条目，防止清掉更新的保存意图。 */
 function clearPendingJournalEntriesIfUnchanged(userId, ids, snapshotEntries) {
   if (!String(userId || '').trim() || !ids || !ids.length) return;
@@ -370,7 +389,7 @@ function applyPendingJournalEntriesToRuntime(entries) {
 const recoveredJournalUsers = new Set();
 
 /** journal 恢复：本地应用（无网络依赖）+ 受保护 id 的推送重试；失败保留至下一轮。 */
-async function runPendingJournalRecovery(session, signal) {
+async function runPendingJournalRecovery(session, signal, bypassLoginSyncGate = false) {
   const userId = String(session?.userId || '').trim();
   if (!userId) return { recovered: false };
   const journal = readPendingJournal(userId);
@@ -392,7 +411,7 @@ async function runPendingJournalRecovery(session, signal) {
   const deletedIds = entryIds.filter((id) => String(journal.entries[id]?.kind || '') === 'delete');
   if (isFeatureDemoActive()) return { recovered: true, upsertIds, deletedIds, remaining: entryIds.length }; // 演示中不推送
   try {
-    await runPushHoldingTransactionRows({ session, upsertIds, deletedIds });
+    await runPushHoldingTransactionRows({ session, upsertIds, deletedIds, bypassLoginSyncGate });
   } catch {
     // 推送失败：journal 保留，下一轮 pull 继续重试；本地已应用，数据不丢。
   }
@@ -416,17 +435,17 @@ async function assertMigrationComplete(session, signal) {
 // pull：远端行按 id/revision 与当前 runtime 合并，保留 pending 行与删除 tombstone。
 // ---------------------------------------------------------------------------
 
-export function pullHoldingTransactions({ session = loadCloudSession(), force = false, signal } = {}) {
+export function pullHoldingTransactions({ session = loadCloudSession(), force = false, signal, bypassLoginSyncGate = false } = {}) {
   if (!session?.accessToken) return Promise.reject(new Error('请先登录账户'));
   const key = `pull:${holdingSyncSessionIdentity(session)}:${force ? 'force' : 'normal'}`;
-  return enqueueHoldingOperation(key, () => runPullHoldingTransactions({ session, force, signal }));
+  return enqueueHoldingOperation(key, () => runPullHoldingTransactions({ session, force, signal, bypassLoginSyncGate }));
 }
 
-async function runPullHoldingTransactions({ session, force, signal }) {
+async function runPullHoldingTransactions({ session, force, signal, bypassLoginSyncGate }) {
   pullInFlight = true;
   try {
     // journal 恢复优先：即使云端不可用，也已把未确认的本地变更恢复进 runtime。
-    await runPendingJournalRecovery(session, signal).catch(() => null);
+    await runPendingJournalRecovery(session, signal, bypassLoginSyncGate).catch(() => null);
     await assertMigrationComplete(session, signal);
     const remoteRows = await fetchAllRemoteRows(session, signal);
     const remoteMap = mapById(remoteRows);
@@ -489,15 +508,17 @@ export function pushHoldingTransactionRows({
   session = loadCloudSession(),
   upsertIds = [],
   deletedIds = [],
-  signal
+  signal,
+  bypassLoginSyncGate = false
 } = {}) {
   if (!session?.accessToken) return Promise.reject(new Error('请先登录账户'));
   operationSequence += 1;
   const key = `push-rows:${holdingSyncSessionIdentity(session)}#${operationSequence}`;
-  return enqueueHoldingOperation(key, () => runPushHoldingTransactionRows({ session, upsertIds, deletedIds, signal }));
+  return enqueueHoldingOperation(key, () => runPushHoldingTransactionRows({ session, upsertIds, deletedIds, signal, bypassLoginSyncGate }));
 }
 
-async function runPushHoldingTransactionRows({ session, upsertIds, deletedIds, signal }) {
+async function runPushHoldingTransactionRows({ session, upsertIds, deletedIds, signal, bypassLoginSyncGate = false }) {
+  if (isLoginSyncWriteBlocked({ session, bypassLoginSyncGate })) return holdingPushBlockedResult(session, [...normalizeTransactionIds(upsertIds)]);
   await assertMigrationComplete(session, signal);
   const previous = readSyncState();
   const journalSnapshot = readPendingJournal(String(session?.userId || '')).entries;
@@ -522,7 +543,8 @@ async function runPushHoldingTransactionRows({ session, upsertIds, deletedIds, s
         baseRevision,
         force: false,
         end: { id: 'browser', type: 'PC Web' },
-        signal
+        signal,
+        bypassLoginSyncGate
       }, session);
       // 按 pushed id 验证云确认：2xx 但未确认同一 id 视为未完成，不标记已同步。
       const confirmedId = String(result?.transaction?.id || result?.id || '').trim();
@@ -592,7 +614,8 @@ async function runPushHoldingTransactionRows({ session, upsertIds, deletedIds, s
         baseRevision,
         force: false,
         end: { id: 'browser', type: 'PC Web' },
-        signal
+        signal,
+        bypassLoginSyncGate
       }, session);
       const confirmedId = String(result?.transaction?.id || result?.id || '').trim();
       if (confirmedId && confirmedId !== id) {
@@ -645,14 +668,15 @@ async function runPushHoldingTransactionRows({ session, upsertIds, deletedIds, s
 // push（全量 dirty 行）：自动同步、合并迁移与手动合并共用。
 // ---------------------------------------------------------------------------
 
-export function pushHoldingTransactions({ session = loadCloudSession(), force = false, deletedIds = [], deleteOnly = false, signal } = {}) {
+export function pushHoldingTransactions({ session = loadCloudSession(), force = false, deletedIds = [], deleteOnly = false, signal, bypassLoginSyncGate = false } = {}) {
   if (!session?.accessToken) return Promise.reject(new Error('请先登录账户'));
   operationSequence += 1;
   const key = `push-all:${holdingSyncSessionIdentity(session)}#${operationSequence}`;
-  return enqueueHoldingOperation(key, () => runPushHoldingTransactionsAll({ session, force, deletedIds, deleteOnly, signal }));
+  return enqueueHoldingOperation(key, () => runPushHoldingTransactionsAll({ session, force, deletedIds, deleteOnly, signal, bypassLoginSyncGate }));
 }
 
-async function runPushHoldingTransactionsAll({ session, force, deletedIds, deleteOnly, signal }) {
+async function runPushHoldingTransactionsAll({ session, force, deletedIds, deleteOnly, signal, bypassLoginSyncGate = false }) {
+  if (isLoginSyncWriteBlocked({ session, bypassLoginSyncGate })) return holdingPushBlockedResult(session);
   pushInFlight = true;
   try {
     await assertMigrationComplete(session, signal);
@@ -681,10 +705,10 @@ async function runPushHoldingTransactionsAll({ session, force, deletedIds, delet
         try {
           let result;
           try {
-            result = await putHoldingTransaction(id, local, { baseRevision, force: false, end: { id: 'browser', type: 'PC Web' }, signal }, session);
+            result = await putHoldingTransaction(id, local, { baseRevision, force: false, end: { id: 'browser', type: 'PC Web' }, signal, bypassLoginSyncGate }, session);
           } catch (error) {
             if (!error?.isRevisionConflict || !force) throw error;
-            result = await putHoldingTransaction(id, local, { force: true, end: { id: 'browser', type: 'PC Web' }, signal }, session);
+            result = await putHoldingTransaction(id, local, { force: true, end: { id: 'browser', type: 'PC Web' }, signal, bypassLoginSyncGate }, session);
           }
           const confirmedId = String(result?.transaction?.id || result?.id || '').trim();
           if (confirmedId !== id) {
@@ -718,10 +742,10 @@ async function runPushHoldingTransactionsAll({ session, force, deletedIds, delet
       try {
         let result;
         try {
-          result = await deleteHoldingTransaction(id, { baseRevision, force: false, end: { id: 'browser', type: 'PC Web' }, signal }, session);
+          result = await deleteHoldingTransaction(id, { baseRevision, force: false, end: { id: 'browser', type: 'PC Web' }, signal, bypassLoginSyncGate }, session);
         } catch (error) {
           if (!error?.isRevisionConflict || !force) throw error;
-          result = await deleteHoldingTransaction(id, { force: true, end: { id: 'browser', type: 'PC Web' }, signal }, session);
+          result = await deleteHoldingTransaction(id, { force: true, end: { id: 'browser', type: 'PC Web' }, signal, bypassLoginSyncGate }, session);
         }
         const confirmedId = String(result?.transaction?.id || result?.id || '').trim();
         if (confirmedId && confirmedId !== id) {

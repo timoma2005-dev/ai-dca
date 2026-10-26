@@ -13,7 +13,7 @@ import {
   putAccountResource
 } from './accountApi.js';
 import { isFeatureDemoActive } from './demo/demoMode.js';
-import { isLoginSyncPending } from './loginSyncGate.js';
+import { isLoginSyncPending, isLoginSyncWriteBlocked } from './loginSyncGate.js';
 
 export const ACCOUNT_SYNC_STATE_KEY = 'aiDcaAccountSyncState';
 export const ACCOUNT_SYNC_EVENTS = {
@@ -141,7 +141,7 @@ function applyLocalResource(resource, raw) {
   return true;
 }
 
-export async function pushResource(resource, { force = false, session = loadCloudSession() } = {}) {
+export async function pushResource(resource, { force = false, session = loadCloudSession(), bypassLoginSyncGate = false } = {}) {
   if (!session?.accessToken) throw new Error('请先登录账户');
   const key = keyForResource(resource);
   if (!key) throw new Error(`未知的同步资源：${resource}`);
@@ -151,7 +151,7 @@ export async function pushResource(resource, { force = false, session = loadClou
   // 本地已删除：只有「之前同步过」才向云端删除，避免新设备空本地误删云端。
   if (raw === null || raw === undefined) {
     if (!state.revision || state.deleted) return { resource, skipped: true, reason: 'empty' };
-    const result = await deleteAccountResource(resource, session);
+    const result = await deleteAccountResource(resource, session, { bypassLoginSyncGate });
     writeResourceState(resource, { revision: result.revision, contentHash: '', localHash: '', updatedAt: result.updatedAt, deleted: true });
     return { resource, deleted: true, revision: result.revision };
   }
@@ -166,7 +166,8 @@ export async function pushResource(resource, { force = false, session = loadClou
       data,
       baseRevision: force ? null : state.revision,
       force,
-      end: getClientEnd()
+      end: getClientEnd(),
+      bypassLoginSyncGate
     }, session);
     writeResourceState(resource, {
       revision: result.revision,
@@ -188,7 +189,8 @@ export async function pushResource(resource, { force = false, session = loadClou
     const retry = await putAccountResource(resource, {
       data: mergedData,
       baseRevision: Number(err.data.currentRevision || 0),
-      end: getClientEnd()
+      end: getClientEnd(),
+      bypassLoginSyncGate
     }, session);
     writeResourceState(resource, {
       revision: retry.revision,
@@ -227,7 +229,7 @@ export async function pushAllResources({ force = false, resources = null, sessio
   return { pushed, skipped, failed, updatedAt: nowIso() };
 }
 
-export async function pullResources({ resources = null, force = false, session = loadCloudSession() } = {}) {
+export async function pullResources({ resources = null, force = false, session = loadCloudSession(), bypassLoginSyncGate = false } = {}) {
   if (!session?.accessToken) throw new Error('请先登录账户');
   const manifest = await fetchAccountManifest(session);
   const items = Array.isArray(manifest?.resources) ? manifest.resources : [];
@@ -279,11 +281,16 @@ export async function pullResources({ resources = null, force = false, session =
     if (mergedRaw !== remoteRaw) {
       // 本机有云端没有的记录 → 回传，让云端补齐。
       const mergedData = safeParse(mergedRaw);
-      if (mergedData !== undefined) {
+      if (mergedData !== undefined && isLoginSyncWriteBlocked({ session, bypassLoginSyncGate })) {
+        // 登录合并待确认：不回传，基线记为云端内容，资源保持 dirty，确认后再上传。
+        writeResourceState(item.resource, { localHash: hashString(remoteRaw) });
+        dirtyResources.add(item.resource);
+      } else if (mergedData !== undefined) {
         const result = await putAccountResource(item.resource, {
           data: mergedData,
           baseRevision: entry.revision,
-          end: getClientEnd()
+          end: getClientEnd(),
+          bypassLoginSyncGate
         }, session);
         writeResourceState(item.resource, {
           revision: result.revision,

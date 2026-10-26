@@ -6,6 +6,7 @@
 
 import { demoAccessToken } from './demo/demoMode.js';
 import { loadCloudSession } from './authSession.js';
+import { assertLoginSyncWriteAllowed } from './loginSyncGate.js';
 import { apiUrl, apiUrlDirect, fetchWithFallback } from './apiBase.js';
 import { fetchWithGetRetry } from './apiTransport.js';
 import { describeAccountRequest, trackAccountOperation } from './accountLoadingState.js';
@@ -105,8 +106,10 @@ export async function assertLegacyMigrationSettled(session = loadCloudSession(),
   throw error;
 }
 
-async function requestAccountResource(path, options = {}, session = loadCloudSession()) {
+async function requestAccountResource(path, { bypassLoginSyncGate = false, ...options } = {}, session = loadCloudSession()) {
   const token = requireToken(session);
+  // 登录合并待确认：资源写入在此统一拦截（不发请求），读取不受影响。
+  if (String(options.method || 'GET').toUpperCase() !== 'GET') assertLoginSyncWriteAllowed({ session, bypassLoginSyncGate });
   await assertLegacyMigrationSettled(session, { signal: options?.signal });
   return request(path, { ...options, token });
 }
@@ -133,13 +136,14 @@ export async function fetchAccountResourceHistory(resource, session = loadCloudS
   return requestAccountResource(`/${resource}?history=1`, {}, session);
 }
 
-export async function putAccountResource(resource, { data, baseRevision = null, force = false, end = null } = {}, session = loadCloudSession()) {
+export async function putAccountResource(resource, { data, baseRevision = null, force = false, end = null, bypassLoginSyncGate = false } = {}, session = loadCloudSession()) {
   const headers = {};
   if (!force && Number.isFinite(Number(baseRevision))) headers['if-match'] = `"${Number(baseRevision)}"`;
   return requestAccountResource(`/${resource}`, {
     method: 'PUT',
     headers,
-    body: { data, baseRevision: force ? null : baseRevision, force, end }
+    body: { data, baseRevision: force ? null : baseRevision, force, end },
+    bypassLoginSyncGate
   }, session);
 }
 
@@ -150,8 +154,8 @@ export async function patchAccountResource(resource, patch = {}, { baseRevision 
   }, session);
 }
 
-export async function deleteAccountResource(resource, session = loadCloudSession()) {
-  return requestAccountResource(`/${resource}`, { method: 'DELETE' }, session);
+export async function deleteAccountResource(resource, session = loadCloudSession(), { bypassLoginSyncGate = false } = {}) {
+  return requestAccountResource(`/${resource}`, { method: 'DELETE', bypassLoginSyncGate }, session);
 }
 
 export async function putAccountResourceItem(resource, itemId, item, session = loadCloudSession()) {

@@ -49,9 +49,31 @@ export function clearLoginSyncPending() {
   return had;
 }
 
+export const LOGIN_SYNC_BLOCKED_CODE = 'LOGIN_SYNC_PENDING';
+export const LOGIN_SYNC_BLOCKED_MESSAGE = '数据未同步，处理数据同步后会上传';
+
 /** 当前登录会话是否仍在等待用户确认合并方式（等待期间自动同步一律暂停）。 */
 export function isLoginSyncPending(session = loadCloudSession()) {
   const userId = String(session?.userId || '').trim();
   if (!userId) return false;
   return readLoginSyncPending()?.userId === userId;
+}
+
+// 门禁打开期间，所有向云端的写入（交易行 PUT/DELETE、资源 PUT/PATCH/DELETE）都在
+// 最底层的 API 出口统一拦截：改动只留在本地并保持 dirty/pending。
+// 只有确认流程（loginSyncActions 执行用户选择）显式传 bypassLoginSyncGate 才能推送。
+export function isLoginSyncWriteBlocked({ session, bypassLoginSyncGate = false } = {}) {
+  return !bypassLoginSyncGate && isLoginSyncPending(session || loadCloudSession());
+}
+
+export function isLoginSyncBlockedError(error) {
+  return error?.code === LOGIN_SYNC_BLOCKED_CODE;
+}
+
+export function assertLoginSyncWriteAllowed(options = {}) {
+  if (!isLoginSyncWriteBlocked(options)) return;
+  const error = new Error(LOGIN_SYNC_BLOCKED_MESSAGE);
+  error.code = LOGIN_SYNC_BLOCKED_CODE;
+  error.loginSyncBlocked = true;
+  throw error;
 }

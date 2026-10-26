@@ -1,10 +1,12 @@
 // 登录后本地数据合并：读取两侧数据 + 按用户选择执行。
 // 依赖全部可注入（deps），便于单测在不触网、不写线上库的前提下验证调用。
 import { keyForResource, listAccountResourceNames } from './accountResources.js';
+import { loadCloudSession } from './authSession.js';
 import { deleteAccountResource, fetchAccountBundle, fetchAccountManifest } from './accountApi.js';
 import { fetchHoldingTransactionRows } from './holdingTransactionsApi.js';
 import { pullResources, pushResource, readLocalResourceRaw } from './resourceSync.js';
 import {
+  clearHoldingTransactionPendingJournal,
   HOLDING_TRANSACTION_SYNC_STATE_KEY,
   pullHoldingTransactions,
   pushHoldingTransactions,
@@ -15,6 +17,8 @@ import { isLikelyDateFundCode, sanitizeTransactions } from './holdingsLedgerBasi
 import { HOLDINGS_LEDGER_RESOURCE, LOGIN_SYNC_CHOICES, normalizeLoginSyncChoice } from './loginSyncDiff.js';
 
 const LEDGER_STORAGE_KEY = 'aiDcaFundHoldingsLedger';
+// 门禁打开期间底层拦截一切云端写入；确认流程执行用户选择时显式放行。
+const BYPASS = Object.freeze({ bypassLoginSyncGate: true });
 
 function storage() {
   if (typeof window === 'undefined' || !window.localStorage) return null;
@@ -53,6 +57,7 @@ function resetHoldingSyncState() {
   const ls = storage();
   if (!ls) return false;
   ls.setItem(HOLDING_TRANSACTION_SYNC_STATE_KEY, JSON.stringify({ rows: {}, knownIds: [], savedAt: new Date().toISOString() }));
+  clearHoldingTransactionPendingJournal(loadCloudSession()?.userId);
   return true;
 }
 
@@ -126,10 +131,10 @@ async function applyResourceChoice(item, choice, sides, { session, deps, pullLis
   const remote = sides.remoteResources?.[resource] || null;
   if (choice === LOGIN_SYNC_CHOICES.LOCAL) {
     if (localRaw === null) {
-      if (remote) await deps.deleteAccountResource(resource, session);
+      if (remote) await deps.deleteAccountResource(resource, session, BYPASS);
       result.deletedRemote.push(resource);
     } else {
-      await deps.pushResource(resource, { force: true, session });
+      await deps.pushResource(resource, { force: true, session, ...BYPASS });
       result.pushed.push(resource);
     }
     return;
@@ -149,7 +154,7 @@ async function applyResourceChoice(item, choice, sides, { session, deps, pullLis
   // 合并：沿用原有「云端优先 + 保留本地独有并回传」；云端没有则直接上传本地。
   if (remote) pullList.push(resource);
   else if (localRaw !== null) {
-    await deps.pushResource(resource, { force: true, session });
+    await deps.pushResource(resource, { force: true, session, ...BYPASS });
     result.pushed.push(resource);
   }
   result.merged.push(resource);
@@ -165,15 +170,15 @@ async function applyTransactionChoice(item, choice, sides, { session, deps, resu
   deps.resetHoldingSyncState();
   if (choice === LOGIN_SYNC_CHOICES.LOCAL) {
     // 本地覆盖云端：全部本地行强制写云端，云端多出的行删除。
-    collectPushFailures(await deps.pushHoldingTransactions({ session, force: true, deletedIds: item.remoteOnlyIds || [] }), item, result);
+    collectPushFailures(await deps.pushHoldingTransactions({ session, force: true, deletedIds: item.remoteOnlyIds || [], ...BYPASS }), item, result);
   } else if (choice === LOGIN_SYNC_CHOICES.REMOTE) {
     // 云端覆盖本地：本地账本替换为云端行（本地独有行删除），再拉取登记 revision。
     deps.writeLocalTransactions(sides.remoteTransactions || []);
-    await deps.pullHoldingTransactions({ session, force: true });
+    await deps.pullHoldingTransactions({ session, force: true, ...BYPASS });
   } else {
     // 合并：按行合并，同 id 云端优先；本地独有行随后回传。
-    await deps.pullHoldingTransactions({ session, force: true });
-    collectPushFailures(await deps.pushHoldingTransactions({ session }), item, result);
+    await deps.pullHoldingTransactions({ session, force: true, ...BYPASS });
+    collectPushFailures(await deps.pushHoldingTransactions({ session, ...BYPASS }), item, result);
   }
   result.transactions = choice;
 }
@@ -196,7 +201,7 @@ export async function applyLoginSyncChoices({ sides, diff, choices = {}, session
   }
   if (pullList.length) {
     try {
-      await deps.pullResources({ resources: pullList, force: true, session });
+      await deps.pullResources({ resources: pullList, force: true, session, ...BYPASS });
       result.pulled.push(...pullList);
     } catch (error) {
       result.failed.push({ id: 'resources', label: '云端资源拉取', message: error?.message || String(error) });
