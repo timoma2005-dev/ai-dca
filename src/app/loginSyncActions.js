@@ -6,6 +6,7 @@ import { loadCloudSession } from './authSession.js';
 import { deleteAccountResource, fetchAccountBundle, fetchAccountManifest } from './accountApi.js';
 import { fetchHoldingTransactionRows } from './holdingTransactionsApi.js';
 import { pullResources, pushResource } from './resourceSync.js';
+import { resetSyncBase } from './syncBase.js';
 import {
   clearHoldingTransactionPendingJournal,
   HOLDING_TRANSACTION_SYNC_STATE_KEY,
@@ -128,6 +129,7 @@ export const DEFAULT_LOGIN_SYNC_DEPS = Object.freeze({
   saveLoginSyncBaseline,
   pullResources,
   pushResource,
+  resetSyncBase,
   pullHoldingTransactions,
   pushHoldingTransactions,
   writeLocalResource,
@@ -186,6 +188,8 @@ async function applyResourceChoice(item, choice, sides, { session, deps, pullLis
   const resource = item.resource;
   const localRaw = sides.localResources?.[resource] ?? null;
   const remote = sides.remoteResources?.[resource] || null;
+  // 本机数据（访客落盘）不是上次和云端一致时的那份，旧删除基线作废，否则合并会误删云端条目。
+  deps.resetSyncBase?.(session?.userId, resource);
   if (choice === LOGIN_SYNC_CHOICES.LOCAL) {
     if (localRaw === null) {
       if (remote) await deps.deleteAccountResource(resource, session, BYPASS);

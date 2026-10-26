@@ -1,6 +1,7 @@
 // 账号数据同步引擎 v2：按功能资源做增量同步，不再整包上传/下载，也不再加密。
 // 每个资源独立 revision；冲突只发生在单个功能内，服务端回传该资源副本后本地就地合并重试。
 
+import { applyBaseDeletions, isItemMergeKey, readSyncBaseIds, writeSyncBase } from './syncBase.js';
 import { applyBackupEnvelope } from './webdavBackup.js';
 import { loadCloudSession } from './authSession.js';
 import { getClientEnd } from './syncClient.js';
@@ -153,6 +154,7 @@ export async function pushResource(resource, { force = false, session = loadClou
     if (!state.revision || state.deleted) return { resource, skipped: true, reason: 'empty' };
     const result = await deleteAccountResource(resource, session, { bypassLoginSyncGate });
     writeResourceState(resource, { revision: result.revision, contentHash: '', localHash: '', updatedAt: result.updatedAt, deleted: true });
+    writeSyncBase(session.userId, resource, null);
     return { resource, deleted: true, revision: result.revision };
   }
 
@@ -176,13 +178,18 @@ export async function pushResource(resource, { force = false, session = loadClou
       updatedAt: result.updatedAt,
       deleted: false
     });
+    writeSyncBase(session.userId, resource, raw);
     return { resource, revision: result.revision, unchanged: Boolean(result.unchanged) };
   } catch (err) {
     if (!err?.isRevisionConflict || !err?.data) throw err;
     // 单功能冲突：本地优先合并（远端独有项保留）后，带服务端 revision 重试一次。
     const remoteData = err.data.data;
     const remoteRaw = remoteData === null || remoteData === undefined ? null : JSON.stringify(remoteData);
-    const mergedRaw = remoteRaw === null ? raw : mergePayloadValue(key, remoteRaw, raw);
+    const unionRaw = remoteRaw === null ? raw : mergePayloadValue(key, remoteRaw, raw);
+    // 三方合并：基线里有、一边已删除的条目按删除处理（删除优先），不再被并集加回来。
+    const mergedRaw = isItemMergeKey(key)
+      ? applyBaseDeletions(unionRaw, { key, baseIds: readSyncBaseIds(session.userId, resource), localRaw: raw, remoteRaw })
+      : unionRaw;
     if (mergedRaw !== raw) applyLocalResource(resource, mergedRaw);
     const mergedData = safeParse(mergedRaw);
     if (mergedData === undefined) throw err;
@@ -199,6 +206,7 @@ export async function pushResource(resource, { force = false, session = loadClou
       updatedAt: retry.updatedAt,
       deleted: false
     });
+    writeSyncBase(session.userId, resource, mergedRaw);
     return { resource, revision: retry.revision, merged: true };
   }
 }
@@ -266,7 +274,11 @@ export async function pullResources({ resources = null, force = false, session =
     if (remoteRaw === null) continue;
     const localRaw = readLocalResourceRaw(item.resource);
     // 下行统一走「远端权威 + 保留本地独有」，避免另一端的数据删掉本机独有记录。
-    const mergedRaw = localRaw == null ? remoteRaw : mergePayloadValueRemoteWins(key, remoteRaw, localRaw);
+    const unionRaw = localRaw == null ? remoteRaw : mergePayloadValueRemoteWins(key, remoteRaw, localRaw);
+    // 三方合并：别的设备删掉的条目（基线有、云端没有）不再因本机还留着而被回传复活；本机待上传的删除同理。
+    const mergedRaw = localRaw != null && isItemMergeKey(key)
+      ? applyBaseDeletions(unionRaw, { key, baseIds: readSyncBaseIds(session.userId, item.resource), localRaw, remoteRaw })
+      : unionRaw;
     if (mergedRaw !== localRaw) {
       applyLocalResource(item.resource, mergedRaw);
       applied.push(item.resource);
@@ -278,6 +290,7 @@ export async function pullResources({ resources = null, force = false, session =
       updatedAt: entry.updatedAt,
       deleted: false
     });
+    writeSyncBase(session.userId, item.resource, remoteRaw);
     if (mergedRaw !== remoteRaw) {
       // 本机有云端没有的记录 → 回传，让云端补齐。
       const mergedData = safeParse(mergedRaw);
@@ -299,6 +312,7 @@ export async function pullResources({ resources = null, force = false, session =
           updatedAt: result.updatedAt,
           deleted: false
         });
+        writeSyncBase(session.userId, item.resource, mergedRaw);
         reuploaded.push(item.resource);
       }
     }
@@ -306,6 +320,7 @@ export async function pullResources({ resources = null, force = false, session =
 
   for (const item of tombstones) {
     applyLocalResource(item.resource, null);
+    writeSyncBase(session.userId, item.resource, null);
     writeResourceState(item.resource, {
       revision: item.revision,
       contentHash: '',
