@@ -28,10 +28,10 @@ function ScoreBar({ value, tone }) {
   const pct = Math.max(0, Math.min(100, Number(value) || 0));
   return (
     <span className="flex items-center gap-2">
+      <b className={cx('w-6 shrink-0 text-right text-xs tabular-nums', tone === 'sell' ? 'text-rose-600' : 'text-emerald-700')}>{pct}</b>
       <span className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100 sm:w-20">
         <span className={cx('block h-full rounded-full', tone === 'sell' ? 'bg-rose-400' : 'bg-emerald-500')} style={{ width: `${pct}%` }} />
       </span>
-      <b className="w-6 text-right text-xs tabular-nums text-slate-700">{pct}</b>
     </span>
   );
 }
@@ -147,7 +147,7 @@ export function RadarScoreTable({ data }) {
               <th className="w-[9%] py-2 font-medium">溢价</th>
               <th className="w-[9%] py-2 font-medium">vs 同类</th>
               <th className="w-[22%] py-2 font-medium">份额状态</th>
-              <th className="w-[10%] py-2 font-medium">额度/日均成交</th>
+              <th className="w-[10%] whitespace-nowrap py-2 font-medium">额度/成交</th>
               <th className="w-[14%] py-2 font-medium">卖出紧迫度</th>
               <th className="w-[14%] py-2 font-medium">买入吸引力</th>
             </tr>

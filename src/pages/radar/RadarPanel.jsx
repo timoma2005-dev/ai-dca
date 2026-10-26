@@ -252,6 +252,26 @@ export default function RadarPanel({ session }) {
           <div className="min-w-0">{leftColumn}</div>
           <div className="min-w-0 space-y-5">
             {hasSnapshot && hasScoring(radar.data) ? <RadarQuotaCard data={radar.data} /> : null}
+            {hasSnapshot && hasScoring(radar.data) ? (
+              <details data-testid="radar-sidebar-fold" className="group rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-slate-700 sm:px-5">
+                  <span>计算控制台 · 数据流水线 · 成熟度</span>
+                  <span className="text-xs font-normal text-slate-400 group-open:hidden">展开</span>
+                  <span className="hidden text-xs font-normal text-slate-400 group-open:inline">收起</span>
+                </summary>
+                <div className="border-t border-slate-100 p-3">
+                  <RadarSidebar
+                    data={radar.data}
+                    receivedAt={radar.receivedAt}
+                    session={sessionInfo}
+                    clockNow={clockNow}
+                    computeState={radar.computeState}
+                    onRequestCompute={canCompute ? radar.requestCompute : undefined}
+                    showPipeline={showPipelineInSidebar}
+                  />
+                </div>
+              </details>
+            ) : (
             <RadarSidebar
               data={radar.data}
               receivedAt={radar.receivedAt}
@@ -261,6 +281,7 @@ export default function RadarPanel({ session }) {
               onRequestCompute={canCompute ? radar.requestCompute : undefined}
               showPipeline={showPipelineInSidebar}
             />
+            )}
           </div>
         </div>
       )}
