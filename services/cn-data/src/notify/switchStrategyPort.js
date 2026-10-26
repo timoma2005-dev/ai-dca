@@ -16,7 +16,7 @@ export const DEFAULT_OTC_PREMIUM_THRESHOLD_PCT = 8;
 export const DEFAULT_OTC_MIN_INTRA_PREMIUM_LOW = 1;
 export const DEFAULT_OTC_MIN_INTRA_PREMIUM_HIGH = 2;
 export const DEFAULT_ARB_TARGET_PCT = 2;
-export const VALID_BACKTEST_TIMEFRAMES = new Set(['5m', '15m', '30m', '60m', '1d']);
+export const VALID_BACKTEST_TIMEFRAMES = new Set(['1m', '5m', '15m', '30m', '60m', '1d']);
 
 function sanitizeCode(value) {
   const code = String(value || '').trim();

@@ -20,7 +20,7 @@ const DEFAULT_OTC_PREMIUM_THRESHOLD_PCT = 8;
 const DEFAULT_OTC_MIN_INTRA_PREMIUM_LOW = 1;
 const DEFAULT_OTC_MIN_INTRA_PREMIUM_HIGH = 2;
 const DEFAULT_ARB_TARGET_PCT = 2;
-const VALID_BACKTEST_TIMEFRAMES = new Set(['5m', '15m', '30m', '60m', '1d']);
+const VALID_BACKTEST_TIMEFRAMES = new Set(['1m', '5m', '15m', '30m', '60m', '1d']);
 
 function defaultSwitchRuleName(index = 0) {
   return index === 0 ? '默认规则' : `规则 ${index + 1}`;

@@ -3,6 +3,7 @@ import { nowIso, withTransaction } from '../db.js';
 import { enqueueEvent } from '../outbox.js';
 import { resolveUserId } from '../authSession.js';
 import { runSwitchConfigDryRun } from '../notify/switchDryRun.js';
+import { handleSwitchRecommend } from '../notify/switchRecommend.js';
 
 export function badRequest(message) { return Object.assign(new Error(message), { status: 400 }); }
 export function required(value, name) {
@@ -71,14 +72,14 @@ export async function handleDataRoute(db, method, url, body, headers = {}) {
     : { status: 405, body: { message: 'Method not allowed' } };
   const query = url.searchParams;
   const known = ['/api/notify/rules', '/api/notify/configs', '/api/account/transactions', '/api/account/resources', '/api/sync/backup',
-    '/api/notify/switch/config', '/api/notify/switch/snapshot', '/api/notify/switch/run', '/api/notify/switch/test'];
+    '/api/notify/switch/config', '/api/notify/switch/snapshot', '/api/notify/switch/run', '/api/notify/switch/test',
+    '/api/notify/switch/recommend'];
   const deletingRule = path.startsWith('/api/notify/rules/');
   if (!known.includes(path) && !deletingRule) return null;
   const allowed = deletingRule ? ['DELETE']
     : path === '/api/sync/backup' ? ['GET', 'PUT']
     : path === '/api/notify/switch/snapshot' ? ['GET']
-    : path === '/api/notify/switch/run' ? ['POST']
-    : path === '/api/notify/switch/test' ? ['POST']
+    : ['/api/notify/switch/run', '/api/notify/switch/test', '/api/notify/switch/recommend'].includes(path) ? ['POST']
     : ['GET', 'POST'];
   if (!allowed.includes(method)) return { status: 405, body: { message: 'Method not allowed' } };
   // Switch endpoints use Bearer auth (like account v1); others use legacy query/body user_id
@@ -90,6 +91,7 @@ export async function handleDataRoute(db, method, url, body, headers = {}) {
         if (queryUser && body.user_id && queryUser !== body.user_id) throw badRequest('Conflicting user_id');
         return required(body.user_id ?? queryUser, 'user_id');
       })();
+  if (path === '/api/notify/switch/recommend') return handleSwitchRecommend(db, user, body);
   const now = nowIso();
   if (deletingRule) {
     let id;
