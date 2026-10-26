@@ -5,6 +5,7 @@
 // 计算按钮本身也只给 isAnalyticsAdmin。演示不保存任何内容（无 keepKeys / getState）。
 import { RADAR_PREMIUM_SOURCE, expectedSnapshotDate } from '../../radarModel.js';
 import { getPreviousTradingDayShanghai } from '../../holidaysCN.js';
+import { scoreRadar } from '../../../../workers/notify/src/radarScoring.js';
 
 export const RADAR_DEMO_PATH = '/api/notify/nasdaq-radar';
 
@@ -61,6 +62,51 @@ function previousTradingDays(date, count) {
   return days; // 由近到远
 }
 
+// 演示份额：最高溢价那只今天额度放大 10 倍（果断卖出），最低那只 2 天前放开（等放开结束），第二低今天收紧。
+function demoLimit(code, dayIndex, ranked) {
+  const order = ranked.map((item) => item.code);
+  if (code === order[0]) return dayIndex === 0 ? 2.5e7 : 2.5e6;
+  if (code === order[order.length - 1]) return dayIndex <= 2 ? 3e7 : 3e6;
+  if (code === order[order.length - 2]) return dayIndex === 0 ? 1e6 : 5e6;
+  return 1e6 * (2 + (Math.abs(Math.round(jitter(`lim:${code}`) * 8)) % 8));
+}
+
+/** 评分 v2 演示：用确定性的合成特征跑真实评分函数，结构与 Worker 快照的 scoring / series 一致 */
+function demoScoring(date, ranked, pastDays) {
+  const days = [...pastDays.slice(0, FEATURE_DAYS - 1).reverse(), date];
+  const featureHistory = days.map((day) => ({
+    date: day,
+    etfs: Object.fromEntries(rankedFor(day).map((item) => [item.code, {
+      code: item.code,
+      name: item.name,
+      premium: item.premium,
+      price: +(2 * (1 + item.premium / 100)).toFixed(3),
+      latestNav: 2,
+      turnover: 20000 + Math.round((jitter(`to:${item.code}`) + 1) * 30000),
+      bidAskSpreadBps: +(4 + jitter(`bp:${item.code}`)).toFixed(2),
+      depth5: 50000 + Math.round((jitter(`dp:${item.code}`) + 1) * 40000),
+    }])),
+  }));
+  const limitHistory = Object.fromEntries(RADAR_DEMO_ETFS.map(({ code }) => [
+    code,
+    days.map((day, i) => ({ date: day, limit: demoLimit(code, days.length - 1 - i, ranked) })),
+  ]));
+  const today = featureHistory[featureHistory.length - 1];
+  const scoring = scoreRadar({ etfs: today.etfs, featureHistory, limitHistory, spreadHistory: [], date });
+  const series = {
+    dates: days,
+    etfs: Object.fromEntries(RADAR_DEMO_ETFS.map(({ code }) => [code, {
+      price: featureHistory.map((day) => day.etfs[code].price),
+      nav: featureHistory.map(() => 2),
+      premium: featureHistory.map((day) => day.etfs[code].premium),
+      limit: limitHistory[code].map((item) => item.limit),
+      sell: featureHistory.map(() => null),
+      buy: featureHistory.map(() => null),
+    }])),
+  };
+  return { scoring, series };
+}
+
 /** 演示快照（纯函数，now 为 epoch 毫秒）。 */
 export function buildRadarDemoSnapshot(now = Date.now()) {
   const date = expectedSnapshotDate(now);
@@ -71,6 +117,7 @@ export function buildRadarDemoSnapshot(now = Date.now()) {
   const spreads = past.map((item) => item.spread).sort((a, b) => a - b);
   const percentile = Math.round((spreads.filter((v) => v <= best.spread).length / spreads.length) * 100);
   const recent = [{ date, ...best }, ...past.slice(0, 4)];
+  const { scoring, series } = demoScoring(date, ranked, pastDays);
   return {
     date,
     computedAt: `${date}T13:36:08.000Z`, // 北京时间 21:36:08（21:35 定时计算后）
@@ -103,6 +150,8 @@ export function buildRadarDemoSnapshot(now = Date.now()) {
       dots: '●●●○○',
       enabledWeights: { base: [...BASE_WEIGHTS], premiumStats20: [], liquidityStats30: [] },
     },
+    scoring,
+    series,
     demo: true,
   };
 }
