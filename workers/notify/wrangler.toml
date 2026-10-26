@@ -14,6 +14,11 @@ zone_name = "freebacktrack.tech"
 binding = "NOTIFY_STATE"
 id = "d3d7cf8351b24070a156649fdd50790d"
 preview_id = "0b6670c7493642ca9b69bc29672dcb46"
+# 只读：etf-shares worker 写入的 PCF 申购限额（etf-pcf:{code}:{yyyymmdd}），供雷达评分 v2 读取份额状态。
+[[kv_namespaces]]
+binding = "FUND_LIMIT_KV"
+id = "633d193bdcb045e3bdbc098ff6249224"
+preview_id = "1892e345c6754009ac678ce467189ef2"
 [[d1_databases]]
 binding = "SYNC_DB"
 database_name = "ai-dca-sync-db"

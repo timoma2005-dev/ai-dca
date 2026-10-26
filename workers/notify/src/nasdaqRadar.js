@@ -14,6 +14,7 @@
 import { fetchSwitchOrderBooks, parseFundMobApiReferences } from './switchMarketCollector.js';
 import { fetchFundMetricsForCodes } from './getNav.js';
 import { isChinaMarketHoliday } from './holdingsNavSupport.js';
+import { effectiveSubscribeLimit, scoreRadar } from './radarScoring.js';
 
 const EASTMONEY_FUNDMOB_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
 
@@ -210,6 +211,60 @@ async function upsertFeatureHistory(env, today, featureSnapshot, currentHistory 
   return history;
 }
 
+const LIMIT_LOOKBACK_DAYS = 22;
+const SERIES_DAYS = 60;
+const LIMIT_READ_DAYS = 30; // KV 单次调用有读次数上限：12 只 × 30 天 = 360 次
+
+/**
+ * 从 etf-shares 的 KV（FUND_LIMIT_KV，只读）读取近 N 个交易日的 PCF 申购上限。
+ * 键：etf-pcf:{code}:{yyyymmdd}。缺绑定 / 读失败返回空，评分按「暂无额度数据」处理。
+ */
+export async function readLimitHistory(env, codes, dates) {
+  const kv = env?.FUND_LIMIT_KV;
+  const out = Object.fromEntries(codes.map((code) => [code, []]));
+  if (!kv || typeof kv.get !== 'function') return out;
+  const jobs = [];
+  for (const code of codes) {
+    for (const date of dates) {
+      jobs.push([code, date, `etf-pcf:${code}:${date.replaceAll('-', '')}`]);
+    }
+  }
+  const results = await Promise.all(jobs.map(async ([code, date, key]) => {
+    try {
+      const raw = await kv.get(key, 'json');
+      return [code, date, raw ? effectiveSubscribeLimit(raw) : null];
+    } catch {
+      return [code, date, null];
+    }
+  }));
+  for (const [code, date, limit] of results) {
+    if (limit !== null) out[code].push({ date, limit });
+  }
+  for (const code of codes) out[code].sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
+/** 复盘用的紧凑日线：收盘价、净值（计算溢价所用的最新净值）、溢价、当日申购上限 */
+export function buildRadarSeries(featureHistory = [], limitHistory = {}, days = SERIES_DAYS) {
+  const rows = featureHistory.slice(-days);
+  const dates = rows.map((day) => day.date);
+  const etfs = {};
+  for (const meta of NASDAQ_ETFS) {
+    const limits = new Map((limitHistory[meta.code] || []).map((item) => [item.date, item.limit]));
+    etfs[meta.code] = {
+      price: rows.map((day) => roundNumber(day?.etfs?.[meta.code]?.price, 4)),
+      nav: rows.map((day) => roundNumber(day?.etfs?.[meta.code]?.latestNav, 4)),
+      premium: rows.map((day) => roundNumber(day?.etfs?.[meta.code]?.premium, 3)),
+      limit: rows.map((day) => {
+        const v = limits.get(day.date);
+        if (v === undefined || v === null) return null;
+        return v === Infinity ? -1 : v; // -1 = 不设限
+      }),
+    };
+  }
+  return { dates, etfs };
+}
+
 function shanghaiDateStr(d = new Date()) {
   // 北京时间日期 YYYY-MM-DD
   const shanghai = new Date(d.getTime() + (8 * 60 + d.getTimezoneOffset()) * 60000);
@@ -384,6 +439,25 @@ export async function computeNasdaqRadar(env, { force = false } = {}) {
       enabledWeights: enabledWeightGroups(featureHistory.length),
     },
   };
+
+  // 评分 v2（影子运行，只展示不通知）：失败不影响主快照。
+  try {
+    const limitDates = [...new Set([...featureHistory.map((day) => day.date), today])].sort().slice(-LIMIT_READ_DAYS);
+    const limitHistory = await readLimitHistory(env, codes, limitDates);
+    const recentLimits = Object.fromEntries(codes.map((code) => [code, limitHistory[code].filter((item) => limitDates.slice(-LIMIT_LOOKBACK_DAYS).includes(item.date))]));
+    result.scoring = scoreRadar({
+      etfs: featureSnapshot.etfs,
+      featureHistory,
+      limitHistory: recentLimits,
+      spreadHistory: spreads,
+      date: today,
+    });
+    result.series = buildRadarSeries(featureHistory, limitHistory);
+    result.dataCoverage.featureCompleteness.quota = codes.filter((code) => result.scoring.etfs?.[code]?.quota?.state && result.scoring.etfs[code].quota.state !== 'unknown').length;
+  } catch (err) {
+    console.log('[nasdaq-radar] scoring failed:', err?.message || String(err));
+    result.scoringError = err?.message || String(err);
+  }
 
   await env.NOTIFY_STATE.put(KV_LATEST, JSON.stringify(result));
   await env.NOTIFY_STATE.put(KV_HISTORY, JSON.stringify(history));
