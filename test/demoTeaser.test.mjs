@@ -53,3 +53,15 @@ test('radar demo route reads the teaser through the real fetch and falls back to
   assert.equal(fb.data.demo, true);
   assert.notEqual(fb.data.teaser, true);
 });
+
+test('雷达演示预告：评分用服务端下发的正式 scoring，买入方遮罩；无 scoring 时不展示合成评分', async () => {
+
+  const base = { date: '2026-10-23', top: [{ code: '159501', name: '嘉实', premium: 17.64 }, { code: '513100', name: '国泰', premium: 15.71 }, { code: '159696', name: '易方达', premium: 15.23 }], hiddenCount: 9, bestPair: { spread: 7.78 }, recent: [] };
+  const plain = buildRadarTeaserSnapshot(base);
+  assert.equal(plain.scoring, null);
+  const scoring = { version: 2, date: '2026-10-23', quotaDate: '2026-10-26', etfs: { 159501: { code: '159501', name: '嘉实', premium: 17.64, sellScore: 77, buyScore: 26, quota: { state: 'steady' } }, 513300: { code: '513300', name: '华夏', quota: { state: 'tight' }, hidden: true } }, recommendedPair: { sell: { code: '159501', name: '嘉实', premium: 17.64 }, buy: null, score: 87, netSpread: 7.71 } };
+  const snap = buildRadarTeaserSnapshot({ ...base, scoring });
+  assert.equal(snap.scoring.recommendedPair.score, 87);
+  assert.match(snap.scoring.recommendedPair.buy.code, /^demo-hidden-/);
+  assert.equal(snap.scoring.etfs['513300'].quota.state, 'tight');
+});

@@ -176,8 +176,19 @@ export function buildRadarTeaserSnapshot(teaser) {
   }));
   const buy = fillers[fillers.length - 1];
   const fallback = buildRadarDemoSnapshot();
+  // 评分与正式雷达同源（服务端预告下发）；老版本服务端没有 scoring 时不展示合成评分，避免与正式数据对不上。
+  let scoring = null;
+  if (teaser.scoring && teaser.scoring.etfs && Object.keys(teaser.scoring.etfs).length >= 2) {
+    const pair = teaser.scoring.recommendedPair;
+    scoring = {
+      ...teaser.scoring,
+      recommendedPair: pair ? { ...pair, buy: pair.buy || { code: buy.code, name: buy.name, premium: buy.premium } } : null,
+    };
+  }
   return {
     ...fallback,
+    scoring,
+    series: teaser.series || null,
     date: teaser.date || fallback.date,
     computedAt: teaser.computedAt || fallback.computedAt,
     premiumSource: teaser.premiumSource || fallback.premiumSource,

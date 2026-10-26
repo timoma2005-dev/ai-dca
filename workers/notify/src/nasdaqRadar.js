@@ -479,6 +479,7 @@ export async function computeNasdaqRadar(env, { force = false } = {}) {
       spreadHistory: spreads,
       date: today,
     });
+    result.scoring.quotaDate = today;
     const scoreHistory = await upsertScoreHistory(env, today, result.scoring);
     result.series = buildRadarSeries(featureHistory, limitHistory, SERIES_DAYS, scoreHistory);
     result.dataCoverage.featureCompleteness.quota = codes.filter((code) => result.scoring.etfs?.[code]?.quota?.state && result.scoring.etfs[code].quota.state !== 'unknown').length;
@@ -492,6 +493,50 @@ export async function computeNasdaqRadar(env, { force = false } = {}) {
 
   console.log(`[nasdaq-radar] done: ${highest.code}(${highest.premium}%) → ${lowest.code}(${lowest.premium}%), spread=${spread}%, p${pct}`);
   return result;
+}
+
+/**
+ * 早盘份额刷新：交易所 PCF 在交易日早上发布当天的申购上限，而雷达快照是上一交易日 21:35 算的。
+ * 当天 PCF 到齐（≥ 半数）后，用「上一交易日收盘溢价 + 当天申购上限」重算评分，写回 latest.scoring
+ * 并标 quotaDate = 今天；评分历史同日覆盖（复盘按交易当日实际看到的分数统计）。每天只成功一次。
+ */
+export async function refreshRadarQuota(env, { today = shanghaiDateStr() } = {}) {
+  if (isChinaMarketHoliday(today)) return { skipped: 'holiday' };
+  let latest = null;
+  try { latest = await env.NOTIFY_STATE.get(KV_LATEST, 'json'); } catch { latest = null; }
+  if (!latest?.scoring || !latest.date || today <= latest.date) return { skipped: 'snapshot-is-today' };
+  if (String(latest.scoring.quotaDate || latest.date) >= today) return { skipped: 'already-refreshed' };
+  const codes = NASDAQ_ETFS.map((meta) => meta.code);
+  // 先只探测今天的 12 个键，PCF 没到齐就不做全量读取
+  const probe = await readLimitHistory(env, codes, [today]);
+  const ready = codes.filter((code) => probe[code].length).length;
+  if (ready < Math.ceil(codes.length / 2)) return { skipped: 'pcf-pending', ready };
+
+  const featureHistory = (await readFeatureHistory(env)).filter((day) => day?.date && day.date <= latest.date);
+  const snap = featureHistory.find((day) => day.date === latest.date);
+  if (!snap?.etfs) return { skipped: 'no-feature-snapshot' };
+  const limitDates = [...new Set([...featureHistory.map((day) => day.date), today])].sort().slice(-LIMIT_READ_DAYS);
+  const limitHistory = await readLimitHistory(env, codes, limitDates.filter((date) => date !== today));
+  for (const code of codes) limitHistory[code].push(...probe[code]);
+  const lookback = new Set(limitDates.slice(-LIMIT_LOOKBACK_DAYS));
+  const recentLimits = Object.fromEntries(codes.map((code) => [code, limitHistory[code].filter((item) => lookback.has(item.date))]));
+  let history = [];
+  try {
+    const stored = await env.NOTIFY_STATE.get(KV_HISTORY, 'json');
+    if (Array.isArray(stored)) history = stored;
+  } catch { history = []; }
+  const spreads = history.filter((h) => h?.date && h.date < latest.date).map((h) => h.spread).filter((v) => typeof v === 'number').sort((a, b) => a - b);
+  const scoring = scoreRadar({ etfs: snap.etfs, featureHistory, limitHistory: recentLimits, spreadHistory: spreads, date: latest.date });
+  scoring.quotaDate = today;
+  scoring.quotaRefreshedAt = new Date().toISOString();
+  const next = { ...latest, scoring };
+  if (next.dataCoverage?.featureCompleteness) {
+    next.dataCoverage.featureCompleteness.quota = codes.filter((code) => scoring.etfs?.[code]?.quota?.state && scoring.etfs[code].quota.state !== 'unknown').length;
+  }
+  await upsertScoreHistory(env, latest.date, scoring);
+  await env.NOTIFY_STATE.put(KV_LATEST, JSON.stringify(next));
+  console.log(`[nasdaq-radar] quota refreshed for ${today} (premium ${latest.date}), pcf ready ${ready}/${codes.length}`);
+  return { refreshed: true, quotaDate: today, ready };
 }
 
 /**

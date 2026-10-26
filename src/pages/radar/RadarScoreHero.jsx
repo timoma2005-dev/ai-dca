@@ -55,7 +55,7 @@ export function RadarScoreHero({ data }) {
             <span className="rounded-full bg-amber-300/20 px-2.5 py-1 text-[11px] font-bold text-amber-200">⚡ 份额事件触发</span>
           ) : null}
           <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] text-indigo-100">
-            评分 v2 · 试运行{data?.date ? ` · ${data.date} 收盘口径` : ''}
+            评分 v2 · 试运行{data?.date ? ` · ${data.date} 收盘溢价` : ''}{data?.scoring?.quotaDate && data.scoring.quotaDate !== data.date ? ` · ${data.scoring.quotaDate} 份额` : ''}
           </span>
         </span>
       </div>

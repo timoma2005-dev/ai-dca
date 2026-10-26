@@ -73,3 +73,30 @@ test('pair backtest rotates on threshold and only returns totals', async () => {
   assert.deepEqual(Object.keys(r).sort(), ['days', 'from', 'gainPct', 'per100k', 'switches', 'to']);
   assert.equal(backtestPair(h.slice(0, 3), 'A', 'B'), null);
 });
+
+test('雷达预告：评分与正式同源，隐藏行只给份额状态，买入方不在前 3 时不下发', () => {
+  const q = (state) => ({ state, label: state, limitShares: 1e6 });
+  const etfs = {
+    A: { code: 'A', name: 'A基金', premium: 15, sellScore: 80, buyScore: 20, quota: q('steady') },
+    B: { code: 'B', name: 'B基金', premium: 14, sellScore: 70, buyScore: 30, quota: q('steady') },
+    C: { code: 'C', name: 'C基金', premium: 13, sellScore: 60, buyScore: 40, quota: q('steady') },
+    D: { code: 'D', name: 'D基金', premium: 10, sellScore: 20, buyScore: 85, quota: q('tight') },
+  };
+  const data = {
+    etfs: Object.values(etfs).map(({ code, name, premium }) => ({ code, name, premium })),
+    bestPair: { spread: 5 },
+    scoring: { version: 2, date: '2026-10-23', quotaDate: '2026-10-26', etfs, recommendedPair: { sell: { code: 'A', name: 'A基金', premium: 15 }, buy: { code: 'D', name: 'D基金', premium: 10 }, score: 88, netSpread: 4.9, buyScore: 85, reasons: ['A基金 溢价处于自身高位', 'D基金 额度刚收紧，溢价易升'] }, blockedPairs: [{}] },
+    series: { dates: ['2026-10-23'], etfs: { A: { limit: [1e6], premium: [15] }, D: { limit: [5e6] } } },
+  };
+  const t = buildRadarTeaser(data);
+  assert.equal(t.scoring.quotaDate, '2026-10-26');
+  assert.equal(t.scoring.etfs.A.sellScore, 80);
+  assert.deepEqual(Object.keys(t.scoring.etfs.D).sort(), ['code', 'hidden', 'name', 'quota']);
+  assert.equal(t.scoring.etfs.D.quota.state, 'tight');
+  assert.equal(t.scoring.recommendedPair.buy, null);
+  assert.equal(t.scoring.recommendedPair.buyScore, null);
+  assert.deepEqual(t.scoring.recommendedPair.reasons, ['A基金 溢价处于自身高位']);
+  assert.deepEqual(t.scoring.blockedPairs, []);
+  assert.deepEqual(Object.keys(t.series.etfs), ['A']);
+  assert.equal(t.series.etfs.A.premium, undefined);
+});

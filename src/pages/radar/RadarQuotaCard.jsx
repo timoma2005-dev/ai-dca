@@ -16,7 +16,7 @@ export function RadarQuotaCard({ data }) {
     <section data-testid="radar-quota-card" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-slate-900">份额动态</h3>
-        <span className="text-[11px] text-slate-400">{data?.scoring?.date || data?.date || ''} 申购上限</span>
+        <span className="text-[11px] text-slate-400">{data?.scoring?.quotaDate || data?.scoring?.date || data?.date || ''} 申购上限</span>
       </div>
       <ul className="space-y-2">
         {events.map((event) => (

@@ -133,6 +133,63 @@ function ranked(data) {
     .sort((a, b) => b.premium - a.premium || a.code.localeCompare(b.code));
 }
 
+/**
+ * 评分 v2 预告：与正式雷达同一份 scoring。前 N 只给完整评分；其余只给份额状态（交易所 PCF 公开数据），
+ * 不给溢价与分数；推荐组合的买入方不在前 N 时不下发（客户端遮罩）。
+ */
+export function buildScoringTeaser(data, visibleCodes) {
+  const scoring = data?.scoring;
+  if (!scoring || typeof scoring !== 'object' || !scoring.etfs || typeof scoring.etfs !== 'object') return null;
+  const visible = new Set(visibleCodes);
+  const etfs = {};
+  for (const [code, item] of Object.entries(scoring.etfs)) {
+    if (!item || typeof item !== 'object') continue;
+    etfs[code] = visible.has(code) ? item : { code, name: item.name || '', quota: item.quota || null, hidden: true };
+  }
+  const pair = scoring.recommendedPair;
+  let recommendedPair = null;
+  if (pair?.sell && visible.has(pair.sell.code)) {
+    const buyVisible = Boolean(pair.buy && visible.has(pair.buy.code));
+    recommendedPair = {
+      sell: pair.sell,
+      buy: buyVisible ? pair.buy : null,
+      spread: pair.spread,
+      costPct: pair.costPct,
+      netSpread: pair.netSpread,
+      spreadScore: pair.spreadScore,
+      sellScore: pair.sellScore,
+      buyScore: buyVisible ? pair.buyScore : null,
+      score: pair.score,
+      blocked: '',
+      reasons: buyVisible ? (pair.reasons || []) : (pair.reasons || []).filter((r) => String(r).startsWith(pair.sell.name || '\u0000')),
+    };
+  }
+  return {
+    version: scoring.version,
+    mode: scoring.mode,
+    date: scoring.date,
+    quotaDate: scoring.quotaDate || scoring.date,
+    peerMeanPremium: scoring.peerMeanPremium,
+    weights: scoring.weights,
+    etfs,
+    recommendedPair,
+    pairs: recommendedPair ? [recommendedPair] : [],
+    blockedPairs: [],
+  };
+}
+
+/** 额度阶梯只下发可见几只 */
+function seriesTeaser(data, visibleCodes) {
+  const series = data?.series;
+  if (!series || !Array.isArray(series.dates) || !series.etfs) return null;
+  const etfs = {};
+  for (const code of visibleCodes) {
+    const item = series.etfs[code];
+    if (item && Array.isArray(item.limit)) etfs[code] = { limit: item.limit };
+  }
+  return { dates: series.dates, etfs };
+}
+
 /** 雷达预告：纯函数，便于测试。 */
 export function buildRadarTeaser(data) {
   const list = ranked(data);
@@ -159,6 +216,8 @@ export function buildRadarTeaser(data) {
       .map((r) => ({ date: r.date || null, spread: Number(r.spread) })),
     codes: list.map((e) => e.code).sort(), // 只给可选代码集合（无排序信息），供换基自选
     names: Object.fromEntries(list.map((e) => [e.code, e.name])),
+    scoring: buildScoringTeaser(data, list.slice(0, TEASER_TOP_N).map((e) => e.code)),
+    series: seriesTeaser(data, list.slice(0, TEASER_TOP_N).map((e) => e.code)),
   };
 }
 

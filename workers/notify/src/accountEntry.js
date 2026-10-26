@@ -15,7 +15,7 @@ import { processSwitchMatchJob, runDecoupledSwitchPipeline } from './switchDecou
 import { runSwitchConfigDryRun } from './switchDryRun.js';
 import { requeueStaleTriggerOutbox } from './notifyReliabilityStorage.js';
 import { runMarketDataPush } from './marketDataPush.js';
-import { computeNasdaqRadar, getNasdaqRadar, getNasdaqRadarFeatureHistory } from './nasdaqRadar.js';
+import { computeNasdaqRadar, getNasdaqRadar, getNasdaqRadarFeatureHistory, refreshRadarQuota } from './nasdaqRadar.js';
 function radarProxyKeyOk(request, env) {
   const expected = String(env?.RADAR_PROXY_KEY || '');
   if (!expected) return true;
@@ -126,6 +126,11 @@ export default {
       return;
     }
     if (cron === '* 1-7 * * MON-FRI') {
+      // 09:00–11:30 北京时间：当天 PCF 发布后刷新雷达份额状态（成功后当日不再读取）
+      const shanghaiMinute = (Math.floor(scheduledMs / 60000) + 8 * 60) % 1440;
+      if (shanghaiMinute >= 9 * 60 && shanghaiMinute <= 11 * 60 + 30) {
+        ctx.waitUntil(refreshRadarQuota(env).catch((err) => { console.log('[nasdaq-radar-quota-failed]', JSON.stringify({ message: err instanceof Error ? err.message : String(err) })); }));
+      }
       ctx.waitUntil(Promise.allSettled([
         runDecoupledSwitchPipeline(env, scheduledMs),
         runMarketDataPush(env)
