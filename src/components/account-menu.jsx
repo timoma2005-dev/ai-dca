@@ -11,6 +11,7 @@ import { showToast } from '../app/toast.js';
 import { cx, inputClass, primaryButtonClass } from './experience-ui.jsx';
 import { PrivacyNotice } from './PrivacyNotice.jsx';
 import { GettingStartedEntry } from './onboarding/GettingStartedSlot.jsx';
+import { LoginSyncPendingEntry } from './login-sync-pending-entry.jsx';
 import { evaluateTabAccess } from '../app/rbac/menuModel.js';
 
 // 头像菜单锚点：顶栏账户按钮（brand-preview-bar 上的 data-account-trigger）。
@@ -239,6 +240,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
               <RoleList roles={rbac.roles} />
             </div>
           ) : null}
+          <LoginSyncPendingEntry onOpened={closeMenu} />
           <GettingStartedEntry loggedIn accessOf={(tab) => evaluateTabAccess(rbac, tab)} onOpened={closeMenu} />
           <PrivacyNotice variant="row" />
           <button

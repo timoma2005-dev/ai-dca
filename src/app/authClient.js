@@ -10,6 +10,7 @@ import {
 import { fetchAccountManifest, fetchLegacyMigrationStatus, isLegacyMigrationSettled } from './accountApi.js';
 import { apiUrl, apiUrlDirect, fetchWithFallback } from './apiBase.js';
 import { applyRbacPayload } from './rbac/rbacStore.js';
+import { markLoginSyncPending } from './loginSyncGate.js';
 
 export {
   CLOUD_SYNC_SESSION_EVENT,
@@ -203,6 +204,8 @@ function assertAuthSessionShape(data, actionLabel = '认证') {
 // - 认证结果与同步结果分离，CF 不可用或 D1 session 未就绪都不阻塞、不失败登录；
 // - 协调器按账号去重，authClient 与 UI 重复调度也只跑一份。
 function schedulePostAuthSync(session, action, securityPassword) {
+  // 登录后先同步设门禁：在合并方式确认前，已在运行的自动同步不得把本机数据并入新账号。
+  if (action === 'login') markLoginSyncPending(session?.userId);
   Promise.resolve()
     .then(() => import('./postAuthSync.js'))
     .then((mod) => mod.coordinatePostAuthSync({ session, action, securityPassword }))

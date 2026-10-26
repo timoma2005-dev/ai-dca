@@ -10,6 +10,7 @@
 // 都经由本模块调度，避免多个入口各自触发迁移检查和重复 hydrate。
 
 import { loadCloudSession } from './authSession.js';
+import { isLoginSyncPending, markLoginSyncPending } from './loginSyncGate.js';
 
 export const CLOUD_SYNC_PREPARING_EVENT = 'cloud-sync:preparing';
 export const CLOUD_SESSION_NOT_READY_CODE = 'CLOUD_SESSION_NOT_READY';
@@ -75,23 +76,10 @@ async function runWithSessionPropagationRetry(task, { identity, phase, session }
   throw error;
 }
 
-/** 首次同步：有云端备份时直接拉取；新注册且无备份时上传本机数据。 */
-async function runInitialAccountSync(cloudSync, { action, identity }) {
-  assertSameSession(identity);
-  const remoteMeta = await cloudSync.refreshRemoteCloudMeta();
-  const hasRemoteBackup = Boolean(remoteMeta?.version);
-  cloudSync.ensureLocalChangeBaseline();
-  if (hasRemoteBackup) {
-    const pulled = await cloudSync.restoreEncryptedCloudBackup();
-    dispatch('cloud-sync:auto-restored', { result: pulled });
-    return 'pulled';
-  }
-  if (action === 'register') {
-    const uploaded = await cloudSync.uploadEncryptedCloudBackup({ force: true });
-    dispatch('cloud-sync:auto-uploaded', { result: uploaded });
-    return uploaded?.skipped ? 'skipped-upload' : 'uploaded';
-  }
-  return 'no-remote';
+/** 首次同步：编排见 loginSyncFlow（云端空强制上传 / 有差异弹合并对话框 / 注册与演示保持原逻辑）。 */
+async function runInitialAccountSync(cloudSync, { action, identity, session, reuseExisting = false }) {
+  const { runLoginAccountSync } = await import('./loginSyncFlow.js');
+  return runLoginAccountSync(cloudSync, { action, session, reuseExisting, assertSession: () => assertSameSession(identity) });
 }
 
 const inFlightByUser = new Map();
@@ -111,6 +99,8 @@ export async function coordinatePostAuthSync({
   const existing = inFlightByUser.get(key);
   if (existing) return existing;
 
+  // 登录：在用户确认合并方式前暂停自动同步（防止把本机/上一账号数据静默并入）。
+  if (action === 'login') markLoginSyncPending(session.userId);
   const run = (async () => {
     const identity = postAuthSessionIdentity(session);
     try {
@@ -133,7 +123,7 @@ export async function coordinatePostAuthSync({
       const cloudSync = await import('./cloudSync.js');
       cloudSync.startCloudAutoSync();
       const syncResult = await runWithSessionPropagationRetry(
-        () => runInitialAccountSync(cloudSync, { action, identity }),
+        () => runInitialAccountSync(cloudSync, { action, identity, session }),
         { identity, phase: 'initial-sync', session }
       );
       return { status: 'synced', syncResult };
@@ -162,7 +152,7 @@ export async function coordinatePostAuthSync({
  * 普通启动（已有本地 session）的协调入口：带传播重试的迁移检查后启动自动同步。
  * 与登录后共用同一迁移门禁与 401 有界重试语义。
  */
-export async function ensureCloudSyncReady({ session = loadCloudSession() } = {}) {
+export async function ensureCloudSyncReady({ session = loadCloudSession(), reopenLoginSync = false } = {}) {
   if (!session?.accessToken) return { status: 'no-session' };
   const identity = postAuthSessionIdentity(session);
   try {
@@ -177,6 +167,14 @@ export async function ensureCloudSyncReady({ session = loadCloudSession() } = {}
       return { status: 'migration-required', migration };
     }
     const cloudSync = await import('./cloudSync.js');
+    if (isLoginSyncPending(session)) {
+      // 上次登录的合并尚未确认（取消/刷新/迁移后）：重新计算差异，必要时再次弹出对话框。
+      const syncResult = await runWithSessionPropagationRetry(
+        () => runInitialAccountSync(cloudSync, { action: 'login', identity, session, reuseExisting: !reopenLoginSync }),
+        { identity, phase: 'initial-sync', session }
+      );
+      return { status: 'login-sync', syncResult };
+    }
     cloudSync.startCloudAutoSync();
     return { status: 'started' };
   } catch (error) {

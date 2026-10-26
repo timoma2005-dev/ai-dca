@@ -13,6 +13,7 @@ import { loadCloudSession } from './authSession.js';
 import { getAccountLoadingSnapshot } from './accountLoadingState.js';
 import { fetchLegacyMigrationStatus } from './accountApi.js';
 import { isFeatureDemoActive } from './demo/demoMode.js';
+import { isLoginSyncPending } from './loginSyncGate.js';
 import { isLikelyDateFundCode, sanitizeTransactions } from './holdingsLedgerBasics.js';
 import {
   deleteHoldingTransaction,
@@ -811,6 +812,7 @@ function schedulePull(delay = PULL_DEBOUNCE_MS) {
 }
 
 async function runPush() {
+  if (isLoginSyncPending()) return; // 登录合并待确认：保留 dirty，确认后由自动同步继续
   if (pushInFlight || pullInFlight) {
     // 有同步操作在途：等它结束后再试，不能把这次待上传变更直接丢掉。
     schedulePush(PUSH_DEBOUNCE_MS);
@@ -834,6 +836,7 @@ async function runPush() {
 }
 
 async function runPull() {
+  if (isLoginSyncPending()) return;
   if (pushInFlight || pullInFlight) {
     schedulePull(PULL_DEBOUNCE_MS);
     return;

@@ -30,6 +30,7 @@ import {
   syncHoldingTransactions
 } from './holdingTransactionsSync.js';
 import { ensureLegacyMigration } from './legacyMigration.js';
+import { isLoginSyncPending } from './loginSyncGate.js';
 
 export {
   compareRecordVersions,
@@ -183,6 +184,8 @@ export function scheduleCloudAutoPull(options = {}) {
 export function startCloudAutoSync() {
   if (cloudAutoSyncStarted) return false;
   if (!loadCloudSession()?.accessToken) return false;
+  // 登录合并待确认时不启动自动同步，由 loginSyncFlow 在确认后再启动。
+  if (isLoginSyncPending()) return false;
   cloudAutoSyncStarted = true;
   // 登录后必须先完成迁移状态检查；只有迁移已完成，才安装普通资源和交易行同步器。
   Promise.resolve()

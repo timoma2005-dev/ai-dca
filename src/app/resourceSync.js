@@ -13,6 +13,7 @@ import {
   putAccountResource
 } from './accountApi.js';
 import { isFeatureDemoActive } from './demo/demoMode.js';
+import { isLoginSyncPending } from './loginSyncGate.js';
 
 export const ACCOUNT_SYNC_STATE_KEY = 'aiDcaAccountSyncState';
 export const ACCOUNT_SYNC_EVENTS = {
@@ -351,7 +352,7 @@ export function markAllResourcesDirty() {
 
 async function runPush() {
   // 功能演示中不推送（读到的是演示存储覆盖层）；待推送资源留到演示结束后再推。
-  if (isFeatureDemoActive()) {
+  if (isFeatureDemoActive() || isLoginSyncPending()) {
     scheduleAccountPush({ delay: PULL_INTERVAL_MS });
     return;
   }
@@ -377,7 +378,7 @@ async function runPush() {
 
 async function runPull() {
   // 功能演示中不拉取（不把账号数据并进演示覆盖层，也不触发回传）。
-  if (pushInFlight || pullInFlight || suppressWatch || isFeatureDemoActive()) return;
+  if (pushInFlight || pullInFlight || suppressWatch || isFeatureDemoActive() || isLoginSyncPending()) return;
   const session = loadCloudSession();
   if (!session?.accessToken) return;
   pullInFlight = true;

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { ScreenPage } from "./pages/ScreenPage.jsx";
 import { AppEntryAdGate } from "./components/monetization.jsx";
 import { AccountDataMigrationModal } from "./components/account-data-migration-modal.jsx";
+import { LoginSyncDiffModal } from "./components/login-sync-diff-modal.jsx";
 import { GlobalConfirmDialog } from "./components/global-confirm-dialog.jsx";
 import { RegionSwitchBanner } from "./components/region-switch-banner.jsx";
 import { installLegacyConfirmAdapter } from "./app/confirm.js";
@@ -97,6 +98,7 @@ createRoot(document.getElementById("root")).render(
       <>
         <ScreenPage inPagesDir={inPagesDir} />
         <AccountDataMigrationModal />
+        <LoginSyncDiffModal />
         <GlobalConfirmDialog />
       </>
     </AppEntryAdGate>
