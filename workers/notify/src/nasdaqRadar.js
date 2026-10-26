@@ -212,6 +212,7 @@ async function upsertFeatureHistory(env, today, featureSnapshot, currentHistory 
 }
 
 const LIMIT_LOOKBACK_DAYS = 22;
+const KV_SCORE_HISTORY = 'nasdaq-radar:score-history:v1';
 const SERIES_DAYS = 60;
 const LIMIT_READ_DAYS = 30; // KV 单次调用有读次数上限：12 只 × 30 天 = 360 次
 
@@ -244,14 +245,40 @@ export async function readLimitHistory(env, codes, dates) {
   return out;
 }
 
+/** 每日每只 ETF 的 [卖出分, 买入分]，供复盘按「当时的分数」分档统计胜率 */
+export function compactScores(scoring) {
+  const etfs = {};
+  for (const [code, item] of Object.entries(scoring?.etfs || {})) etfs[code] = [item.sellScore, item.buyScore];
+  return etfs;
+}
+
+async function upsertScoreHistory(env, today, scoring) {
+  let history = [];
+  try {
+    const stored = await env.NOTIFY_STATE.get(KV_SCORE_HISTORY, 'json');
+    if (Array.isArray(stored)) history = stored;
+  } catch {
+    history = [];
+  }
+  history = history.filter((item) => item?.date !== today);
+  history.push({ date: today, version: scoring.version, etfs: compactScores(scoring) });
+  history.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  history = history.slice(-FEATURE_HISTORY_DAYS);
+  await env.NOTIFY_STATE.put(KV_SCORE_HISTORY, JSON.stringify(history));
+  return history;
+}
+
 /** 复盘用的紧凑日线：收盘价、净值（计算溢价所用的最新净值）、溢价、当日申购上限 */
-export function buildRadarSeries(featureHistory = [], limitHistory = {}, days = SERIES_DAYS) {
+export function buildRadarSeries(featureHistory = [], limitHistory = {}, days = SERIES_DAYS, scoreHistory = []) {
   const rows = featureHistory.slice(-days);
   const dates = rows.map((day) => day.date);
+  const scoresByDate = new Map((Array.isArray(scoreHistory) ? scoreHistory : []).map((item) => [item?.date, item?.etfs || {}]));
   const etfs = {};
   for (const meta of NASDAQ_ETFS) {
     const limits = new Map((limitHistory[meta.code] || []).map((item) => [item.date, item.limit]));
     etfs[meta.code] = {
+      sell: rows.map((day) => scoresByDate.get(day.date)?.[meta.code]?.[0] ?? null),
+      buy: rows.map((day) => scoresByDate.get(day.date)?.[meta.code]?.[1] ?? null),
       price: rows.map((day) => roundNumber(day?.etfs?.[meta.code]?.price, 4)),
       nav: rows.map((day) => roundNumber(day?.etfs?.[meta.code]?.latestNav, 4)),
       premium: rows.map((day) => roundNumber(day?.etfs?.[meta.code]?.premium, 3)),
@@ -452,7 +479,8 @@ export async function computeNasdaqRadar(env, { force = false } = {}) {
       spreadHistory: spreads,
       date: today,
     });
-    result.series = buildRadarSeries(featureHistory, limitHistory);
+    const scoreHistory = await upsertScoreHistory(env, today, result.scoring);
+    result.series = buildRadarSeries(featureHistory, limitHistory, SERIES_DAYS, scoreHistory);
     result.dataCoverage.featureCompleteness.quota = codes.filter((code) => result.scoring.etfs?.[code]?.quota?.state && result.scoring.etfs[code].quota.state !== 'unknown').length;
   } catch (err) {
     console.log('[nasdaq-radar] scoring failed:', err?.message || String(err));

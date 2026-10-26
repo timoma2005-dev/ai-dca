@@ -56,6 +56,7 @@
       .act h2 { font-size:24px; margin:8px 0 6px; letter-spacing:-.3px; line-height:1.3; }
       .act h2 .hl { color:#86efac; } .act h2 .hs { color:#fca5a5; }
       .act p { color:#cbd5e1; font-size:13px; line-height:1.6; }
+      .act p .qn { display:block; margin-top:4px; color:#fcd34d; }
       .flow { display:flex; align-items:stretch; gap:12px; margin-top:14px; }
       .flow:empty { display:none; }
       .leg { flex:1; min-width:0; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:12px 14px; }
@@ -107,6 +108,7 @@
       .st { font-size:11px; padding:2px 8px; border-radius:999px; font-weight:600; background:#f1f5f9; color:var(--sub); white-space:nowrap; }
       .st.trade { background:#ecfdf3; color:#15803d; } .st.auc { background:#fff7ed; color:#c2410c; } .st.halt { background:#fef2f2; color:#dc2626; }
       .pill { font-size:11px; padding:2px 7px; border-radius:6px; font-weight:600; white-space:nowrap; }
+      .qa { display:inline-block; margin-left:4px; padding:0 5px; border-radius:5px; font-size:10px; font-weight:700; line-height:16px; vertical-align:1px; } .qR { background:#fee2e2; color:#b91c1c; } .qT { background:#dcfce7; color:#15803d; } .qC { background:#e0e7ff; color:#4338ca; }
       .pB { background:#dcfce7; color:#15803d; } .pH { background:#dbeafe; color:#1d4ed8; } .pS { background:#fee2e2; color:#b91c1c; } .pX { background:#f1f5f9; color:var(--sub); }
       .devc { font-weight:700; }
       .ba { color:var(--sub); font-size:12px; }
@@ -295,7 +297,7 @@
 
         var S = { nq: null, nqStale: false, etf: {}, etfTime: null, etfStale: false, haveEtf: false,
           busy: false, timer: null, sort: { k: "dev", d: 1 }, thr: 0.2, lo: 0.5, phaseKey: null, held: {}, haltThr: 10, nav: {},
-          rounds: {}, filter: "all", prevSig: null, log: [], logDay: "" };
+          rounds: {}, filter: "all", prevSig: null, log: [], logDay: "", quota: {}, quotaDate: "" };
         try { var hs = (window.localStorage && localStorage.getItem(KP + "nqHeld")) || ""; } catch (e) { hs = ""; }
         if (!hs && location.hash.indexOf("held=") >= 0) hs = decodeURIComponent(location.hash.split("held=")[1].split("&")[0]);
         hs.split(",").forEach(function (c) { if (c) S.held[c] = true; });
@@ -465,6 +467,33 @@
             S.navSrc = "东方财富基金(同 ai-dca-notify)";
           }).catch(function () { window[cb] = function () {}; });
         }
+        // 份额（PCF 申购上限）：今日 vs 上一交易日。放开 ≥2 倍或转为不设限 → 不作为买入候选（套利盘会继续压溢价）。
+        function limitTxt(k, n) { return k === "unlimited" ? "不设限" : n == null ? "—" : n >= 1e4 ? +(n / 1e4).toFixed(1) + "万" : String(n); }
+        function quotaOf(rec) {
+          if (!rec) return null;
+          if (rec.subscriptionAllowed === false || (rec.effLimitKind === "limited" && rec.effLimitShares === 0)) return { k: "closed", t: "暂停申购", c: "qC" };
+          var ch = rec.limitChange, lc = rec.limitChanges || {}, strong = false, txt = "";
+          ["net", "total"].forEach(function (key) {
+            var x = lc[key]; if (!x || x.change !== ch) return;
+            var bf = x.before || {}, af = x.after || {};
+            if (ch === "relaxed" && (af.kind === "unlimited" || (x.ratio != null && x.ratio >= 2))) strong = true;
+            if (!txt && (ch === "relaxed" || ch === "tightened")) txt = limitTxt(bf.kind, bf.shares) + "→" + limitTxt(af.kind, af.shares) + "份";
+          });
+          if (ch === "relaxed") return { k: "relax", t: "份额放开", c: "qR", strong: strong, txt: txt };
+          if (ch === "tightened") return { k: "tight", t: "份额收紧", c: "qT", txt: txt };
+          return null;
+        }
+        function loadQuota() {
+          if (ENV.load) return Promise.resolve(false);
+          return fetch("/api/etf-pcf-shares", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+            if (!d || !Array.isArray(d.records)) return false;
+            var m = {}; d.records.forEach(function (rec) { var q = quotaOf(rec); if (q) m[String(rec.code)] = q; });
+            S.quota = m; S.quotaDate = String(d.limitDate || ""); return true;
+          }).catch(function () { return false; });
+        }
+        function qBlocks(r) { var q = S.quota[r.code]; return !!(q && q.k === "relax" && q.strong); }
+        function qChip(r) { var q = S.quota[r.code]; return q ? '<span class="qa ' + q.c + '" title="' + esc((S.quotaDate ? S.quotaDate + " 申购上限 " : "") + (q.txt || q.t)) + '">' + q.t + "</span>" : ""; }
+
         function loadETF() {
           ETFS.forEach(function (e) { window["v_" + e[0]] = undefined; });
           return load(QQ_URL, "gbk").then(function () {
@@ -613,7 +642,10 @@
 
         function decide(list, b) {
           var T = S.thr, act = { h: "", p: "", flow: "" };
-          var cands = list.filter(function (r) { return !r.held && inZone(r); }).sort(function (x, y) { return x.dev - y.dev; });
+          var cands = list.filter(function (r) { return !r.held && inZone(r) && !qBlocks(r); }).sort(function (x, y) { return x.dev - y.dev; });
+          var qSkip = list.filter(function (r) { return !r.held && inZone(r) && qBlocks(r); });
+          var qNote = qSkip.map(function (r) { return '<span class="qn">' + esc(r.name) + " 偏离 " + f2(r.dev) + " 在买入区，但今日" + esc((S.quota[r.code] || {}).txt || "份额放开") + "，溢价可能继续下行，已跳过。</span>"; }).join("");
+          list.forEach(function (r) { var q = S.quota[r.code]; if (r.held && q && q.k === "relax") qNote = '<span class="qn">雷达：' + esc(r.name) + " 今日份额放开（" + esc(q.txt || "") + "），套利盘会压低溢价，优先考虑切出。</span>" + qNote; });
           cands.forEach(function (r, i) { r.cand = i + 1; });
           var dip = cands[0], hl = list.filter(function (r) { return r.held; });
           if (!inWin(b)) {
@@ -622,8 +654,8 @@
             return act;
           }
           if (!hl.length) {
-            if (dip) { act.h = '空仓：买入 <span class="hl">' + esc(dip.name) + "</span>"; act.p = esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在买入区，买入后等偏离回到 0 卖出。"; act.flow = legHtml("b", dip, "买入 · 候选①"); }
-            else { act.h = "空仓：等待"; act.p = "暂无偏离在 " + zoneTxt() + " 的标的。"; }
+            if (dip) { act.h = '空仓：买入 <span class="hl">' + esc(dip.name) + "</span>"; act.p = esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在买入区，买入后等偏离回到 0 卖出。" + qNote; act.flow = legHtml("b", dip, "买入 · 候选①"); }
+            else { act.h = "空仓：等待"; act.p = "暂无偏离在 " + zoneTxt() + " 的标的。" + qNote; }
             return act;
           }
           var hh = [], pp = [], ff = [];
@@ -644,7 +676,7 @@
               ff.push('<div class="leg"><small>持有中</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + "</span>" + (dip ? '<span class="lp">最近候选 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" : "") + "</em></div>");
             }
           });
-          act.h = hh.join("；"); act.p = pp.join(" "); act.flow = ff.join("");
+          act.h = hh.join("；"); act.p = pp.join(" ") + qNote; act.flow = ff.join("");
           return act;
         }
 
@@ -782,7 +814,7 @@
             var q = r.q, sg = r.sigObj, trc = r.held ? "held" : r.cand ? "cand" : r.halt ? "halt" : "";
             var ba = q && !r.halt ? fmt3(q.b1) + " <small>" + (q.b1v || 0) + "</small> / " + fmt3(q.a1) + " <small>" + (q.a1v || 0) + "</small>" : "—";
             return "<tr" + (trc ? ' class="' + trc + '"' : "") + ">" +
-              '<td class="fn" title="' + esc(q ? q.full : r.name) + '"><b>' + esc(r.name) + "</b><small>" + r.code + "</small></td>" +
+              '<td class="fn" title="' + esc(q ? q.full : r.name) + '"><b>' + esc(r.name) + "</b><small>" + r.code + "</small>" + qChip(r) + "</td>" +
               '<td class="c"><input type="checkbox" class="chk" data-code="' + r.code + '"' + (r.held ? " checked" : "") + (S.acct ? ' disabled title="按账户持仓自动识别"' : "") + "></td>" +
               '<td><span class="st ' + r.stObj.c + '">' + esc(r.stObj.text) + "</span></td>" +
               '<td class="num">' + (r.price ? r.price.toFixed(3) : "—") + (r.kind ? ' <small class="ba">' + r.kind + "</small>" : "") + "</td>" +
@@ -810,7 +842,7 @@
           $("m-items").innerHTML = ml.length ? ml.map(function (r) {
             var v = r.dev, sg = r.sigObj, q = r.q;
             return '<div class="item' + (r.held ? " held" : r.cand ? " cand" : r.halt ? " halt" : "") + '">' +
-              '<div class="it-n">' + esc(r.name) + " <small>" + r.code + "</small>" + (sg ? '<span class="pill ' + sg.c + '">' + sg.t + "</span>" : "") +
+              '<div class="it-n">' + esc(r.name) + " <small>" + r.code + "</small>" + qChip(r) + (sg ? '<span class="pill ' + sg.c + '">' + sg.t + "</span>" : "") +
               (S.acct ? "" : '<input type="checkbox" class="chk" data-code="' + r.code + '"' + (r.held ? " checked" : "") + ' aria-label="持有">') + "</div>" +
               '<div class="it-d ' + (v == null ? "" : cls(v)) + '">' + (v == null ? "—" : f2(v)) + "</div>" +
               '<div class="it-m">' + (r.halt ? '<span class="st halt">' + esc(r.stObj.text) + "</span>" : "<span>" + (r.price ? (auction ? "竞价 " : "现价 ") + r.price.toFixed(3) : esc(r.stObj.text)) + "</span>") +
@@ -851,6 +883,8 @@
           S.busy = true;
           clearTimeout(S.timer);
           $("refresh").textContent = "刷新中…";
+          // 份额每 30 分钟刷新一次（PCF 每天开盘前发布一次）
+          if (!ENV.load && (!S.quotaAt || Date.now() - S.quotaAt > 18e5)) { S.quotaAt = Date.now(); loadQuota().then(function (ok) { if (ok) renderETF(); }); }
           (ENV.load ? loadEnv() : Promise.all([loadNQ(), loadETF(), loadFM()])).then(function (ok) {
             if (ok[0] || ok[1]) $("updated").textContent = hms(bj());
             renderNQ();

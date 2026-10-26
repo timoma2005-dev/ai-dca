@@ -119,6 +119,6 @@ test('buildRadarSeries: 不设限记为 -1，缺失为 null', () => {
     { 159513: [{ date: 'd1', limit: Infinity }] }
   );
   assert.deepEqual(s.dates, ['d1']);
-  assert.deepEqual(s.etfs['159513'], { price: [1.7], nav: [1.6], premium: [6.25], limit: [-1] });
+  assert.deepEqual(s.etfs['159513'], { sell: [null], buy: [null], price: [1.7], nav: [1.6], premium: [6.25], limit: [-1] });
   assert.deepEqual(s.etfs['159941'].limit, [null]);
 });

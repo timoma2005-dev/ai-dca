@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { canAccessMenuFromSession, isAnalyticsAdmin } from '../../app/analytics.js';
 import { countdownView, radarSession, snapshotFreshness } from '../../app/radarModel.js';
 import { cx } from '../../components/experience-ui.jsx';
@@ -10,6 +10,11 @@ import RadarOpportunityCards from './RadarOpportunityCards.jsx';
 import RadarRanking from './RadarRanking.jsx';
 import RadarSidebar from './RadarSidebar.jsx';
 import RadarComputeDialog from './RadarComputeDialog.jsx';
+import RadarScoreHero from './RadarScoreHero.jsx';
+import RadarScoreTable from './RadarScoreTable.jsx';
+import RadarQuotaCard from './RadarQuotaCard.jsx';
+import RadarReviewPanel from './RadarReviewPanel.jsx';
+import { hasScoring } from '../../app/radarScoreModel.js';
 
 /**
  * 雷达页编排（plan §4）：RadarPanel 只负责编排与状态分流，
@@ -55,6 +60,7 @@ export default function RadarPanel({ session }) {
   const canCompute = isAnalyticsAdmin(session);
   const clockNow = useRadarClock({ enabled: isAdmin });
   const radar = useRadarData({ enabled: isAdmin });
+  const [view, setView] = useState('radar');
 
   const sessionInfo = useMemo(() => radarSession(clockNow), [clockNow]);
   const countdown = useMemo(() => countdownView(clockNow), [clockNow]);
@@ -153,8 +159,17 @@ export default function RadarPanel({ session }) {
           本次读取未返回快照（远端暂无数据）；以下展示上次有效数据，不会自动视为“新鲜”。
         </div>
       )}
-      {hasSnapshot && <RadarOpportunityCards data={radar.data} />}
-      <RadarRanking data={radar.data} selectedCode={radar.selectedCode} onToggleSelected={radar.toggleSelected} />
+      {hasSnapshot && hasScoring(radar.data) ? (
+        <>
+          <RadarScoreHero data={radar.data} />
+          <RadarScoreTable data={radar.data} />
+        </>
+      ) : (
+        <>
+          {hasSnapshot && <RadarOpportunityCards data={radar.data} />}
+          <RadarRanking data={radar.data} selectedCode={radar.selectedCode} onToggleSelected={radar.toggleSelected} />
+        </>
+      )}
     </div>
   );
 
@@ -165,6 +180,23 @@ export default function RadarPanel({ session }) {
           <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">纳指 ETF 套利雷达</h2>
           <span className="rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">测试中</span>
           <span className="hidden text-xs text-slate-400 sm:inline">VIP 及以上可见</span>
+          <div className="ml-1 inline-flex rounded-xl bg-slate-100 p-0.5" role="tablist" aria-label="雷达视图">
+            {[['radar', '今日雷达'], ['review', '切换复盘']].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={view === key}
+                onClick={() => setView(key)}
+                className={cx(
+                  'min-h-8 rounded-lg px-3 text-xs font-semibold transition-colors',
+                  view === key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {canCompute ? <button
           type="button"
@@ -208,7 +240,9 @@ export default function RadarPanel({ session }) {
         </div>
       )}
 
-      {firstLoading ? (
+      {view === 'review' ? (
+        <RadarReviewPanel data={radar.data} />
+      ) : firstLoading ? (
         leftColumn
       ) : (
         <div
@@ -216,7 +250,8 @@ export default function RadarPanel({ session }) {
           className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,4fr)] items-start"
         >
           <div className="min-w-0">{leftColumn}</div>
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-5">
+            {hasSnapshot && hasScoring(radar.data) ? <RadarQuotaCard data={radar.data} /> : null}
             <RadarSidebar
               data={radar.data}
               receivedAt={radar.receivedAt}
