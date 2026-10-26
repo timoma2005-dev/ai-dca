@@ -427,3 +427,21 @@ test('再次登录：上次已合并且本机未改 → 不再弹窗，直接以
   assert.ok(cloudSync.calls.includes('restore'));
   assert.equal(isLoginSyncPending(session), false);
 });
+
+test('启动补跑（silent）：差异事件标记 silent，弹窗只在登录流程中自动出现', async () => {
+  const { shouldAutoOpenLoginSync } = await import('../src/app/modalArbiter.js');
+  for (const silent of [true, false]) {
+    resetLoginSyncFlowForTest();
+    const session = login(`u-silent-${silent}`);
+    const cloudSync = fakeCloudSync({ remoteVersion: 1 });
+    const { deps } = sidesDeps({
+      remoteResources: { 'trades/ledger': [{ id: 't2' }] },
+      localResources: { 'trades/ledger': '[{"id":"t1"}]' }
+    });
+    const status = await runLoginAccountSync(cloudSync, { action: 'login', session, deps, demoActive: false, silent });
+    assert.equal(status, 'diff-pending');
+    const detail = diffEvents().at(-1).detail;
+    assert.equal(detail.silent, silent);
+    assert.equal(shouldAutoOpenLoginSync(detail), !silent);
+  }
+});

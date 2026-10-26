@@ -71,6 +71,7 @@ export function runLoginAccountSync(cloudSync, options = {}) {
 
 async function runLoginAccountSyncOnce(cloudSync, {
   action = 'login',
+  silent = false,
   session,
   assertSession = () => {},
   deps = DEFAULT_LOGIN_SYNC_DEPS,
@@ -126,7 +127,8 @@ async function runLoginAccountSyncOnce(cloudSync, {
 
   // 有差异：保持门禁（暂停自动同步），等待用户在对话框中选择。
   pendingDiff = { userId, sides, rawSides, diff, createdAt: new Date().toISOString() };
-  dispatch(LOGIN_SYNC_DIFF_EVENT, { userId, diff });
+  // silent：启动时后台补跑的检查，只记待处理，不主动弹窗（避免在删除等操作中途冒出来）。
+  dispatch(LOGIN_SYNC_DIFF_EVENT, { userId, diff, silent: Boolean(silent) });
   return 'diff-pending';
 }
 

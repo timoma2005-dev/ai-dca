@@ -77,9 +77,9 @@ async function runWithSessionPropagationRetry(task, { identity, phase, session }
 }
 
 /** 首次同步：编排见 loginSyncFlow（云端空强制上传 / 有差异弹合并对话框 / 注册与演示保持原逻辑）。 */
-async function runInitialAccountSync(cloudSync, { action, identity, session, reuseExisting = false }) {
+async function runInitialAccountSync(cloudSync, { action, identity, session, reuseExisting = false, silent = false }) {
   const { runLoginAccountSync } = await import('./loginSyncFlow.js');
-  return runLoginAccountSync(cloudSync, { action, session, reuseExisting, assertSession: () => assertSameSession(identity) });
+  return runLoginAccountSync(cloudSync, { action, session, reuseExisting, silent, assertSession: () => assertSameSession(identity) });
 }
 
 const inFlightByUser = new Map();
@@ -170,7 +170,7 @@ export async function ensureCloudSyncReady({ session = loadCloudSession(), reope
     if (isLoginSyncPending(session)) {
       // 上次登录的合并尚未确认（取消/刷新/迁移后）：重新计算差异，必要时再次弹出对话框。
       const syncResult = await runWithSessionPropagationRetry(
-        () => runInitialAccountSync(cloudSync, { action: 'login', identity, session, reuseExisting: !reopenLoginSync }),
+        () => runInitialAccountSync(cloudSync, { action: 'login', identity, session, reuseExisting: !reopenLoginSync, silent: !reopenLoginSync }),
         { identity, phase: 'initial-sync', session }
       );
       return { status: 'login-sync', syncResult };

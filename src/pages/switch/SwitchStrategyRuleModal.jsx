@@ -3,6 +3,7 @@ import { ArrowLeftRight, Loader2, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog.jsx';
 import { Field, TextInput, cx, primaryButtonClass, secondaryButtonClass } from '../../components/experience-ui.jsx';
 import { resolveCnFundName } from '../markets/marketsCatalog.js';
+import { buildDefaultSwitchRuleName, validateSwitchRuleName } from './switchRuleName.js';
 
 const CODE_PATTERN = /^\d{6}$/;
 
@@ -60,7 +61,8 @@ export function SwitchStrategyRuleModal({
   onClose,
   onAutoFill,
   onSave,
-  onSubmit
+  onSubmit,
+  existingRules = []
 }) {
   const activeRow = row || initialRule;
   const isEditing = Boolean(activeRow?.id);
@@ -80,6 +82,8 @@ export function SwitchStrategyRuleModal({
   const [autoMessage, setAutoMessage] = useState('');
   const [autoMeta, setAutoMeta] = useState(null);
   const saveButtonRef = useRef(null);
+  const submittedRef = useRef(false);
+  const autoNameRef = useRef('');
 
   useEffect(() => {
     if (!autoCompleted || typeof window === 'undefined') return undefined;
@@ -94,6 +98,7 @@ export function SwitchStrategyRuleModal({
     if (!open) return;
     const r = row || initialRule;
     const sourceRule = r?.rule || r;
+    submittedRef.current = false;
     setAutoPanelOpen(false);
     setAutoCompleted(false);
     setAutoHoldingCode('');
@@ -124,6 +129,8 @@ export function SwitchStrategyRuleModal({
       setName('');
       setHighCode('159632');
       setLowCode('513100');
+      autoNameRef.current = buildDefaultSwitchRuleName('159632', '513100');
+      setName(autoNameRef.current);
       setLowerPct('0.10');
       setUpperPct('0.90');
       setHoldingSide('H');
@@ -148,8 +155,8 @@ export function SwitchStrategyRuleModal({
     const upper = Number(upperPct);
     if (!Number.isFinite(lower) || !Number.isFinite(upper)) return '阈值需要填写数字。';
     if (upper <= lower) return 'H→L 切出阈值必须大于 L→H 切回阈值。';
-    return '';
-  }, [highCode, highCodes, lowCode, lowCodes, lowerPct, upperPct]);
+    return validateSwitchRuleName(name, existingRules, activeRow?.id || '');
+  }, [highCode, highCodes, lowCode, lowCodes, lowerPct, upperPct, name, existingRules, activeRow?.id]);
 
   async function runAutoFill() {
     const normalizedCode = sanitizeSingleCodeInput(autoHoldingCode);
@@ -175,7 +182,8 @@ export function SwitchStrategyRuleModal({
       const normalizedHighCodes = resultHighCodes.map(sanitizeSingleCodeInput).filter((code) => CODE_PATTERN.test(code));
       const normalizedLowCodes = resultLowCodes.map(sanitizeSingleCodeInput).filter((code) => CODE_PATTERN.test(code));
       if (!normalizedHighCodes.length || !normalizedLowCodes.length) throw new Error('自动填充结果不完整，请稍后重试。');
-      setName((current) => String(current || '').trim() ? current : result.name || `${normalizedCode} 切换方案`);
+      // 名称仍是打开时自动填的默认名时，换成自动生成结果的名称（同样带代码与时间，可区分）。
+      setName((current) => (String(current || '').trim() && current !== autoNameRef.current ? current : result.name || buildDefaultSwitchRuleName(normalizedCode)));
       setHighCode(normalizedHighCodes.join(', '));
       setLowCode(normalizedLowCodes.join(', '));
       setLowerPct(String(result.lowerPct));
@@ -193,14 +201,15 @@ export function SwitchStrategyRuleModal({
   }
 
   function submit() {
-    if (validation) return;
+    if (validation || submittedRef.current) return;
+    submittedRef.current = true;
     const holdingCodes = holdingSide === 'L' ? lowCodes : highCodes;
     const candidateCodes = holdingSide === 'L' ? highCodes : lowCodes;
     const preferredHoldingCode = String(autoMeta?.holdingFundCode || '').trim();
     const generatedHoldingCode = holdingCodes.includes(preferredHoldingCode) ? preferredHoldingCode : holdingCodes[0];
     const payload = {
       ruleId: activeRow?.id || '',
-      name: String(name || '').trim() || `${highCodes[0]} 切换方案`,
+      name: String(name || '').trim(),
       highCodes,
       lowCodes,
       highCode: highCodes[0],
@@ -303,7 +312,7 @@ export function SwitchStrategyRuleModal({
 
           {!autoPanelOpen ? (
           <>
-          <Field label="方案名称">
+          <Field label="方案名称（必填）">
             <TextInput
               value={name}
               placeholder="例如：纳指100轮动套利"

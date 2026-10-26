@@ -1,6 +1,7 @@
 import { AlertTriangle, HelpCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { subscribeToConfirmActions } from '../app/confirm.js';
+import { setBlockingConfirmOpen } from '../app/modalArbiter.js';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle
 } from './ui/dialog.jsx';
@@ -18,6 +19,11 @@ export function GlobalConfirmDialog() {
       return next;
     });
   }), []);
+
+  useEffect(() => {
+    setBlockingConfirmOpen(Boolean(request));
+  }, [request]);
+  useEffect(() => () => setBlockingConfirmOpen(false), []);
 
   function finish(result) {
     request?.resolve?.(result);

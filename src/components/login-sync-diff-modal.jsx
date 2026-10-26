@@ -1,5 +1,5 @@
 // 登录时本机数据与云端不一致：不再逐项比较，只问一次「用本机覆盖云端」还是「改用云端」。
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CloudCog, CloudDownload, HardDriveUpload, Loader2 } from 'lucide-react';
 import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession } from '../app/authSession.js';
 import { LOGIN_SYNC_DIFF_EVENT } from '../app/loginSyncGate.js';
@@ -7,6 +7,7 @@ import { confirmLoginSync, getPendingLoginSyncDiff } from '../app/loginSyncFlow.
 import { HOLDINGS_LEDGER_RESOURCE, LOGIN_SYNC_CHOICES, uniformLoginSyncChoices } from '../app/loginSyncDiff.js';
 import { isLocalOnlyModeChosen, setLocalOnlyMode } from '../app/recordingAccess.js';
 import { setMobileBottomSheetOpen } from '../app/mobileBottomSheet.js';
+import { isBlockingConfirmOpen, shouldAutoOpenLoginSync, subscribeBlockingConfirm } from '../app/modalArbiter.js';
 import { showToast } from '../app/toast.js';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
@@ -63,7 +64,9 @@ function downloadLocalBackup(pending) {
 
 export function LoginSyncDiffModal() {
   const [pending, setPending] = useState(() => getPendingLoginSyncDiff());
-  const [open, setOpen] = useState(() => Boolean(getPendingLoginSyncDiff()));
+  // 挂载时不自动弹出：只在登录流程 / 用户主动打开（差异事件 silent=false）时出现。
+  const [open, setOpen] = useState(false);
+  const deferredRef = useRef(null);
   const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
   const summary = useMemo(() => summarizeLoginSyncPending(pending), [pending]);
@@ -78,8 +81,26 @@ export function LoginSyncDiffModal() {
     setOpen(true);
   }, []);
 
+  useEffect(() => subscribeBlockingConfirm((confirmOpen) => {
+    if (confirmOpen || !deferredRef.current) return;
+    const next = deferredRef.current;
+    deferredRef.current = null;
+    show(next);
+  }), [show]);
+
   useEffect(() => {
-    function handleDiff() { show(getPendingLoginSyncDiff()); }
+    function handleDiff(event) {
+      const next = getPendingLoginSyncDiff();
+      if (!next) return;
+      if (!shouldAutoOpenLoginSync(event?.detail)) {
+        setPending(next);
+        showToast({ title: '数据未同步', description: '本机与云端数据不一致，可从账户菜单「处理数据同步」选择保留哪一份。', tone: 'amber', durationMs: 6000 });
+        return;
+      }
+      // 确认弹窗（如删除确认）打开期间不叠加，关闭后再弹。
+      if (isBlockingConfirmOpen()) { deferredRef.current = next; return; }
+      show(next);
+    }
     function handleSession(event) {
       const session = event?.detail?.session || loadCloudSession();
       if (String(session?.userId || '') !== String(pending?.userId || '')) {
