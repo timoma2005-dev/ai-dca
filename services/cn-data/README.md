@@ -36,6 +36,8 @@ closing SQLite. Configure nginx to preserve `/api/...` request paths.
 | --- | --- |
 | `CN_DATA_DB_PATH` | `/var/lib/ai-dca-cn-data/cn-data.db`; shared by both processes |
 | `CN_DATA_PORT` | `8081`; loopback HTTP port |
+| `AUTH_DB_PATH` | `/var/lib/ai-dca-auth/auth.sqlite`; shared auth SQLite, opened read-only |
+| `CN_DATA_AUTH_FAIL_OPEN` | Unset/default = **fail-closed**. Set to `1`/`true` only for local dev/test without an auth DB: trust query/body `user_id` and skip RBAC when the auth DB is unavailable or not migrated. Never enable in production. |
 | `SYNC_DAEMON_INTERVAL_MS` | `30000`; delay between completed batches |
 | `SYNC_DAEMON_NOTIFY_URL` | Required daemon origin for notify Worker |
 | `SYNC_DAEMON_ACCOUNT_URL` | Required daemon origin for account Worker |
@@ -54,13 +56,15 @@ limited to 2 MiB; individual transaction payloads are limited to 64 KiB.
 **RBAC:** `src/rbacGuard.js` reads the shared auth SQLite (read-only) and returns 403 when a
 valid session lacks the route permission (`/api/account/*` → `api:account`, `/api/notify/switch/*` →
 `api:fund-switch`, other `/api/notify/*` → `api:notify`, `/sync` & `/api/sync/*` → `api:sync`).
-Missing/invalid tokens fall through to the routes (401); a pre-migration auth DB skips the check.
-See `docs/plan-rbac.md`.
+Missing/invalid tokens fall through to the routes (401). If the auth DB cannot be opened or the RBAC
+tables are not migrated, the guard is **fail-closed by default (503 `AUTH_UNAVAILABLE`)**; the legacy
+skip/fallback behavior only runs when `CN_DATA_AUTH_FAIL_OPEN=1`. See `docs/plan-rbac.md`.
 
-**Phase 1 identity contract:** `user_id` is required in query parameters for reads
-and in the query or JSON body for writes. Conflicting query/body identities return
-400. Identity is currently trusted; session verification through nginx/auth must
-be implemented before public exposure. No auth service changes are included.
+**Identity contract:** with a healthy auth DB, identity always comes from the validated Bearer/cookie
+session (`authSession.js`); any client-supplied `user_id` is ignored. The legacy fallback that trusts
+query/body `user_id` (conflicting query/body identities still return 400) is only reachable when
+`CN_DATA_AUTH_FAIL_OPEN=1`, which is intended solely for local dev/test and must never be set in
+production. When the auth DB is unavailable without that flag, requests fail with 503 `AUTH_UNAVAILABLE`.
 
 | Method/path | Parameters/body | Response |
 | --- | --- | --- |

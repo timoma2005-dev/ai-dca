@@ -9,6 +9,7 @@ import {
   markEventDead,
   outboxStats,
   MAX_RETRY_DELAY_MS,
+  CLAIM_LEASE_MS,
 } from '../src/outbox.js';
 import { processOnce } from '../src/syncWorker.js';
 
@@ -78,6 +79,67 @@ describe('outbox: enqueue and claim', () => {
     markEventDead(db, id, 'permanent');
     assert.deepEqual(outboxStats(db), { pending: 0, processing: 0, dead: 1 });
     assert.equal(claimPendingEvents(db, 10).length, 0);
+  });
+});
+
+describe('outbox: processing lease recovery', () => {
+  let db;
+  beforeEach(() => { db = openDb(':memory:'); });
+  afterEach(() => closeDb(db));
+
+  it('stamps claimed_at when an event is claimed', () => {
+    const id = enqueueEvent(db, 'user.login', {});
+    claimPendingEvents(db, 10);
+    const row = db.prepare('SELECT status, claimed_at FROM sync_outbox WHERE event_id = ?').get(id);
+    assert.equal(row.status, 'processing');
+    assert.ok(Date.parse(row.claimed_at) > 0, 'claimed_at must be set');
+  });
+
+  it('does not reclaim a processing event still within its lease', () => {
+    const id = enqueueEvent(db, 'user.register', {});
+    claimPendingEvents(db, 10);
+    // Fresh claim: claimed_at is now, well inside the 10-minute lease.
+    assert.equal(claimPendingEvents(db, 10).length, 0);
+    const row = db.prepare('SELECT status FROM sync_outbox WHERE event_id = ?').get(id);
+    assert.equal(row.status, 'processing');
+  });
+
+  it('recovers a processing event whose lease has expired', () => {
+    const id = enqueueEvent(db, 'user.register', {});
+    claimPendingEvents(db, 10);
+    // Simulate a worker that crashed after claiming: backdate beyond the lease.
+    db.prepare('UPDATE sync_outbox SET claimed_at = ? WHERE event_id = ?')
+      .run(new Date(Date.now() - CLAIM_LEASE_MS - 1000).toISOString(), id);
+
+    const reclaimed = claimPendingEvents(db, 10);
+    assert.equal(reclaimed.length, 1);
+    assert.equal(reclaimed[0].event_id, id);
+    const row = db.prepare('SELECT status, claimed_at FROM sync_outbox WHERE event_id = ?').get(id);
+    assert.equal(row.status, 'processing');
+    // Re-claim refreshes the lease instead of keeping the stale timestamp.
+    assert.ok(Date.parse(row.claimed_at) > Date.now() - 60000);
+  });
+
+  it('recovers legacy processing rows that have NULL claimed_at (pre-migration)', () => {
+    const id = enqueueEvent(db, 'user.register', {});
+    claimPendingEvents(db, 10);
+    // Emulate a row written before 003-outbox-lease.sql existed.
+    db.prepare("UPDATE sync_outbox SET claimed_at = NULL WHERE event_id = ?").run(id);
+    const reclaimed = claimPendingEvents(db, 10);
+    assert.equal(reclaimed.length, 1);
+    assert.equal(reclaimed[0].event_id, id);
+  });
+
+  it('clears claimed_at when an event falls back to pending or dead', () => {
+    const failedId = enqueueEvent(db, 'user.register', {});
+    claimPendingEvents(db, 10);
+    markEventFailed(db, failedId, 'boom');
+    assert.equal(db.prepare('SELECT claimed_at FROM sync_outbox WHERE event_id = ?').get(failedId).claimed_at, null);
+
+    const deadId = enqueueEvent(db, 'user.login', {});
+    claimPendingEvents(db, 10);
+    markEventDead(db, deadId, 'permanent');
+    assert.equal(db.prepare('SELECT claimed_at FROM sync_outbox WHERE event_id = ?').get(deadId).claimed_at, null);
   });
 });
 

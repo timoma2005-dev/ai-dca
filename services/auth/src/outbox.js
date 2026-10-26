@@ -4,6 +4,10 @@ import { randomId, nowIso, withTransaction } from './auth.js';
 export const MAX_RETRY_DELAY_MS = 30 * 60 * 1000;
 // Base delay for the first retry: 5 seconds, doubled per attempt.
 export const BASE_RETRY_DELAY_MS = 5 * 1000;
+// A claim older than this is considered abandoned (worker crashed after flipping
+// the row to 'processing') and gets returned to the pending queue. Mirrors the
+// cn-data outbox lease; sized well beyond a sequential batch's 15s/request budget.
+export const CLAIM_LEASE_MS = 10 * 60 * 1000;
 
 function computeNextAttempt(retryCount) {
   const exponential = BASE_RETRY_DELAY_MS * 2 ** Math.min(retryCount, 12);
@@ -26,11 +30,19 @@ export function enqueueEvent(db, eventType, payload) {
 
 /**
  * Atomically claim up to `limit` due events for processing.
- * Uses a single transaction: select due rows, flip them to 'processing'.
+ * Uses a single transaction: recover abandoned claims past their lease, select
+ * due rows, then flip them to 'processing' with a fresh claimed_at.
  * Returns the claimed rows with parsed payloads.
  */
 export function claimPendingEvents(db, limit = 20) {
   const rows = withTransaction(db, () => {
+    const now = nowIso();
+    // Recover rows stuck in 'processing' because a previous worker died mid-delivery.
+    // claimed_at IS NULL covers legacy rows created before the lease column existed.
+    db.prepare(
+      `UPDATE sync_outbox SET status = 'pending', claimed_at = NULL
+       WHERE status = 'processing' AND (claimed_at IS NULL OR claimed_at <= ?)`
+    ).run(new Date(Date.now() - CLAIM_LEASE_MS).toISOString());
     const due = db
       .prepare(
         `SELECT event_id, event_type, payload, retry_count, created_at
@@ -39,10 +51,12 @@ export function claimPendingEvents(db, limit = 20) {
          ORDER BY created_at ASC
          LIMIT ?`
       )
-      .all(nowIso(), limit);
+      .all(now, limit);
     if (due.length === 0) return [];
-    const mark = db.prepare(`UPDATE sync_outbox SET status = 'processing' WHERE event_id = ?`);
-    for (const row of due) mark.run(row.event_id);
+    const mark = db.prepare(
+      `UPDATE sync_outbox SET status = 'processing', claimed_at = ? WHERE event_id = ?`
+    );
+    for (const row of due) mark.run(now, row.event_id);
     return due;
   });
   return rows.map((row) => {
@@ -68,14 +82,14 @@ export function markEventFailed(db, eventId, error) {
   const retryCount = row.retry_count + 1;
   db.prepare(
     `UPDATE sync_outbox
-     SET status = 'pending', retry_count = ?, next_attempt_at = ?, last_error = ?
+     SET status = 'pending', retry_count = ?, next_attempt_at = ?, last_error = ?, claimed_at = NULL
      WHERE event_id = ?`
   ).run(retryCount, computeNextAttempt(retryCount), String(error || '').slice(0, 500), eventId);
 }
 
 export function markEventDead(db, eventId, error) {
   db.prepare(
-    `UPDATE sync_outbox SET status = 'dead', last_error = ? WHERE event_id = ?`
+    `UPDATE sync_outbox SET status = 'dead', last_error = ?, claimed_at = NULL WHERE event_id = ?`
   ).run(String(error || '').slice(0, 500), eventId);
 }
 

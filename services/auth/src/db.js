@@ -19,7 +19,7 @@ function applyMigrations(db) {
   const applied = new Set(
     db.prepare('SELECT name FROM schema_migrations').all().map((row) => row.name)
   );
-  const files = ['001-init.sql', '002-rbac.sql'];
+  const files = ['001-init.sql', '002-rbac.sql', '003-outbox-lease.sql'];
   for (const file of files) {
     if (applied.has(file)) continue;
     const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');

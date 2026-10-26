@@ -6,9 +6,11 @@
 //
 // 失败语义：
 // - 没有 token / token 无效 → 交给原路由（它们会返回 401），这里不抢先处理。
-// - auth 库不可用或尚未执行 002-rbac 迁移 → 放行（保持迁移前行为），只打印一次告警。
+// - auth 库不可用或尚未执行 002-rbac 迁移 → 默认 fail-closed 抛 503；仅当显式设置
+//   CN_DATA_AUTH_FAIL_OPEN=1（本地开发/测试）时才放行并打印一次告警。
 // - token 有效但缺少权限 → 403。
 import { HttpError, openAuthDb } from './authSession.js';
+import { isAuthFailOpenEnabled } from './authPolicy.js';
 import { sha256Hex } from './account/store.js';
 
 export const SESSION_COOKIE_NAME = 'aidca_session';
@@ -100,16 +102,24 @@ export function enforceRoutePermission(headers, pathname, { openDb = openAuthDb,
   const token = readToken(headers);
   if (!token) return null;
   const auth = openDb();
-  if (!auth) return null;
+  if (!auth) {
+    // 默认 fail-closed：认证依赖不可用时，带 token 的请求也不得放行。
+    // 仅 CN_DATA_AUTH_FAIL_OPEN=1（本地开发/测试）时保留旧的放行行为。
+    if (isAuthFailOpenEnabled()) return null;
+    throw new HttpError(503, 'AUTH_UNAVAILABLE', '认证服务暂不可用，请稍后重试');
+  }
   try {
     const session = auth.prepare('SELECT user_id, expires_at FROM sessions WHERE token_hash = ?').get(sha256Hex(token));
     if (!session || String(session.expires_at) <= now) return null;
     if (!rbacReady(auth)) {
-      if (!warnedNotMigrated) {
-        warnedNotMigrated = true;
-        console.warn('[cn-data] auth DB has no RBAC tables yet (002-rbac.sql); permission checks skipped');
+      if (isAuthFailOpenEnabled()) {
+        if (!warnedNotMigrated) {
+          warnedNotMigrated = true;
+          console.warn('[cn-data] auth DB has no RBAC tables yet (002-rbac.sql); permission checks skipped (fail-open enabled)');
+        }
+        return null;
       }
-      return null;
+      throw new HttpError(503, 'AUTH_UNAVAILABLE', '权限数据尚未就绪，请稍后重试');
     }
     const perms = computeUserPerms(auth, session.user_id, now);
     if (perms.has(perm)) return null;

@@ -72,3 +72,4 @@ location /api/sync/auth/ {
 - 注册/登录在同一事务内写 `users`/`sessions` 并入 `sync_outbox` 队列
 - 同步成功删除事件；网络错误/5xx/429 按指数退避重试（5s 起，最大 30min，429 尊重 Retry-After）
 - 4xx（非 429）进入死信（`status='dead'`），不再重试，需人工处理
+- 认领租约：claim 时写入 `claimed_at`，超过 10 分钟仍处于 `processing` 的事件（含迁移前 `claimed_at` 为空的遗留行）会在下次 claim 时重置回 `pending` 重新投递，避免 syncWorker 崩溃后事件永久卡死（迁移 `003-outbox-lease.sql`）
