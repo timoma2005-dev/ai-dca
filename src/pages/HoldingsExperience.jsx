@@ -82,6 +82,7 @@ import { buildAggregatesTableData } from './holdings/buildAggregatesTableData.js
 import { getAutoNavRefreshCodes, getManualNavRefreshCodes } from './holdings/holdingsNavRefreshPolicy.js';
 import { useTodaySignals } from './holdings/useTodaySignals.js';
 import { buildHoldingsAnalyticsSummary } from './holdings/holdingsAnalytics.js';
+import { requestRecordingAccess } from '../app/recordingAccess.js';
 import { computeOtcAutoFillContext, prepareTransactionDraftForSubmit, updateTransactionDraftField } from './holdings/transactionDraftState.js';
 
 function buildCodeKindMap(codes, transactions) {
@@ -613,6 +614,7 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
   }
 
   async function submitDraft() {
+    if (!(await requestRecordingAccess({ source: 'holdings-transaction' }))) return;
     const prepared = prepareTransactionDraftForSubmit(draft);
     const errors = getTransactionErrors(prepared);
     if (Object.keys(errors).length) {
@@ -788,7 +790,8 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     });
   }
   // ---- OCR import ----
-  function handleTriggerOcr() {
+  async function handleTriggerOcr() {
+    if (!(await requestRecordingAccess({ source: 'holdings-ocr' }))) return;
     if (!fileInputRef.current) return;
     fileInputRef.current.value = '';
     fileInputRef.current.click();
@@ -886,7 +889,8 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     }
   }
   // ---- Excel paste import ----
-  function openPasteModal(source = 'toolbar') {
+  async function openPasteModal(source = 'toolbar') {
+    if (!(await requestRecordingAccess({ source: 'holdings-paste' }))) return;
     setPasteModalOpen(true);
     setPasteText('');
     setPasteResult(null);
@@ -896,7 +900,8 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     setPasteModalOpen(false);
   }
   // ---- OCR import modal controls ----
-  function openOcrModal(source = 'toolbar') {
+  async function openOcrModal(source = 'toolbar') {
+    if (!(await requestRecordingAccess({ source: 'holdings-ocr' }))) return;
     setOcrModalOpen(true);
     setOcrPreview(null);
     setOcrState(createOcrState());

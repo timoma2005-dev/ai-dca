@@ -1,219 +1,79 @@
+// 登录时本机数据与云端不一致：不再逐项比较，只问一次「用本机覆盖云端」还是「改用云端」。
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ChevronDown, CloudCog, GitMerge, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CloudCog, CloudDownload, HardDriveUpload, Loader2 } from 'lucide-react';
 import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession } from '../app/authSession.js';
 import { LOGIN_SYNC_DIFF_EVENT } from '../app/loginSyncGate.js';
 import { confirmLoginSync, getPendingLoginSyncDiff } from '../app/loginSyncFlow.js';
-import { defaultLoginSyncChoices, LOGIN_SYNC_CHOICES, uniformLoginSyncChoices } from '../app/loginSyncDiff.js';
+import { HOLDINGS_LEDGER_RESOURCE, LOGIN_SYNC_CHOICES, uniformLoginSyncChoices } from '../app/loginSyncDiff.js';
+import { isLocalOnlyModeChosen, setLocalOnlyMode } from '../app/recordingAccess.js';
 import { setMobileBottomSheetOpen } from '../app/mobileBottomSheet.js';
 import { showToast } from '../app/toast.js';
-import { cx } from './experience-ui.jsx';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
 const SHEET_SOURCE = 'login-sync-diff';
-const ROW_LIMIT = 12;
-
-const CHOICE_META = {
-  [LOGIN_SYNC_CHOICES.LOCAL]: { label: '保留本地', hint: '用本机数据覆盖云端，云端多出的条目会被删除。' },
-  [LOGIN_SYNC_CHOICES.REMOTE]: { label: '保留云端', hint: '以云端为准，并删除这台设备上未登录时留下的旧数据。' },
-  [LOGIN_SYNC_CHOICES.MERGE]: { label: '合并', hint: '两边都保留；同一条目两边不同时以云端为准。' }
-};
-const CHOICE_ORDER = [LOGIN_SYNC_CHOICES.LOCAL, LOGIN_SYNC_CHOICES.REMOTE, LOGIN_SYNC_CHOICES.MERGE];
-
-const GLOBAL_ACTIONS = [
-  { choice: LOGIN_SYNC_CHOICES.LOCAL, label: '全部本地覆盖云端', icon: ArrowUpFromLine },
-  { choice: LOGIN_SYNC_CHOICES.REMOTE, label: '全部云端覆盖本地', icon: ArrowDownToLine },
-  { choice: LOGIN_SYNC_CHOICES.MERGE, label: '全部合并', icon: GitMerge }
-];
 
 function formatTime(value = '') {
-  if (!value) return '时间未知';
+  if (!value) return '';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-function formatNumber(value) {
-  const number = Number(value) || 0;
-  return number.toLocaleString('zh-CN', { maximumFractionDigits: 4 });
-}
-
-function sideText(side, unit) {
-  if (!side?.exists) return '无数据';
-  return `${side.count} ${unit} · ${formatTime(side.updatedAt)}`;
-}
-
-function txText(tx = {}) {
-  const direction = tx.type === 'SELL' ? '卖出' : tx.type === 'BUY' ? '买入' : (tx.type || '—');
-  const size = tx.shares > 0 ? `${formatNumber(tx.shares)} 份` : tx.amount > 0 ? `${formatNumber(tx.amount)} 元` : '—';
-  return { code: `${tx.code || '—'}${tx.name ? ` ${tx.name}` : ''}`, date: tx.date || '—', direction, size };
-}
-
-function TxLine({ tx, tone }) {
-  const text = txText(tx);
-  return (
-    <li className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 rounded-lg bg-white px-2.5 py-1.5 text-xs ring-1 ring-slate-100 sm:grid-cols-[minmax(0,1fr)_6rem_3rem_7rem]">
-      <span className="min-w-0 truncate font-semibold text-slate-800">{text.code}</span>
-      <span className="text-right text-slate-500 sm:text-left">{text.date}</span>
-      <span className={cx('font-semibold', tone)}>{text.direction}</span>
-      <span className="text-right tabular-nums text-slate-700">{text.size}</span>
-    </li>
-  );
-}
-
-function LimitedList({ items, render, emptyText = '' }) {
-  const [showAll, setShowAll] = useState(false);
-  if (!items.length) return emptyText ? <div className="text-xs text-slate-400">{emptyText}</div> : null;
-  const visible = showAll ? items : items.slice(0, ROW_LIMIT);
-  return (
-    <>
-      <ul className="space-y-1">{visible.map(render)}</ul>
-      {items.length > ROW_LIMIT ? (
-        <button type="button" className="mt-1 text-xs font-semibold text-indigo-600" onClick={() => setShowAll((value) => !value)}>
-          {showAll ? '收起' : `展开全部 ${items.length} 条`}
-        </button>
-      ) : null}
-    </>
-  );
-}
-
-function DiffGroup({ title, count, tone, children }) {
-  if (!count) return null;
-  return (
-    <div>
-      <div className={cx('mb-1 text-[11px] font-bold', tone)}>{title}（{count}）</div>
-      {children}
-    </div>
-  );
-}
-
-function TransactionDetails({ rows }) {
-  return (
-    <div className="space-y-2.5">
-      <DiffGroup title="仅本地" count={rows.localOnly.length} tone="text-indigo-700">
-        <LimitedList items={rows.localOnly} render={(tx) => <TxLine key={`l-${tx.id}`} tx={tx} tone="text-indigo-700" />} />
-      </DiffGroup>
-      <DiffGroup title="仅云端" count={rows.remoteOnly.length} tone="text-sky-700">
-        <LimitedList items={rows.remoteOnly} render={(tx) => <TxLine key={`r-${tx.id}`} tx={tx} tone="text-sky-700" />} />
-      </DiffGroup>
-      <DiffGroup title="两边内容不同" count={rows.changed.length} tone="text-amber-700">
-        <LimitedList
-          items={rows.changed}
-          render={(pair) => (
-            <li key={`c-${pair.id}`} className="space-y-1 rounded-lg bg-amber-50/60 p-1.5">
-              <div className="text-[10px] font-semibold text-slate-400">本地</div>
-              <ul><TxLine tx={pair.local} tone="text-slate-700" /></ul>
-              <div className="text-[10px] font-semibold text-slate-400">云端</div>
-              <ul><TxLine tx={pair.remote} tone="text-slate-700" /></ul>
-            </li>
-          )}
-        />
-      </DiffGroup>
-    </div>
-  );
-}
-
-function EntryChip({ entry, tone }) {
-  return <li className={cx('inline-flex max-w-full truncate rounded-md px-2 py-0.5 text-xs', tone)} title={entry.label}>{entry.label}</li>;
-}
-
-function ResourceDetails({ item }) {
-  const { localOnly, remoteOnly, changed } = item.entries;
-  if (!localOnly.length && !remoteOnly.length && !changed.length) {
-    return <div className="text-xs leading-5 text-slate-500">两边的设置内容不同（非列表数据，无法逐条对比）。</div>;
-  }
-  // 条目名只是内部键（数字 / #序号）时不展示键本身，只说条数，避免看不懂。
-  const chipList = (list, tone, prefix) => {
-    const named = list.filter((entry) => !entry.opaque);
-    const opaqueCount = list.length - named.length;
-    return (
-      <>
-        {named.length ? <LimitedList items={named} render={(entry) => <EntryChip key={`${prefix}-${entry.key}`} entry={entry} tone={tone} />} /> : null}
-        {opaqueCount ? <div className="text-xs text-slate-500">{named.length ? `另有 ${opaqueCount} 条` : `${opaqueCount} 条`}未命名记录</div> : null}
-      </>
-    );
+export function summarizeLoginSyncPending(pending) {
+  const sides = pending?.sides || {};
+  const items = pending?.diff?.items || [];
+  const txItem = items.find((item) => item.id === HOLDINGS_LEDGER_RESOURCE);
+  const resourceLabels = items.filter((item) => item.kind === 'resource').map((item) => item.label || item.resource);
+  const remoteTimes = [
+    ...Object.values(sides.remoteResources || {}).map((entry) => entry?.updatedAt),
+    ...(sides.remoteTransactions || []).map((tx) => tx?.updatedAt)
+  ].filter(Boolean).sort();
+  return {
+    localTxCount: (sides.localTransactions || []).length,
+    remoteTxCount: (sides.remoteTransactions || []).length,
+    remoteOnlyTxCount: (txItem?.remoteOnlyIds || txItem?.rows?.remoteOnly || []).length,
+    resourceLabels,
+    remoteUpdatedAt: remoteTimes[remoteTimes.length - 1] || ''
   };
-  return (
-    <div className="space-y-2.5 [&_ul]:flex [&_ul]:flex-wrap [&_ul]:gap-1 [&_ul]:space-y-0">
-      <DiffGroup title="仅本地" count={localOnly.length} tone="text-indigo-700">{chipList(localOnly, 'bg-indigo-50 text-indigo-800', 'l')}</DiffGroup>
-      <DiffGroup title="仅云端" count={remoteOnly.length} tone="text-sky-700">{chipList(remoteOnly, 'bg-sky-50 text-sky-800', 'r')}</DiffGroup>
-      <DiffGroup title="两边内容不同" count={changed.length} tone="text-amber-700">{chipList(changed, 'bg-amber-50 text-amber-900', 'c')}</DiffGroup>
-    </div>
-  );
 }
 
-function ChoiceSwitch({ value, onChange, disabled }) {
-  return (
-    <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold" role="radiogroup">
-      {CHOICE_ORDER.map((choice) => (
-        <button
-          key={choice}
-          type="button"
-          role="radio"
-          aria-checked={value === choice}
-          disabled={disabled}
-          className={cx(
-            'h-8 rounded-lg px-2 transition-colors disabled:opacity-60',
-            value === choice ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-          )}
-          onClick={() => onChange(choice)}
-        >
-          {CHOICE_META[choice].label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function DiffItemCard({ item, choice, onChoice, disabled }) {
-  const [expanded, setExpanded] = useState(item.kind === 'transactions');
-  const unit = item.kind === 'transactions' ? '行' : '项';
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="text-sm font-bold text-slate-950">{item.label}</div>
-          <div className="mt-1 grid gap-0.5 text-xs text-slate-500">
-            <span><span className="font-semibold text-indigo-700">本地</span> {sideText(item.local, unit)}</span>
-            <span><span className="font-semibold text-sky-700">云端</span> {sideText(item.remote, unit)}</span>
-          </div>
-        </div>
-        <div className="sm:w-60 sm:flex-none">
-          <ChoiceSwitch value={choice} onChange={onChoice} disabled={disabled} />
-        </div>
-      </div>
-      <div className="mt-2 text-[11px] leading-5 text-slate-400">{CHOICE_META[choice].hint}</div>
-      <button
-        type="button"
-        className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        <ChevronDown className={cx('h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')} aria-hidden="true" />
-        {expanded ? '收起差异' : '查看差异'}
-      </button>
-      {expanded ? (
-        <div className="mt-2 rounded-xl bg-slate-50 p-2.5">
-          {item.kind === 'transactions' ? <TransactionDetails rows={item.rows} /> : <ResourceDetails item={item} />}
-        </div>
-      ) : null}
-    </section>
-  );
+function downloadLocalBackup(pending) {
+  try {
+    const sides = pending?.sides || {};
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      note: 'ai-dca 本机数据备份（登录时选择改用云端前自动导出）',
+      transactions: sides.localTransactions || [],
+      resources: sides.localResources || {}
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ai-dca-本机数据备份-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function LoginSyncDiffModal() {
   const [pending, setPending] = useState(() => getPendingLoginSyncDiff());
   const [open, setOpen] = useState(() => Boolean(getPendingLoginSyncDiff()));
-  const [choices, setChoices] = useState(() => defaultLoginSyncChoices(getPendingLoginSyncDiff()?.diff?.items || []));
-  const [phase, setPhase] = useState('ready');
+  const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
-  const items = useMemo(() => pending?.diff?.items || [], [pending]);
-  const busy = phase === 'applying' || phase === 'checking';
+  const summary = useMemo(() => summarizeLoginSyncPending(pending), [pending]);
+  const busy = Boolean(phase);
+  const localOnly = isLocalOnlyModeChosen();
 
   const show = useCallback((next) => {
     if (!next) return;
     setPending(next);
-    setChoices(defaultLoginSyncChoices(next.diff?.items || []));
-    setPhase('ready');
+    setPhase('');
     setError('');
     setOpen(true);
   }, []);
@@ -240,131 +100,91 @@ export function LoginSyncDiffModal() {
     return () => setMobileBottomSheetOpen(SHEET_SOURCE, false);
   }, [open]);
 
-  function cancel() {
+  function later() {
     if (busy) return;
     setOpen(false);
     showToast({
       title: '数据未同步',
-      description: '本机与云端数据尚未同步，自动同步已暂停。可从账户菜单「处理数据同步」再次打开。',
+      description: '自动同步已暂停。可从账户菜单「处理数据同步」再次打开。',
       tone: 'amber',
       durationMs: 6000
     });
   }
 
-  async function confirm() {
-    if (busy) return;
-    setPhase('applying');
+  async function apply(choice) {
+    if (busy || !pending) return;
+    setPhase(choice);
     setError('');
     try {
-      await confirmLoginSync(choices);
+      if (choice === LOGIN_SYNC_CHOICES.REMOTE) downloadLocalBackup(pending);
+      await confirmLoginSync(uniformLoginSyncChoices(pending.diff?.items || [], choice));
+      setLocalOnlyMode(false);
       setOpen(false);
       setPending(null);
-      setPhase('ready');
-      showToast({ title: '数据已同步', description: '已按你的选择完成同步，并开启自动同步。', tone: 'emerald' });
+      setPhase('');
+      showToast(choice === LOGIN_SYNC_CHOICES.LOCAL
+        ? { title: '已用本机数据覆盖云端', description: '之后数据以云端为准，多端自动同步。', tone: 'emerald' }
+        : { title: '已改用云端数据', description: '本机旧数据已导出备份文件并从浏览器清除。', tone: 'emerald' });
     } catch (applyError) {
-      setError(applyError?.message || '同步未完成，请重新检查后再试。');
-      setPhase('failed');
-    }
-  }
-
-  async function recheck() {
-    setPhase('checking');
-    setError('');
-    try {
-      const mod = await import('../app/postAuthSync.js');
-      const outcome = await mod.ensureCloudSyncReady({ reopenLoginSync: true });
-      const next = getPendingLoginSyncDiff();
-      if (next) show(next);
-      else {
-        setOpen(false);
-        setPending(null);
-        setPhase('ready');
-        if (outcome?.status !== 'error') showToast({ title: '数据已同步', tone: 'emerald' });
-      }
-    } catch (checkError) {
-      setError(checkError?.message || '重新检查失败，请稍后重试。');
-      setPhase('failed');
+      setError(applyError?.message || '同步未完成，请稍后再试。');
+      setPhase('');
     }
   }
 
   if (!open || !pending) return null;
-  const selectedUniform = CHOICE_ORDER.find((choice) => items.every((item) => choices[item.id] === choice)) || '';
+  const remoteTime = formatTime(summary.remoteUpdatedAt);
+  const localParts = [];
+  if (summary.localTxCount) localParts.push(`${summary.localTxCount} 笔交易`);
+  if (summary.resourceLabels.length) localParts.push(summary.resourceLabels.slice(0, 4).join('、') + (summary.resourceLabels.length > 4 ? ' 等' : ''));
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) cancel(); }}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) later(); }}>
       <DialogContent
-        className="inset-0 left-0 top-0 z-[140] flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white p-0 shadow-2xl sm:inset-auto sm:left-[50%] sm:top-[50%] sm:h-auto sm:max-h-[88vh] sm:w-[calc(100%-1.5rem)] sm:max-w-3xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-3xl"
-        overlayClassName="z-[130] bg-slate-950/65 backdrop-blur-[1px]"
+        className="z-[140] max-w-md gap-0 rounded-3xl p-0"
+        overlayClassName="z-[130] bg-slate-950/65"
         showCloseButton={false}
         onPointerDownOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}
       >
-        <header className="flex-none bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-white sm:px-7 sm:pb-5 sm:pt-6">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
-              <CloudCog className="h-5 w-5 text-indigo-200" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold tracking-[0.18em] text-indigo-200">登录数据同步</div>
-              <DialogTitle className="mt-1 text-lg font-bold leading-tight text-white sm:text-2xl">本机与云端数据有 {items.length} 处不同</DialogTitle>
-              <DialogDescription className="mt-1 text-xs leading-5 text-slate-300 sm:text-sm">
-                请逐项选择保留哪一边。确认前不会同步，自动同步也会暂停。
-              </DialogDescription>
+        <div className="px-5 pb-2 pt-5 sm:px-6">
+          <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-indigo-600">
+            <CloudCog className="h-4 w-4" aria-hidden="true" />登录数据同步
+          </div>
+          <DialogTitle className="mt-2 text-lg font-bold leading-snug text-slate-900">
+            {localOnly ? '你之前选择了「只在本机使用」' : '这台设备上有未登录时录入的数据'}
+          </DialogTitle>
+          <DialogDescription className="mt-2 text-sm leading-6 text-slate-600">
+            登录后将用本机数据覆盖云端，之后以云端为准、多端同步。
+          </DialogDescription>
+          <div className="mt-3 space-y-1.5 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <div><span className="text-slate-400">本机：</span>{localParts.join('，') || '有未同步的数据'}</div>
+            <div>
+              <span className="text-slate-400">云端：</span>
+              {summary.remoteTxCount ? `${summary.remoteTxCount} 笔交易` : '已有数据'}
+              {remoteTime ? `，最后更新 ${remoteTime}` : ''}
             </div>
+            {summary.remoteOnlyTxCount ? (
+              <div className="text-amber-700">覆盖后，云端有、本机没有的 {summary.remoteOnlyTxCount} 笔交易会被删除。</div>
+            ) : null}
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-2">
-            {GLOBAL_ACTIONS.map(({ choice, label, icon: Icon }) => (
-              <button
-                key={choice}
-                type="button"
-                disabled={busy}
-                className={cx(
-                  'flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-bold leading-tight ring-1 transition-colors disabled:opacity-60 sm:text-xs',
-                  selectedUniform === choice ? 'bg-white text-indigo-800 ring-white' : 'bg-white/5 text-white ring-white/20 hover:bg-white/10'
-                )}
-                onClick={() => setChoices(uniformLoginSyncChoices(items, choice))}
-              >
-                <Icon className="hidden h-3.5 w-3.5 flex-none sm:block" aria-hidden="true" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        <main className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-slate-50/70 px-3 py-3 sm:px-7 sm:py-5">
-          {items.map((item) => (
-            <DiffItemCard
-              key={item.id}
-              item={item}
-              choice={choices[item.id] || LOGIN_SYNC_CHOICES.MERGE}
-              disabled={busy}
-              onChoice={(choice) => setChoices((current) => ({ ...current, [item.id]: choice }))}
-            />
-          ))}
           {error ? (
-            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-700" role="alert">
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700" role="alert">
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
               <span>{error}</span>
             </div>
           ) : null}
-        </main>
-
-        <footer className="flex flex-none flex-col-reverse gap-2 border-t border-slate-200 bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:flex-row sm:items-center sm:justify-end sm:px-7 sm:py-4">
-          <button type="button" className="flex h-11 items-center justify-center rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600 disabled:opacity-50" onClick={cancel} disabled={busy}>
-            暂不同步
+        </div>
+        <div className="space-y-2 px-5 pb-5 pt-3 sm:px-6">
+          <button type="button" disabled={busy} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white disabled:opacity-60" onClick={() => void apply(LOGIN_SYNC_CHOICES.LOCAL)}>
+            {phase === LOGIN_SYNC_CHOICES.LOCAL ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveUpload className="h-4 w-4" />}
+            用本机数据覆盖云端
           </button>
-          {phase === 'failed' || phase === 'checking' ? (
-            <button type="button" className="flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-bold text-white disabled:opacity-50" onClick={() => void recheck()} disabled={busy}>
-              {phase === 'checking' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {phase === 'checking' ? '正在重新检查…' : '重新检查差异'}
-            </button>
-          ) : (
-            <button type="button" className="flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-bold text-white disabled:opacity-50" onClick={() => void confirm()} disabled={busy}>
-              {phase === 'applying' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudCog className="h-4 w-4" />}
-              {phase === 'applying' ? '正在同步…' : '确认并同步'}
-            </button>
-          )}
-        </footer>
+          <button type="button" disabled={busy} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 disabled:opacity-60" onClick={() => void apply(LOGIN_SYNC_CHOICES.REMOTE)}>
+            {phase === LOGIN_SYNC_CHOICES.REMOTE ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />}
+            不覆盖，改用云端（本机数据导出备份）
+          </button>
+          <button type="button" disabled={busy} className="h-9 w-full text-xs text-slate-400 disabled:opacity-60" onClick={later}>稍后处理</button>
+        </div>
       </DialogContent>
     </Dialog>
   );
