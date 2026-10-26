@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
 from market_collector.product_snapshot import (
@@ -126,10 +127,15 @@ class ProductSnapshotTest(unittest.TestCase):
                 json.dumps({"symbols": []}), encoding="utf-8",
             )
 
+            # nav_history 按「今天 - days(=45)」的滚动窗口过滤净值日期，
+            # 硬编码日期会随时间滑出窗口导致用例假失败；改用相对日期并留出时区余量。
+            previous_day = (date.today() - timedelta(days=5)).isoformat()
+            latest_day = (date.today() - timedelta(days=3)).isoformat()
+
             def fetch_json(_url, _timeout):
                 return {"data": {"items": [
-                    {"date": "2026-09-09", "nav": 1.2345},
-                    {"date": "2026-09-10", "nav": 1.2456},
+                    {"date": previous_day, "nav": 1.2345},
+                    {"date": latest_day, "nav": 1.2456},
                 ], "total_items": 2}}
 
             service = ProductSnapshotService(
@@ -141,7 +147,7 @@ class ProductSnapshotTest(unittest.TestCase):
             self.assertEqual(len(items), 1)
             self.assertEqual(items[0]["code"], "017091")
             self.assertEqual(items[0]["latestNav"], 1.2456)
-            self.assertEqual(items[0]["latestNavDate"], "2026-09-10")
+            self.assertEqual(items[0]["latestNavDate"], latest_day)
             self.assertEqual(items[0]["previousNav"], 1.2345)
             self.assertEqual(items[0]["source"], "danjuan-nav-history")
 
