@@ -73,7 +73,8 @@ export function useMarketsWatchRefresh({
   const refreshSeqRef = useRef(0);
   const inflightKeyRef = useRef('');
 
-  return useCallback(async () => {
+  // force：手动刷新 / 数据延迟自动重连时跳过 inflight 去重，作废旧请求并重新拉取。
+  return useCallback(async ({ force = false } = {}) => {
     const trackedList = uniqueSymbols(trackedWatchSymbols);
     const { primarySymbols: list, remainingSymbols } = buildLazyWatchRefreshBatches({
       requestedWatchSymbols,
@@ -103,7 +104,7 @@ export function useMarketsWatchRefresh({
       list.join(','),
       `tracked:${trackedList.join(',')}`
     ].join('|');
-    if (inflightKeyRef.current === refreshKey) {
+    if (!force && inflightKeyRef.current === refreshKey) {
       trackActionResult('markets', 'watch_refresh', 'deduped', {
         market,
         symbolCount: list.length,

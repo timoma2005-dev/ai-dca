@@ -7,6 +7,9 @@ import { MarketSymbolSearchBox } from './MarketSymbolSearchBox.jsx';
 import { WatchlistSelector } from './WatchlistControls.jsx';
 import { MarketRefreshTime } from './MarketRefreshTime.jsx';
 
+const FEED_STATUS_TONE = { live: 'bg-emerald-50 text-emerald-700', delayed: 'bg-amber-50 text-amber-700', closed: 'bg-slate-100 text-slate-600', waiting: 'bg-slate-100 text-slate-500' };
+const FEED_STATUS_DOT = { live: 'bg-emerald-500', delayed: 'bg-amber-500 animate-pulse', closed: 'bg-slate-400', waiting: 'bg-slate-400' };
+
 export function MarketsFullTablePanel({
   fullTableMode = false,
   rows = [],
@@ -39,6 +42,7 @@ export function MarketsFullTablePanel({
   onRefresh,
   refreshing = false,
   marketRefreshAt = '',
+  feedHealth = null,
   onVisibleSymbolsChange,
   onColumnVisibilityStateChange,
   onViewPresetSave,
@@ -75,7 +79,7 @@ export function MarketsFullTablePanel({
     const activeSort = sorting[0];
     const sortColumn = activeSort ? table?.getColumn(activeSort.id) : null;
     const sortLabel = sortColumn?.columnDef?.meta?.label || activeSort?.id;
-    const connected = Boolean(marketRefreshAt) || (rows?.length > 0);
+    const health = feedHealth || { status: (marketRefreshAt || rows?.length > 0) ? 'live' : 'waiting', label: (marketRefreshAt || rows?.length > 0) ? '实时行情连接正常' : '等待行情数据', title: '' };
 
     const watchlistPills = watchLists?.length > 1 ? (
       <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -154,17 +158,15 @@ export function MarketsFullTablePanel({
             <MarketRefreshTime timestamp={marketRefreshAt} loading={refreshing} className="max-w-[18rem]" />
           </div>
           <div className="flex shrink-0 items-center">
-            {connected ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                实时行情连接正常
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                等待行情数据
-              </span>
-            )}
+            <span
+              data-testid="market-feed-status"
+              data-status={health.status}
+              title={health.title || undefined}
+              className={cx('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold', FEED_STATUS_TONE[health.status] || FEED_STATUS_TONE.waiting)}
+            >
+              <span className={cx('h-1.5 w-1.5 rounded-full', FEED_STATUS_DOT[health.status] || FEED_STATUS_DOT.waiting)} />
+              {health.label}
+            </span>
           </div>
         </div>
         <div className="flex items-center justify-between gap-3">

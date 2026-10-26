@@ -83,12 +83,21 @@ function resolveFundFeeUrl(refresh = false, options) {
     : apiUrl(`/api/fund-fee${suffix}`);
 }
 
+// 未传 signal 时给 GET 一个超时：挂起的请求会让 inflight 去重永远命中同一个 promise，行情因此冻结、手动刷新无效。
+const GET_TIMEOUT_MS = 25000;
+
+function withDefaultTimeout(signal) {
+  if (signal) return signal;
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(GET_TIMEOUT_MS);
+  return undefined;
+}
+
 async function getJson(path, { signal } = {}) {
   const url = resolveBase() + path;
   const res = await fetch(url, {
     method: 'GET',
     headers: { accept: 'application/json' },
-    signal,
+    signal: withDefaultTimeout(signal),
     cache: 'no-store'
   });
   if (!res.ok) {

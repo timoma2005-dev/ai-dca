@@ -4,6 +4,7 @@ import { cx } from '../../components/experience-ui.jsx';
 import { BREADTH_ITEMS, DEFAULT_RULES, useMarketSentimentWeather } from './marketSentimentWeather.js';
 import { setMobileBottomSheetOpen } from '../../app/mobileBottomSheet.js';
 import { changeToneClass } from './marketDisplayUtils.js';
+import { formatSentimentTime, sentimentCellState } from './marketSentimentSnapshot.js';
 
 function createDefaultSettings() {
   return { rules: { ...DEFAULT_RULES } };
@@ -37,9 +38,9 @@ export function MarketSentimentStrip() {
   const [reportOpen, setReportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const {
-    refreshing, error, refresh, fearGreed, vix, breadth, tempLabel, weather,
-    qqqChangePercent, vooChangePercent,
+    refreshing, error, refresh, fearGreed, vix, breadth, tempLabel, weather, snapshot, ready,
   } = useMarketSentimentWeather(settings.rules);
+  const snapshotTime = formatSentimentTime(snapshot.lastSuccessAt);
 
   useEffect(() => {
     setMobileBottomSheetOpen('market-sentiment-settings', settingsOpen);
@@ -70,29 +71,32 @@ export function MarketSentimentStrip() {
             </div>
             <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--market-border)] bg-white/60 backdrop-blur-sm dark:bg-slate-900/35 px-2 py-1" title="CNN 贪婪与恐慌指数">
               <span className="text-[10px] text-[var(--market-text-muted)]">F&G</span>
-              <span className="font-mono text-xs font-black text-sky-500">{fearGreed}</span>
-              <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400">{fearGreedLabel(fearGreed)}</span>
+              <span className="font-mono text-xs font-black text-sky-500">{fearGreed ?? '—'}</span>
+              {fearGreed != null ? <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400">{fearGreedLabel(fearGreed)}</span> : null}
             </div>
             <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--market-border)] bg-white/60 backdrop-blur-sm dark:bg-slate-900/35 px-2 py-1" title="CBOE 波动率指数">
               <span className="text-[10px] text-[var(--market-text-muted)]">VIX</span>
-              <span className="font-mono text-xs font-black text-emerald-500">{vix.toFixed(1)}</span>
-              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">{vixLabel(vix)}</span>
+              <span className="font-mono text-xs font-black text-emerald-500">{vix == null ? '—' : vix.toFixed(1)}</span>
+              {vix != null ? <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">{vixLabel(vix)}</span> : null}
             </div>
             {[
-              ['QQQ', qqqChangePercent],
-              ['VOO', vooChangePercent],
-            ].map(([symbol, changePercent]) => (
-              <div
-                key={symbol}
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--market-border)] bg-white/60 px-2 py-1 backdrop-blur-sm dark:bg-slate-900/35"
-                title={symbol + ' 当日涨幅'}
-              >
-                <span className="text-[10px] text-[var(--market-text-muted)]">{symbol}</span>
-                <span className={cx('font-mono text-xs font-black', changeToneClass(changePercent))}>
-                  {formatChangePercent(changePercent)}
-                </span>
-              </div>
-            ))}
+              ['QQQ', snapshot.qqq],
+              ['VOO', snapshot.voo],
+            ].map(([symbol, view]) => {
+              const cell = sentimentCellState(view, { loading: snapshot.loading, format: formatChangePercent });
+              return (
+                <div
+                  key={symbol}
+                  className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--market-border)] bg-white/60 px-2 py-1 backdrop-blur-sm dark:bg-slate-900/35"
+                  title={symbol + ' 当日涨幅 · ' + cell.title}
+                  data-testid={'sentiment-' + symbol}
+                >
+                  <span className="text-[10px] text-[var(--market-text-muted)]">{symbol}</span>
+                  <span className={cx('font-mono text-xs font-black', changeToneClass(view.value))}>{cell.text}</span>
+                  {cell.note ? <span className="text-[10px] font-bold text-amber-600">{cell.note}</span> : null}
+                </div>
+              );
+            })}
             <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--market-border)] bg-white/60 backdrop-blur-sm dark:bg-slate-900/35 px-2 py-1">
               <span className="text-[10px] text-[var(--market-text-muted)]">晴雨比</span>
               <span className="font-mono text-xs font-bold text-[var(--market-rise)]">{breadth.up}晴</span>
@@ -114,7 +118,7 @@ export function MarketSentimentStrip() {
             </button>
           </div>
         </div>
-        {error ? <div className="mt-1 text-[10px] text-amber-600">指标暂时使用最近可用值</div> : null}
+        {error || snapshot.stale ? <div className="mt-1 text-[10px] text-amber-600">{snapshotTime ? `数据延迟，显示 ${snapshotTime} 的最近可用值` : '行情指标暂不可用'}</div> : null}
       </section>
       </div>
 
@@ -123,9 +127,12 @@ export function MarketSentimentStrip() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="font-bold text-indigo-950 dark:text-indigo-200">纳指市场情绪研报</div>
-              <p className="mt-1 leading-6">
-                当前体感温标为 <strong>{tempLabel}</strong>，晴雨比为 <strong>{breadth.up} 晴 / {breadth.down} 雨</strong>。F&G 为 <strong>{fearGreed}</strong>，处于“{fearGreedLabel(fearGreed)}”；VIX 为 <strong>{vix.toFixed(1)}</strong>，处于“{vixLabel(vix)}”。温标综合 QQQ 当日涨跌、市场情绪和纳指 ETF 广度计算，仅用于快速观察市场状态。
+              <p className="mt-0.5 text-[10px] text-slate-500" data-testid="sentiment-report-asof">
+                {ready ? `数据时间 ${snapshotTime || '—'}（与上方情绪条为同一份快照）` : '行情数据加载中，暂不生成研报'}
               </p>
+              {ready ? <p className="mt-1 leading-6">
+                当前体感温标为 <strong>{tempLabel}</strong>，晴雨比为 <strong>{breadth.up} 晴 / {breadth.down} 雨</strong>。{fearGreed != null ? <>F&G 为 <strong>{fearGreed}</strong>，处于“{fearGreedLabel(fearGreed)}”；</> : null}{vix != null ? <>VIX 为 <strong>{vix.toFixed(1)}</strong>，处于“{vixLabel(vix)}”。</> : null}温标综合 QQQ 当日涨跌、市场情绪和纳指 ETF 广度计算，仅用于快速观察市场状态。
+              </p> : null}
             </div>
             <button type="button" aria-label="关闭研报" className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-white/70 hover:text-slate-700 dark:hover:bg-slate-800" onClick={() => setReportOpen(false)}>
               <X size={15} />

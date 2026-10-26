@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { fetchQuotes } from './marketsApiLoader.js';
+import { createSentimentStore } from './marketSentimentSnapshot.js';
 
 export const BREADTH_ITEMS = [
   ['159509', 2.89], ['513100', 2.21], ['159501', 1.62], ['159941', 2.32],
@@ -89,118 +90,56 @@ export function selectWeatherState({ compositeTemp = 0, fearGreed = 50, vix = 18
   return WEATHER_STATES.rainy;
 }
 
-function cleanCode(raw) {
-  return String(raw || '').replace(/\D/g, '');
-}
-
-function findQuote(quoteMap, rawCode) {
-  if (!quoteMap || typeof quoteMap !== 'object') return null;
-  const code = String(rawCode || '');
-  const digits = cleanCode(code);
-  const candidates = [code, digits, 'sh' + digits, 'sz' + digits, 'SH' + digits, 'SZ' + digits];
-  for (const candidate of candidates) {
-    if (quoteMap[candidate] && typeof quoteMap[candidate] === 'object') return quoteMap[candidate];
+let sharedStore = null;
+function sentimentStore() {
+  if (!sharedStore) {
+    sharedStore = createSentimentStore({ fetchQuotes: (codes) => fetchQuotes(codes), breadthCodes: BREADTH_ITEMS.map(([code]) => code) });
   }
-  return null;
+  return sharedStore;
 }
 
-function quoteNumber(quote, keys) {
-  for (const key of keys) {
-    const value = Number(quote?.[key]);
-    if (Number.isFinite(value)) return value;
-  }
-  return null;
-}
-
+// 情绪条 / 研报 / 页面背景共用同一个快照；未拿到数据时不再用写死的兜底值冒充实时行情。
 export function useMarketSentimentWeather(rules = DEFAULT_RULES) {
-  const [liveQuotes, setLiveQuotes] = useState({});
+  const store = sentimentStore();
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
 
   const refresh = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
-    setError('');
     try {
-      const [etfPayload, usPayload] = await Promise.all([
-        fetchQuotes(BREADTH_ITEMS.map(([code]) => code)).catch(() => null),
-        fetchQuotes(['^VIX', 'CNN_FNG', 'QQQ', 'VOO']).catch(() => null),
-      ]);
-      const etfQuotes = etfPayload?.quotes || etfPayload || {};
-      const usQuotes = usPayload?.quotes || usPayload || {};
-      const merged = {
-        ...(typeof etfQuotes === 'object' ? etfQuotes : {}),
-        ...(typeof usQuotes === 'object' ? usQuotes : {}),
-      };
-      if (Object.keys(merged).length) setLiveQuotes((previous) => ({ ...previous, ...merged }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '行情指标暂不可用');
+      await store.refresh();
     } finally {
       if (manual) setRefreshing(false);
     }
-  }, []);
+  }, [store]);
 
-  useEffect(() => {
-    refresh();
-    const timer = setInterval(() => refresh(), 15000);
-    return () => clearInterval(timer);
-  }, [refresh]);
-
-  const qqqChangePercent = useMemo(() => {
-    const value = quoteNumber(findQuote(liveQuotes, 'QQQ'), ['changePercent', 'change_percent', 'pctChange']);
-    return value == null ? null : Number(value.toFixed(2));
-  }, [liveQuotes]);
-
-  const vooChangePercent = useMemo(() => {
-    const value = quoteNumber(findQuote(liveQuotes, 'VOO'), ['changePercent', 'change_percent', 'pctChange']);
-    return value == null ? null : Number(value.toFixed(2));
-  }, [liveQuotes]);
-
-  const ndxChange = useMemo(() => {
-    const value = quoteNumber(findQuote(liveQuotes, 'QQQ'), ['changePercent', 'change', 'pctChange']);
-    return value == null ? 0 : Number(value.toFixed(2));
-  }, [liveQuotes]);
-
-  const fearGreed = useMemo(() => {
-    const value = quoteNumber(findQuote(liveQuotes, 'CNN_FNG'), ['price', 'value', 'close']);
-    return value == null || value <= 0 ? 29 : Math.round(value);
-  }, [liveQuotes]);
-
-  const vix = useMemo(() => {
-    const value = quoteNumber(findQuote(liveQuotes, '^VIX'), ['price', 'value', 'close']);
-    return value == null || value <= 0 ? 14.81 : Number(value.toFixed(2));
-  }, [liveQuotes]);
-
-  const breadth = useMemo(() => {
-    let up = 0;
-    let down = 0;
-    for (const [code, fallback] of BREADTH_ITEMS) {
-      const change = quoteNumber(findQuote(liveQuotes, code), ['changePercent', 'change', 'pctChange']);
-      if ((change == null ? fallback : change) >= 0) up += 1;
-      else down += 1;
-    }
-    return { up, down };
-  }, [liveQuotes]);
-
-  const compositeTemp = useMemo(() => calculateCompositeTemp({ ndxChange, fearGreed, vix, breadth }), [
-    breadth.down, breadth.up, fearGreed, ndxChange, vix,
+  const { breadth, ready } = snapshot;
+  const fearGreed = snapshot.fearGreed.value;
+  const vix = snapshot.vix.value;
+  const ndxChange = snapshot.qqq.value ?? 0;
+  const compositeTemp = useMemo(() => (ready ? calculateCompositeTemp({ ndxChange, fearGreed: fearGreed ?? 50, vix: vix ?? 18, breadth }) : null), [
+    breadth, fearGreed, ndxChange, ready, vix,
   ]);
-
-  const tempLabel = (compositeTemp >= 0 ? '+' : '') + compositeTemp.toFixed(1) + '°C';
+  const tempLabel = compositeTemp == null ? '—' : (compositeTemp >= 0 ? '+' : '') + compositeTemp.toFixed(1) + '°C';
   const effectiveRules = useMemo(() => ({ ...DEFAULT_RULES, ...(rules || {}) }), [rules]);
-  const weather = useMemo(() => selectWeatherState({ compositeTemp, fearGreed, vix, breadth, rules: effectiveRules }), [
-    breadth.down, breadth.up, compositeTemp, effectiveRules, fearGreed, vix,
+  const weather = useMemo(() => (compositeTemp == null
+    ? WEATHER_STATES.overcast
+    : selectWeatherState({ compositeTemp, fearGreed: fearGreed ?? 50, vix: vix ?? 18, breadth, rules: effectiveRules })), [
+    breadth, compositeTemp, effectiveRules, fearGreed, vix,
   ]);
 
   return {
     breadth,
     compositeTemp,
-    error,
+    error: snapshot.error,
     fearGreed,
     ndxChange,
-    qqqChangePercent,
-    vooChangePercent,
+    qqqChangePercent: snapshot.qqq.value,
+    vooChangePercent: snapshot.voo.value,
+    ready,
     refresh,
     refreshing,
+    snapshot,
     tempLabel,
     vix,
     weather,
