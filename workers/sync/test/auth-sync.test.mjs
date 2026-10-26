@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
 import { handleInternalAuthSync } from '../src/internalAuthSync.js';
+import { hashPassword, isPbkdf2Hash } from '../src/password.js';
 
 const BASE = 'https://api.freebacktrack.tech';
 const INTERNAL_TOKEN = 'test-internal-sync-token';
@@ -83,6 +84,15 @@ function makeAuthEnv({ internalToken = INTERNAL_TOKEN } = {}) {
               row.last_login_at = last_login_at;
               row.updated_at = updated_at;
             }
+            return { success: true };
+          }
+          if (/^UPDATE users SET password_hash/i.test(query)) {
+            const [password_hash, password_salt, updated_at, id] = args;
+            const row = state.usersById.get(id);
+            if (!row) throw new Error('UNIQUE constraint failed: no such user');
+            row.password_hash = password_hash;
+            row.password_salt = password_salt;
+            row.updated_at = updated_at;
             return { success: true };
           }
           return { success: true };
@@ -180,6 +190,21 @@ function loginEvent(eventId, userOverrides = {}) {
       id: 'usr_test_1',
       username: 'synceduser',
       last_login_at: '2026-10-03T01:00:00.000Z',
+      ...userOverrides,
+    },
+  };
+}
+
+function rotatedEvent(eventId, userOverrides = {}) {
+  return {
+    eventId,
+    eventType: 'user.credential_rotated',
+    payload: {
+      id: 'usr_test_1',
+      username: 'synceduser',
+      password_hash: '$pbkdf2-sha256$310000$placeholder-salt$placeholder-hash-placeholder',
+      password_salt: '',
+      updated_at: '2026-10-26T00:00:00.000Z',
       ...userOverrides,
     },
   };
@@ -512,4 +537,112 @@ test('公网注册/登录：现有行为不受影响', async () => {
     env
   );
   assert.equal(badRes.status, 401);
+});
+
+test('user.credential_rotated：legacy 注册后同 id 覆盖为 PHC，重放幂等', async () => {
+  const { env, state } = makeAuthEnv();
+  // 先应用一个 legacy 格式的 user.register（旧 SHA-256 hex + 独立盐）。
+  const reg = await handleInternalAuthSync(
+    internalReq(registerEvent('evt_legacy_reg', { password_hash: 'a'.repeat(64), password_salt: 'pwd_salt_1' })),
+    env
+  );
+  assert.equal(reg.status, 200);
+  assert.equal(state.usersById.get('usr_test_1').password_hash, 'a'.repeat(64));
+
+  // 主库惰性轮转后发出真实 PHC。
+  const phc = await hashPassword('p'.repeat(64));
+  const res1 = await handleInternalAuthSync(
+    internalReq(rotatedEvent('evt_rotate_1', { password_hash: phc })),
+    env
+  );
+  assert.equal(res1.status, 200);
+  assert.deepEqual(await res1.json(), { ok: true });
+  const row = state.usersById.get('usr_test_1');
+  assert.ok(isPbkdf2Hash(row.password_hash));
+  assert.equal(row.password_hash, phc);
+  assert.equal(row.password_salt, '');
+
+  // 同一 event_id 重放 -> dedup；新 event_id 但凭证一致 -> 幂等跳过用户写入。
+  const replay = await handleInternalAuthSync(
+    internalReq(rotatedEvent('evt_rotate_1', { password_hash: phc })),
+    env
+  );
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).deduplicated, true);
+  const sameCred = await handleInternalAuthSync(
+    internalReq(rotatedEvent('evt_rotate_2', { password_hash: phc })),
+    env
+  );
+  assert.equal(sameCred.status, 200);
+  assert.equal(state.usersById.get('usr_test_1').password_hash, phc);
+});
+
+test('user.credential_rotated：未知用户 404，改名/跨 id 重放 409', async () => {
+  const { env, state } = makeAuthEnv();
+  const phc = await hashPassword('p'.repeat(64));
+
+  // 未注册直接轮转 -> 404
+  const ghost = await handleInternalAuthSync(
+    internalReq(rotatedEvent('evt_rotate_ghost', { password_hash: phc })),
+    env
+  );
+  assert.equal(ghost.status, 404);
+  assert.match((await ghost.json()).error, /凭证轮转事件无法应用/);
+  assert.equal(state.syncEvents.size, 0, '404 事件不得记录为已应用');
+
+  // 注册同一用户后，试图用不同 username 轮转 -> 409
+  await handleInternalAuthSync(internalReq(registerEvent('evt_reg_for_rotate')), env);
+  const rename = await handleInternalAuthSync(
+    internalReq(rotatedEvent('evt_rotate_rename', { username: 'othername', password_hash: phc })),
+    env
+  );
+  assert.equal(rename.status, 409);
+  assert.match((await rename.json()).error, /用户名不一致/);
+
+  // 同 username 但属于另一个 user id -> 409
+  const crossId = await handleInternalAuthSync(
+    internalReq(rotatedEvent('evt_rotate_cross', { id: 'usr_other_9', password_hash: phc })),
+    env
+  );
+  assert.equal(crossId.status, 409);
+  assert.match((await crossId.json()).error, /用户名已被占用/);
+  assert.equal(state.usersById.get('usr_test_1').password_hash, 'a'.repeat(64), '拒绝路径不得改动凭证');
+});
+
+test('公网注册落 PHC、盐列留空，且 PHC 用户可正常登录', async () => {
+  const { env, state } = makeAuthEnv();
+  const body = { username: 'pbkdf2user', passwordHash: 'p'.repeat(64) };
+  const regRes = await worker.fetch(
+    new Request(`${BASE}/api/sync/auth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    env
+  );
+  assert.equal(regRes.status, 200);
+  const row = [...state.usersById.values()].find((u) => u.username === 'pbkdf2user');
+  assert.ok(row);
+  assert.ok(isPbkdf2Hash(row.password_hash), 'Worker 公网注册必须直接写 PBKDF2 PHC');
+  assert.equal(row.password_salt, '');
+
+  const loginOk = await worker.fetch(
+    new Request(`${BASE}/api/sync/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    env
+  );
+  assert.equal(loginOk.status, 200);
+
+  const loginBad = await worker.fetch(
+    new Request(`${BASE}/api/sync/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'pbkdf2user', passwordHash: 'z'.repeat(64) }),
+    }),
+    env
+  );
+  assert.equal(loginBad.status, 401);
 });
