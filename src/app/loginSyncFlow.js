@@ -5,7 +5,7 @@
 import { loadCloudSession } from './authSession.js';
 import { isFeatureDemoActive } from './demo/demoMode.js';
 import { clearLoginSyncPending, LOGIN_SYNC_DIFF_EVENT, markLoginSyncPending } from './loginSyncGate.js';
-import { computeLoginSyncDiff, hasLocalAccountData, hasRemoteAccountData } from './loginSyncDiff.js';
+import { applyLoginSyncBaseline, buildLoginSyncBaseline, computeLoginSyncDiff, hasLocalAccountData, hasRemoteAccountData } from './loginSyncDiff.js';
 import { applyLoginSyncChoices, DEFAULT_LOGIN_SYNC_DEPS, loadLoginSyncSides } from './loginSyncActions.js';
 
 let pendingDiff = null;
@@ -84,8 +84,11 @@ async function runLoginAccountSyncOnce(cloudSync, {
 
   const userId = userIdOf(session);
   markLoginSyncPending(userId);
-  const sides = await loadLoginSyncSides({ session, deps });
+  const rawSides = await loadLoginSyncSides({ session, deps });
   assertSession();
+  // 上次登录已合并且之后没在本机改过的数据不再参与比较。
+  const sides = applyLoginSyncBaseline(rawSides, deps.readLoginSyncBaseline?.(userId));
+  const rememberBaseline = () => { deps.saveLoginSyncBaseline?.(userId, buildLoginSyncBaseline(rawSides)); };
 
   if (!hasRemoteAccountData(sides)) {
     // 云端为空的老账号：与注册一致，强制上传本机数据；本机也没有数据就跳过。
@@ -95,16 +98,26 @@ async function runLoginAccountSyncOnce(cloudSync, {
       return 'no-remote';
     }
     deps.resetHoldingSyncState();
+    // 本机数据（落盘）先放进当前账号 runtime，再整体上传。
+    for (const [name, raw] of Object.entries(sides.localResources || {})) deps.writeLocalResource(name, raw);
+    if ((sides.localTransactions || []).length) deps.writeLocalTransactions(sides.localTransactions);
     const uploaded = await cloudSync.uploadEncryptedCloudBackup({ force: true });
     dispatch('cloud-sync:auto-uploaded', { result: uploaded });
+    if (!uploaded?.skipped) rememberBaseline();
     cloudSync.startCloudAutoSync();
     return uploaded?.skipped ? 'skipped-upload' : 'uploaded';
   }
 
   const diff = computeLoginSyncDiff(sides);
   if (!diff.hasDiff) {
+    // 不需要用户选择：云端没有的本机数据直接上传，其余以云端为准。
+    // 上传失败不阻塞登录：不记基线，下次登录会再尝试。
+    const auto = diff.autoItems.length
+      ? await applyLoginSyncChoices({ sides, diff, choices: {}, session, deps })
+      : { failed: [] };
     finishWithoutDialog();
     deps.resetHoldingSyncState();
+    if (!auto.failed.length) rememberBaseline();
     const pulled = await cloudSync.restoreEncryptedCloudBackup();
     dispatch('cloud-sync:auto-restored', { result: pulled });
     cloudSync.startCloudAutoSync();
@@ -112,7 +125,7 @@ async function runLoginAccountSyncOnce(cloudSync, {
   }
 
   // 有差异：保持门禁（暂停自动同步），等待用户在对话框中选择。
-  pendingDiff = { userId, sides, diff, createdAt: new Date().toISOString() };
+  pendingDiff = { userId, sides, rawSides, diff, createdAt: new Date().toISOString() };
   dispatch(LOGIN_SYNC_DIFF_EVENT, { userId, diff });
   return 'diff-pending';
 }
@@ -137,6 +150,7 @@ export async function confirmLoginSync(choices = {}, {
     error.result = result;
     throw error;
   }
+  deps.saveLoginSyncBaseline?.(current.userId, buildLoginSyncBaseline(current.rawSides || current.sides));
   finishWithoutDialog();
   const mod = cloudSync || await import('./cloudSync.js');
   mod.startCloudAutoSync();

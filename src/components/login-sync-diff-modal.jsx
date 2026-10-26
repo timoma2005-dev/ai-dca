@@ -14,7 +14,7 @@ const ROW_LIMIT = 12;
 
 const CHOICE_META = {
   [LOGIN_SYNC_CHOICES.LOCAL]: { label: '保留本地', hint: '用本机数据覆盖云端，云端多出的条目会被删除。' },
-  [LOGIN_SYNC_CHOICES.REMOTE]: { label: '保留云端', hint: '用云端数据替换本机，本机独有的条目会被删除。' },
+  [LOGIN_SYNC_CHOICES.REMOTE]: { label: '保留云端', hint: '以云端为准，并删除这台设备上未登录时留下的旧数据。' },
   [LOGIN_SYNC_CHOICES.MERGE]: { label: '合并', hint: '两边都保留；同一条目两边不同时以云端为准。' }
 };
 const CHOICE_ORDER = [LOGIN_SYNC_CHOICES.LOCAL, LOGIN_SYNC_CHOICES.REMOTE, LOGIN_SYNC_CHOICES.MERGE];
@@ -121,9 +121,17 @@ function ResourceDetails({ item }) {
   if (!localOnly.length && !remoteOnly.length && !changed.length) {
     return <div className="text-xs leading-5 text-slate-500">两边的设置内容不同（非列表数据，无法逐条对比）。</div>;
   }
-  const chipList = (list, tone, prefix) => (
-    <LimitedList items={list} render={(entry) => <EntryChip key={`${prefix}-${entry.key}`} entry={entry} tone={tone} />} />
-  );
+  // 条目名只是内部键（数字 / #序号）时不展示键本身，只说条数，避免看不懂。
+  const chipList = (list, tone, prefix) => {
+    const named = list.filter((entry) => !entry.opaque);
+    const opaqueCount = list.length - named.length;
+    return (
+      <>
+        {named.length ? <LimitedList items={named} render={(entry) => <EntryChip key={`${prefix}-${entry.key}`} entry={entry} tone={tone} />} /> : null}
+        {opaqueCount ? <div className="text-xs text-slate-500">{named.length ? `另有 ${opaqueCount} 条` : `${opaqueCount} 条`}未命名记录</div> : null}
+      </>
+    );
+  };
   return (
     <div className="space-y-2.5 [&_ul]:flex [&_ul]:flex-wrap [&_ul]:gap-1 [&_ul]:space-y-0">
       <DiffGroup title="仅本地" count={localOnly.length} tone="text-indigo-700">{chipList(localOnly, 'bg-indigo-50 text-indigo-800', 'l')}</DiffGroup>

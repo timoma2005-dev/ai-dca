@@ -13,6 +13,12 @@ const ENTRY_ID_FIELDS = ['id', 'key', 'code', 'symbol', 'uuid'];
 const ENTRY_LABEL_FIELDS = ['name', 'title', 'label', 'fundName', 'symbolName'];
 const PREVIEW_LIMIT = 3;
 
+// 界面状态 / 偏好类资源：不让用户逐项选择，登录后一律以云端为准（云端没有时才上传本机）。
+export const PREFERENCE_RESOURCES = new Set([
+  'holdings/state', 'plans/state', 'dca/state', 'vix/state', 'sell-plans/draft',
+  'fund-switch/prefs', 'prefs/workspace', 'prefs/home-dashboard', 'prefs/premium', 'prefs/analytics-opt-out'
+]);
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -103,16 +109,28 @@ function entriesOf(value, shape) {
   return map;
 }
 
+/** 条目名是否只是内部键（数字、#序号、带 # 的去重键），这类不展示给用户看。 */
+export function isOpaqueEntryLabel(label = '', key = '') {
+  const text = String(label);
+  if (text !== String(key)) return false;
+  return /^#?\d+(\.\d+)?$/.test(text) || text.includes('#') || /^[a-z0-9_-]{16,}$/i.test(text);
+}
+
+function entryInfo(item, key) {
+  const label = entryLabel(item, key);
+  return { key, label, opaque: isOpaqueEntryLabel(label, key) };
+}
+
 function diffEntryMaps(localMap, remoteMap) {
   const localOnly = [];
   const remoteOnly = [];
   const changed = [];
   for (const [key, item] of localMap) {
-    if (!remoteMap.has(key)) localOnly.push({ key, label: entryLabel(item, key) });
-    else if (canonicalize(item) !== canonicalize(remoteMap.get(key))) changed.push({ key, label: entryLabel(item, key) });
+    if (!remoteMap.has(key)) localOnly.push(entryInfo(item, key));
+    else if (canonicalize(item) !== canonicalize(remoteMap.get(key))) changed.push(entryInfo(item, key));
   }
   for (const [key, item] of remoteMap) {
-    if (!localMap.has(key)) remoteOnly.push({ key, label: entryLabel(item, key) });
+    if (!localMap.has(key)) remoteOnly.push(entryInfo(item, key));
   }
   return { localOnly, remoteOnly, changed };
 }
@@ -209,6 +227,26 @@ export function diffTransactionRows(localRows = [], remoteRows = []) {
 }
 
 /**
+ * 一项差异是否需要用户选择：只有「本机有、云端也有，且本机有云端没有的内容」才问。
+ * - 本机为空：云端为准，无需选择；
+ * - 云端为空：直接上传本机（auto）；
+ * - 本机是云端的子集（只有「仅云端」）：拉取即可，本机不会丢东西；
+ * - 偏好类资源：一律以云端为准。
+ */
+export function classifyDiffItem(item) {
+  if (!item) return 'skip';
+  if (!item.local?.exists) return 'skip';
+  if (!item.remote?.exists) return 'push';
+  if (item.kind === 'resource' && PREFERENCE_RESOURCES.has(item.resource)) return 'skip';
+  if (item.kind === 'transactions') {
+    return item.rows.localOnly.length || item.rows.changed.length ? 'ask' : 'skip';
+  }
+  const { localOnly, changed, remoteOnly } = item.entries;
+  if (!localOnly.length && !changed.length && !remoteOnly.length) return 'ask'; // 非列表数据整体不同
+  return localOnly.length || changed.length ? 'ask' : 'skip';
+}
+
+/**
  * 计算登录时的整体差异。
  * sides: { resources: string[], localResources: {resource: raw}, remoteResources: {resource: {data, updatedAt}},
  *          localTransactions: tx[], remoteTransactions: tx[] }
@@ -228,7 +266,53 @@ export function computeLoginSyncDiff(sides = {}) {
   }
   const txItem = diffTransactionRows(sides.localTransactions || [], sides.remoteTransactions || []);
   if (txItem) items.unshift(txItem);
-  return { items, hasDiff: items.length > 0 };
+  const asked = [];
+  const autoItems = [];
+  for (const item of items) {
+    const kind = classifyDiffItem(item);
+    if (kind === 'ask') asked.push(item);
+    else if (kind === 'push') autoItems.push(item);
+  }
+  return { items: asked, autoItems, hasDiff: asked.length > 0 };
+}
+
+/** 稳定指纹（djb2），用于记录「上次登录合并时本机数据的样子」。 */
+export function fingerprint(value) {
+  const text = canonicalize(value);
+  let hash = 5381;
+  for (let i = 0; i < text.length; i += 1) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+  return `${text.length}:${hash.toString(36)}`;
+}
+
+function txFingerprint(rows = []) {
+  const list = (Array.isArray(rows) ? rows : []).slice().sort((a, b) => txId(a).localeCompare(txId(b)));
+  return list.length ? fingerprint(list) : '';
+}
+
+/** 本次合并完成后本机数据的指纹。 */
+export function buildLoginSyncBaseline(sides = {}) {
+  const resources = {};
+  for (const [name, raw] of Object.entries(sides.localResources || {})) {
+    const value = parseLocalRaw(raw);
+    if (!isEmptyValue(value)) resources[name] = fingerprint(value);
+  }
+  return { resources, transactions: txFingerprint(sides.localTransactions || []), savedAt: new Date().toISOString() };
+}
+
+/**
+ * 去掉「上次登录已合并过、之后没在本机改过」的本机数据：这些内容已经进过云端，
+ * 之后在云端的改动（包括删除）应当直接生效，不应每次登录都再问一遍。
+ */
+export function applyLoginSyncBaseline(sides = {}, baseline = null) {
+  if (!baseline || typeof baseline !== 'object') return sides;
+  const localResources = {};
+  for (const [name, raw] of Object.entries(sides.localResources || {})) {
+    const value = parseLocalRaw(raw);
+    if (baseline.resources?.[name] && baseline.resources[name] === fingerprint(value)) continue;
+    localResources[name] = raw;
+  }
+  const sameTx = baseline.transactions && baseline.transactions === txFingerprint(sides.localTransactions || []);
+  return { ...sides, localResources, localTransactions: sameTx ? [] : (sides.localTransactions || []) };
 }
 
 export function hasLocalAccountData(sides = {}) {

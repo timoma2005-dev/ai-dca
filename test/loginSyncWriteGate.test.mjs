@@ -175,7 +175,8 @@ test('确认流程：每个写云端调用都带 bypassLoginSyncGate，且清空
     const options = name === 'pushResource' ? args[1] : args[0];
     assert.equal(options?.bypassLoginSyncGate, true, `${name} 必须显式 bypass`);
   }
-  const deletion = calls.find(([name]) => name === 'deleteAccountResource');
-  assert.equal(deletion[3]?.bypassLoginSyncGate, true);
+  for (const deletion of calls.filter(([name]) => name === 'deleteAccountResource')) {
+    assert.equal(deletion[3]?.bypassLoginSyncGate, true);
+  }
   assert.equal(ls.getItem(pendingHoldingTransactionJournalKey('gate-u5')), null);
 });

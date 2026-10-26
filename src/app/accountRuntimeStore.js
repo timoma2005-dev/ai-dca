@@ -26,6 +26,23 @@ function persistentGetItem(key) {
   }
 }
 
+/** 绕过登录态守卫，读浏览器真正落盘的值（未登录时写下的本机数据）。 */
+export function readPersistentStorageRaw(key = "") {
+  return persistentGetItem(String(key || ""));
+}
+
+/** 绕过登录态守卫，删除浏览器落盘的本机数据（登录合并选「保留云端」时用）。 */
+export function removePersistentStorageKey(key = "") {
+  if (!hasWindowStorage()) return false;
+  const remover = nativeRemoveItem || window.Storage.prototype.removeItem;
+  try {
+    remover.call(window.localStorage, String(key || ""));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function isRemoteAccountSessionActive() {
   const raw = persistentGetItem(SESSION_KEY);
   if (!raw) return false;

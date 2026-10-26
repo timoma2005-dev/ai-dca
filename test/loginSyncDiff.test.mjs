@@ -28,6 +28,8 @@ const {
   diffTransactionRows,
   hasLocalAccountData,
   hasRemoteAccountData,
+  applyLoginSyncBaseline,
+  buildLoginSyncBaseline,
   LOGIN_SYNC_CHOICES,
   uniformLoginSyncChoices
 } = await import('../src/app/loginSyncDiff.js');
@@ -97,25 +99,66 @@ test('按行 diff：持仓交易按 id 比较并给出展示摘要', () => {
   assert.equal(diffTransactionRows([tx('a')], [tx('a')]), null);
 });
 
-test('整体 diff：交易行排在最前，无差异时 hasDiff=false；有无数据判定', () => {
+test('整体 diff：只问本机有、云端也有且本机有云端没有的内容；交易行排在最前', () => {
   const sides = {
-    resources: ['trades/ledger', 'plans/store'],
-    localResources: { 'trades/ledger': '[{"id":"t1"}]' },
-    remoteResources: { 'trades/ledger': { data: [{ id: 't1' }] }, 'plans/store': { data: { plans: [{ id: 'p' }] } } },
+    resources: ['trades/ledger', 'plans/store', 'dca/store', 'plans/state'],
+    localResources: {
+      'trades/ledger': '[{"id":"t1"},{"id":"t9"}]',
+      'dca/store': '{"plans":[{"id":"d1"}]}',
+      'plans/state': '{"view":"grid"}'
+    },
+    remoteResources: {
+      'trades/ledger': { data: [{ id: 't1' }] },
+      'plans/store': { data: { plans: [{ id: 'p' }] } },
+      'plans/state': { data: { view: 'list' } }
+    },
     localTransactions: [tx('a')],
-    remoteTransactions: []
+    remoteTransactions: [tx('a', { shares: 5 })]
   };
   const diff = computeLoginSyncDiff(sides);
   assert.equal(diff.hasDiff, true);
-  assert.deepEqual(diff.items.map((item) => item.id), ['holdings/ledger', 'plans/store']);
-  assert.deepEqual(defaultLoginSyncChoices(diff.items), { 'holdings/ledger': 'merge', 'plans/store': 'merge' });
-  assert.deepEqual(uniformLoginSyncChoices(diff.items, 'local'), { 'holdings/ledger': 'local', 'plans/store': 'local' });
-  assert.deepEqual(uniformLoginSyncChoices(diff.items, 'bogus'), { 'holdings/ledger': 'merge', 'plans/store': 'merge' });
-  assert.equal(computeLoginSyncDiff({ ...sides, localTransactions: [], remoteResources: { 'trades/ledger': { data: [{ id: 't1' }] } } }).hasDiff, false);
+  // plans/store 本机为空 → 以云端为准；plans/state 偏好 → 以云端为准；dca/store 云端为空 → 自动上传
+  assert.deepEqual(diff.items.map((item) => item.id), ['holdings/ledger', 'trades/ledger']);
+  assert.deepEqual(diff.autoItems.map((item) => item.id), ['dca/store']);
+  assert.deepEqual(defaultLoginSyncChoices(diff.items), { 'holdings/ledger': 'merge', 'trades/ledger': 'merge' });
+  assert.deepEqual(uniformLoginSyncChoices(diff.items, 'local'), { 'holdings/ledger': 'local', 'trades/ledger': 'local' });
+  assert.deepEqual(uniformLoginSyncChoices(diff.items, 'bogus'), { 'holdings/ledger': 'merge', 'trades/ledger': 'merge' });
+  // 本机是云端子集（只有仅云端条目）：不问
+  const subset = computeLoginSyncDiff({ resources: ['trades/ledger'], localResources: { 'trades/ledger': '[{"id":"t1"}]' }, remoteResources: { 'trades/ledger': { data: [{ id: 't1' }, { id: 't2' }] } }, localTransactions: [tx('a')], remoteTransactions: [tx('a'), tx('b')] });
+  assert.equal(subset.hasDiff, false);
+  assert.deepEqual(subset.autoItems, []);
   assert.equal(hasLocalAccountData({ localResources: { a: '[]' }, localTransactions: [] }), false);
   assert.equal(hasLocalAccountData({ localResources: {}, localTransactions: [tx('a')] }), true);
   assert.equal(hasRemoteAccountData({ remoteResources: { a: { data: {} } }, remoteTransactions: [] }), false);
   assert.equal(hasRemoteAccountData({ remoteResources: { a: { data: [1] } }, remoteTransactions: [] }), true);
+});
+
+test('差异条目：只有内部键（数字 / #序号）的条目标为 opaque，界面只显示条数', () => {
+  const item = diffResource({ resource: 'holdings/accumulation', localRaw: '{"20":{"done":true}}', remote: { data: { 20: { done: false }, 30: {}, 50: {} } } });
+  assert.deepEqual(item.entries.remoteOnly.map((entry) => entry.opaque), [true, true]);
+  assert.equal(item.entries.changed[0].opaque, true);
+  const named = diffResource({ resource: 'plans/store', localRaw: '[{"id":"p1","name":"纳指建仓"}]', remote: { data: [] } });
+  assert.equal(named.entries.localOnly[0].opaque, false);
+  assert.equal(named.entries.localOnly[0].label, '纳指建仓');
+});
+
+test('登录基线：上次已合并且本机未改的数据不再参与比较；本机改过才重新比较', () => {
+  const sides = {
+    resources: ['trades/ledger'],
+    localResources: { 'trades/ledger': '[{"id":"t1"},{"id":"t2"}]' },
+    remoteResources: { 'trades/ledger': { data: [{ id: 't1' }] } }, // 登录期间在云端删了 t2
+    localTransactions: [tx('a'), tx('b')],
+    remoteTransactions: [tx('a')]
+  };
+  const baseline = buildLoginSyncBaseline(sides);
+  assert.equal(computeLoginSyncDiff(sides).hasDiff, true);
+  const filtered = applyLoginSyncBaseline(sides, baseline);
+  assert.deepEqual(filtered.localResources, {});
+  assert.deepEqual(filtered.localTransactions, []);
+  assert.equal(computeLoginSyncDiff(filtered).hasDiff, false);
+  // 退出后本机又改了：重新参与比较
+  const edited = { ...sides, localResources: { 'trades/ledger': '[{"id":"t1"},{"id":"t3"}]' } };
+  assert.ok(applyLoginSyncBaseline(edited, baseline).localResources['trades/ledger']);
 });
 
 // ---------------------------------------------------------------------------
@@ -147,7 +190,7 @@ function fakeDeps(overrides = {}) {
 
 const SIDES = {
   resources: ['trades/ledger', 'plans/store', 'dca/store', 'sell-plans/store'],
-  localResources: { 'trades/ledger': '[{"id":"t1"}]', 'dca/store': '{"plans":[{"id":"d1"}]}' },
+  localResources: { 'trades/ledger': '[{"id":"t1"}]', 'dca/store': '{"plans":[{"id":"d1"}]}', 'plans/store': '{"plans":[{"id":"p0"}]}' },
   remoteResources: {
     'trades/ledger': { data: [{ id: 't2' }] },
     'plans/store': { data: { plans: [{ id: 'p1' }] } },
@@ -158,67 +201,65 @@ const SIDES = {
 };
 const DIFF = computeLoginSyncDiff(SIDES);
 
-test('执行：逐项三种选择各自走正确写入路径', async () => {
+test('执行：差异分组——两边都有才问，云端没有自动上传，本机没有不处理', () => {
+  assert.deepEqual(DIFF.items.map((item) => item.id), ['holdings/ledger', 'trades/ledger', 'plans/store']);
+  assert.deepEqual(DIFF.autoItems.map((item) => item.id), ['dca/store']);
+});
+
+test('执行：保留本地 / 合并都先把本机数据放进 runtime 再推送或拉取；自动项按合并上传', async () => {
   const { deps, calls } = fakeDeps();
-  const choices = {
-    'trades/ledger': 'local',
-    'plans/store': 'local', // 本地没有 → 删除云端
-    'dca/store': 'remote', // 云端没有 → 删除本地
-    'sell-plans/store': 'merge', // 本地没有 → 走拉取合并
-    'holdings/ledger': 'merge'
-  };
+  const choices = { 'trades/ledger': 'local', 'plans/store': 'merge', 'holdings/ledger': 'merge' };
   const result = await applyLoginSyncChoices({ sides: SIDES, diff: DIFF, choices, session: { userId: 'u' }, deps });
   assert.deepEqual(result.failed, []);
   const names = calls.map((call) => call[0]);
-  assert.deepEqual(calls.find((call) => call[0] === 'pushResource').slice(1, 2), ['trades/ledger']);
-  assert.equal(calls.find((call) => call[0] === 'pushResource')[2].force, true);
-  assert.deepEqual(calls.find((call) => call[0] === 'deleteAccountResource').slice(1, 2), ['plans/store']);
-  assert.deepEqual(calls.find((call) => call[0] === 'writeLocalResource').slice(1), ['dca/store', null]);
-  assert.deepEqual(calls.find((call) => call[0] === 'pullResources')[1].resources, ['sell-plans/store']);
-  // 交易行合并：先清基线 → 强制拉取（同 id 云端优先）→ 回传本地独有
+  const writeTrades = names.indexOf('writeLocalResource');
+  assert.deepEqual(calls[writeTrades].slice(1), ['trades/ledger', '[{"id":"t1"}]']);
+  assert.equal(calls[writeTrades + 1][0], 'pushResource');
+  assert.equal(calls[writeTrades + 1][2].force, true);
+  assert.ok(calls.some((call) => call[0] === 'writeLocalResource' && call[1] === 'plans/store'));
+  assert.deepEqual(calls.find((call) => call[0] === 'pullResources')[1].resources, ['plans/store']);
+  // 自动项：dca/store 云端没有 → 写 runtime 后上传
+  assert.ok(calls.some((call) => call[0] === 'writeLocalResource' && call[1] === 'dca/store'));
+  assert.ok(calls.some((call) => call[0] === 'pushResource' && call[1] === 'dca/store'));
+  // 交易行合并：清基线 → 本机行写 runtime → 强制拉取（同 id 云端优先）→ 回传本地独有
   const txCalls = names.slice(names.indexOf('resetHoldingSyncState'));
-  assert.deepEqual(txCalls, ['resetHoldingSyncState', 'pullHoldingTransactions', 'pushHoldingTransactions']);
-  assert.equal(calls.find((call) => call[0] === 'pullHoldingTransactions')[1].force, true);
+  assert.deepEqual(txCalls, ['resetHoldingSyncState', 'writeLocalTransactions', 'pullHoldingTransactions', 'pushHoldingTransactions']);
+  assert.deepEqual(calls.find((call) => call[0] === 'writeLocalTransactions')[1].map((row) => row.id), ['a', 'b']);
   assert.notEqual(calls.find((call) => call[0] === 'pushHoldingTransactions')[1].force, true);
 });
 
-test('执行：保留云端 → 云端整体替换本地后拉取登记；交易行只保留云端行', async () => {
-  const { deps, calls } = fakeDeps();
-  await applyLoginSyncChoices({ sides: SIDES, diff: DIFF, choices: { 'trades/ledger': 'remote', 'holdings/ledger': 'remote' }, session: {}, deps });
+test('执行：保留云端 → 云端替换 runtime 并删掉本机落盘旧副本；交易行只保留云端行', async () => {
+  const cleared = [];
+  const { deps, calls } = fakeDeps({ clearGuestResource: (name) => { cleared.push(name); return true; }, clearGuestTransactions: () => { cleared.push('tx'); return true; } });
+  await applyLoginSyncChoices({ sides: SIDES, diff: DIFF, choices: { 'trades/ledger': 'remote', 'holdings/ledger': 'remote', 'plans/store': 'remote' }, session: {}, deps });
   const write = calls.find((call) => call[0] === 'writeLocalResource' && call[1] === 'trades/ledger');
   assert.deepEqual(JSON.parse(write[2]), [{ id: 't2' }]);
-  const pull = calls.find((call) => call[0] === 'pullResources');
-  assert.ok(pull[1].resources.includes('trades/ledger'));
-  assert.equal(pull[1].force, true);
+  assert.deepEqual(calls.find((call) => call[0] === 'pullResources')[1].resources.sort(), ['plans/store', 'trades/ledger']);
   const txWrite = calls.find((call) => call[0] === 'writeLocalTransactions');
   assert.deepEqual(txWrite[1].map((row) => row.id), ['b', 'c']);
   assert.ok(!calls.some((call) => call[0] === 'pushHoldingTransactions'), '云端覆盖本地不推送交易行');
+  assert.deepEqual(cleared.sort(), ['plans/store', 'trades/ledger', 'tx']);
 });
 
-test('全局：全部本地覆盖云端 → 只写云端（PUT/删除/逐行强推并删云端多余行），不写本地', async () => {
+test('全局：全部本地覆盖云端 → 强推本机数据并删云端多余交易行，不拉取', async () => {
   const { deps, calls } = fakeDeps();
   await applyLoginSyncChoices({ sides: SIDES, diff: DIFF, choices: uniformLoginSyncChoices(DIFF.items, LOGIN_SYNC_CHOICES.LOCAL), session: {}, deps });
   const names = calls.map((call) => call[0]);
-  assert.ok(!names.includes('writeLocalResource'));
-  assert.ok(!names.includes('writeLocalTransactions'));
   assert.ok(!names.includes('pullResources'));
   assert.ok(!names.includes('pullHoldingTransactions'));
-  assert.deepEqual(calls.filter((call) => call[0] === 'pushResource').map((call) => call[1]).sort(), ['dca/store', 'trades/ledger']);
-  assert.deepEqual(calls.filter((call) => call[0] === 'deleteAccountResource').map((call) => call[1]).sort(), ['plans/store', 'sell-plans/store']);
+  assert.deepEqual(calls.filter((call) => call[0] === 'pushResource').map((call) => call[1]).sort(), ['dca/store', 'plans/store', 'trades/ledger']);
   const push = calls.find((call) => call[0] === 'pushHoldingTransactions')[1];
   assert.equal(push.force, true);
   assert.deepEqual(push.deletedIds, ['c']);
 });
 
-test('全局：全部云端覆盖本地 → 只写本地，本地独有删除，不向云端写', async () => {
+test('全局：全部云端覆盖本地 → 不向云端写用户选择项（自动项除外）', async () => {
   const { deps, calls } = fakeDeps();
   await applyLoginSyncChoices({ sides: SIDES, diff: DIFF, choices: uniformLoginSyncChoices(DIFF.items, LOGIN_SYNC_CHOICES.REMOTE), session: {}, deps });
-  const names = calls.map((call) => call[0]);
-  assert.ok(!names.includes('pushResource'));
-  assert.ok(!names.includes('deleteAccountResource'));
-  assert.ok(!names.includes('pushHoldingTransactions'));
-  assert.deepEqual(calls.find((call) => call[0] === 'writeLocalResource' && call[1] === 'dca/store').slice(1), ['dca/store', null]);
-  assert.deepEqual(calls.find((call) => call[0] === 'pullResources')[1].resources.sort(), ['plans/store', 'sell-plans/store', 'trades/ledger']);
+  assert.deepEqual(calls.filter((call) => call[0] === 'pushResource').map((call) => call[1]), ['dca/store']);
+  assert.ok(!calls.some((call) => call[0] === 'deleteAccountResource'));
+  assert.ok(!calls.some((call) => call[0] === 'pushHoldingTransactions'));
+  assert.deepEqual(calls.find((call) => call[0] === 'pullResources')[1].resources.sort(), ['plans/store', 'trades/ledger']);
 });
 
 test('执行：单项失败被收集，不中断其它项', async () => {
@@ -366,4 +407,23 @@ test('确认时部分失败：保持门禁，不启动自动同步', async () =>
   assert.equal(isLoginSyncPending(session), true);
   assert.ok(!cloudSync.calls.includes('start'));
   clearLoginSyncPending();
+});
+
+test('再次登录：上次已合并且本机未改 → 不再弹窗，直接以云端为准', async () => {
+  resetLoginSyncFlowForTest();
+  const session = login('u-baseline');
+  const store = {};
+  const baselineDeps = { saveLoginSyncBaseline: (id, value) => { store[id] = value; }, readLoginSyncBaseline: (id) => store[id] || null };
+  const first = sidesDeps({ remoteResources: { 'trades/ledger': [{ id: 't2' }] }, localResources: { 'trades/ledger': '[{"id":"t1"}]' } });
+  Object.assign(first.deps, baselineDeps);
+  assert.equal(await runLoginAccountSync(fakeCloudSync({ remoteVersion: 1 }), { action: 'login', session, deps: first.deps, demoActive: false }), 'diff-pending');
+  await confirmLoginSync({ 'trades/ledger': 'merge' }, { session, deps: first.deps, cloudSync: fakeCloudSync({ remoteVersion: 1 }) });
+  assert.ok(store['u-baseline']);
+  // 之后在云端删掉了 t1，只剩 t2；本机落盘数据没变
+  const second = sidesDeps({ remoteResources: { 'trades/ledger': [{ id: 't2' }] }, localResources: { 'trades/ledger': '[{"id":"t1"}]' } });
+  Object.assign(second.deps, baselineDeps);
+  const cloudSync = fakeCloudSync({ remoteVersion: 1 });
+  assert.equal(await runLoginAccountSync(cloudSync, { action: 'login', session, deps: second.deps, demoActive: false }), 'pulled');
+  assert.ok(cloudSync.calls.includes('restore'));
+  assert.equal(isLoginSyncPending(session), false);
 });
