@@ -31,8 +31,10 @@ function createStorage({ throwOnSetKeys = new Set() } = {}) {
   };
 }
 
-function installBrowserMock({ dnt = '0', localStorageOptions = {}, sessionStorageOptions = {} } = {}) {
+// 统计改为 opt-in 后，默认模拟“用户已明确开启统计”；optIn: null 模拟未设置的新用户。
+function installBrowserMock({ dnt = '0', localStorageOptions = {}, sessionStorageOptions = {}, optIn = '0' } = {}) {
   const localStorage = createStorage(localStorageOptions);
+  if (optIn != null) localStorage.setItem('aiDcaAnalyticsOptOut_v1', optIn);
   const sessionStorage = createStorage(sessionStorageOptions);
   const beacons = [];
   const events = [];
@@ -219,4 +221,22 @@ test('browser Do Not Track stops analytics collection', () => {
   assert.equal(getAnalyticsVisitorId(), 'visitor:disabled');
   assert.equal(env.localStorage.getItem('aiDcaAnalyticsVisitorId_v1'), null);
   assert.equal(env.beacons.length, 0);
+});
+
+test('analytics is opt-in: unset local value keeps collection off for new users', () => {
+  const env = installBrowserMock({ optIn: null });
+  assert.equal(isAnalyticsCollectionDisabled(), true);
+  assert.equal(trackAnalyticsEvent('page_view'), null);
+  assert.equal(env.localStorage.getItem('aiDcaAnalyticsVisitorId_v1'), null);
+});
+
+test('analytics opt-in persists explicit choices and keeps an existing opt-out', () => {
+  const env = installBrowserMock({ optIn: '1' });
+  assert.equal(isAnalyticsCollectionDisabled(), true);
+  setAnalyticsOptOut(false);
+  assert.equal(env.localStorage.getItem('aiDcaAnalyticsOptOut_v1'), '0');
+  assert.equal(isAnalyticsCollectionDisabled(), false);
+  setAnalyticsOptOut(true);
+  assert.equal(env.localStorage.getItem('aiDcaAnalyticsOptOut_v1'), '1');
+  assert.equal(isAnalyticsCollectionDisabled(), true);
 });

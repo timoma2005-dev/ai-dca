@@ -58,15 +58,17 @@ test('auction iframe embeds the static board eagerly with an accessible title', 
   assert.match(auctionSource, /referrerPolicy="strict-origin-when-cross-origin"/);
 });
 
-test('auction panel matches the article iframe container and height classes', () => {
-  const articlesSource = readSource('src/pages/ArticlesExperience.jsx');
+test('auction panel keeps the full-height iframe container classes', () => {
+  // 文章页在 batch2 改为按内容自适应高度；竞价看板继续使用原来的固定高度容器。
+  const expected = {
+    section: 'h-[calc(100vh-10rem)] min-h-[560px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:h-[calc(100vh-8rem)] sm:min-h-[640px]',
+    iframe: 'h-full w-full border-0',
+  };
   for (const element of ['section', 'iframe']) {
     const classPattern = new RegExp(`<${element}\\b[^>]*className="([^"]+)"`);
     const actual = auctionSource.match(classPattern);
-    const expected = articlesSource.match(classPattern);
     assert.ok(actual);
-    assert.ok(expected);
-    assert.equal(actual[1], expected[1], `${element} classes match ArticlesExperience`);
+    assert.equal(actual[1], expected[element], `${element} classes stay stable`);
   }
 });
 

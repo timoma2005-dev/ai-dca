@@ -11,6 +11,8 @@ import {
 import { formatSignedPercent } from '../../app/holdingsHelpers.js';
 import { fetchNavHistory } from '../../app/navHistoryClient.js';
 import { buildPortfolioSeries, shiftDays } from '../../app/portfolioSeries.js';
+import { chartA11yProps, summarizeSeries } from '../../lib/chartA11y.js';
+import { ChartSrSummary } from '../../components/ChartA11y.jsx';
 
 const CHART_DIMENSION = { width: 1, height: 1 };
 
@@ -140,6 +142,15 @@ export function HoldingReturnCurve({ aggregate, transactions = [] }) {
   }, [code, focusedTransactions, inception]);
 
   const ready = state.status === 'ready' && state.data.length > 0;
+  const a11ySummary = useMemo(() => (ready ? summarizeSeries({
+    title: '累计收益曲线',
+    subject: [aggregate?.name || aggregate?.fundName, code].filter(Boolean).join(' '),
+    points: state.data,
+    getValue: (point) => point.value,
+    getDate: (point) => point.date,
+    unit: '%',
+    changeMode: 'difference',
+  }) : null), [ready, state.data, aggregate?.name, aggregate?.fundName, code]);
 
   return (
     <section className="mt-4 sm:mt-6" aria-label="累计收益曲线">
@@ -147,7 +158,7 @@ export function HoldingReturnCurve({ aggregate, transactions = [] }) {
         <h3 className="text-sm font-semibold text-slate-800">累计收益曲线</h3>
         <span className="text-[11px] text-slate-400 tabular-nums sm:text-xs">{state.hint || '—'}</span>
       </div>
-      <div className="mt-2 h-48 min-w-0 sm:h-56">
+      <div className="mt-2 h-48 min-w-0 sm:h-56" {...(a11ySummary ? chartA11yProps(a11ySummary) : {})}>
         {!ready ? (
           <div className={`flex h-full items-center justify-center rounded-xl bg-slate-50 text-xs ${state.status === 'error' ? 'text-rose-500' : 'text-slate-400'}`} aria-live="polite">
             {curveStateMessage(state)}
@@ -192,6 +203,7 @@ export function HoldingReturnCurve({ aggregate, transactions = [] }) {
           </ResponsiveContainer>
         )}
       </div>
+      <ChartSrSummary summary={a11ySummary} />
       {state.error === '缓存净值' ? (
         <div className="mt-1 text-right text-[10px] text-amber-500">缓存净值</div>
       ) : null}

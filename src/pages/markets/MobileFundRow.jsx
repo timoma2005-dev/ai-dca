@@ -1,7 +1,8 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cx } from '../../components/experience-ui.jsx';
 import { buildIdentityLine, formatRowCode, isOtcFundRow, resolveMetricDisplay } from './mobileFundMetrics.js';
-import { formatRedeemFeeTiers, formatRedeemFeeRate, formatMarketPrice, formatPercent } from './marketDisplayUtils.js';
+import { formatRedeemFeeTiers, formatRedeemFeeRate, formatPercent } from './marketDisplayUtils.js';
+import { MobilePriceValue } from './MarketValueCells.jsx';
 
 function feeNumber(value) {
   if (value == null || value === '') return null;
@@ -66,9 +67,7 @@ export function MobileFundRow({ row, isOtcList = false, metricIds = [], expanded
         <div className="flex items-baseline justify-between mt-1 pt-0.5">
           <div>
             <span className="text-[10px] text-slate-400 mr-1.5">最新价</span>
-            <span className="font-mono text-lg font-bold tabular-nums text-slate-900">
-              {formatMarketPrice(row?.price, row)}
-            </span>
+            <MobilePriceValue row={row} />
           </div>
           <div>
             {(() => {

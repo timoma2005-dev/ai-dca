@@ -1,0 +1,86 @@
+/* 审计 batch2 共享样式：表格滚动提示、FAB 避让底栏、移动端触摸目标、情绪条溢出。 */
+:root {
+  --mobile-bottom-nav-height: 52px;
+}
+
+/* #12 宽表横向滚动阴影与提示 */
+.data-table-scroll-wrap { isolation: isolate; }
+.data-table-scroll-shadow {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  z-index: 40;
+  width: 18px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.data-table-scroll-shadow--left {
+  left: 0;
+  border-top-left-radius: 1rem;
+  border-bottom-left-radius: 1rem;
+  background: linear-gradient(to right, rgba(15, 23, 42, 0.12), rgba(15, 23, 42, 0));
+}
+.data-table-scroll-shadow--right {
+  right: 0;
+  border-top-right-radius: 1rem;
+  border-bottom-right-radius: 1rem;
+  background: linear-gradient(to left, rgba(15, 23, 42, 0.14), rgba(15, 23, 42, 0));
+}
+.data-table-scroll-wrap[data-scroll-left="true"] .data-table-scroll-shadow--left,
+.data-table-scroll-wrap[data-scroll-right="true"] .data-table-scroll-shadow--right { opacity: 1; }
+.data-table-scroll-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 41;
+  pointer-events: none;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 18px;
+  color: #fff;
+}
+
+/* #17 持仓页 FAB 避开底部导航与安全区 */
+.fab-above-bottom-nav {
+  bottom: calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 16px);
+}
+
+/* #18 移动端/触屏最小触摸目标 44×44 */
+@media (max-width: 640px), (pointer: coarse) {
+  .touch-target,
+  button[aria-label]:not([data-touch-exempt]),
+  [role="button"][aria-label]:not([data-touch-exempt]),
+  [data-slot="dialog-close"],
+  .console-sidebar__expand {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .data-table-sort-target { min-height: 44px; }
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) { min-height: 44px; }
+  input[type="checkbox"],
+  input[type="radio"] { min-width: 20px; min-height: 20px; }
+}
+
+/* #16 移动端情绪条：指标行横向滚动、文字可截断，按钮组换行不撑破容器 */
+@media (max-width: 480px) {
+  .market-sentiment-strip { max-width: 100%; }
+  .market-sentiment-strip__row { flex-wrap: wrap; }
+  .market-sentiment-strip__chips {
+    /* 原来 w-full + flex-1 的 basis 为 0，窄屏不会换行，被挤在按钮右侧并被裁切；这里强制独占一行。 */
+    flex: 1 1 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+  }
+  .market-sentiment-strip__chips::-webkit-scrollbar { display: none; }
+  .market-sentiment-strip__chips > * { max-width: 70vw; }
+  .market-sentiment-strip__chips span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .market-sentiment-strip__actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 100%; }
+}

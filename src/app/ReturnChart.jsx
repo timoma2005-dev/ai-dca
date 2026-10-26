@@ -26,6 +26,8 @@ import { fetchNavHistory, fetchNavHistoryBatch } from './navHistoryClient.js';
 import { buildDailyFundPnlMap, buildPortfolioSeries, resolveRangeWindow, shiftDays } from './portfolioSeries.js';
 import { addCashYieldToDailyPnlMap } from './cashYield.js';
 import { useRangeUrlSync, DEFAULT_RANGE } from './rangeUrlSync.js';
+import { chartA11yProps, summarizeSeries } from '../lib/chartA11y.js';
+import { ChartSrSummary } from '../components/ChartA11y.jsx';
 
 const BENCH_CODE = '510300';
 const BENCH_LABEL = '沪深300';
@@ -288,6 +290,15 @@ function ReturnChart({
   const isEmpty = state.status === 'ready' && state.data.length === 0;
   const canSelectDate = typeof onSelectDate === 'function';
   const selectedDateInChart = selectedDate && state.data.some((d) => d.date === selectedDate) ? selectedDate : null;
+  const a11ySummary = state.data.length ? summarizeSeries({
+    title: '收益曲线',
+    subject: '我的组合',
+    points: state.data,
+    getValue: (point) => (Number.isFinite(point.portfolio) ? point.portfolio * 100 : null),
+    getDate: (point) => point.date,
+    unit: '%',
+    changeMode: 'difference',
+  }) : null;
 
   const handleChartClick = (next) => {
     if (!canSelectDate) return;
@@ -333,7 +344,7 @@ function ReturnChart({
         </div>
       ) : null}
 
-      <div className={cx(hideHeader ? 'h-56 min-w-0 w-full sm:h-56 lg:h-52' : 'mt-3 h-56 min-w-0 w-full sm:h-56 lg:h-52', chartClassName)}>
+      <div className={cx(hideHeader ? 'h-56 min-w-0 w-full sm:h-56 lg:h-52' : 'mt-3 h-56 min-w-0 w-full sm:h-56 lg:h-52', chartClassName)} {...(a11ySummary ? chartA11yProps(a11ySummary) : {})}>
         {isEmpty || !state.data.length ? (
           <div className="flex h-full items-center justify-center text-[11px] text-slate-400">
             {isLoading ? '准备中…' : '暂无数据'}
@@ -431,6 +442,7 @@ function ReturnChart({
           </ResponsiveContainer>
         )}
       </div>
+      <ChartSrSummary summary={a11ySummary} />
     </div>
   );
 }

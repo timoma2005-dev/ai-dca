@@ -25,7 +25,6 @@ import {
   formatSignedPercent,
   formatSymbolDisplay,
   formatTotalShares,
-  formatTurnover,
   formatYearPercent,
   isExchangeHalted,
   resolveHaltBadgeLabel,
@@ -46,17 +45,10 @@ import {
 } from '../../app/holdingsLedgerBasics.js';
 import { resolveCloseHighDrawdown, resolveDayHighDrawdown } from './marketHighDrawdown.js';
 import { matchesTextFilterConditions } from './marketTableFilters.js';
+import { createMissingLastNumericSort, resolveMarketPriceValue, toNumberOrNull } from './marketMissingValue.js';
+import { MarketPriceCell, MarketTurnoverCell } from './MarketValueCells.jsx';
+import { TextPromptDialog } from '../../components/TextPromptDialog.jsx';
 
-const numericSortFn = (rowA, rowB, columnId) => {
-  const a = rowA.getValue(columnId);
-  const b = rowB.getValue(columnId);
-  const aN = !Number.isFinite(Number(a));
-  const bN = !Number.isFinite(Number(b));
-  if (aN && bN) return 0;
-  if (aN) return 1;
-  if (bN) return -1;
-  return Number(a) - Number(b);
-};
 
 const textIncludesFilterFn = (row, columnId, filterValue) => {
   return matchesTextFilterConditions(row.getValue(columnId), filterValue);
@@ -69,8 +61,8 @@ const numberRangeFilterFn = (row, columnId, filterValue) => {
   const hasMin = Number.isFinite(min);
   const hasMax = Number.isFinite(max);
   if (!hasMin && !hasMax) return true;
-  const value = Number(row.getValue(columnId));
-  if (!Number.isFinite(value)) return false;
+  const value = toNumberOrNull(row.getValue(columnId));
+  if (value == null) return false;
   if (hasMin && value < min) return false;
   if (hasMax && value > max) return false;
   return true;
@@ -369,6 +361,9 @@ export function MarketListTable({
   const initialViewStorage = readInitialTableViewStorage(viewStorageScope, viewStateStorageKey, viewPresetsStorageKey);
   const initialViewState = normalizeTableViewState(initialViewStorage.state, defaultColumnVisibility);
   const [sorting, setSorting] = useState(initialViewState.sorting);
+  // 缺失值升降序都排最后：比较函数需要知道当前列方向，因此随 sorting 重建。
+  const numericSortFn = useMemo(() => createMissingLastNumericSort((id) => sorting.find((item) => item.id === id)?.desc), [sorting]);
+  const [presetDialog, setPresetDialog] = useState(false);
   const [columnFilters, setColumnFilters] = useState(initialViewState.columnFilters);
   const [localVisibility, setLocalVisibility] = useState(initialViewState.columnVisibility);
   const [viewPresets, setViewPresets] = useState(initialViewStorage.presets);
@@ -436,11 +431,11 @@ export function MarketListTable({
     },
     {
       id: 'price',
-      accessorFn: (row) => Number(row.price),
+      accessorFn: (row) => resolveMarketPriceValue(row),
       meta: { label: '最新价', variant: 'number', align: 'center' },
       size: 96,
       header: ({ column }) => <DataTableColumnHeader column={column} label="最新价" />,
-      cell: ({ row }) => <span className="tabular-nums font-semibold text-slate-900">{formatMarketPrice(row.original.price, row.original)}</span>,
+      cell: ({ row }) => <MarketPriceCell row={row.original} />,
       sortingFn: numericSortFn,
       filterFn: numberRangeFilterFn,
     },
@@ -541,11 +536,11 @@ export function MarketListTable({
     },
     {
       id: 'turnover',
-      accessorFn: (row) => Number(row.turnover ?? row.amount),
+      accessorFn: (row) => toNumberOrNull(row.turnover ?? row.amount),
       meta: { label: '成交额', variant: 'number', align: 'center' },
       size: 112,
       header: ({ column }) => <DataTableColumnHeader column={column} label="成交额" />,
-      cell: ({ row }) => <span className="tabular-nums text-[var(--market-text-strong)]">{formatTurnover(row.original.turnover ?? row.original.amount)}</span>,
+      cell: ({ row }) => <MarketTurnoverCell row={row.original} />,
       sortingFn: numericSortFn,
       filterFn: numberRangeFilterFn,
     },
@@ -801,7 +796,7 @@ export function MarketListTable({
       sortingFn: numericSortFn,
       filterFn: numberRangeFilterFn,
     } : null,
-  ].filter(Boolean)), [showLimitColumn, hidePremiumColumn, hideTrendColumn, klineMap, todayDate, limitFilterOptions, compact]);
+  ].filter(Boolean)), [showLimitColumn, hidePremiumColumn, hideTrendColumn, klineMap, todayDate, limitFilterOptions, compact, numericSortFn]);
   const table = useReactTable({
     data: rows,
     columns,
@@ -917,11 +912,8 @@ export function MarketListTable({
     setVisibility(normalized.columnVisibility);
   }
 
-  function saveCurrentView() {
-    if (typeof window === 'undefined') return;
-    const name = window.prompt('保存当前筛选视图名称', '我的筛选');
-    const trimmed = String(name || '').trim();
-    if (!trimmed) return;
+  function saveCurrentView(trimmed) {
+    setPresetDialog(false);
     const preset = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: trimmed.slice(0, 18),
@@ -994,11 +986,12 @@ export function MarketListTable({
       })}
       <button
         type="button"
-        onClick={saveCurrentView}
+        onClick={() => setPresetDialog(true)}
         className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-dashed border-[var(--market-border-strong)] px-3 text-xs font-medium text-[var(--market-text-muted)] transition hover:bg-[var(--market-surface-muted)] hover:text-[var(--market-text-strong)]"
       >
         <Save size={14} /> 保存视图
       </button>
+      <TextPromptDialog open={presetDialog} title="保存当前筛选视图" label="视图名称" defaultValue="我的筛选" maxLength={18} submitLabel="保存" onCancel={() => setPresetDialog(false)} onSubmit={saveCurrentView} />
     </div>
   ) : null;
 
@@ -1050,7 +1043,7 @@ export function MarketListTable({
           tableChrome={tableChrome}
           tableChromeClassName={tableChromeClassName}
           className={cx(
-            '[&_td]:text-center [&_td:first-child]:text-left [&_td:nth-child(2)]:text-left [&_th]:whitespace-nowrap',
+            '[&_td]:text-center [&_td:first-child]:text-left [&_td:nth-child(2)]:text-left',
             compact && '[&_table]:min-w-[360px] [&_td]:px-2 [&_td]:py-3 [&_th]:px-2 [&_th]:py-2 [&_td:nth-child(2)]:max-w-[160px] [&_td:nth-child(2)>div]:max-w-[160px]',
             dataTableClassName
           )}
@@ -1163,7 +1156,7 @@ export function MarketListTable({
                   </div>
                   {row.meta ? <div className="truncate text-[10px] text-[var(--market-text-muted)]">{row.meta}</div> : null}
                 </td>
-                <td className={cx(cellPad, 'whitespace-nowrap text-center tabular-nums text-[var(--market-text-strong)]')}>{formatMarketPrice(row.price, row)}</td>
+                <td className={cx(cellPad, 'whitespace-nowrap text-center')}><MarketPriceCell row={row} className="text-[var(--market-text-strong)]" /></td>
                 <td className={cx(cellPad, 'whitespace-nowrap text-center')}>
                   <span className="inline-flex items-center justify-center gap-1.5">
                     <span className={cx('font-semibold tabular-nums', flat ? 'text-[var(--market-text-muted)]' : up ? 'text-[var(--market-rise)]' : 'text-[var(--market-fall)]')}>{formatPercent(row.changePercent)}</span>
@@ -1185,7 +1178,7 @@ export function MarketListTable({
                     {Number.isFinite(historicalPercentile) ? `${historicalPercentile.toFixed(2)}%` : '—'}
                   </td>
                 ) : null}
-                <td className={cx(cellPad, 'whitespace-nowrap text-center tabular-nums text-[var(--market-text-strong)]')}>{formatTurnover(row.turnover ?? row.amount)}</td>
+                <td className={cx(cellPad, 'whitespace-nowrap text-center')}><MarketTurnoverCell row={row} /></td>
                 {showLimitColumn ? (
                   <td className={cx(cellPad, 'whitespace-nowrap text-center text-xs')}>
                     {row.fundLimit || shouldShowAppTag(row.fundMeta, row.fundLimit) ? (

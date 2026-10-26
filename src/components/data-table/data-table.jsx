@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { flexRender } from "@tanstack/react-table";
 import { DataTablePagination } from "@/components/data-table/data-table-pagination";
 import {
@@ -12,6 +12,10 @@ import {
 } from "@/components/ui/table";
 import { getColumnPinningStyle } from "@/lib/data-table";
 import { cn } from "@/lib/utils";
+import { computeScrollEdges } from "./scrollEdges.js";
+import { describeSortState } from "./sortState.js";
+
+const HEADER_MIN_WIDTH = 64;
 
 function getColumnAlignClass(column) {
   const align = column?.columnDef?.meta?.align;
@@ -42,6 +46,33 @@ function DataTable({
   ...props
 }) {
   const rowRefs = useRef(new Map());
+  const scrollNodeRef = useRef(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const updateEdges = useCallback(() => {
+    const node = scrollNodeRef.current;
+    if (!node) return;
+    const next = computeScrollEdges(node);
+    setEdges((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
+  }, []);
+  const setScrollNode = useCallback((node) => {
+    scrollNodeRef.current = node;
+    if (typeof tableScrollRef === "function") tableScrollRef(node);
+    else if (tableScrollRef) tableScrollRef.current = node;
+  }, [tableScrollRef]);
+  useEffect(() => {
+    const node = scrollNodeRef.current;
+    if (!node) return undefined;
+    updateEdges();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(updateEdges);
+    observer.observe(node);
+    if (node.firstElementChild) observer.observe(node.firstElementChild);
+    const tableNode = node.querySelector("table");
+    if (tableNode) observer.observe(tableNode);
+    return () => observer.disconnect();
+  }, [updateEdges]);
+  // 只有本来就撑满父容器的表格才让外层包裹继续 flex-1；否则高度跟随内容（审计 batch2 #10）。
+  const scrollWrapperGrows = /(^|\s)flex-1(\s|$)/.test(String(tableContainerClassName || ""));
   const rowModelRows = table.getRowModel().rows || [];
   const rowIdsSignature = rowModelRows.map((row) => row.id).join("|");
 
@@ -154,7 +185,15 @@ function DataTable({
       {...props}
     >
       {children}
-      <div ref={tableScrollRef} onScroll={onHorizontalScroll} className={cn("max-w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white", tableContainerClassName)}>
+      <div className={cn("data-table-scroll-wrap relative flex min-h-0 min-w-0 max-w-full flex-col", scrollWrapperGrows && "flex-1")} data-scroll-left={edges.left ? "true" : undefined} data-scroll-right={edges.right ? "true" : undefined}>
+      <div
+        ref={setScrollNode}
+        onScroll={(event) => { updateEdges(); onHorizontalScroll?.(event); }}
+        role="region"
+        aria-label={edges.left || edges.right ? "数据表格（可左右滑动查看更多列）" : "数据表格"}
+        tabIndex={0}
+        className={cn("max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200 bg-white focus-visible:outline-2 focus-visible:outline-indigo-400", tableContainerClassName)}
+      >
         {tableChrome ? (
           <div
             className={cn(
@@ -169,17 +208,24 @@ function DataTable({
           <TableHeader className={cn("sticky top-0 z-20 bg-slate-50/95 backdrop-blur", tableChrome && "top-[55px]")}>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
+                {headerGroup.headers.map((header) => {
+                  const pinStyle = getColumnPinningStyle({ column: header.column });
+                  const minWidth = Math.max(Number(pinStyle.minWidth) || 0, HEADER_MIN_WIDTH);
+                  return (
                   <TableHead
                     key={header.id}
                     colSpan={header.colSpan}
+                    aria-sort={header.column.getCanSort() ? describeSortState(header.column.getIsSorted()).ariaSort : undefined}
                     className={cn(
                       getColumnAlignClass(header.column),
-                      "bg-slate-50 text-slate-600 font-medium py-3 border-b border-slate-200 select-none",
+                      "h-auto min-h-11 whitespace-normal bg-slate-50 text-slate-600 font-medium py-2.5 border-b border-slate-200 select-none",
                       header.column.getIsPinned() && "bg-slate-50"
                     )}
                     style={{
-                      ...getColumnPinningStyle({ column: header.column }),
+                      ...pinStyle,
+                      minWidth,
+                      width: Math.max(Number(pinStyle.width) || 0, minWidth),
+                      maxWidth: Math.max(Number(pinStyle.maxWidth) || 0, minWidth),
                       position: 'sticky',
                       top: tableChrome ? 55 : 0,
                       zIndex: header.column.getIsPinned() ? 35 : 20,
@@ -191,7 +237,8 @@ function DataTable({
                       header.getContext()
                     )}
                   </TableHead>
-                ))}
+                  );
+                })}
               </TableRow>
             ))}
           </TableHeader>
@@ -241,6 +288,10 @@ function DataTable({
             </TableFooter>
           ) : null}
         </table>
+      </div>
+      <span aria-hidden="true" className="data-table-scroll-shadow data-table-scroll-shadow--left" />
+      <span aria-hidden="true" className="data-table-scroll-shadow data-table-scroll-shadow--right" />
+      {edges.right && !edges.left ? <span className="data-table-scroll-hint" aria-hidden="true">左右滑动查看更多 →</span> : null}
       </div>
       <div className="flex flex-col gap-2.5">
         <DataTablePagination table={table} />

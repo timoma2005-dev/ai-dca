@@ -102,6 +102,7 @@ const PRESERVED_QUERY_PARAMS_BY_TAB = {
   markets: ['view', 'symbol', 'compare', 'chartType', 'indicators', 'cnFundParam', 'chartRange', 'chartFrom', 'chartTo'],
   fundSwitch: ['symbol', 'code', 'targetCode', 'source', 'trigger'],
   holdings: ['code', 'source'],
+  articles: ['article'],
 };
 
 function runWhenIdle(callback, { timeout = 2500, delayMs = 0 } = {}) {

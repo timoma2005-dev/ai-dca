@@ -154,10 +154,17 @@ export function isDoNotTrackEnabled() {
   return value === '1' || value === 'yes';
 }
 
+// 隐私统计改为 opt-in（审计 batch2 #15）：
+// '1' = 用户明确关闭；'0' = 用户明确开启；未设置（新用户 / 从未切换过）= 默认关闭。
+// 已明确关闭的选择保持不变。
+export function resolveAnalyticsOptOut(storedValue) {
+  return storedValue !== '0';
+}
+
 export function getAnalyticsOptOut() {
   const ls = safeStorage();
-  if (!ls) return false;
-  return storageGetItem(ls, OPT_OUT_KEY) === '1';
+  if (!ls) return true;
+  return resolveAnalyticsOptOut(storageGetItem(ls, OPT_OUT_KEY));
 }
 
 export function setAnalyticsOptOut(optedOut) {
@@ -167,7 +174,7 @@ export function setAnalyticsOptOut(optedOut) {
     storageSetItem(ls, OPT_OUT_KEY, '1');
     storageRemoveItem(ls, PENDING_STORE_KEY);
   } else {
-    storageRemoveItem(ls, OPT_OUT_KEY);
+    storageSetItem(ls, OPT_OUT_KEY, '0');
   }
   try {
     window.dispatchEvent(new CustomEvent('analytics:opt-out-changed', { detail: { optedOut: Boolean(optedOut) } }));

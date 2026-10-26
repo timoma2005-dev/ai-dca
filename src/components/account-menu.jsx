@@ -13,6 +13,7 @@ import { PrivacyNotice } from './PrivacyNotice.jsx';
 import { GettingStartedEntry } from './onboarding/GettingStartedSlot.jsx';
 import { LoginSyncPendingEntry } from './login-sync-pending-entry.jsx';
 import { evaluateTabAccess } from '../app/rbac/menuModel.js';
+import { authFieldAttrs, missingAuthField, resolveAuthFormHint } from '../app/authFormState.js';
 
 // 头像菜单锚点：顶栏账户按钮（brand-preview-bar 上的 data-account-trigger）。
 // 菜单通过 portal 挂到 body 并用 fixed 定位到按钮正下方，
@@ -64,6 +65,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
   const [authError, setAuthError] = useState('');
   const [form, setForm] = useState({ username: '', password: '', rememberDevice: true });
   const [busy, setBusy] = useState('');
+  const [formTouch, setFormTouch] = useState({ touched: false, submitted: false });
   const [open, setOpen] = useState(initialOpen || Boolean(initialAuthIntent));
   const [anchor, setAnchor] = useState(null);
   const isControlled = controlledOpen !== undefined;
@@ -154,6 +156,15 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+    if (field !== 'rememberDevice') setFormTouch((current) => (current.touched ? current : { ...current, touched: true }));
+  }
+
+  function handleAuthSubmit(event) {
+    event.preventDefault();
+    if (busy) return;
+    setFormTouch({ touched: true, submitted: true });
+    if (missingAuthField(form)) return;
+    void handleAuth(authMode);
   }
 
   async function handleAuth(action) {
@@ -196,13 +207,8 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
     showToast({ title: '已退出账户', tone: 'slate' });
   }
 
-  const authDisabledReason = busy
-    ? '处理中'
-    : !form.username
-    ? '填写用户名'
-    : !form.password
-    ? '填写登录密码'
-    : '';
+  const authHint = resolveAuthFormHint({ busy, ...form, ...formTouch });
+  const authFields = authFieldAttrs(authMode);
   const initial = loggedIn ? String(session.username || '?').slice(0, 1).toUpperCase() : '';
   const topRoleName = rbac.topRole?.name || '';
 
@@ -314,7 +320,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
                   <div className="flex gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
                     <button
                       type="button"
-                      onClick={() => { setAuthError(''); setAuthMode('login'); }}
+                      onClick={() => { setAuthError(''); setFormTouch({ touched: false, submitted: false }); setAuthMode('login'); }}
                       className={cx(
                         'flex-1 rounded-lg py-2 transition-colors',
                         authMode === 'login' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -322,7 +328,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
                     >登录</button>
                     <button
                       type="button"
-                      onClick={() => { setAuthError(''); setAuthMode('register'); }}
+                      onClick={() => { setAuthError(''); setFormTouch({ touched: false, submitted: false }); setAuthMode('register'); }}
                       className={cx(
                         'flex-1 rounded-lg py-2 transition-colors',
                         authMode === 'register' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -333,14 +339,15 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
                     <p><span className="font-semibold">用户名 / 登录密码</span>用于账号保护及多设备云端自动同步。</p>
                   </div>
                   <PrivacyNotice compact />
-                  <label className="block space-y-1.5 text-xs font-semibold text-slate-600">
-                    用户名
-                    <input className={inputClass} value={form.username} onChange={(event) => updateField('username', event.target.value)} autoComplete="username" spellCheck="false" />
-                  </label>
-                  <label className="block space-y-1.5 text-xs font-semibold text-slate-600">
-                    登录密码
-                    <input className={inputClass} type="password" value={form.password} onChange={(event) => updateField('password', event.target.value)} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} />
-                  </label>
+                  <form className="space-y-3" onSubmit={handleAuthSubmit} noValidate aria-label={authMode === 'register' ? '注册表单' : '登录表单'}>
+                  <div className="space-y-1.5">
+                    <label htmlFor={authFields.username.id} className="block text-xs font-semibold text-slate-600">用户名</label>
+                    <input className={inputClass} {...authFields.username} type="text" required value={form.username} onChange={(event) => updateField('username', event.target.value)} spellCheck="false" autoCapitalize="none" aria-invalid={authHint === '请填写用户名' ? 'true' : undefined} aria-describedby="account-auth-hint" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor={authFields.password.id} className="block text-xs font-semibold text-slate-600">登录密码</label>
+                    <input className={inputClass} {...authFields.password} type="password" required value={form.password} onChange={(event) => updateField('password', event.target.value)} aria-invalid={authHint === '请填写登录密码' ? 'true' : undefined} aria-describedby="account-auth-hint" />
+                  </div>
                   <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
                     <input type="checkbox" checked={form.rememberDevice} onChange={(event) => updateField('rememberDevice', event.target.checked)} />
                     记住本设备
@@ -355,16 +362,16 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
                     </div>
                   ) : null}
                   <button
-                    type="button"
+                    type="submit"
                     className={cx(primaryButtonClass, 'w-full justify-center')}
-                    onClick={() => handleAuth(authMode)}
-                    disabled={Boolean(authDisabledReason)}
-                    title={authDisabledReason || undefined}
+                    disabled={Boolean(busy)}
+                    aria-busy={busy ? 'true' : undefined}
                   >
                     {busy === authMode ? <Loader2 className="h-4 w-4 animate-spin" /> : (authMode === 'register' ? <KeyRound className="h-4 w-4" /> : <UserRound className="h-4 w-4" />)}
                     {authMode === 'register' ? '注册并登录' : '登录'}
                   </button>
-                  {authDisabledReason ? <div className="text-xs text-slate-400">{authDisabledReason}</div> : null}
+                  <div id="account-auth-hint" aria-live="polite" className={cx('text-xs', authHint ? 'text-amber-600' : 'sr-only')}>{authHint}</div>
+                  </form>
                   <GettingStartedEntry loggedIn={false} accessOf={(tab) => evaluateTabAccess(rbac, tab)} variant="auth" onOpened={closeMenu} />
                 </div>
             </div>

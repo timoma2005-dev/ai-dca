@@ -1,15 +1,14 @@
 import {
   changeToneClass,
-  formatMarketPrice,
   formatPercent,
   formatPremiumPercent,
   formatSignedPercent,
   formatSymbolDisplay,
-  formatTurnover,
   formatYearPercent,
   resolvePremiumPercent,
 } from './marketDisplayUtils.js';
 import { resolveCloseHighDrawdown, resolveDayHighDrawdown } from './marketHighDrawdown.js';
+import { resolveMarketPriceDisplay, resolveMarketPriceValue, resolveTurnoverDisplay, toNumberOrNull } from './marketMissingValue.js';
 
 export const MOBILE_METRIC_MAX = 3;
 export const MOBILE_PAGE_SIZE = 40;
@@ -51,11 +50,11 @@ function limitMetric(row) {
 }
 
 export const MOBILE_METRIC_CATALOG = [
-  { id: 'price', label: '最新价/净值', shortLabel: '最新', resolve: (row) => ({ text: formatMarketPrice(row.price, row), tone: 'text-[var(--market-text-strong)]' }) },
+  { id: 'price', label: '最新价/净值', shortLabel: '最新', resolve: (row) => { const view = resolveMarketPriceDisplay(row); return { text: view.note ? `${view.text} ${view.note}` : view.text, tone: view.missing ? 'text-[var(--market-text-muted)]' : 'text-[var(--market-text-strong)]' }; } },
   { id: 'changePercent', label: '日涨跌幅', shortLabel: '涨跌', resolve: (row) => ({ text: formatPercent(row.changePercent), tone: Number.isFinite(number(row.changePercent)) ? changeToneClass(number(row.changePercent)) : 'text-[var(--market-text-subtle)]' }) },
   { id: 'premium', label: '溢价率', shortLabel: '溢价', etfOnly: true, resolve: (row) => ({ text: formatPremiumPercent(row), tone: changeToneClass(resolvePremiumPercent(row)) }) },
   { id: 'limit', label: '申购状态', shortLabel: '申购', otcOnly: true, resolve: limitMetric },
-  { id: 'turnover', label: '成交额', shortLabel: '成交额', etfOnly: true, resolve: (row) => ({ text: formatTurnover(row.turnover ?? row.amount), tone: 'text-[var(--market-text-strong)]' }) },
+  { id: 'turnover', label: '成交额', shortLabel: '成交额', etfOnly: true, resolve: (row) => ({ text: resolveTurnoverDisplay(row).text, tone: 'text-[var(--market-text-strong)]' }) },
   { id: 'currentYearPercent', label: '今年以来', shortLabel: '今年', resolve: (row) => ({ text: formatYearPercent(row), tone: changeToneClass(number(row.ytdReturn ?? row.currentYearPercent)) }) },
   { id: 'return1w', label: '近1周', shortLabel: '近1周', resolve: (row) => percentMetric(row.return1w) },
   { id: 'return1m', label: '近1月', shortLabel: '近1月', resolve: (row) => percentMetric(row.return1m) },
@@ -158,6 +157,8 @@ function sortValue(row, id) {
   if (id === 'limit') return number(row?.fundLimit?.maxPurchasePerDay);
   if (id === 'currentYearPercent') return number(row?.ytdReturn ?? row?.currentYearPercent);
   if (id === 'name' || id === 'symbol') return String(row?.[id] || '');
+  if (id === 'price') return resolveMarketPriceValue(row) ?? Number.NaN;
+  if (id === 'turnover') return toNumberOrNull(row?.turnover ?? row?.amount) ?? Number.NaN;
   return number(row?.[id]);
 }
 
@@ -173,6 +174,10 @@ export function queryMobileFundPage(rows, { sorting = { id: 'heldRank', desc: tr
   const sorted = filtered.map((row, index) => ({ row, index })).sort((left, right) => {
     const a = sortValue(left.row, id);
     const b = sortValue(right.row, id);
+    const aMissing = typeof a !== 'string' && !Number.isFinite(a);
+    const bMissing = typeof b !== 'string' && !Number.isFinite(b);
+    // 缺失值不论升降序都排最后（审计 batch2 #5）。
+    if (aMissing !== bMissing) return aMissing ? 1 : -1;
     let result = 0;
     if (typeof a === 'string' || typeof b === 'string') result = String(a).localeCompare(String(b), 'zh-CN');
     else if (Number.isFinite(a) && Number.isFinite(b)) result = a - b;

@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { describeSortState, nextSortState } from "./sortState.js";
 
 function hasFilterValue(value) {
   if (value == null) return false;
@@ -207,23 +208,20 @@ function DataTableColumnHeader({ column, label, className, ...props }) {
     if (!canSort) return;
     event.preventDefault();
     event.stopPropagation();
-    const current = column.getIsSorted();
-    if (!current) {
-      column.toggleSorting(true); // desc first in financial data
-    } else if (current === "desc") {
-      column.toggleSorting(false); // asc
-    } else {
-      column.clearSorting(); // reset
-    }
+    // 三态循环：无 → 降序（金融数据默认）→ 升序 → 无。
+    const next = nextSortState(column.getIsSorted());
+    if (next) column.toggleSorting(next === "desc");
+    else column.clearSorting();
   };
+  const sortInfo = canSort ? describeSortState(sortDir, label) : null;
 
   const sortIcon = canSort ? (
     sortDir === "desc" ? (
-      <ChevronDown className="size-3.5 shrink-0 text-indigo-600 stroke-[2.5]" />
+      <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-indigo-600 stroke-[2.5]" />
     ) : sortDir === "asc" ? (
-      <ChevronUp className="size-3.5 shrink-0 text-indigo-600 stroke-[2.5]" />
+      <ChevronUp aria-hidden="true" className="size-3.5 shrink-0 text-indigo-600 stroke-[2.5]" />
     ) : (
-      <ChevronsUpDown className="size-3.5 shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
+      <ChevronsUpDown aria-hidden="true" className="size-3.5 shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />
     )
   ) : null;
 
@@ -271,6 +269,7 @@ function DataTableColumnHeader({ column, label, className, ...props }) {
             isFiltered ? "text-indigo-600 bg-indigo-50" : "text-slate-400 hover:text-slate-600 hover:bg-slate-200/60"
           )}
           title="筛选与列设置"
+          aria-label={`${label}：筛选与列设置`}
         >
           <ListFilter className="size-3" />
         </button>
@@ -473,9 +472,10 @@ function DataTableColumnHeader({ column, label, className, ...props }) {
           handleSortClick(event);
         }
       }}
-      title={canSort ? (sortDir === "desc" ? "当前降序，点击切换为升序" : sortDir === "asc" ? "当前升序，点击重置排序" : "点击排序（降序）") : undefined}
+      title={sortInfo ? sortInfo.title : label}
+      aria-label={sortInfo ? sortInfo.title : undefined}
       className={cn(
-        "group inline-flex items-center gap-1 select-none text-xs transition-colors py-1",
+        "data-table-sort-target group inline-flex min-w-0 items-center gap-1 select-none text-xs transition-colors py-1",
         canSort && "cursor-pointer",
         sortDir ? "text-indigo-600 font-semibold" : "text-slate-600 hover:text-slate-900 font-medium",
         centerAligned ? "relative mx-auto flex w-full items-center justify-center text-center" : "flex items-center",
@@ -483,7 +483,7 @@ function DataTableColumnHeader({ column, label, className, ...props }) {
       )}
       {...props}
     >
-      <span className="truncate">{label}</span>
+      <span className="line-clamp-2 min-w-0 whitespace-normal break-words leading-tight" title={label}>{label}</span>
       {sortIcon}
       {filterTrigger}
       {pinControl}

@@ -21,9 +21,13 @@ test('articles is an internal workspace tab', () => {
 });
 
 test('articles page embeds the cn article archive', () => {
-  assert.match(articlePageSource, /const ARTICLES_URL = 'https:\/\/fast\.freebacktrack\.tech\/wechat\//);
+  const syncSource = readSource('src/pages/articles/articleUrlSync.js');
+  assert.match(syncSource, /ARTICLES_ORIGIN = 'https:\/\/fast\.freebacktrack\.tech'/);
+  assert.match(syncSource, /ARTICLES_PATH = '\/wechat\/'/);
   assert.match(articlePageSource, /<iframe/);
-  assert.match(articlePageSource, /src=\{ARTICLES_URL\}/);
+  assert.match(articlePageSource, /src=\{frameSrc\}/);
+  assert.match(articlePageSource, /title=\{frameTitle\}/);
+  assert.match(articlePageSource, /新窗口打开原文/);
   assert.match(articlePageSource, /公众号历史文章/);
 });
 

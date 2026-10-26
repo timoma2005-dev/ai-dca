@@ -80,9 +80,9 @@ export function PrivacyNotice({ compact = false, variant = 'card' } = {}) {
           </div>
 
           <div>
-            <div className="font-bold text-slate-900">关闭后</div>
+            <div className="font-bold text-slate-900">默认关闭</div>
             <p className="mt-2">
-              关闭开关或启用浏览器 Do Not Track 后，页面不会生成新的 visitorId/sessionId，也不会写入或上报新的统计事件。
+              统计默认关闭，只有你手动开启后才会采集。关闭开关或启用浏览器 Do Not Track 后，页面不会生成新的 visitorId/sessionId，也不会写入或上报新的统计事件。
               已保存的本地业务数据和云同步功能不受影响。
             </p>
           </div>

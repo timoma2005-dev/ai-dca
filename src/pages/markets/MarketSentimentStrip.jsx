@@ -58,12 +58,12 @@ export function MarketSentimentStrip() {
   return (
     <>
       <div className="market-collapsible">
-      <section className={cx('relative z-10 isolate overflow-hidden rounded-2xl border px-3 py-2.5 shadow-sm transition-colors sm:px-4', weather.surfaceClass)} aria-label="市场情绪指标">
+      <section className={cx('market-sentiment-strip relative z-10 isolate overflow-hidden rounded-2xl border px-3 py-2.5 shadow-sm transition-colors sm:px-4', weather.surfaceClass)} aria-label="市场情绪指标">
         <span className={cx('pointer-events-none absolute -right-2 -top-5 select-none text-7xl opacity-30', weather.decorClass)} aria-hidden="true">{weather.icon}</span>
         <span className={cx('pointer-events-none absolute -bottom-12 -left-4 h-28 w-28 rounded-full blur-3xl', weather.orbClass)} aria-hidden="true" />
-        <div className="relative z-[1] flex min-w-0 flex-wrap items-center gap-2">
+        <div className="market-sentiment-strip__row relative z-[1] flex min-w-0 flex-wrap items-center gap-2">
           <div className="order-1 shrink-0 text-xs font-bold text-[var(--market-text-muted)]">市场情绪</div>
-          <div className="order-3 flex min-w-0 w-full flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap pb-0.5 sm:order-2 sm:w-auto">
+          <div className="market-sentiment-strip__chips order-3 flex min-w-0 w-full flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap pb-0.5 sm:order-2 sm:w-auto" role="group" aria-label="市场情绪指标（可横向滑动）">
             <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--market-border)] bg-white/60 backdrop-blur-sm dark:bg-slate-900/35 px-2.5 py-1" title="由纳指、F&G、VIX和ETF晴雨比综合计算">
               <span className={cx('text-sm', weather.glow)}>{weather.icon}</span>
               <span className="text-xs font-bold text-[var(--market-text-strong)]">{weather.name}</span>
@@ -106,7 +106,7 @@ export function MarketSentimentStrip() {
               <span className="font-mono text-xs font-bold text-[var(--market-text-muted)]">{breadth.down}雨</span>
             </div>
           </div>
-          <div className="order-2 ml-auto flex shrink-0 items-center gap-1.5 sm:order-3">
+          <div className="market-sentiment-strip__actions order-2 ml-auto flex shrink-0 items-center gap-1.5 sm:order-3">
             <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-[var(--market-border)] px-2 py-1 text-xs font-medium text-[var(--market-text-muted)] transition hover:bg-[var(--market-surface-muted)]" title="展开或收起研报" onClick={() => setReportOpen((value) => !value)}>
               <span>💡</span><span>研报</span><ChevronDown size={12} className={cx('transition-transform', reportOpen && 'rotate-180')} />
             </button>

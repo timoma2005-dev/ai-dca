@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { chartA11yProps, summarizeSeries } from '../../lib/chartA11y.js';
 import { ChevronDown } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Customized, Line, Pie, PieChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { cx } from '../../components/experience-ui.jsx';
@@ -220,6 +221,17 @@ export function SymbolDetailChart({ candles, tf, chartType, indicators, compareS
       };
     });
   }, [candles, tf, normalized]);
+  const a11ySummary = useMemo(() => {
+    const summary = summarizeSeries({
+      title: '走势图',
+      subject: [valueRow?.name, symbol].filter(Boolean).join(' '),
+      points: Array.isArray(candles) ? candles : [],
+      getValue: (candle) => candle?.c,
+      getDate: (candle) => candle?.date || candle?.t,
+      format: (value) => formatMarketPrice(value, valueRow),
+    });
+    return { label: summary.details.length ? `${summary.label}，${summary.details.join('，')}` : summary.label };
+  }, [candles, symbol, valueRow]);
   const indicatorLines = useMemo(() => {
     if (normalized || !Array.isArray(candles) || candles.length === 0) return [];
     const closes = candles.map((candle) => Number(candle.c));
@@ -615,6 +627,7 @@ export function SymbolDetailChart({ candles, tf, chartType, indicators, compareS
   return (
     <div
       ref={chartShellRef}
+      {...chartA11yProps(a11ySummary)}
       className="relative h-full w-full touch-none select-none outline-none [-webkit-tap-highlight-color:transparent] [&_*]:outline-none [&_.recharts-surface]:outline-none [&_.recharts-surface]:focus:outline-none [&_.recharts-wrapper]:outline-none"
       tabIndex={-1}
       onMouseMove={handlePointerMove}

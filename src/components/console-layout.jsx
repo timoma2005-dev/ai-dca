@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Menu, ChevronsRight, ChevronsLeft, X, Lock } from 'lucide-react';
 import { consumePendingToasts, subscribeToToasts } from '../app/toast.js';
 import { AccountLoadingIndicator } from './account-loading-indicator.jsx';
+import { sidenavLinkA11y } from './consoleSidenavA11y.js';
 
 function cx(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -92,6 +93,28 @@ function ConsoleToastViewport() {
  * - contextPanel / contextPanelTitle: optional right panel content.
  * - sidebarFooter: optional node rendered at the bottom of the sidebar (e.g. quick actions or market snapshot).
  */
+function SidenavLink({ item, activeKey, onSelectNav, className = '' }) {
+  const Icon = item.icon;
+  const isActive = item.key === activeKey;
+  return (
+    <a
+      href={item.href}
+      {...sidenavLinkA11y(item, activeKey)}
+      data-locked={item.locked ? 'true' : undefined}
+      className={cx('console-sidenav__link', isActive && 'is-active', className)}
+      onClick={(event) => {
+        if (!onSelectNav) return;
+        event.preventDefault();
+        onSelectNav(item.key);
+      }}
+    >
+      {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
+      <span className="truncate">{item.label}</span>
+      {item.locked ? <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" data-menu-lock="true" /> : null}
+    </a>
+  );
+}
+
 export function ConsoleLayout({
   sidebarNav = [],
   sidebarAdminNav = [],
@@ -212,57 +235,15 @@ export function ConsoleLayout({
             </button>
           </div>
           <nav className="console-sidenav" aria-label="模块导航">
-            {sidebarNav.map((item) => {
-              const isActive = item.key === activeKey;
-              const Icon = item.icon;
-              return (
-                <a
-                  key={item.key}
-                  href={item.href}
-                  aria-current={isActive ? 'page' : undefined}
-                  data-locked={item.locked ? 'true' : undefined}
-                  className={cx('console-sidenav__link', isActive && 'is-active')}
-                  onClick={(event) => {
-                    if (!onSelectNav) {
-                      return;
-                    }
-                    event.preventDefault();
-                    onSelectNav(item.key);
-                  }}
-                >
-                  {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
-                  <span className="truncate">{item.label}</span>
-                  {item.locked ? <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="需要更高权限" data-menu-lock="true" /> : null}
-                </a>
-              );
-            })}
+            {sidebarNav.map((item) => (
+              <SidenavLink key={item.key} item={item} activeKey={activeKey} onSelectNav={onSelectNav} />
+            ))}
             {sidebarAdminNav.length > 0 && (
               <>
                 <div className="px-3 pt-4 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">管理</div>
-                {sidebarAdminNav.map((item) => {
-                  const isActive = item.key === activeKey;
-                  const Icon = item.icon;
-                  return (
-                    <a
-                      key={item.key}
-                      href={item.href}
-                      aria-current={isActive ? 'page' : undefined}
-                      data-locked={item.locked ? 'true' : undefined}
-                      className={cx('console-sidenav__link', isActive && 'is-active', 'opacity-75')}
-                      onClick={(event) => {
-                        if (!onSelectNav) {
-                          return;
-                        }
-                        event.preventDefault();
-                        onSelectNav(item.key);
-                      }}
-                    >
-                      {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
-                      <span className="truncate">{item.label}</span>
-                      {item.locked ? <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-400" aria-label="需要更高权限" data-menu-lock="true" /> : null}
-                    </a>
-                  );
-                })}
+                {sidebarAdminNav.map((item) => (
+                  <SidenavLink key={item.key} item={item} activeKey={activeKey} onSelectNav={onSelectNav} className="opacity-75" />
+                ))}
               </>
             )}
           </nav>
@@ -270,6 +251,8 @@ export function ConsoleLayout({
           <button
             type="button"
             aria-label={desktopNavCollapsed ? "展开导航" : "收起导航"}
+            title={desktopNavCollapsed ? "展开导航" : "收起导航"}
+            aria-expanded={!desktopNavCollapsed}
             className="console-sidebar__expand"
             onClick={() => setDesktopNavCollapsed((v) => !v)}
           >

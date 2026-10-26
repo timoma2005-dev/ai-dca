@@ -244,7 +244,7 @@ export function MarketsFullTablePanel({
         dataTableHeader={renderHeader}
         containerClassName="h-full min-h-0 flex-1"
         dataTableClassName="min-h-0 flex-1 overflow-hidden [&_th:first-child]:pl-6 [&_td:first-child]:pl-6 [&_th:last-child]:pr-6 [&_td:last-child]:pr-6"
-        dataTableContainerClassName="markets-monitor-list-scroll min-h-0 flex-1 overflow-auto rounded-none border-x-0 border-b-0"
+        dataTableContainerClassName="markets-monitor-list-scroll min-h-0 overflow-auto rounded-none border-x-0"
         autoPinColumn
         onVisibleSymbolsChange={onVisibleSymbolsChange}
         onColumnVisibilityStateChange={onColumnVisibilityStateChange}

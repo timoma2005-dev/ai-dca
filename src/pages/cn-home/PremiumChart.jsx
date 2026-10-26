@@ -7,6 +7,8 @@ import {
   resolveEndLabels,
   tooltipRows,
 } from './chartModel.mjs';
+import { summarizeMultiSeries } from '../../lib/chartA11y.js';
+import { ChartSrSummary } from '../../components/ChartA11y.jsx';
 
 // viewBox matches the reference home.html chart geometry.
 const W = 800;
@@ -79,6 +81,17 @@ export function PremiumChart({ series, mode }) {
   const lines = Array.isArray(series) ? series : [];
   const model = useMemo(() => buildChartModel(lines, mode, hiddenKeys), [lines, mode, hiddenKeys]);
 
+  const a11ySummary = useMemo(() => summarizeMultiSeries({
+    title: mode === 'premium' ? '场内分时溢价率走势' : '场内分时走势',
+    lines: model.rows,
+    getLabel: (line) => lineLabel(line),
+    getPoints: (line) => line.points,
+    getValue: (point) => point.value,
+    getDate: (point) => point.t,
+    unit: mode === 'premium' ? '%' : '',
+    changeMode: mode === 'premium' ? 'difference' : 'relative',
+  }), [model.rows, mode]);
+
   const legendItems = useMemo(
     () => lines.map((line, index) => ({
       key: lineKey(line, index),
@@ -143,7 +156,7 @@ export function PremiumChart({ series, mode }) {
 
   return (
     <div className="cn-home-premium-wrap" ref={ref} onMouseMove={move} onMouseLeave={leave} onTouchStart={move} onTouchMove={move}>
-      <svg className="cn-home-premium-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="场内分时走势">
+      <svg className="cn-home-premium-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={a11ySummary.label}>
         {[0, 1, 2, 3, 4].map((i) => {
           const y = PAD_T + (i / 4) * PLOT_H;
           const val = model.max - (i / 4) * (model.max - model.min);
@@ -184,6 +197,7 @@ export function PremiumChart({ series, mode }) {
           );
         })}
       </svg>
+      <ChartSrSummary summary={a11ySummary} />
       {cursor != null ? (
         <div
           className="cn-home-chart-tooltip"
