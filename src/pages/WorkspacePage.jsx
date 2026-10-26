@@ -436,7 +436,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   function startFeatureDemo() {
     window.__AI_DCA_DEMO_VARIANT__ = '';
     if (consumeDemoQuota(activeTab)) setDemoTab(activeTab);
-    else showToast({ title: '今日体验次数已用完', description: '明天可以再来体验，或打赏开通后不限次使用。', tone: 'amber' });
+    else showToast({ title: '本功能今日体验次数已用完', description: '明天可以再来体验，或打赏开通后不限次使用。', tone: 'amber' });
   }
   useEffect(() => {
     if (demoTab && demoTab !== activeTab) setDemoTab('');
@@ -644,7 +644,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
       if (!tab || !demoFeatureFor(tab)) return;
       handleSelectTab(tab);
       if (!consumeDemoQuota(tab)) {
-        showToast({ title: '今日体验次数已用完', description: '明天可以再来体验，或注册后直接使用。', tone: 'amber' });
+        showToast({ title: '本功能今日体验次数已用完', description: '明天可以再来体验，或注册后直接使用。', tone: 'amber' });
         return;
       }
       window.__AI_DCA_DEMO_VARIANT__ = event?.detail?.variant || '';
@@ -893,7 +893,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
               <img src={buyMeCoffeeQr} alt="Buy me coffee 二维码" className="block w-full" />
               {qrPurpose === 'upgrade' ? (
                 <p className="px-4 py-3 text-center text-xs leading-5 text-slate-600" data-qr-upgrade-hint>
-                  金额随意，付款备注请填写账号名{cloudSession?.username ? <>「<span className="font-bold text-slate-900">{cloudSession.username}</span>」</> : ''}，管理员看到后会尽快为您开通。
+                  金额随意，付款备注请填写账号名{accountUsername ? <>「<span className="font-bold text-slate-900">{accountUsername}</span>」</> : ''}，管理员看到后会尽快为您开通。
                 </p>
               ) : (
                 <p className="px-4 py-3 text-center text-xs text-slate-600">扫码支持作者</p>

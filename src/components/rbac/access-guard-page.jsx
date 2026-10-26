@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Check, Coffee, Lock, LogIn, PlayCircle, ShieldAlert, Sparkles } from 'lucide-react';
 import { isPaidRole, requiredRoleLabel } from '../../app/rbac/menuModel.js';
+import { demoQuotaText } from '../../app/demo/demoQuotaText.js';
 
 /** 功能介绍要点：points 数组每条一行；兼容旧的 pitch 字符串。 */
 function DemoPoints({ demo, tone }) {
@@ -77,7 +78,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
               登录 / 注册
             </button>
           </div>
-          {demo && !demo.unlimited ? <p className="mt-3 text-xs text-slate-400">{demo.remaining > 0 ? `今日还可体验 ${demo.remaining} 次` : '今日体验次数已用完'}</p> : null}
+          {demo && !demo.unlimited ? <p className="mt-3 text-xs text-slate-400" data-testid="access-guard-quota">{demoQuotaText(demo)}</p> : null}
           {demo?.retainedUntil ? <p className="mt-1 text-xs font-medium text-amber-700" data-testid="access-guard-retained">演示内容保留至 {new Date(demo.retainedUntil).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' })}，注册 后自动带入账号</p> : null}
         </>
       ) : isPaid ? (
@@ -119,7 +120,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
             ) : null}
           </div>
           <p className="mt-3 text-xs text-slate-400">
-            {demo && !demo.unlimited ? (demo.remaining > 0 ? `今日还可体验 ${demo.remaining} 次 · ` : '今日体验次数已用完 · ') : ''}开通后刷新页面即可使用
+            {demo && !demo.unlimited ? `${demoQuotaText(demo)} · ` : ''}开通后刷新页面即可使用
           </p>
           {demo?.retainedUntil ? <p className="mt-1 text-xs font-medium text-amber-700" data-testid="access-guard-retained">演示内容保留至 {new Date(demo.retainedUntil).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' })}，升级 后自动带入账号</p> : null}
         </>

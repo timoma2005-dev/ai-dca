@@ -34,7 +34,8 @@ export function normalizeRbacPayload(payload = {}, { loggedIn, username = '' } =
   const isLoggedIn = loggedIn ?? Boolean(payload.loggedIn ?? payload.userId);
   return {
     loggedIn: Boolean(isLoggedIn),
-    username: String(payload.username || username || ''),
+    // 游客 / 会话失效时不保留任何身份字段，避免退出后仍渲染缓存里的用户名。
+    username: isLoggedIn ? String(payload.username || username || '') : '',
     roles: Array.isArray(payload.roles) ? payload.roles.map((role) => ({
       code: String(role?.code || ''),
       name: String(role?.name || role?.code || ''),
@@ -70,7 +71,9 @@ export function readRbacState(session = loadCloudSession()) {
   const key = sessionKey(session);
   if (memoryState && memoryState.key === key) return memoryState.state;
   const stored = readStored();
-  if (stored && stored.key === key && stored.state?.permVersion) {
+  // 旧版本可能把残留 cookie 返回的会员菜单写进了 guest 缓存（带用户名）：视为污染，丢弃。
+  const taintedGuestCache = key === 'guest' && Boolean(stored?.state?.username);
+  if (stored && stored.key === key && stored.state?.permVersion && !taintedGuestCache) {
     const loggedIn = Boolean(session?.accessToken) && stored.state.loggedIn !== false;
     memoryState = { key, state: normalizeRbacPayload(stored.state, { loggedIn, username: session?.username }) };
     return memoryState.state;
@@ -90,7 +93,10 @@ export function readRbacState(session = loadCloudSession()) {
 /** 写入服务端返回的 RBAC 载荷；permVersion 未变化时不触发更新。返回是否有变化。 */
 export function applyRbacPayload(payload, { session = loadCloudSession(), loggedIn } = {}) {
   const key = sessionKey(session);
-  const state = normalizeRbacPayload(payload, { loggedIn: loggedIn ?? Boolean(session?.accessToken), username: session?.username });
+  const clientLoggedIn = loggedIn ?? Boolean(session?.accessToken);
+  // 本地已是游客，但服务端仍凭残留的 httpOnly cookie 返回了登录用户的菜单：丢弃，避免游客看到会员菜单 / 用户名。
+  if (!clientLoggedIn && (payload?.loggedIn || payload?.userId)) return false;
+  const state = normalizeRbacPayload(payload, { loggedIn: clientLoggedIn, username: session?.username });
   const current = memoryState && memoryState.key === key ? memoryState.state : null;
   if (current && current.permVersion && current.permVersion === state.permVersion) return false;
   memoryState = { key, state };
@@ -116,13 +122,16 @@ export function clearRbacState() {
   emit(buildGuestFallback());
 }
 
-async function fetchJson(path, token) {
+// 游客菜单请求不带 cookie：退出后若服务端 cookie 未清掉，也不能拿到上一个账号的菜单与用户名。
+const GUEST_FETCH_OPTIONS = Object.freeze({ credentials: 'omit' });
+
+async function fetchJson(path, token, { credentials = 'same-origin' } = {}) {
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : null;
   try {
     const headers = { accept: 'application/json' };
     if (token) headers.authorization = `Bearer ${token}`;
-    const response = await fetch(apiUrl(path), { headers, credentials: 'same-origin', signal: controller?.signal });
+    const response = await fetch(apiUrl(path), { headers, credentials, signal: controller?.signal });
     const data = await response.json().catch(() => ({}));
     return { status: response.status, ok: response.ok, data };
   } finally {
@@ -150,10 +159,10 @@ export function refreshRbac({ force = false, fetchImpl = fetchJson } = {}) {
         if (result.status === 401) {
           // token 已失效：按游客展示（锁住的菜单点击会弹登录），登录态由账户模块自行处理。
           loggedIn = false;
-          result = await fetchImpl('/api/sync/auth/menus', '');
+          result = await fetchImpl('/api/sync/auth/menus', '', GUEST_FETCH_OPTIONS);
         }
       } else {
-        result = await fetchImpl('/api/sync/auth/menus', '');
+        result = await fetchImpl('/api/sync/auth/menus', '', GUEST_FETCH_OPTIONS);
       }
       if (result?.ok && Array.isArray(result.data?.menus)) {
         lastFetchKey = key;
