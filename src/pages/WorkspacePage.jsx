@@ -15,7 +15,7 @@ import { trackPageEngagement, trackPageView, trackSessionHeartbeat, trackSession
 import { saveWorkspaceReturn } from '../app/workspaceReturn.js';
 import { CONVERSION_PROMPT_EVENT } from '../app/conversionPrompts.js';
 import { ConversionPromptCard } from '../components/conversion-prompt-card.jsx';
-import { ACCOUNT_AUTH_OPEN_EVENT, openAccountAuth } from '../app/accountAuthEvents.js';
+import { ACCOUNT_AUTH_OPEN_EVENT, UPGRADE_QR_OPEN_EVENT, openAccountAuth } from '../app/accountAuthEvents.js';
 import { loadAccountMenu } from '../app/loadAccountMenu.js';
 import { useRbac } from '../app/rbac/useRbac.js';
 import { RBAC_MANAGED_TABS, evaluateTabAccess, flattenMenus, isAdminState, isPaidRole, requiredRoleLabel, splitSidebarMenus } from '../app/rbac/menuModel.js';
@@ -268,6 +268,15 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     }
     window.addEventListener(ACCOUNT_AUTH_OPEN_EVENT, handleOpenAccountAuth);
     return () => window.removeEventListener(ACCOUNT_AUTH_OPEN_EVENT, handleOpenAccountAuth);
+  }, []);
+
+  useEffect(() => {
+    function handleOpenUpgradeQr() {
+      setQrPurpose('upgrade');
+      setShowQrModal(true);
+    }
+    window.addEventListener(UPGRADE_QR_OPEN_EVENT, handleOpenUpgradeQr);
+    return () => window.removeEventListener(UPGRADE_QR_OPEN_EVENT, handleOpenUpgradeQr);
   }, []);
 
   useEffect(() => {

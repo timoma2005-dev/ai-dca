@@ -1,0 +1,7 @@
+# 份额页单只基金历史（SVIP）：services/etf-history/build_history.py，增量（最近 6 个交易日重抓）。
+# 09:45 补上一交易日份额/当日 PCF；12:30 补 QDII 净值；22:30 补当日份额/收盘。时区为服务器本地（CST）。
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+45 9 * * 1-5 root cd /root/ai-dca/services/etf-history && flock -n /tmp/etf-history.lock python3 build_history.py >> /var/log/ai-dca-etf-history.log 2>&1
+30 12 * * 1-5 root cd /root/ai-dca/services/etf-history && flock -n /tmp/etf-history.lock python3 build_history.py >> /var/log/ai-dca-etf-history.log 2>&1
+30 22 * * 1-5 root cd /root/ai-dca/services/etf-history && flock -n /tmp/etf-history.lock python3 build_history.py >> /var/log/ai-dca-etf-history.log 2>&1

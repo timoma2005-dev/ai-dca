@@ -3,17 +3,21 @@
  * - PC：顶部统计小块 + 搜索 + 卡片/表格切换 + 刷新（参考 tab=fundSwitch），卡片 auto-fill 270px；
  *   表格模式只替换卡片区，顶部、日期行、筛选不变；视图选择存 localStorage `etf-shares:view-mode`。
  * - 手机（≤640px）：Home 面板式紧凑列表，标题「N只基金收紧，对比 P → T。」+ 三行条目。
- * - 点「PCF 清单」/ 手机条目弹出居中弹窗（X、背景、Esc 关闭），内容复用 PcfDetailDrawer。
+ * - 点「PCF 清单」/ 手机条目弹出居中弹窗（X、背景、Esc 关闭）：「PCF 清单」页签复用 PcfDetailDrawer，「历史」页签（SVIP）见 shares/EtfHistoryTab.jsx。
  * 数据：快照 sharesClient（worker 预计算 limitChanges / prevLimitDate / 沪市份额 / 行情名称）；
  * 老快照没有 limitChanges 时，按 code + 日期用 pcfDetailClient 读两天 PCF 自行对比（模块级缓存，失败重试一次）。
  */
-import { Fragment, useCallback, useEffect, useState } from 'react';
-import { Search, RefreshCw, Inbox, CircleAlert, X } from 'lucide-react';
+import { Fragment, Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { Search, RefreshCw, Inbox, CircleAlert, X, Diamond } from 'lucide-react';
 import { previousSession } from '../../shared/etfPcfSharesSchema.js';
 import { sharesClient, shanghaiAccessDay } from '../app/etfPcfSharesClient.js';
 import { pcfDetailClient } from '../app/etfPcfDetailClient.js';
 import { usePcfAtLimitCodes } from '../app/usePcfAtLimitCodes.js';
 import './shares-board.css';
+import './shares/etf-history.css';
+
+// 「历史」页签（SVIP）含 recharts，按需加载。
+const EtfHistoryTab = lazy(() => import('./shares/EtfHistoryTab.jsx'));
 
 const isSz = (r) => r.code.startsWith('159');
 
@@ -395,6 +399,7 @@ function MobileRow({ row, calendar, shareRange, onOpen, onOverall, atLimit }) {
 }
 
 function PcfModal({ row, date, onClose, DetailDrawer }) {
+  const [tab, setTab] = useState('pcf');
   useEffect(() => {
     const k = (ev) => ev.key === 'Escape' && onClose();
     document.addEventListener('keydown', k);
@@ -410,20 +415,38 @@ function PcfModal({ row, date, onClose, DetailDrawer }) {
     <div className="nx-modal-mask" onClick={(ev) => ev.target === ev.currentTarget && onClose()}>
       <div className="nx-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="nx-modal-head">
-          <h3 id={titleId}>{`${row.name} ${row.code} · PCF 清单`}</h3>
+          <h3 id={titleId}>{tab === 'history' ? `${row.name} ${row.code} · 历史` : `${row.name} ${row.code} · PCF 清单`}</h3>
           <button type="button" className="nx-modal-close" aria-label="关闭" onClick={onClose}>
             <X size={16} aria-hidden="true" />
           </button>
         </div>
+        <div className="nx-modal-tabs" role="tablist" aria-label="清单与历史">
+          <button type="button" role="tab" aria-selected={tab === 'pcf'} onClick={() => setTab('pcf')}>
+            PCF 清单
+          </button>
+          <button type="button" role="tab" aria-selected={tab === 'history'} onClick={() => setTab('history')}>
+            历史
+            <span className="nx-svip-tag">
+              <Diamond size={9} aria-hidden="true" />
+              SVIP
+            </span>
+          </button>
+        </div>
         <div className="nx-modal-body">
-          <DetailDrawer
-            row={row}
-            code={row.code}
-            name={row.name}
-            date={row.limitDate || date}
-            id={`shares-detail-${row.code}`}
-            labelledBy={titleId}
-          />
+          {tab === 'history' ? (
+            <Suspense fallback={<div className="eh-state">正在加载…</div>}>
+              <EtfHistoryTab code={row.code} onClose={onClose} />
+            </Suspense>
+          ) : (
+            <DetailDrawer
+              row={row}
+              code={row.code}
+              name={row.name}
+              date={row.limitDate || date}
+              id={`shares-detail-${row.code}`}
+              labelledBy={titleId}
+            />
+          )}
         </div>
       </div>
     </div>
