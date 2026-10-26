@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { sha256Hex } from './account/store.js';
+import { isAuthFailOpenEnabled } from './authPolicy.js';
 
 export class HttpError extends Error {
   constructor(status, code, message) {
@@ -41,9 +42,14 @@ export function resolveUserId(url, body, headers) {
       db.close();
     }
   }
+  // 默认 fail-closed：认证库打不开时拒绝请求，避免信任客户端自报 user_id 造成横向越权。
+  // 仅在显式设置 CN_DATA_AUTH_FAIL_OPEN=1（本地开发/测试）时保留旧兜底。
+  if (!isAuthFailOpenEnabled()) {
+    throw new HttpError(503, 'AUTH_UNAVAILABLE', '认证服务暂不可用，请稍后重试');
+  }
   if (!warnedAuthUnavailable) {
     warnedAuthUnavailable = true;
-    console.warn('[cn-data] auth DB unavailable, falling back to query user_id (dev/test only)');
+    console.warn('[cn-data] auth DB unavailable, CN_DATA_AUTH_FAIL_OPEN is on: trusting query/body user_id (dev/test only)');
   }
   const queryUser = url.searchParams.get('user_id');
   if (queryUser && body?.user_id && queryUser !== body.user_id) throw new HttpError(400, 'CONFLICTING_USER_ID', 'Conflicting user_id');
