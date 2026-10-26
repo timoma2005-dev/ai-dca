@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { requestRecordingAccess } from '../app/recordingAccess.js';
 import { formatCurrency, formatPercent } from '../app/accumulation.js';
 import { putAccountResourceItem } from '../app/accountApi.js';
 import { readHomeDashboardState } from '../app/homeDashboard.js';
@@ -535,6 +536,7 @@ export function NewPlanExperience({ links, inPagesDir = false, embedded = false,
     if (isSaving) {
       return;
     }
+    if (!(await requestRecordingAccess({ source: 'new-plan' }))) return;
 
     const blocking = planValidation.blocking[0];
     if (blocking) {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { requestRecordingAccess } from '../app/recordingAccess.js';
 import { ArrowLeft, Check, TrendingUp } from 'lucide-react';
 import { formatCurrency } from '../app/accumulation.js';
 import { buildDcaProjection, defaultDcaState, persistDcaState } from '../app/dca.js';
@@ -153,6 +154,7 @@ export function DcaExperience({
 
   async function handleSave() {
     if (isSaving) return;
+    if (!(await requestRecordingAccess({ source: 'dca' }))) return;
 
     const sym = String(state.symbol || '').trim().toUpperCase();
     if (!sym) {

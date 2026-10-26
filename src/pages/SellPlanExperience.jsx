@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { requestRecordingAccess } from '../app/recordingAccess.js';
 import { ArrowLeft, Check, TrendingDown } from 'lucide-react';
 import { formatCurrency } from '../app/accumulation.js';
 import {
@@ -99,6 +100,7 @@ export function SellPlanExperience({
 
   async function handleSave() {
     if (isSaving) return;
+    if (!(await requestRecordingAccess({ source: 'sell-plan' }))) return;
     const sym = String(state.symbol || '').trim().toUpperCase();
     if (!sym) {
       showToast({ title: '请先填写标的代码', tone: 'amber' });
