@@ -1,6 +1,12 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { enqueueEvent } from './outbox.js';
 import { applyBootstrapGrants, buildAuthPayload } from './rbac.js';
+import {
+  hashPassword,
+  verifyPassword,
+  isPbkdf2Hash,
+  legacyPasswordHash,
+} from './password.js';
 
 // Must stay in sync with workers/sync/src/index.js.
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -22,8 +28,12 @@ export function sha256Hex(text = '') {
   return createHash('sha256').update(String(text), 'utf8').digest('hex');
 }
 
+/**
+ * 旧版单轮 SHA-256 凭证派生，保留给存量用户验证与既有调用方；
+ * 新注册/轮转统一使用 password.js 的 PBKDF2 PHC。
+ */
 export function hashPasswordCredential(clientPasswordHash, salt) {
-  return sha256Hex(`${salt}:${clientPasswordHash}`);
+  return legacyPasswordHash(clientPasswordHash, salt);
 }
 
 export function randomId(prefix = '') {
@@ -52,18 +62,6 @@ export function withTransaction(db, fn) {
     }
     throw err;
   }
-}
-
-function constantTimeEqual(a, b) {
-  const aBuf = Buffer.from(String(a || ''), 'utf8');
-  const bBuf = Buffer.from(String(b || ''), 'utf8');
-  if (aBuf.length !== bBuf.length) {
-    // Compare against a same-length buffer to keep timing uniform.
-    const dummy = Buffer.alloc(aBuf.length);
-    timingSafeEqual(aBuf, dummy);
-    return false;
-  }
-  return timingSafeEqual(aBuf, bBuf);
 }
 
 function validateCredentials(username, clientPasswordHash) {
@@ -126,8 +124,9 @@ export function registerUser(db, { username, clientPasswordHash }) {
 
   const normalized = validation.username;
   const user = { id: randomId('usr_'), username: normalized };
-  const salt = randomId('pwd_');
-  const storedHash = hashPasswordCredential(clientPasswordHash, salt);
+  // PHC 自描述哈希内嵌随机盐；password_salt 列仅为兼容旧 schema 而留空。
+  const storedHash = hashPassword(clientPasswordHash);
+  const passwordSalt = '';
   const now = nowIso();
 
   const insertUser = db.prepare(
@@ -137,14 +136,14 @@ export function registerUser(db, { username, clientPasswordHash }) {
   let created;
   try {
     withTransaction(db, () => {
-      insertUser.run(user.id, normalized, storedHash, salt, now, now);
+      insertUser.run(user.id, normalized, storedHash, passwordSalt, now, now);
       grantSignupGift(db, user.id, now);
       created = createSessionRow(db, user);
       enqueueEvent(db, 'user.register', {
         id: user.id,
         username: normalized,
         password_hash: storedHash,
-        password_salt: salt,
+        password_salt: passwordSalt,
         created_at: now,
         updated_at: now,
         session: created.syncSession,
@@ -178,13 +177,29 @@ export function loginUser(db, { username, clientPasswordHash }) {
     .prepare('SELECT id, username, password_hash, password_salt FROM users WHERE username = ?')
     .get(normalized);
 
-  const expectedHash = row ? hashPasswordCredential(clientPasswordHash, row.password_salt || '') : '';
-  if (!row || !constantTimeEqual(row.password_hash, expectedHash)) {
+  // 新 PHC 走 PBKDF2，存量 64 位 hex 走旧 SHA-256；用户不存在与密码错误返回完全一致。
+  if (!row || !verifyPassword(clientPasswordHash, row.password_hash, row.password_salt || '')) {
     return { error: '用户名或密码不正确', status: 401 };
   }
 
   let created;
   withTransaction(db, () => {
+    // 惰性升级：旧 SHA-256 用户验证通过后，在同一事务内轮转成 PBKDF2 PHC，
+    // 并发出 user.credential_rotated 事件让 D1 灾备副本同步新凭证。
+    if (!isPbkdf2Hash(row.password_hash)) {
+      const rotatedHash = hashPassword(clientPasswordHash);
+      const rotatedAt = nowIso();
+      db.prepare(
+        'UPDATE users SET password_hash = ?, password_salt = ?, updated_at = ? WHERE id = ?'
+      ).run(rotatedHash, '', rotatedAt, row.id);
+      enqueueEvent(db, 'user.credential_rotated', {
+        id: row.id,
+        username: row.username,
+        password_hash: rotatedHash,
+        password_salt: '',
+        updated_at: rotatedAt,
+      });
+    }
     created = createSessionRow(db, row);
     enqueueEvent(db, 'user.login', {
       id: row.id,

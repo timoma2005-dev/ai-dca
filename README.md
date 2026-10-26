@@ -84,9 +84,13 @@ RBAC 通过 nginx `auth_request` 子请求调用 auth 服务的 `GET /api/sync/a
 - **market-collector**：SQLite 为主存，可选 TiDB 副本（`storage_backend=dual`），TiDB 失败进 `replica_outbox` 重试；快照发布走本地 `publish-outbox` 推送到 Worker。
 - **etf-mirror**：后台线程定期从 CF `etf-shares` Worker 拉取投影/限额原样落本地 SQLite，HTTP 读本地；未命中的历史日期/非目标 code 同步回源并落库，CF 不可达时持续返回最近一次成功数据。
 
-### 端侧加密
+### 数据存储与加密
 
-备份明文只存在于浏览器：`src/app/secureVault.js` 使用 AES-GCM-256、PBKDF2（31 万次）派生 KEK，再包裹随机 DEK（KEK/DEK 分离），带随机 IV/salt 与密码正确性 verifier。服务端（SQLite 与 D1）只存密文与完整性校验和，坏 blob 不会下发。
+**账户资源主路径（当前）**：`/api/account/v1` 的 REST 请求体为明文 JSON，鉴权复用登录 Bearer 会话（见 `src/app/accountApi.js`），传输安全依赖 HTTPS，cn-data SQLite 与 D1 直接保存明文资源。因此服务端静态存储安全（DB 文件权限、磁盘/备份加密、日志脱敏、访问审计）是这条链路的主要控制点。
+
+**登录口令**：原始密码不离开浏览器——前端先算 `clientHash = sha256(小写用户名 + ':' + 密码)`；服务端再对 clientHash 做 PBKDF2-HMAC-SHA256（31 万次、随机盐），存为自描述 PHC `$pbkdf2-sha256$...`。Node（`services/auth/src/password.js`）与 Cloudflare Worker（`workers/sync/src/password.js`）参数逐一对齐、可互验；旧单轮 SHA-256 用户首登验证通过后惰性轮转。
+
+**旧版端到端加密（仅迁移保留）**：`src/app/secureVault.js` 的 AES-GCM-256 + PBKDF2（31 万次）KEK 包裹随机 DEK 方案只用于解开历史备份（`legacyMigration.js` 按 `password` / `device-key` / `plaintext` 分类导入到新的明文资源结构）。新数据不再产生这类密文信封；存量迁移完成前该模块不能下线。
 
 ---
 
@@ -95,7 +99,7 @@ RBAC 通过 nginx `auth_request` 子请求调用 auth 服务的 `GET /api/sync/a
 ```text
 src/                     React 前端（页面、组件、app 业务逻辑、加密 vault）
 workers/                 Cloudflare Workers（D1 副本侧 + 跨境 API）
-  sync/                  注册/登录、加密备份、内部 sync-auth/sync-backup 接收端
+  sync/                  注册/登录（PBKDF2 PHC）、备份、内部 sync-auth/sync-backup 接收端
   account/               账户资源 v1、交易行、内部 sync 接收端
   notify/                推送、规则同步、cron、WsHub、内部 sync-rules 接收端
   markets/               行情、K 线、基金指标、新闻/财务

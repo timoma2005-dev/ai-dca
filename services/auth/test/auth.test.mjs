@@ -8,8 +8,10 @@ import {
   hashPasswordCredential,
   sha256Hex,
   normalizeUsername,
+  nowIso,
   SESSION_TTL_SECONDS,
 } from '../src/auth.js';
+import { isPbkdf2Hash } from '../src/password.js';
 import { compensateSessions, planSessionCompensation } from '../src/compensateSessions.js';
 
 const CLIENT_HASH = 'a'.repeat(64); // 64-char client-side password hash
@@ -355,5 +357,93 @@ describe('auth: 存量 session 幂等补偿', () => {
     assert.equal(planned.length, 0, '过期与在途 session 都不应计划');
     assert.equal(skippedInFlight.length, 2, '在途探针事件与注册事件携带的 session 都应跳过');
     assert.ok(skippedInFlight.includes(inFlight.tokenHash));
+  });
+});
+
+describe('auth: PBKDF2 慢哈希注册与惰性轮转', () => {
+  let db;
+  beforeEach(() => { db = freshDb(); });
+  afterEach(() => closeDb(db));
+
+  it('新注册直接落 PHC，password_salt 留空，outbox 负载同步携带 PHC', () => {
+    const result = registerUser(db, { username: 'dudu', clientPasswordHash: CLIENT_HASH });
+    assert.equal(result.status, 200);
+
+    const user = db.prepare('SELECT password_hash, password_salt FROM users WHERE username = ?').get('dudu');
+    assert.ok(isPbkdf2Hash(user.password_hash), '注册必须直接写 PBKDF2 PHC');
+    assert.equal(user.password_salt, '', '盐内嵌在 PHC 内，独立盐列留空');
+
+    const event = db.prepare("SELECT payload FROM sync_outbox WHERE event_type = 'user.register'").get();
+    const payload = JSON.parse(event.payload);
+    assert.ok(isPbkdf2Hash(payload.password_hash));
+    assert.equal(payload.password_salt, '');
+    assert.equal(payload.password_hash, user.password_hash);
+  });
+
+  it('存量 legacy 用户首次登录成功并惰性轮转成 PHC，发出 credential_rotated 事件', () => {
+    // 模拟升级前注册的存量行：旧 64 位 hex + 独立盐列。
+    const legacySalt = 'pwd_legacy_1';
+    const legacyHash = hashPasswordCredential(CLIENT_HASH, legacySalt);
+    const legacyId = 'usr_legacy_1';
+    const now = nowIso();
+    db.prepare(
+      'INSERT INTO users (id, username, password_hash, password_salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(legacyId, 'legacy', legacyHash, legacySalt, now, now);
+
+    const login = loginUser(db, { username: 'legacy', clientPasswordHash: CLIENT_HASH });
+    assert.equal(login.status, 200);
+
+    const after = db.prepare('SELECT password_hash, password_salt FROM users WHERE id = ?').get(legacyId);
+    assert.ok(isPbkdf2Hash(after.password_hash), '登录后必须轮转成 PHC');
+    assert.equal(after.password_salt, '');
+
+    const rotations = db.prepare("SELECT payload FROM sync_outbox WHERE event_type = 'user.credential_rotated'").all();
+    assert.equal(rotations.length, 1, '轮转事件必须恰好入队一次');
+    const rotationPayload = JSON.parse(rotations[0].payload);
+    assert.equal(rotationPayload.id, legacyId);
+    assert.equal(rotationPayload.username, 'legacy');
+    assert.equal(rotationPayload.password_hash, after.password_hash);
+    assert.equal(rotationPayload.password_salt, '');
+
+    // user.login 事件照常入队，且与轮转共存。
+    const logins = db.prepare("SELECT COUNT(*) AS n FROM sync_outbox WHERE event_type = 'user.login'").get();
+    assert.equal(logins.n, 1);
+  });
+
+  it('轮转后再次登录走 PBKDF2 验证，不再产生轮转事件', () => {
+    const legacySalt = 'pwd_legacy_2';
+    const legacyHash = hashPasswordCredential(CLIENT_HASH, legacySalt);
+    const now = nowIso();
+    db.prepare(
+      'INSERT INTO users (id, username, password_hash, password_salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run('usr_legacy_2', 'legacy2', legacyHash, legacySalt, now, now);
+
+    assert.equal(loginUser(db, { username: 'legacy2', clientPasswordHash: CLIENT_HASH }).status, 200);
+    assert.equal(loginUser(db, { username: 'legacy2', clientPasswordHash: CLIENT_HASH }).status, 200);
+
+    const count = db.prepare("SELECT COUNT(*) AS n FROM sync_outbox WHERE event_type = 'user.credential_rotated'").get();
+    assert.equal(count.n, 1, '第二次登录已走 PHC，不得重复轮转');
+    const logins = db.prepare("SELECT COUNT(*) AS n FROM sync_outbox WHERE event_type = 'user.login'").get();
+    assert.equal(logins.n, 2);
+  });
+
+  it('legacy 用户密码错误时返回 401，凭证保持原样且不发轮转事件', () => {
+    const legacySalt = 'pwd_legacy_3';
+    const legacyHash = hashPasswordCredential(CLIENT_HASH, legacySalt);
+    const now = nowIso();
+    db.prepare(
+      'INSERT INTO users (id, username, password_hash, password_salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run('usr_legacy_3', 'legacy3', legacyHash, legacySalt, now, now);
+
+    const failed = loginUser(db, { username: 'legacy3', clientPasswordHash: 'b'.repeat(64) });
+    assert.equal(failed.status, 401);
+
+    const row = db.prepare('SELECT password_hash, password_salt FROM users WHERE id = ?').get('usr_legacy_3');
+    assert.equal(row.password_hash, legacyHash, '验证失败不得改动凭证');
+    assert.equal(row.password_salt, legacySalt);
+    assert.equal(
+      db.prepare("SELECT COUNT(*) AS n FROM sync_outbox WHERE event_type = 'user.credential_rotated'").get().n,
+      0
+    );
   });
 });

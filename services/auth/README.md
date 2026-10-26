@@ -51,9 +51,18 @@ AUTH_DB_PATH=/var/lib/ai-dca-auth/auth.sqlite npm run sync-worker
 权限每次请求按 token 在服务端重新计算，不信任客户端字段。
 `AUTH_RBAC_SYNC_ENABLED=1` 时 RBAC 变更会入队 `rbac.change`（D1 消费端未实现，默认关闭）。
 
-密码哈希口径与 `workers/sync` 完全一致：
-`stored = sha256(salt + ':' + clientHash)`，session 有效期 30 天，
-token 以 `acc_`/`ref_` 开头，DB 只存 token 的 SHA256。
+密码哈希口径与 `workers/sync` 完全一致（双端同构，D1 灾备副本可独立验密）：
+
+- 浏览器先做一轮 `clientHash = sha256(小写用户名 + ':' + 密码)`，原始密码不离开设备；
+- 服务端对 clientHash 做 **PBKDF2-HMAC-SHA256 慢哈希（310000 次、16 字节随机盐、32 字节派生）**，
+  存为自描述 PHC：`$pbkdf2-sha256$310000$<saltB64url>$<hashB64url>`，盐内嵌、无需 schema 迁移；
+- 存量用户是旧格式 `stored = sha256(salt + ':' + clientHash)`（不含 `$` 的 64 位 hex，盐在
+  `password_salt` 列），登录验证通过后在同一事务内**惰性轮转**成 PHC，并发出
+  `user.credential_rotated` 事件同步 D1；验证失败一律 401，不改动凭证；
+- 实现见 `src/password.js`（Node）与 `workers/sync/src/password.js`（Web Crypto），两者参数逐一对齐；
+- session 有效期 30 天，token 以 `acc_`/`ref_` 开头，DB 只存 token 的 SHA256。
+
+> 发布注意：部署后避免回滚到不识别 PHC 的旧版本，否则已轮转用户会登录失败（旧版把 PHC 当 legacy hex 验不过），靠前滚修复。
 
 ## nginx 接线（下一阶段）
 

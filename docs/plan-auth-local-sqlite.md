@@ -35,7 +35,9 @@ CN 本地认证 + SQLite 持久化 outbox + Worker 幂等接收。
 ## 关键设计
 
 1. **事务**：注册在同一事务内写 users + sessions + outbox；UNIQUE 约束处理并发，返回 409
-2. **密码**：sha256(salt:clientHash)，与 Worker 一致；恒定时间比较
+2. **密码**：~~sha256(salt:clientHash)~~（初版，仅用于验证存量用户）；现升级为 PBKDF2-HMAC-SHA256
+   PHC（310000 次，见 `services/auth/src/password.js` 与 `workers/sync/src/password.js`），旧哈希
+   用户首登惰性轮转发 `user.credential_rotated`；双端恒定时间比较
 3. **同步**：outbox 模式，至少一次投递，固定 event_id；指数退避 5s→30min；429 尊重 Retry-After
 4. **幂等**：Worker 侧 sync_events(event_id PK) 去重；同事件同 payload 返回成功，不同 payload 返回 409
 5. **禁止**：按 username 无条件覆盖密码；INSERT OR REPLACE 替换用户身份

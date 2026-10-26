@@ -129,6 +129,54 @@ async function applyUserRegister(env, payload) {
 }
 
 /**
+ * user.credential_rotated 事件：主库把存量用户的旧 SHA-256 凭证惰性升级为
+ * PBKDF2 PHC 后发出的凭证轮转。只允许同一 id+username 覆盖凭证，仍然拒绝
+ * 改名式覆盖与跨 id 重放；凭证完全一致时幂等跳过。
+ * 注意：能产生轮转的都是升级前已注册、其 user.register 早已同步到 D1 的用户，
+ * 因此正常时序下用户必然存在；不存在时返回 404（由投递方死信告警），不静默丢弃。
+ */
+async function applyCredentialRotated(env, payload) {
+  const id = String(payload?.id || '').trim();
+  const username = String(payload?.username || '').trim().toLowerCase();
+  const passwordHash = String(payload?.password_hash || '');
+  const passwordSalt = String(payload?.password_salt || '');
+  const updatedAt = String(payload?.updated_at || '') || nowIso();
+
+  if (!id || username.length < 3) return { status: 400, body: { error: '事件 payload 非法：用户 id/username 缺失' } };
+  if (passwordHash.length < 32) return { status: 400, body: { error: '事件 payload 非法：password_hash 缺失' } };
+
+  const existing = await env.DB.prepare(
+    'SELECT id, username, password_hash, password_salt FROM users WHERE username = ? OR id = ?'
+  )
+    .bind(username, id)
+    .first();
+
+  if (!existing) {
+    return { status: 404, body: { error: '用户不存在，凭证轮转事件无法应用' } };
+  }
+  if (existing.username !== username) {
+    return { status: 409, body: { error: '用户 id 已被占用且用户名不一致' } };
+  }
+  if (existing.id !== id) {
+    return { status: 409, body: { error: '用户名已被占用' } };
+  }
+  // 同 id 同用户名且凭证一致：幂等跳过（兼容事件重投）。
+  if (existing.password_hash === passwordHash && String(existing.password_salt || '') === passwordSalt) {
+    return { status: 200, body: null };
+  }
+
+  return {
+    status: 200,
+    body: null,
+    statements: [
+      env.DB.prepare(
+        'UPDATE users SET password_hash = ?, password_salt = ?, updated_at = ? WHERE id = ?'
+      ).bind(passwordHash, passwordSalt, updatedAt, id),
+    ],
+  };
+}
+
+/**
  * user.login 事件：确认用户存在并更新 last_login_at。
  * 本地服务已完成密码校验，这里只做存在性校验与登录时间同步。
  */
@@ -209,7 +257,8 @@ export async function handleInternalAuthSync(request, env, origin = '*') {
   const { eventId, eventType, payload } = pickEventFields(body);
   if (!eventId) return json({ error: '缺少 eventId' }, { status: 400, origin });
   if (!payload || typeof payload !== 'object') return json({ error: '缺少 payload' }, { status: 400, origin });
-  if (eventType !== 'user.register' && eventType !== 'user.login') {
+  const KNOWN_EVENT_TYPES = new Set(['user.register', 'user.login', 'user.credential_rotated']);
+  if (!KNOWN_EVENT_TYPES.has(eventType)) {
     return json({ error: `未知的事件类型：${eventType}` }, { status: 400, origin });
   }
 
@@ -232,7 +281,11 @@ export async function handleInternalAuthSync(request, env, origin = '*') {
   }
 
   // 2. 按事件类型应用
-  const applier = eventType === 'user.register' ? applyUserRegister : applyUserLogin;
+  const applier = eventType === 'user.register'
+    ? applyUserRegister
+    : eventType === 'user.credential_rotated'
+      ? applyCredentialRotated
+      : applyUserLogin;
   const applied = await applier(env, payload);
   if (applied.status !== 200) {
     return json(applied.body || { error: '事件应用失败' }, { status: applied.status, origin });
