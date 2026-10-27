@@ -9,6 +9,7 @@ import { openDb } from '../src/db.js';
 import { createApp } from '../src/server.js';
 import { sha256Hex } from '../src/account/store.js';
 import worker from '../../../workers/sync/src/index.js';
+import { buildProbeHtml } from '../../../workers/shared/probeHtml.js';
 
 async function app(t, authenticated = false) {
   const directory = mkdtempSync(join(tmpdir(), 'cn-sync-'));
@@ -160,7 +161,8 @@ test('health and probe are public; probe HTML matches original except relative r
   const { request } = await app(t);
   const health = await request('/health'); assert.equal(health.status, 200); assert.equal(health.body.ok, true); assert.equal(health.body.service, 'sync'); assert.ok(Number.isFinite(Date.parse(health.body.at)));
   const probe = await request('/probe'); assert.equal(probe.status, 200); assert.equal(probe.headers.get('content-type'), 'text/html; charset=utf-8');
-  const source = readFileSync(new URL('../../../workers/sync/src/index.js', import.meta.url), 'utf8');
-  const literal = source.split('\n').find(line => line.startsWith('const PROBE_HTML = ')).slice('const PROBE_HTML = '.length, -1);
-  assert.equal(probe.body, JSON.parse(literal).replace('https://api.freebacktrack.tech/api/sync/analytics/track', '/api/sync/analytics/track'));
+  // Worker 与 cn-data 现在共享 workers/shared/probeHtml.js 规范实现，
+  // 唯一差异仍是 analytics 上报地址（绝对 vs 同源相对）。
+  const workerProbe = buildProbeHtml({ analyticsUrl: 'https://api.freebacktrack.tech/api/sync/analytics/track' });
+  assert.equal(probe.body, workerProbe.replace('https://api.freebacktrack.tech/api/sync/analytics/track', '/api/sync/analytics/track'));
 });
