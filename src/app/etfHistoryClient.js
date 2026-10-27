@@ -75,6 +75,57 @@ export function limitEvents(rows) {
   return out;
 }
 
+/**
+ * 把额度变动合并成「段」，并量出每段对溢价的影响（图上画箭头用）。
+ * - 同方向、相隔不超过 mergeGap 个交易日的变动合并成一段（例：10-08 至 10-16 连续收紧 4 次）。
+ * - 放宽：起点 = 变动前一日溢价；终点 = 变动当日起 window 个交易日内最低溢价。
+ * - 收紧：起点 = 变动前一日与当日中较低者（承接放宽后的低点）；终点 = 最后一次收紧后 window 个交易日内最高溢价。
+ * 溢价缺失时跳过；起点或终点缺失的段不返回。
+ */
+export function limitEpisodes(rows, { mergeGap = 10, window = 5 } = {}) {
+  const groups = [];
+  for (const e of limitEvents(rows)) {
+    const g = groups[groups.length - 1];
+    if (g && g.kind === e.kind && e.index - g.events[g.events.length - 1].index <= mergeGap) g.events.push(e);
+    else groups.push({ kind: e.kind, events: [e] });
+  }
+  const P = rows.map((r) => r.prem);
+  const pick = (from, to, best) => {
+    let hit = null;
+    for (let j = Math.max(0, from); j <= Math.min(rows.length - 1, to); j++) {
+      if (P[j] === null || P[j] === undefined) continue;
+      if (!hit || (best === 'min' ? P[j] < hit.p : P[j] > hit.p)) hit = { p: P[j], i: j };
+    }
+    return hit;
+  };
+  const out = [];
+  for (const g of groups) {
+    const first = g.events[0], last = g.events[g.events.length - 1];
+    const s = first.index;
+    const start = g.kind === 'relaxed' ? pick(s - 1, s - 1, 'min') : pick(s - 1, s, 'min');
+    const endIndex = Math.min(rows.length - 1, (g.kind === 'relaxed' ? s : last.index) + window);
+    const end = pick(s, endIndex, g.kind === 'relaxed' ? 'min' : 'max');
+    if (!start || !end) continue;
+    out.push({
+      kind: g.kind,
+      count: g.events.length,
+      startDate: first.d,
+      lastDate: last.d,
+      startIndex: s,
+      lastIndex: last.index,
+      endIndex,
+      from: first.from,
+      to: last.to,
+      premFrom: start.p,
+      premFromIndex: start.i,
+      premTo: end.p,
+      premToIndex: end.i,
+      premChange: end.p - start.p
+    });
+  }
+  return out;
+}
+
 export function sliceRange(rows, range) {
   const spec = HISTORY_RANGES.find(([k]) => k === range) || HISTORY_RANGES[2];
   return Number.isFinite(spec[2]) ? rows.slice(-spec[2]) : rows.slice();
@@ -100,6 +151,15 @@ export function fmtShares(v, { sign = false } = {}) {
   if (a >= 1e8) return `${s}${(v / 1e8).toFixed(2)}亿`;
   if (a >= 1e4) return `${s}${Math.round(v / 1e4).toLocaleString('zh-CN')}万`;
   return `${s}${Math.round(v).toLocaleString('zh-CN')}`;
+}
+
+/** 额度简写（图上标签）：1.8亿 / 100万 / 不限。 */
+export function fmtLimitShort(v) {
+  if (v === Infinity) return '不限';
+  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
+  if (v >= 1e8) return `${+(v / 1e8).toFixed(2)}亿`;
+  if (v >= 1e4) return `${+(v / 1e4).toFixed(1)}万`;
+  return `${Math.round(v)}`;
 }
 
 export function fmtLimit(v) {

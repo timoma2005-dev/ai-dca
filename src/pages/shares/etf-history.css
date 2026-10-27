@@ -1,4 +1,4 @@
-/* 份额页 PCF 弹窗「历史」页签（SVIP）。设计稿 mockups/history/。 */
+/* 份额页 PCF 弹窗「历史」页签（SVIP）。设计稿 mockups/history2/。 */
 .nx-modal-tabs{display:flex;gap:20px;border-bottom:1px solid var(--slate-100);padding:0 16px}
 .nx-modal-tabs button{border:0;background:none;padding:9px 0;font-size:14px;font-weight:600;color:var(--slate-500);border-bottom:2px solid transparent;display:inline-flex;align-items:center;gap:5px;cursor:pointer}
 .nx-modal-tabs button[aria-selected="true"]{color:var(--slate-900);border-bottom-color:#4f46e5}
@@ -17,7 +17,25 @@
 .eh-kpis-inline{display:flex;gap:8px;flex:1}
 .eh-kpis-inline div{background:var(--slate-50);border-radius:9px;padding:4px 10px;font-size:12px;display:flex;gap:6px}
 .eh-kpis-inline span{color:var(--slate-500)}
-.eh-chart{border:1px solid var(--slate-100);border-radius:12px;padding:6px 4px 2px}
+.eh-chart{position:relative;border:1px solid var(--slate-100);border-radius:12px;padding:6px 4px 0;color:var(--slate-500)}
+.eh-chart svg{display:block;font-family:inherit}
+.eh-grid{stroke:var(--slate-100);stroke-width:1}
+.eh-ax{font-size:9.5px;fill:var(--slate-400)}
+.eh-lab{font-size:10px;fill:var(--slate-500)}
+.eh-ql{font-size:9px;font-weight:700;fill:#7c3aed}
+.eh-pill{font-size:10px;font-weight:700}
+.eh-chart .eh-tip{position:absolute;top:4px;transform:translateX(-50%);pointer-events:none;white-space:nowrap;z-index:2}
+.eh-title{display:flex;flex-direction:column;gap:2px;min-width:0}
+.eh-title b{font-size:14px;color:var(--slate-900)}
+.eh-title span{font-size:11.5px;color:var(--slate-500)}
+.eh-eps{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.eh-ep{display:grid;grid-template-columns:1fr auto;gap:3px 8px;background:var(--slate-50);border-radius:10px;padding:8px 10px;font-size:12px;align-items:center;font-variant-numeric:tabular-nums}
+.eh-ep .eh-chip{margin-left:0;justify-self:start}
+.eh-ep-when{color:var(--slate-500);text-align:right}
+.eh-ep-q{color:#7c3aed;font-weight:600}
+.eh-ep-p{text-align:right;color:var(--slate-700)}
+.eh-ep-p b{font-size:13px}
+.eh-daily-toggle{display:flex;justify-content:space-between;align-items:center;border:0;background:var(--slate-50);border-radius:10px;padding:9px 12px;font-size:12.5px;color:#4f46e5;cursor:pointer;width:100%}
 .eh-tip{background:#0f172a;color:#e2e8f0;font-size:11.5px;line-height:1.6;padding:7px 10px;border-radius:9px;box-shadow:0 6px 20px rgba(15,23,42,.25)}
 .eh-tip b{color:#fff}
 .eh-tip .eh-tip-down{color:#fca5a5}.eh-tip .eh-tip-up{color:#86efac}.eh-tip .eh-tip-prem{color:#fdba74}
@@ -34,7 +52,7 @@
 .eh-table .num{text-align:right}
 .eh-table tr.eh-row-tightened td{background:#fff7f7}
 .eh-table tr.eh-row-relaxed td{background:#f6fef8}
-.eh-up{color:#2563eb}.eh-down{color:#dc2626}.eh-prem-up{color:#ea580c}.eh-prem-down{color:#16a34a}.eh-b{font-weight:700}.eh-muted{color:var(--slate-400)}
+.eh-up{color:#2563eb}.eh-down{color:#dc2626}.eh-prem-up{color:#dc2626}.eh-prem-down{color:#16a34a}.eh-b{font-weight:700}.eh-muted{color:var(--slate-400)}
 .eh-chip{display:inline-block;border-radius:999px;padding:0 7px;font-size:10.5px;font-weight:700;margin-left:4px}
 .eh-chip-tightened{background:#fee2e2;color:#b91c1c}.eh-chip-relaxed{background:#dcfce7;color:#15803d}.eh-chip-gray{background:var(--slate-100);color:var(--slate-600);margin-left:0}
 .eh-more{border:0;background:none;color:#4f46e5;font-size:12px;padding:6px;align-self:center;cursor:pointer}
@@ -56,7 +74,8 @@
 .eh-btn{width:100%;border:0;border-radius:12px;padding:10px;font-size:14px;font-weight:700;color:#fff;background:linear-gradient(90deg,#7c3aed,#db2777);cursor:pointer}
 .eh-locknote{font-size:11.5px;color:var(--slate-500);margin-top:8px}
 @media (max-width:640px){
-  .eh-toolbar{gap:8px}
+  .eh-toolbar{gap:8px;align-items:flex-start}
+  .eh-eps{grid-template-columns:1fr}
   .eh-table{font-size:11.5px}
   .eh-table th,.eh-table td{padding:6px 3px}
 }

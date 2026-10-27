@@ -5,6 +5,8 @@ import {
   createEtfHistoryClient,
   fmtShares,
   historyToCsv,
+  fmtLimitShort,
+  limitEpisodes,
   limitEvents,
   normalizeEtfHistory,
   sliceRange,
@@ -85,4 +87,32 @@ test('client: 401/403 映射为 login/locked，带 Bearer，成功结果缓存',
   assert.match(calls[0][0], /\/api\/etf-history\/513300\.json$/);
   assert.equal(calls[0][1], 'Bearer tok');
   assert.equal((await client.load('../x')).state, 'error');
+});
+
+test('limitEpisodes: 放宽后溢价回落、连续收紧合并并量出溢价回升（159501 2026-09/10 形态）', () => {
+  const lim = [1e6, 1e6, 1.8e8, 7e7, 1.5e7, 5e6, 5e6, 5e6, 5e6, 1e6, 1e6, 1e6];
+  const prem = [15.9, 16.8, 15.0, 13.8, 14.1, 15.9, 15.4, 18.2, 15.2, 20.2, 17.8, 17.9];
+  const rows = lim.map((v, i) => row(`2026-10-${String(i + 1).padStart(2, '0')}`, { effShares: v, prem: prem[i] }));
+  const eps = limitEpisodes(rows);
+  assert.equal(eps.length, 2);
+  assert.equal(eps[0].kind, 'relaxed');
+  assert.equal(eps[0].premFrom, 16.8);
+  assert.equal(eps[0].premTo, 13.8);
+  assert.equal(eps[1].kind, 'tightened');
+  assert.equal(eps[1].count, 4);
+  assert.equal(eps[1].from, 1.8e8);
+  assert.equal(eps[1].to, 1e6);
+  assert.equal(eps[1].premFrom, 13.8);
+  assert.equal(eps[1].premTo, 20.2);
+  assert.ok(Math.abs(eps[1].premChange - 6.4) < 1e-9);
+});
+
+test('limitEpisodes: 相隔超过 mergeGap 不合并，溢价缺失不出段', () => {
+  const rows = Array.from({ length: 30 }, (_, i) => row(`2026-09-${String(i + 1).padStart(2, '0')}`, { effShares: i < 5 ? 4e6 : i < 20 ? 2e6 : 1e6 }));
+  assert.equal(limitEpisodes(rows).length, 2);
+  const noPrem = rows.map((r) => ({ ...r, prem: null }));
+  assert.equal(limitEpisodes(noPrem).length, 0);
+  assert.equal(fmtLimitShort(1.8e8), '1.8亿');
+  assert.equal(fmtLimitShort(1e6), '100万');
+  assert.equal(fmtLimitShort(Infinity), '不限');
 });

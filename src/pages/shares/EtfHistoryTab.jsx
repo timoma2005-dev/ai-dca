@@ -2,21 +2,10 @@
  * 份额页 PCF 弹窗「历史」页签（SVIP）：近一年每日总份额、新增、生效申购上限、收盘价、净值、溢价率。
  * - 权限：useRbac().perms 含 api:etf-history（svip 及以上）或管理员才请求数据；服务端 nginx 再次校验。
  * - 无权限时只渲染本地合成的模糊占位（不含真实数据）+ 开通引导；未登录引导登录。
- * - 图：总份额（左轴）、溢价率（右轴）、日新增柱（独立隐藏轴）；生效申购上限变化日画竖线并标注「收/放」。
- * 设计稿：mockups/history/history_app.png、history_pc.png。
+ * - 图只讲一件事：额度放宽 → 溢价回落，收紧 → 溢价走高。上半溢价率、下半额度阶梯，按段画箭头（limitEpisodes）。
+ * - 每日明细默认折叠。设计稿：mockups/history2/history3_app.png（gen2.py）。
  */
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from 'recharts';
 import { Diamond, Download } from 'lucide-react';
 import { useRbac } from '../../app/rbac/useRbac.js';
 import { openAccountAuth, openUpgradeQr } from '../../app/accountAuthEvents.js';
@@ -25,13 +14,14 @@ import {
   canViewEtfHistory,
   etfHistoryClient,
   fmtLimit,
+  fmtLimitShort,
   fmtPct,
   fmtShares,
   historyToCsv,
+  limitEpisodes,
   limitEvents,
   limitValue,
-  sliceRange,
-  summarizeHistory
+  sliceRange
 } from '../../app/etfHistoryClient.js';
 
 const PAGE = 20;
@@ -52,130 +42,227 @@ function useIsMobile() {
 const shortDate = (d) => d.slice(5);
 const GAP = '\u3000';
 
-function TipBox({ active, payload, events }) {
-  if (!active || !payload?.length) return null;
-  const r = payload[0].payload;
-  const ev = events.find((e) => e.d === r.d);
-  return (
-    <div className="eh-tip">
-      <b>{r.d}</b>
-      <div>
-        总份额 {fmtShares(r.sh)}{GAP}新增 {fmtShares(r.dsh, { sign: true })}
-      </div>
-      <div>
-        申购上限{' '}
-        {ev ? (
-          <>
-            {fmtLimit(ev.from)} → <b className={ev.kind === 'tightened' ? 'eh-tip-down' : 'eh-tip-up'}>{fmtLimit(ev.to)}</b>
-          </>
-        ) : (
-          fmtLimit(limitValue(r))
-        )}
-        {r.allow === false ? '（暂停申购）' : ''}
-      </div>
-      <div>
-        收盘 {r.close ?? '—'}{GAP}净值 {r.nav ?? '—'}
-      </div>
-      <div>
-        溢价 <b className="eh-tip-prem">{fmtPct(r.prem)}</b>
-        {r.dprem !== null ? `（${r.dprem > 0 ? '+' : ''}${r.dprem.toFixed(2)}）` : ''}
-      </div>
-    </div>
-  );
-}
+const yearOf = (d) => d.slice(0, 4);
+/** 日期显示：与最新数据同年只显示月-日，跨年显示完整日期。 */
+const dayLabel = (d, refYear) => (yearOf(d) === refYear ? d.slice(5) : d);
 
-function EventLabel({ viewBox, kind, text }) {
-  if (!viewBox) return null;
-  const { x, y } = viewBox;
-  const c = kind === 'tightened' ? '#dc2626' : '#16a34a';
-  return (
-    <g>
-      <circle cx={x} cy={y + 9} r={8} fill={c} />
-      <text x={x} y={y + 12.5} fontSize={10} fill="#fff" textAnchor="middle" fontWeight={700}>
-        {kind === 'tightened' ? '收' : '放'}
-      </text>
-      {text ? (
-        <text x={x + 11} y={y + 12.5} fontSize={10.5} fill={c} fontWeight={700}>
-          {text}
-        </text>
-      ) : null}
-    </g>
-  );
-}
+const C_PREM = '#f97316';
+const C_QUOTA = '#8b5cf6';
+const C_TIGHT = '#ef4444';
+const C_RELAX = '#22c55e';
+const kindColor = (k) => (k === 'tightened' ? C_TIGHT : C_RELAX);
+const episodeWord = (ep) => (ep.kind === 'relaxed' ? '放宽' : ep.count > 1 ? `收紧${ep.count}次` : '收紧');
 
-function HistoryChart({ rows, events, mobile }) {
-  const prem = rows.map((r) => r.prem).filter((v) => v !== null);
-  const pMin = prem.length ? Math.floor(Math.min(...prem, 0)) : -1;
-  const pMax = prem.length ? Math.ceil(Math.max(...prem)) : 5;
-  const dshMax = Math.max(1, ...rows.map((r) => Math.abs(r.dsh || 0)));
-  const ticks = Math.min(mobile ? 4 : 7, rows.length);
-  const step = Math.max(1, Math.floor((rows.length - 1) / Math.max(1, ticks - 1)));
-  const xTicks = rows.filter((_, i) => i % step === 0).map((r) => r.d);
+/**
+ * 「额度变了，溢价怎么走」图：上半溢价率，下半每日申购额度（对数阶梯），共用时间轴。
+ * 每段额度变动加底色 + 箭头（起点 → 终点溢价）+ 标签「放宽 溢价-3.0点」。
+ * 手写 SVG（固定 viewBox 宽度，按设备选 360/720），不依赖图表库，便于精确控制标注。
+ */
+export function QuotaPremiumChart({ rows, episodes, mobile }) {
+  const [hover, setHover] = useState(null);
+  const W = mobile ? 360 : 720;
+  const H = mobile ? 258 : 300;
+  const L = 8, R = 38, T = 62; // 顶部两条标签道
+  const PB = mobile ? 176 : 206; // 溢价区底
+  const QT = PB + 26, QB = H - 30; // 额度区
+  const n = rows.length;
+  const x = (i) => L + ((W - L - R) * i) / Math.max(1, n - 1);
+  const dx = n > 1 ? x(1) - x(0) : 0;
+  const prem = rows.map((r) => r.prem);
+  const vals = prem.filter((v) => v !== null);
+  const lo = vals.length ? Math.floor(Math.min(...vals) / 2) * 2 - 1 : -1;
+  const hi = vals.length ? Math.ceil(Math.max(...vals) / 2) * 2 + 1 : 5;
+  const y = (v) => T + ((PB - T) * (hi - v)) / Math.max(1e-9, hi - lo);
+  const lims = rows.map(limitValue);
+  const finite = lims.filter((v) => v !== null && Number.isFinite(v) && v > 0);
+  const qMaxFinite = finite.length ? Math.max(...finite) : 1;
+  const qv = (v) => (v === Infinity ? qMaxFinite * 4 : v);
+  const logs = lims.filter((v) => v !== null && v > 0).map((v) => Math.log10(qv(v)));
+  const qlo = logs.length ? Math.min(...logs) - 0.35 : 0;
+  const qhi = logs.length ? Math.max(...logs) : 1;
+  const qy = (v) => QB - ((QB - QT) * (Math.log10(qv(v)) - qlo)) / Math.max(1e-9, qhi - qlo);
+  const refYear = rows.length ? yearOf(rows[n - 1].d) : '';
+
+  // 溢价折线：缺失处断开
+  const premPaths = [];
+  let seg = '';
+  prem.forEach((p, i) => {
+    if (p === null) {
+      if (seg) premPaths.push(seg);
+      seg = '';
+      return;
+    }
+    seg += `${seg ? 'L' : 'M'}${x(i).toFixed(1)},${y(p).toFixed(1)} `;
+  });
+  if (seg) premPaths.push(seg);
+
+  // 额度阶梯面积：未知处断开
+  const quotaPaths = [];
+  let qd = '';
+  let qStart = null;
+  const closeQ = (i) => {
+    if (qd) quotaPaths.push(`${qd}L${Math.min(W - R, x(i) + dx / 2).toFixed(1)},${QB} L${qStart.toFixed(1)},${QB} Z`);
+    qd = '';
+  };
+  lims.forEach((v, i) => {
+    if (v === null || !(v > 0)) {
+      closeQ(i - 1);
+      return;
+    }
+    const xa = Math.max(L, x(i) - dx / 2), xb = Math.min(W - R, x(i) + dx / 2), q = qy(v).toFixed(1);
+    if (!qd) {
+      qStart = xa;
+      qd = `M${xa.toFixed(1)},${QB} `;
+    }
+    qd += `L${xa.toFixed(1)},${q} L${xb.toFixed(1)},${q} `;
+  });
+  closeQ(n - 1);
+
+  // 额度变化处的数字标签（太挤就略过）
+  const qLabels = [];
+  let lastLx = -99;
+  lims.forEach((v, i) => {
+    if (v === null || (i > 0 && v === lims[i - 1])) return;
+    if (x(i) - lastLx < (mobile ? 30 : 40)) return;
+    qLabels.push({ i, v });
+    lastLx = x(i);
+  });
+
+  // 段标签放在图顶两条标签道里（不压折线），按影响大小优先放，放不下的只画箭头（下方卡片有完整数据）
+  const pills = [];
+  const pillW = mobile ? 100 : 112, pillH = 18;
+  const lanes = [14, 38];
+  [...episodes]
+    .sort((a, b) => Math.abs(b.premChange) - Math.abs(a.premChange))
+    .forEach((ep) => {
+      const ax = x(ep.premToIndex);
+      const cx = Math.min(Math.max(ax, L + pillW / 2), W - R - pillW / 2);
+      for (const cy of lanes) {
+        const box = { x0: cx - pillW / 2 - 4, x1: cx + pillW / 2 + 4, cy };
+        if (!pills.some((p) => p.box.cy === cy && box.x0 < p.box.x1 && box.x1 > p.box.x0)) {
+          pills.push({ ep, cx, cy, ax, ay: y(ep.premTo), box });
+          break;
+        }
+      }
+    });
+
+  const step = Math.max(2, Math.ceil((hi - lo) / 4 / 2) * 2);
+  const gridVals = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) gridVals.push(v);
+  const xTickIdx = mobile ? [0, Math.floor((n - 1) / 2), n - 1] : [0, Math.floor((n - 1) / 3), Math.floor((2 * (n - 1)) / 3), n - 1];
+
+  const onMove = (e) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * W;
+    const i = Math.round(((px - L) / (W - L - R)) * (n - 1));
+    setHover(i >= 0 && i < n ? i : null);
+  };
+  const hr = hover !== null ? rows[hover] : null;
+  const hEp = hr ? episodes.find((ep) => hover >= ep.startIndex && hover <= ep.lastIndex) : null;
+
   return (
-    <div className="eh-chart" role="img" aria-label="总份额、溢价率与每日新增走势">
-      <ResponsiveContainer width="100%" height={mobile ? 220 : 300}>
-        <ComposedChart data={rows} margin={{ top: 22, right: 4, bottom: 0, left: 0 }}>
-          <CartesianGrid stroke="#eef2f7" vertical={false} />
-          <XAxis dataKey="d" ticks={xTicks} tickFormatter={shortDate} tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
-          <YAxis
-            yAxisId="sh"
-            domain={['dataMin', 'dataMax']}
-            tickFormatter={(v) => fmtShares(v)}
-            tick={{ fontSize: 10, fill: '#4f46e5' }}
-            width={mobile ? 50 : 62}
-            tickLine={false}
-            axisLine={false}
-            tickCount={4}
-          />
-          <YAxis
-            yAxisId="prem"
-            orientation="right"
-            domain={[pMin, pMax]}
-            tickFormatter={(v) => `${v}%`}
-            tick={{ fontSize: 10, fill: '#f97316' }}
-            width={34}
-            tickLine={false}
-            axisLine={false}
-          />
-          <YAxis yAxisId="dsh" hide domain={[-dshMax, dshMax * 3.2]} />
-          <Tooltip content={<TipBox events={events} />} cursor={{ stroke: '#0f172a', strokeWidth: 0.7 }} />
-          <Bar yAxisId="dsh" dataKey="dsh" isAnimationActive={false} shape={<DshBar />} />
-          {events.map((e) => (
-            <ReferenceLine
-              key={e.d}
-              yAxisId="sh"
-              x={e.d}
-              stroke={e.kind === 'tightened' ? '#dc2626' : '#16a34a'}
-              strokeDasharray="3 3"
-              label={<EventLabel kind={e.kind} text={mobile ? '' : `${fmtLimit(e.from)}→${fmtLimit(e.to)}`} />}
-              ifOverflow="extendDomain"
-            />
+    <div className="eh-chart" role="img" aria-label="申购额度变化与溢价率走势">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)} style={{ touchAction: 'pan-y' }}>
+        <defs>
+          {['tightened', 'relaxed'].map((k) => (
+            <marker key={k} id={`eh-arrow-${k}`} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 Z" fill={kindColor(k)} />
+            </marker>
           ))}
-          <Line yAxisId="sh" type="monotone" dataKey="sh" stroke="#4f46e5" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-          <Line yAxisId="prem" type="monotone" dataKey="prem" stroke="#f97316" strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
-        </ComposedChart>
-      </ResponsiveContainer>
+        </defs>
+        {episodes.map((ep) => {
+          const x0 = Math.max(L, x(ep.startIndex) - dx / 2), x1 = Math.min(W - R, x(Math.max(ep.lastIndex, ep.premToIndex)) + dx / 2);
+          return <rect key={`bg-${ep.startDate}`} x={x0} y={T - 8} width={Math.max(2, x1 - x0)} height={QB - T + 8} fill={kindColor(ep.kind)} opacity={0.1} />;
+        })}
+        {gridVals.map((v) => (
+          <g key={v}>
+            <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} className="eh-grid" />
+            <text x={W - R + 4} y={y(v) + 3} className="eh-ax">
+              {v}%
+            </text>
+          </g>
+        ))}
+        {premPaths.map((d, i) => (
+          <path key={i} d={d} fill="none" stroke={C_PREM} strokeWidth={2} strokeLinejoin="round" />
+        ))}
+        <line x1={L} x2={W - R} y1={QB} y2={QB} className="eh-grid" />
+        <text x={L} y={QT - 8} className="eh-lab">
+          每日申购额度
+        </text>
+        {quotaPaths.map((d, i) => (
+          <path key={i} d={d} fill={C_QUOTA} fillOpacity={0.3} stroke={C_QUOTA} strokeWidth={1.2} />
+        ))}
+        {qLabels.map(({ i, v }) => (
+          <text key={i} x={Math.min(x(i) + 2, W - R - 26)} y={qy(v) - 3} className="eh-ql">
+            {fmtLimitShort(v)}
+          </text>
+        ))}
+        {episodes.map((ep) => {
+          const c = kindColor(ep.kind);
+          const x0 = x(ep.premFromIndex), y0 = y(ep.premFrom), x1 = x(ep.premToIndex), y1 = y(ep.premTo);
+          return (
+            <g key={`ar-${ep.startDate}`}>
+              <line x1={x0} y1={y0} x2={x1} y2={y1} stroke={c} strokeWidth={1.5} strokeDasharray="3 2" markerEnd={`url(#eh-arrow-${ep.kind})`} />
+              <circle cx={x0} cy={y0} r={3} fill="#fff" stroke={c} strokeWidth={1.5} />
+              <circle cx={x1} cy={y1} r={3.5} fill={c} />
+            </g>
+          );
+        })}
+        {pills.map(({ ep, cx, cy, ax, ay }) => {
+          const c = kindColor(ep.kind);
+          return (
+            <g key={`pl-${ep.startDate}`}>
+              <line x1={ax} y1={cy + pillH / 2} x2={ax} y2={ay - 5} stroke={c} strokeOpacity={0.45} strokeWidth={1} strokeDasharray="1 2" />
+              <rect x={cx - pillW / 2} y={cy - pillH / 2} width={pillW} height={pillH} rx={pillH / 2} fill={c} fillOpacity={0.16} stroke={c} strokeOpacity={0.6} />
+              <text x={cx} y={cy + 3.5} textAnchor="middle" className="eh-pill" fill={c}>
+                {episodeWord(ep)} 溢价{ep.premChange > 0 ? '+' : ''}
+                {ep.premChange.toFixed(1)}点
+              </text>
+            </g>
+          );
+        })}
+        {xTickIdx.map((i, k) => (
+          <text key={i} x={x(i)} y={H - 12} className="eh-ax" textAnchor={k === 0 ? 'start' : k === xTickIdx.length - 1 ? 'end' : 'middle'}>
+            {rows[i] ? dayLabel(rows[i].d, refYear) : ''}
+          </text>
+        ))}
+        {hr ? <line x1={x(hover)} x2={x(hover)} y1={T - 6} y2={QB} stroke="currentColor" strokeOpacity={0.35} strokeWidth={0.8} /> : null}
+      </svg>
+      {hr ? (
+        <div className="eh-tip" style={{ left: `${Math.min(Math.max((x(hover) / W) * 100, 18), 82)}%` }}>
+          <b>{hr.d}</b>
+          <div>
+            溢价 <b className="eh-tip-prem">{fmtPct(hr.prem)}</b>
+            {GAP}额度 {fmtLimit(limitValue(hr))}
+          </div>
+          {hEp ? <div className={hEp.kind === 'tightened' ? 'eh-tip-down' : 'eh-tip-up'}>{episodeWord(hEp)}中</div> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function DshBar({ x, y, width, height, payload }) {
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !height) return null;
-  const neg = (payload?.dsh || 0) < 0;
-  return <rect x={x} y={height < 0 ? y + height : y} width={Math.max(1, width)} height={Math.abs(height)} fill={neg ? '#fca5a5' : '#93c5fd'} />;
-}
-
-function Legend() {
+export function EpisodeList({ episodes, refYear }) {
+  if (!episodes.length) return <p className="eh-empty">所选区间内额度没有变动，可切换到更长的时间范围。</p>;
   return (
-    <div className="eh-legend" aria-hidden="true">
-      <i style={{ background: '#4f46e5' }} />
-      份额
-      <i style={{ background: '#f97316' }} />
-      溢价
-      <i style={{ background: '#93c5fd' }} />
-      日新增
-      <i style={{ background: '#fca5a5' }} />
-      日减少
+    <div className="eh-eps">
+      {[...episodes].reverse().map((ep) => {
+        const when = ep.startDate === ep.lastDate ? dayLabel(ep.startDate, refYear) : `${dayLabel(ep.startDate, refYear)} – ${dayLabel(ep.lastDate, refYear)}`;
+        const word = ep.kind === 'relaxed' ? '放宽' : ep.count > 1 ? `连续收紧 ${ep.count} 次` : '收紧';
+        return (
+          <div key={ep.startDate} className="eh-ep">
+            <span className={`eh-chip eh-chip-${ep.kind}`}>{word}</span>
+            <span className="eh-ep-when">{when}</span>
+            <span className="eh-ep-q">
+              {fmtLimitShort(ep.from)} → {fmtLimitShort(ep.to)}
+            </span>
+            <span className="eh-ep-p">
+              {fmtPct(ep.premFrom, { digits: 1 })} → <b className={ep.premChange > 0 ? 'eh-prem-up' : 'eh-prem-down'}>{fmtPct(ep.premTo, { digits: 1 })}</b>
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -221,7 +308,7 @@ function HistoryTable({ rows, eventsByDate, mobile, onlyEvents }) {
               const ev = eventsByDate.get(r.d);
               return (
                 <tr key={r.d} className={ev ? `eh-row-${ev.kind}` : undefined}>
-                  <td>{mobile ? shortDate(r.d) : r.d}</td>
+                  <td>{mobile && yearOf(r.d) === yearOf(rows[rows.length - 1]?.d || '') ? shortDate(r.d) : r.d}</td>
                   <td className="num">{fmtShares(r.sh)}</td>
                   <td className={`num ${r.dsh > 0 ? 'eh-up' : r.dsh < 0 ? 'eh-down' : ''}`}>{fmtShares(r.dsh, { sign: true })}</td>
                   <td className="num">
@@ -367,7 +454,8 @@ export default function EtfHistoryTab({ code, onClose }) {
   const allowed = canViewEtfHistory(rbac);
   const mobile = useIsMobile();
   const [result, setResult] = useState({ state: allowed ? 'loading' : 'locked' });
-  const [range, setRange] = useState('6m');
+  const [range, setRange] = useState('3m');
+  const [showDaily, setShowDaily] = useState(false);
   const [onlyEvents, setOnlyEvents] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -387,7 +475,8 @@ export default function EtfHistoryTab({ code, onClose }) {
   const rows = useMemo(() => sliceRange(all, range), [all, range]);
   const events = useMemo(() => limitEvents(rows), [rows]);
   const eventsByDate = useMemo(() => new Map(events.map((e) => [e.d, e])), [events]);
-  const sum = useMemo(() => summarizeHistory(rows), [rows]);
+  const episodes = useMemo(() => limitEpisodes(rows), [rows]);
+  const refYear = rows.length ? yearOf(rows[rows.length - 1].d) : '';
 
   if (result.state === 'locked' || result.state === 'login')
     return <LockedCard loggedIn={result.state === 'locked'} onClose={onClose} mobile={mobile} />;
@@ -406,6 +495,10 @@ export default function EtfHistoryTab({ code, onClose }) {
   return (
     <div className="eh">
       <div className="eh-toolbar">
+        <div className="eh-title">
+          <b>额度变了，溢价怎么走</b>
+          <span>放得越开溢价越低，收得越紧溢价越高</span>
+        </div>
         <div className="eh-seg" role="tablist" aria-label="时间范围">
           {HISTORY_RANGES.map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={range === k} className={range === k ? 'on' : ''} onClick={() => setRange(k)}>
@@ -413,49 +506,34 @@ export default function EtfHistoryTab({ code, onClose }) {
             </button>
           ))}
         </div>
-        {mobile ? null : <Kpis sum={sum} inline />}
-        <Legend />
       </div>
-      {mobile ? <Kpis sum={sum} /> : null}
-      <HistoryChart rows={rows} events={events} mobile={mobile} />
-      <div className="eh-tablehead">
-        <b>每日明细</b>
-        <div className="eh-actions">
-          <button type="button" className={`eh-chipbtn ${onlyEvents ? 'on' : ''}`} aria-pressed={onlyEvents} onClick={() => setOnlyEvents((v) => !v)}>
-            只看额度变动日
-          </button>
-          {mobile ? null : (
-            <button type="button" className="eh-dl" onClick={() => downloadCsv(rows, { code, name: result.data.name })}>
-              <Download size={13} aria-hidden="true" /> 导出 CSV
-            </button>
-          )}
-        </div>
-      </div>
-      <HistoryTable rows={rows} eventsByDate={eventsByDate} mobile={mobile} onlyEvents={onlyEvents} />
+      <QuotaPremiumChart rows={rows} episodes={episodes} mobile={mobile} />
+      <EpisodeList episodes={episodes} refYear={refYear} />
+      <p className="eh-foot">放宽：变动前一日 → 之后 5 个交易日最低溢价；收紧：起点 → 最后一次收紧后 5 个交易日最高溢价。</p>
+      <button type="button" className="eh-daily-toggle" aria-expanded={showDaily} onClick={() => setShowDaily((v) => !v)}>
+        <span>每日明细（份额 / 新增 / 收盘 / 净值）</span>
+        <span>{showDaily ? '收起 ▴' : '展开 ▾'}</span>
+      </button>
+      {showDaily ? (
+        <>
+          <div className="eh-tablehead">
+            <div className="eh-actions">
+              <button type="button" className={`eh-chipbtn ${onlyEvents ? 'on' : ''}`} aria-pressed={onlyEvents} onClick={() => setOnlyEvents((v) => !v)}>
+                只看额度变动日
+              </button>
+              {mobile ? null : (
+                <button type="button" className="eh-dl" onClick={() => downloadCsv(rows, { code, name: result.data.name })}>
+                  <Download size={13} aria-hidden="true" /> 导出 CSV
+                </button>
+              )}
+            </div>
+          </div>
+          <HistoryTable rows={rows} eventsByDate={eventsByDate} mobile={mobile} onlyEvents={onlyEvents} />
+        </>
+      ) : null}
       <p className="eh-foot">
-        溢价率 = 收盘价 ÷ 同日单位净值 − 1；申购上限为当日 PCF 生效值（净申购优先）。数据截至 {all[all.length - 1]?.d}。
+        溢价率 = 收盘价 ÷ 同日单位净值 − 1；申购额度为当日 PCF 生效值（净申购优先）。数据截至 {all[all.length - 1]?.d}。
       </p>
-    </div>
-  );
-}
-
-function Kpis({ sum, inline = false }) {
-  return (
-    <div className={inline ? 'eh-kpis-inline' : 'eh-kpis'}>
-      <div>
-        <span>区间份额</span>
-        <b className={sum.sharesChange > 0 ? 'eh-up' : sum.sharesChange < 0 ? 'eh-down' : ''}>{fmtShares(sum.sharesChange, { sign: true })}</b>
-      </div>
-      <div>
-        <span>当前溢价</span>
-        <b>{fmtPct(sum.premium)}</b>
-      </div>
-      <div>
-        <span>额度变动</span>
-        <b>
-          收紧 {sum.tightened} · 放宽 {sum.relaxed}
-        </b>
-      </div>
     </div>
   );
 }
