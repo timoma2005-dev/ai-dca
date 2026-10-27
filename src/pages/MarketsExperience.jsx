@@ -399,7 +399,7 @@ export function MarketsExperience() {
     await refreshWatch({ force: true });
     await refreshFundLimits();
   }, [refreshWatch, refreshFundLimits]);
-  const feedHealth = useMarketFeedHealth({ market, lastSuccessAt: feedOkAt, dataTimestamp: marketRefreshAt, hasRows: watchSymbols.length > 0, onStale: () => refreshWatch({ force: true }) });
+  const feedHealth = useMarketFeedHealth({ market, lastSuccessAt: feedOkAt, dataTimestamp: marketRefreshAt, hasRows: watchSymbols.length > 0, onStale: () => { if (!localDirect) refreshWatch({ force: true }); } });
   const refreshSectors = useCallback(async (forceRefresh = false) => {
     if (market !== 'us') {
       setSectors([]);
@@ -420,7 +420,7 @@ export function MarketsExperience() {
   // 详情页 K 线 / 净值历史 / 溢价快照统一由 useMarketDetailHistory 调度（见下）。
 
   useEffect(() => {
-    if (!selectedSymbol || market !== 'us' || symbolDetailTab !== 'financials') return;
+    if (localDirect || !selectedSymbol || market !== 'us' || symbolDetailTab !== 'financials') return;
     if (financialsMap[selectedSymbol]) return;
     if (financialsInflightRef.current.has(selectedSymbol)) return;
     financialsInflightRef.current.add(selectedSymbol);
@@ -438,10 +438,10 @@ export function MarketsExperience() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedSymbol, market, symbolDetailTab, financialsMap]);
+  }, [selectedSymbol, market, symbolDetailTab, financialsMap, localDirect]);
 
   useEffect(() => {
-    if (!shouldFetchCnDetail({ market, symbol: selectedSymbol, activeTab: symbolDetailTab, isOtcList: isActiveOtcList })) return;
+    if (localDirect || !shouldFetchCnDetail({ market, symbol: selectedSymbol, activeTab: symbolDetailTab, isOtcList: isActiveOtcList })) return;
     if (Object.prototype.hasOwnProperty.call(cnDetailDataMap, selectedSymbol)) return;
     if (cnDetailInflightRef.current.has(selectedSymbol)) return;
     cnDetailInflightRef.current.add(selectedSymbol);
@@ -459,24 +459,26 @@ export function MarketsExperience() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedSymbol, market, symbolDetailTab, cnDetailDataMap, isActiveOtcList]);
+  }, [selectedSymbol, market, symbolDetailTab, cnDetailDataMap, isActiveOtcList, localDirect]);
 
+  // 本地直连期间云端行情/资讯一律不请求（数据全部由浏览器直连腾讯/东财）。
   useEffect(() => {
+    if (localDirect) return;
     refreshNews();
     refreshEarnings(false);
-  }, [refreshNews, refreshEarnings]);
+  }, [refreshNews, refreshEarnings, localDirect]);
 
   useEffect(() => {
-    refreshSummary(false);
-  }, [refreshSummary]);
+    if (!localDirect) refreshSummary(false);
+  }, [refreshSummary, localDirect]);
 
   useEffect(() => {
-    refreshWatch();
-  }, [refreshWatch]);
+    if (!localDirect) refreshWatch();
+  }, [refreshWatch, localDirect]);
 
   // ---- WS 行情订阅：自选代码变化时重新订阅 ----
   useEffect(() => {
-    const symbols = selectMarketRealtimeSymbols({
+    const symbols = localDirect ? [] : selectMarketRealtimeSymbols({
       trackedWatchSymbols,
       requestedWatchSymbols,
       visibleWatchSymbols,
@@ -494,7 +496,7 @@ export function MarketsExperience() {
         });
       }
     }
-  }, [trackedWatchSymbols, requestedWatchSymbols, visibleWatchSymbols, selectedSymbol, fullTableMode, market, activeWatchList?.type]);
+  }, [trackedWatchSymbols, requestedWatchSymbols, visibleWatchSymbols, selectedSymbol, fullTableMode, market, activeWatchList?.type, localDirect]);
 
   // ---- WS 行情推送：接收实时价格更新 ----
   useEffect(() => {
@@ -535,8 +537,8 @@ export function MarketsExperience() {
   }, [requestedWatchSymbols]);
 
   useEffect(() => {
-    refreshSectors(false);
-  }, [refreshSectors]);
+    if (!localDirect) refreshSectors(false);
+  }, [refreshSectors, localDirect]);
 
   useEffect(() => {
     const q = symbolInput.trim();
@@ -1104,7 +1106,7 @@ export function MarketsExperience() {
   }, [selectedSymbol, chartRange, chartCustomRange]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
+    if (typeof window === 'undefined' || localDirect) return undefined;
     const openPendingSymbol = (rawValue = '') => {
       const params = new URL(window.location.href).searchParams;
       const raw = rawValue || params.get('symbol') || '';
@@ -1133,10 +1135,10 @@ export function MarketsExperience() {
       window.removeEventListener('markets:select-symbol', handleSelectEvent);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchRows.length]);
+  }, [watchRows.length, localDirect]);
 
   useEffect(() => {
-    if (!selectedSymbol) return undefined;
+    if (!selectedSymbol || localDirect) return undefined;
     const selectedWatchRow = watchRows.find((row) => row.symbol === selectedSymbol);
     if (selectedWatchRow && Number.isFinite(Number(selectedWatchRow.price))) return undefined;
     if (Number.isFinite(Number(selectedStoredQuote?.price))) return undefined;
@@ -1182,7 +1184,7 @@ export function MarketsExperience() {
         }
       });
     return () => { cancelled = true; };
-  }, [market, selectedSymbol, selectedStoredQuote?.price, watchRows]);
+  }, [market, selectedSymbol, selectedStoredQuote?.price, watchRows, localDirect]);
 
   // 详情页历史数据（K 线/净值历史/溢价快照）：MarketsExperience 只负责把当前
   // 选中标的与区间交给 useMarketDetailHistory 调度，普通加载缓存优先，
@@ -1195,7 +1197,7 @@ export function MarketsExperience() {
     refreshDetailHistory,
   } = useMarketDetailHistory({
     market,
-    selectedSymbol,
+    selectedSymbol: localDirect ? '' : selectedSymbol,
     chartRange,
     chartCustomRange,
     cnFundParam: detailCnFundParam,
@@ -1209,6 +1211,8 @@ export function MarketsExperience() {
   const switchToLocalDirect = () => {
     setLocalDirectEntrySymbol(market === 'cn' ? selectedSymbol || '' : '');
     setLocalDirect(true);
+    // 云端选中态清掉，避免本地直连期间云端详情 K 线 / 净值 / 资讯继续请求。
+    setSelectedSymbol('');
   };
   const switchToCloud = (symbol = '', name = '') => {
     setLocalDirectEntrySymbol('');
@@ -1238,7 +1242,8 @@ export function MarketsExperience() {
         onCancel={() => setWatchlistDialog(null)}
         onSubmit={handleWatchlistDialogSubmit}
       />
-      <MarketSentimentPageSurface padBottom={false} fillHeight>
+      <div className="relative h-full min-h-[calc(100vh-var(--brand-bar-h,48px))]">
+        <div className="relative z-[1] flex h-full min-h-0 flex-col pt-4">
         <LocalDirectMarketsView
           isMobile={isMobile}
           watchLists={watchLists}
@@ -1264,7 +1269,8 @@ export function MarketsExperience() {
           initialSelectedSymbol={localDirectEntrySymbol}
           onSwitchCloud={switchToCloud}
         />
-      </MarketSentimentPageSurface>
+        </div>
+      </div>
       </>
     );
   }
