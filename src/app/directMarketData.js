@@ -917,7 +917,8 @@ export function parseEastmoneyFundNavPayload(body, codes = []) {
     out[code] = {
       code,
       symbol: code,
-      name: '',
+      // 场外基金腾讯行情没有名称，用 FundMNFInfo 的 SHORTNAME。
+      name: String(item.SHORTNAME || '').trim(),
       latestNav,
       latestNavDate: pdate,
       // 显式溢价率，上层优先使用，不再按价格/净值本地重算。

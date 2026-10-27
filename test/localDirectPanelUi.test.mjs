@@ -154,7 +154,8 @@ test('markets and fundSwitch pages wire the local-direct entry', () => {
   // 面板净值走东财 FundMNFInfo（与竞价看板同链路），蛋卷仅兜底。
   const panel = readFileSync(new URL('../src/components/markets/LocalDirectPanel.jsx', import.meta.url), 'utf8');
   assert.match(panel, /fetchEastmoneyFundNavs/);
-  assert.match(panel, /fetchDanjuanDirectQuotes/);
+  // 蛋卷 djapi 无 CORS 头，浏览器直连不再请求；净值与名称走东财 FundMNFInfo。
+  assert.doesNotMatch(panel, /fetchDanjuanDirectQuotes/);
 
   const fundSwitch = readFileSync(new URL('../src/pages/FundSwitchExperience.jsx', import.meta.url), 'utf8');
   assert.match(fundSwitch, /\{ id: 'local', label: '本地直连'/);

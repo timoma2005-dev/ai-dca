@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   clearDirectMarketDataCaches,
-  fetchDanjuanDirectQuotes,
   fetchDirectKline,
   fetchDirectQuotes,
   fetchEastmoneyFundNavs,
@@ -143,15 +142,14 @@ export function LocalDirectMarketsView({
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const [quoteResult, fmResult, danjuanResult] = await Promise.allSettled([
+      // 蛋卷 djapi 不返回 CORS 头，浏览器直连必然被拦截，净值/名称统一走东财 FundMNFInfo（JSONP）。
+      const [quoteResult, fmResult] = await Promise.allSettled([
         isOtcList ? Promise.resolve(null) : fetchDirectQuotes(codes, { signal: controller.signal }),
         fetchEastmoneyFundNavs(codes, { signal: controller.signal }),
-        fetchDanjuanDirectQuotes(codes, { signal: controller.signal }),
       ]);
       if (controller.signal.aborted || seq !== seqRef.current) return;
       if (quoteResult.status === 'rejected' && fmResult.status === 'rejected') throw quoteResult.reason;
       const nextNavs = {};
-      if (danjuanResult.status === 'fulfilled') Object.assign(nextNavs, danjuanResult.value?.quotes || {});
       if (fmResult.status === 'fulfilled') Object.assign(nextNavs, fmResult.value?.quotes || {});
       setQuotes(quoteResult.status === 'fulfilled' ? (quoteResult.value?.quotes || {}) : {});
       setNavs(nextNavs);

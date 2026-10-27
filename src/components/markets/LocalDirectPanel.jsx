@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import {
   clearDirectMarketDataCaches,
-  fetchDanjuanDirectQuotes,
   fetchDirectKline,
   fetchDirectQuotes,
   fetchEastmoneyFundNavs,
@@ -262,11 +261,8 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
     try {
       const tasks = [fetchDirectQuotes(codes, { signal: controller.signal })];
       if (showPremium) {
-        // 东财基金接口为主：ZJL 折价率直接给溢价率（盘中可用），NAV 给官方净值，蛋卷兜底缺失代码。
-        tasks.push(
-          fetchEastmoneyFundNavs(codes, { signal: controller.signal }),
-          fetchDanjuanDirectQuotes(codes, { signal: controller.signal })
-        );
+        // 东财基金接口：ZJL 折价率直接给溢价率（盘中可用），NAV 给官方净值。蛋卷 djapi 无 CORS 头，浏览器直连会被拦截，不再请求。
+        tasks.push(fetchEastmoneyFundNavs(codes, { signal: controller.signal }));
       }
       const results = await Promise.allSettled(tasks);
       if (controller.signal.aborted || seq !== seqRef.current) return;
@@ -274,8 +270,7 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
       if (quoteResult.status === 'rejected') throw quoteResult.reason;
       const navs = {};
       if (showPremium) {
-        const [, fmResult, danjuanResult] = results;
-        if (danjuanResult?.status === 'fulfilled') Object.assign(navs, danjuanResult.value?.quotes || {});
+        const [, fmResult] = results;
         if (fmResult?.status === 'fulfilled') Object.assign(navs, fmResult.value?.quotes || {});
       }
       const nextRows = buildDirectRows({
