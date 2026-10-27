@@ -23,7 +23,7 @@ const LOCAL_METRIC_ORDER = ['premium', 'turnover', 'highDrawdown', 'closeHighDra
 
 function metricHasValue(id, row) {
   const text = resolveMetricDisplay(id, row).text;
-  return Boolean(text) && text !== '—' && text !== '--';
+  return /\d/.test(String(text || ''));
 }
 
 // 列表里至少一行有值的指标（顶部已展示最新价/涨跌幅，不重复）。

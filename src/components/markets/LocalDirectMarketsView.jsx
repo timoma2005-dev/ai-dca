@@ -51,7 +51,7 @@ function columnHasData(id, row) {
   const spec = OPTIONAL_COLUMN_FIELDS[id];
   if (spec === 'metric') {
     const text = resolveMetricDisplay(id, row).text;
-    return Boolean(text) && text !== '—' && text !== '--';
+    return /\d/.test(String(text || ''));
   }
   return spec.some((field) => row?.[field] != null && row[field] !== '' && Number.isFinite(Number(row[field])));
 }
