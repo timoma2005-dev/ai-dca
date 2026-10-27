@@ -1032,15 +1032,13 @@ export async function fetchEastmoneyFundNavs(codes = [], { signal } = {}) {
 // 基金档案（区间收益 / 费率 / ETF 总份额）——东财接口均返回 CORS 头，浏览器可直接 fetch。
 //   FundMNPeriodIncrease：近1周…成立以来、今年以来（场内 ETF 也支持，按净值计）
 //   FundMNDetailInformation：管理费 / 托管费 / 销售服务费
-//   push2 stock/get f84：场内基金总份额（份）
 // 都是日频数据，按代码缓存 12 小时（内存 + localStorage），一次只查一只，限并发。
 // ---------------------------------------------------------------------------
 const EM_PERIOD_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNPeriodIncrease';
 const EM_FUND_DETAIL_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNDetailInformation';
-const EM_PUSH2_STOCK_URL = 'https://push2.eastmoney.com/api/qt/stock/get';
 const FUND_PROFILE_STORAGE_KEY = 'aiDcaDirectFundProfile:v1';
 const FUND_PROFILE_TTL_MS = 12 * 60 * 60 * 1000;
-const FUND_PROFILE_CONCURRENCY = 4;
+const FUND_PROFILE_CONCURRENCY = 6;
 const MAX_LOCAL_FUND_PROFILES = 300;
 const fundProfileMemoryCache = new Map();
 const fundProfileInflight = new Map();
@@ -1094,10 +1092,6 @@ export function parseEastmoneyFundDetail(body) {
   return out;
 }
 
-function exchangeSecid(code) {
-  return /^[56]/.test(code) ? `1.${code}` : `0.${code}`;
-}
-
 function readLocalFundProfiles() {
   if (typeof window === 'undefined' || !window.localStorage) return {};
   try {
@@ -1145,13 +1139,8 @@ async function fetchOneFundProfile(code, { exchange, signal }) {
     fetchJsonCors(`${EM_PERIOD_URL}?${params.toString()}`, signal).then(parseEastmoneyPeriodIncrease),
     fetchJsonCors(`${EM_FUND_DETAIL_URL}?${params.toString()}`, signal).then(parseEastmoneyFundDetail),
   ];
-  if (exchange) {
-    const q = new URLSearchParams({ secid: exchangeSecid(code), fields: 'f57,f84' });
-    tasks.push(fetchJsonCors(`${EM_PUSH2_STOCK_URL}?${q.toString()}`, signal).then((body) => {
-      const shares = emNumber(body?.data?.f84);
-      return shares != null && shares > 0 ? { totalShares: shares } : {};
-    }));
-  }
+  // push2 stock/get 在浏览器里不回 CORS 头（curl 带 Origin 能拿到，实测 Chrome 被拦），总份额暂不取。
+  void exchange;
   const results = await Promise.allSettled(tasks);
   if (results.every((item) => item.status === 'rejected')) throw results[0].reason;
   return Object.assign({}, ...results.map((item) => (item.status === 'fulfilled' ? item.value : {})));
