@@ -4,7 +4,9 @@ import { getExpectedLatestNavDate, getTodayShanghaiDate } from './holdingsLedger
 const TENCENT_QUOTE_URL = 'https://qt.gtimg.cn/';
 const TENCENT_SEARCH_URL = 'https://smartbox.gtimg.cn/s3/';
 const EM_KLINE_URL = 'https://push2his.eastmoney.com/api/qt/stock/kline/get';
-const EM_PUSH_TOKEN = '7eea3edcaed734bea9cbfc24409ed989';
+// push2his K 线接口在 web 端的标准 ut（JSONP cb 回包依赖它），与其它东财接口的 token 不同。
+const EM_KLINE_TOKEN = 'fa5fd1943c7b386f172d6893dbfba10b';
+const TENCENT_KLINE_URL = 'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get';
 
 const CN_EXCHANGE_PREFIXES = new Set(['15', '50', '51', '52', '54', '56', '58']);
 const QUOTE_CACHE_TTL_MS = 45 * 1000;
@@ -533,6 +535,75 @@ export function parseEastmoneyKlinePayload(payload, { symbol = '', timeframe = '
   };
 }
 
+// 腾讯 K 线周期单位与每档拉取根数。
+const TENCENT_KLINE_UNITS = { '1d': { unit: 'day', count: 320 }, '1w': { unit: 'week', count: 260 }, '1mo': { unit: 'month', count: 120 } };
+
+/**
+ * 解析腾讯 fqkline 响应为统一 candle 结构（与东财解析器同形）。
+ * 行格式：[date, open, close, high, low, volume(手), ...]；前复权键 qfq{unit}，缺失时回退 {unit}。
+ */
+export function parseTencentKlinePayload(payload, { symbol = '', timeframe = '1d' } = {}) {
+  const conf = TENCENT_KLINE_UNITS[timeframe];
+  const meta = normalizeDirectSymbol(symbol);
+  const tencentCode = meta?.tencent || symbol;
+  const node = payload?.data?.[tencentCode];
+  const rows = (conf && (node?.[`qfq${conf.unit}`] || node?.[conf.unit])) || [];
+  const candles = rows.map((row) => {
+    const [date, open, close, high, low, volume] = row;
+    return {
+      t: epochSecFromCnDate(date),
+      date: String(date || ''),
+      o: compactNumber(open),
+      h: compactNumber(high),
+      l: compactNumber(low),
+      c: compactNumber(close),
+      v: safeNumber(volume),
+      amount: null,
+    };
+  }).filter((item) => item.t > 0 && item.c != null);
+  return {
+    symbol: meta?.code || symbol,
+    name: node?.qt?.[tencentCode]?.[1] || meta?.code || symbol,
+    market: 'cn',
+    tf: timeframe,
+    candles,
+    generatedAt: new Date().toISOString(),
+    source: 'tencent-kline-direct',
+  };
+}
+
+async function fetchTencentKline(meta, timeframe) {
+  const conf = TENCENT_KLINE_UNITS[timeframe];
+  if (!conf) throw new Error('unsupported timeframe');
+  const params = new URLSearchParams({ param: `${meta.tencent},${conf.unit},,,${conf.count},qfq` });
+  // web.ifzq.gtimg.cn 对浏览器开放 CORS，可直接 fetch，无需 JSONP。
+  const res = await fetch(`${TENCENT_KLINE_URL}?${params.toString()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('tencent kline HTTP ' + res.status);
+  const body = await res.json();
+  const normalized = parseTencentKlinePayload(body, { symbol: meta.code, timeframe });
+  if (!normalized.candles.length) throw new Error('tencent kline empty');
+  return normalized;
+}
+
+async function fetchEastmoneyKlineJsonp(meta, timeframe) {
+  const klt = eastmoneyKlt(timeframe);
+  if (!klt) throw new Error('unsupported timeframe');
+  const params = new URLSearchParams({
+    secid: meta.eastmoneySecid,
+    ut: EM_KLINE_TOKEN,
+    fields1: 'f1,f2,f3,f4,f5,f6',
+    fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+    klt,
+    fqt: '1',
+    beg: '19700101',
+    end: '20500101'
+  });
+  // 东财 push2his 不返回 CORS 头，fetch 会被浏览器拦截，与竞价看板一致走 JSONP。
+  const payload = await fetchJsonp(`${EM_KLINE_URL}?${params.toString()}`);
+  if (payload?.rc !== 0 || !payload?.data) throw new Error('eastmoney kline empty');
+  return parseEastmoneyKlinePayload(payload, { symbol: meta.code, timeframe });
+}
+
 export async function fetchDirectKline(symbol, { timeframe = '1d', limit = '' } = {}) {
   const key = directKlineInflightKey(symbol, { timeframe });
   if (!key) return null;
@@ -550,9 +621,8 @@ export async function fetchDirectKline(symbol, { timeframe = '1d', limit = '' } 
 
 function directKlineInflightKey(symbol, { timeframe = '1d' } = {}) {
   const meta = normalizeDirectSymbol(symbol);
-  const klt = eastmoneyKlt(timeframe);
-  if (!meta || meta.market !== 'cn' || !klt) return '';
-  return `${meta.eastmoneySecid}|${timeframe}`;
+  if (!meta || meta.market !== 'cn' || !TENCENT_KLINE_UNITS[timeframe]) return '';
+  return `${meta.code}|${timeframe}`;
 }
 
 function sliceDirectKlinePayload(payload, limit = '') {
@@ -564,9 +634,8 @@ function sliceDirectKlinePayload(payload, limit = '') {
 
 async function fetchDirectKlineUncached(symbol, { timeframe = '1d' } = {}) {
   const meta = normalizeDirectSymbol(symbol);
-  const klt = eastmoneyKlt(timeframe);
-  if (!meta || meta.market !== 'cn' || !klt) return null;
-  const cacheKey = `${meta.eastmoneySecid}|${timeframe}`;
+  if (!meta || meta.market !== 'cn' || !TENCENT_KLINE_UNITS[timeframe]) return null;
+  const cacheKey = `${meta.code}|${timeframe}`;
   const now = Date.now();
   const cached = klineMemoryCache.get(cacheKey);
   if (cached?.expiresAt > now && cached.payload?.candles?.length) {
@@ -575,21 +644,14 @@ async function fetchDirectKlineUncached(symbol, { timeframe = '1d' } = {}) {
       cache: { hit: true, source: 'memory-direct' }
     };
   }
-  const params = new URLSearchParams({
-    secid: meta.eastmoneySecid,
-    ut: EM_PUSH_TOKEN,
-    fields1: 'f1,f2,f3,f4,f5,f6',
-    fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-    klt,
-    fqt: '1',
-    beg: '19700101',
-    end: '20500101'
-  });
-  const res = await fetch(`${EM_KLINE_URL}?${params.toString()}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error('eastmoney kline HTTP ' + res.status);
-  const payload = await res.json();
-  if (payload?.rc !== 0 || !payload?.data) throw new Error('eastmoney kline empty');
-  const normalized = parseEastmoneyKlinePayload(payload, { symbol: meta.code, timeframe });
+  // 腾讯 fqkline 为主（CORS 全开，普通 fetch 即可）；失败再退东财 push2his JSONP。
+  let normalized;
+  try {
+    normalized = await fetchTencentKline(meta, timeframe);
+  } catch (primaryError) {
+    normalized = await fetchEastmoneyKlineJsonp(meta, timeframe);
+    normalized.fallbackFrom = primaryError?.message || 'tencent-kline-failed';
+  }
   klineMemoryCache.set(cacheKey, { payload: normalized, expiresAt: now + KLINE_CACHE_TTL_MS });
   return normalized;
 }
@@ -597,6 +659,7 @@ async function fetchDirectKlineUncached(symbol, { timeframe = '1d' } = {}) {
 export function clearDirectMarketDataCaches() {
   quoteMemoryCache.clear();
   klineMemoryCache.clear();
+  fundNavMemoryCache.clear();
   quoteInflight.clear();
   searchInflight.clear();
   klineInflight.clear();
@@ -809,4 +872,156 @@ export async function fetchDanjuanDirectQuotes(codes = [], { signal } = {}) {
   }
 
   return { quotes: out, generatedAt: new Date().toISOString(), source: 'danjuan-direct' };
+}
+
+// ── 东财基金净值直连（FundMNFInfo，JSONP；与 public/auction-board.html 同接口） ──
+// ZJL 即东财行情页的折价率（%）：负值代表溢价，溢价率直接取反即可，
+// 盘中也由东财服务端实时给出，无需 NEWPRICE 反推；NAV 为官方单位净值（T-1）。
+
+const EM_FUND_NAV_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
+const EM_FUND_NAV_CACHE_TTL_MS = 60 * 1000;
+const fundNavMemoryCache = new Map();
+
+function sixDigitCodes(codes = []) {
+  return Array.from(new Set(
+    (Array.isArray(codes) ? codes : [codes])
+      .map((c) => String(c || '').trim().replace(/^(sh|sz|bj)/i, ''))
+      .filter((c) => /^\d{6}$/.test(c))
+  ));
+}
+
+function round2(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * 解析 FundMNFInfo JSONP 响应体为 { code: navQuote }。
+ * 溢价率直接取 ZJL 反号；纯函数，无 DOM 依赖，node:test 可直接覆盖。
+ */
+export function parseEastmoneyFundNavPayload(body, codes = []) {
+  const wanted = new Set(sixDigitCodes(codes));
+  const datas = body?.Datas;
+  if (!Array.isArray(datas)) return {};
+  const out = {};
+  for (const item of datas) {
+    const code = String(item?.FCODE || '').trim();
+    if (!/^\d{6}$/.test(code) || (wanted.size > 0 && !wanted.has(code))) continue;
+    const nav = compactNumber(item.NAV);
+    const latestNav = nav != null && nav > 0 ? nav : null;
+    const pdate = String(item.PDATE || '').slice(0, 10);
+    // 注意 safeNumber('') === 0，空串必须先显式排除。
+    const rawZjl = item.ZJL;
+    const zjl = rawZjl === '' || rawZjl == null ? null : safeNumber(rawZjl);
+    const premiumPercent = zjl == null ? null : round2(-zjl);
+    if (premiumPercent == null && latestNav == null) continue;
+    out[code] = {
+      code,
+      symbol: code,
+      name: '',
+      latestNav,
+      latestNavDate: pdate,
+      // 显式溢价率，上层优先使用，不再按价格/净值本地重算。
+      premiumPercent,
+      navSource: premiumPercent != null ? 'eastmoney-zjl' : 'eastmoney-nav',
+      source: 'eastmoney-fund-direct',
+    };
+  }
+  return out;
+}
+
+/**
+ * 通用 JSONP：东财接口（push2his / fundmobapi）不返回 CORS 头，
+ * fetch 会被浏览器拦截，统一走 script 标签，与竞价看板 adminAuction 同方式。
+ */
+function fetchJsonp(url, { signal, callbackParam = 'cb' } = {}) {
+  return new Promise((resolve, reject) => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      reject(new Error('jsonp requires browser'));
+      return;
+    }
+    const callback = `aiDcaJsonp_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    const script = document.createElement('script');
+    let settled = false;
+    const cleanup = () => {
+      try { delete window[callback]; } catch { window[callback] = undefined; }
+      script.remove();
+      if (signal) signal.removeEventListener('abort', abort);
+    };
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    window[callback] = (payload) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(payload);
+    };
+    const joiner = url.includes('?') ? '&' : '?';
+    script.src = `${url}${joiner}${callbackParam}=${encodeURIComponent(callback)}&_=${Date.now()}`;
+    script.onload = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('jsonp callback missing'));
+    };
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('jsonp script failed'));
+    };
+    if (signal) {
+      if (signal.aborted) { abort(); return; }
+      signal.addEventListener('abort', abort, { once: true });
+    }
+    document.body.appendChild(script);
+  });
+}
+
+function fetchEastmoneyFundNavJsonp(codes, { signal } = {}) {
+  const params = new URLSearchParams({
+    pageIndex: '1',
+    pageSize: '200',
+    plat: 'Android',
+    appType: 'ttjj',
+    product: 'EFund',
+    Version: '1',
+    deviceid: 'ai-dca-direct',
+    Fcodes: codes.join(','),
+  });
+  // FundMNFInfo 的回调参数名是 callback，与 push2his 的 cb 不同。
+  return fetchJsonp(`${EM_FUND_NAV_URL}?${params.toString()}`, { signal, callbackParam: 'callback' });
+}
+
+/**
+ * 批量拉取东财基金净值（一次 JSONP 最多 200 只），60s 内存缓存去重。
+ * 与竞价看板 adminAuction 的 loadFM 同链路、同参考净值公式。
+ */
+export async function fetchEastmoneyFundNavs(codes = [], { signal } = {}) {
+  const list = sixDigitCodes(codes);
+  if (!list.length) return null;
+  const now = Date.now();
+  const out = {};
+  const missing = [];
+  for (const code of list) {
+    const cached = fundNavMemoryCache.get(code);
+    if (cached?.expiresAt > now && cached.quote) out[code] = cached.quote;
+    else missing.push(code);
+  }
+  if (!missing.length) {
+    return { quotes: out, generatedAt: new Date().toISOString(), source: 'eastmoney-fund-direct-cache' };
+  }
+  const body = await fetchEastmoneyFundNavJsonp(missing, { signal });
+  const parsed = parseEastmoneyFundNavPayload(body, missing);
+  for (const code of missing) {
+    const quote = parsed[code];
+    if (quote) {
+      out[code] = quote;
+      fundNavMemoryCache.set(code, { quote, expiresAt: now + EM_FUND_NAV_CACHE_TTL_MS });
+    }
+  }
+  return { quotes: out, generatedAt: new Date().toISOString(), source: 'eastmoney-fund-direct' };
 }
