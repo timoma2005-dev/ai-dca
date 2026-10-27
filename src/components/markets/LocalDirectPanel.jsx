@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Cloud,
+  Info,
   Loader2,
   PlugZap,
   RefreshCw,
@@ -85,49 +86,25 @@ export function LocalDirectModeBar({ scope, enabled, onChange, compact = false }
 }
 
 /**
- * 行情数据源的右侧悬浮切换：收起时贴右边缘一枚小标签（当前模式），
- * 点开后弹出「云端 / 本地直连」两项和一句说明，不再占顶部一整行。
+ * 行情数据源横条：云端提示「刷新失败可用本地直连」，本地直连提示「数据已精简」，右侧一键切换。
+ * 列表头部和基金详情顶部共用。
  */
-export function LocalDirectModeFloat({ enabled, onChange }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const close = (event) => {
-      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
-  }, [open]);
-  const pick = (next) => {
-    setOpen(false);
-    if (next !== enabled) onChange(next);
-  };
+export function MarketsSourceNotice({ localDirect = false, onSwitch, className = '' }) {
   return (
-    <div ref={rootRef} className="ldp-float" data-testid="local-direct-mode-float" data-open={open ? 'true' : 'false'}>
-      {open ? (
-        <div className="ldp-float-panel" role="dialog" aria-label="行情数据源">
-          <div className="ldp-float-title">行情数据源</div>
-          <button type="button" className={!enabled ? 'is-active' : ''} aria-pressed={!enabled} onClick={() => pick(false)}>
-            <Cloud size={15} />
-            <span><b>云端</b><small>数据最全，含收益、费率、溢价历史等</small></span>
-          </button>
-          <button type="button" className={enabled ? 'is-active' : ''} aria-pressed={enabled} onClick={() => pick(true)}>
-            <PlugZap size={15} />
-            <span><b>本地直连</b><small>浏览器直连腾讯/东财，数据精简</small></span>
-          </button>
-        </div>
+    <div
+      data-testid={localDirect ? 'local-direct-notice' : 'cloud-source-notice'}
+      className={['ldp-source-notice', className].filter(Boolean).join(' ')}
+    >
+      <Info size={13} className="shrink-0" />
+      <span className="min-w-0 flex-1">
+        {localDirect ? '本地直连已精简部分数据，需要更详细的数据请使用云端' : '若云端数据刷新失败，请使用本地直连'}
+      </span>
+      {onSwitch ? (
+        <button type="button" onClick={onSwitch} className="ldp-source-notice-btn">
+          {localDirect ? <Cloud size={12} /> : <PlugZap size={12} />}
+          {localDirect ? '切换云端' : '切换直连'}
+        </button>
       ) : null}
-      <button
-        type="button"
-        className={enabled ? 'ldp-float-tab is-direct' : 'ldp-float-tab'}
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-label={`行情数据源：${enabled ? '本地直连' : '云端'}，点击切换`}
-      >
-        {enabled ? <PlugZap size={14} /> : <Cloud size={14} />}
-        <span>{enabled ? '直连' : '云端'}</span>
-      </button>
     </div>
   );
 }

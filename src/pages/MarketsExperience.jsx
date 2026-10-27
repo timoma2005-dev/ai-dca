@@ -14,7 +14,7 @@ import {
   searchSymbols,
 } from './markets/marketsApiLoader.js';
 import { addToWatchlist, CN_ETF_WATCHLIST_PRESETS, createWatchlist, deleteWatchlist, loadWatchlist, removeFromWatchlist, renameWatchlist, setActiveWatchlist } from '../app/marketsWatchlistStorage.js';
-import { LocalDirectModeFloat, useLocalDirectMode } from '../components/markets/LocalDirectPanel.jsx';
+import { MarketsSourceNotice, useLocalDirectMode } from '../components/markets/LocalDirectPanel.jsx';
 import { LocalDirectMarketsView } from '../components/markets/LocalDirectMarketsView.jsx';
 import { LOCAL_DIRECT_SCOPES } from '../app/localDirectMode.js';
 import { useMarketsPageSync } from './markets/useMarketsPageSync.js';
@@ -137,6 +137,7 @@ export function MarketsExperience() {
   const [sectorsOpen, setSectorsOpen] = useState(true);
   const [sectorSearchOpen, setSectorSearchOpen] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState('');
+  const [localDirectEntrySymbol, setLocalDirectEntrySymbol] = useState('');
   const [fullTableMode, setFullTableMode] = useState(() => getInitialMarketsFullTableMode());
   const selectedSymbolRef = useRef('');
   const pendingSymbolHandledRef = useRef('');
@@ -1204,7 +1205,23 @@ export function MarketsExperience() {
   });
 
   const listTableColumnProps = { showLimitColumn, hidePremiumColumn, hideTrendColumn };
-  const fullTablePanelProps = { fullTableMode, rows: activeSidebarRows, activeWatchListName: activeWatchList?.name, watchLists, activeWatchListId: watch.activeListId, market, isMobile, klineMap, selectedSymbol, marketRefreshAt, onSelectWatchlist: handleSelectWatchlist, onCreateWatchlist: handleCreateWatchlist, onRenameWatchlist: handleRenameWatchlist, onDeleteWatchlist: handleDeleteWatchlist, onSelectSymbol: handleSelectSymbol, searchOpen: watchOverlaySearchOpen, searchValue: watchOverlaySearchInput, searchResults: watchOverlaySearchResults, searchLoading: watchOverlaySearchLoading, searchError: watchOverlaySearchError, watchSymbols, onSearchToggle: handleToggleWatchOverlaySearch, onSearchChange: setWatchOverlaySearchInput, onSearchClear: handleClearWatchOverlaySearch, onSearchResultSelect: handlePickSymbolSearch, onSearchResultAdd: handleAddSearchResult, onRefresh: refreshMarketsData, feedHealth, refreshing: watchLoading, onVisibleSymbolsChange: handleVisibleWatchSymbolsChange, onColumnVisibilityStateChange: handleColumnVisibilityStateChange, onViewPresetSave: (meta) => promptMarketViewPresetSave({ market, listType: activeWatchList?.type || '', ...(meta || {}) }), ...listTableColumnProps };
+  // 云端 ↔ 本地直连：在基金详情里切换时留在同一只基金的详情，不回列表。
+  const switchToLocalDirect = () => {
+    setLocalDirectEntrySymbol(market === 'cn' ? selectedSymbol || '' : '');
+    setLocalDirect(true);
+  };
+  const switchToCloud = (symbol = '', name = '') => {
+    setLocalDirectEntrySymbol('');
+    if (symbol) {
+      handleSelectSymbol({ symbol, code: symbol, name: name || symbol, market: 'cn' }, { source: 'local-direct-switch', market: 'cn' });
+    } else {
+      clearSelectedSymbol();
+      setFullTableMode(true);
+    }
+    setLocalDirect(false);
+  };
+  const cloudSourceNotice = <MarketsSourceNotice onSwitch={switchToLocalDirect} className={isMobile ? 'mt-2 mx-3 mb-1' : ''} />;
+  const fullTablePanelProps = { notice: market === 'cn' ? cloudSourceNotice : null, fullTableMode, rows: activeSidebarRows, activeWatchListName: activeWatchList?.name, watchLists, activeWatchListId: watch.activeListId, market, isMobile, klineMap, selectedSymbol, marketRefreshAt, onSelectWatchlist: handleSelectWatchlist, onCreateWatchlist: handleCreateWatchlist, onRenameWatchlist: handleRenameWatchlist, onDeleteWatchlist: handleDeleteWatchlist, onSelectSymbol: handleSelectSymbol, searchOpen: watchOverlaySearchOpen, searchValue: watchOverlaySearchInput, searchResults: watchOverlaySearchResults, searchLoading: watchOverlaySearchLoading, searchError: watchOverlaySearchError, watchSymbols, onSearchToggle: handleToggleWatchOverlaySearch, onSearchChange: setWatchOverlaySearchInput, onSearchClear: handleClearWatchOverlaySearch, onSearchResultSelect: handlePickSymbolSearch, onSearchResultAdd: handleAddSearchResult, onRefresh: refreshMarketsData, feedHealth, refreshing: watchLoading, onVisibleSymbolsChange: handleVisibleWatchSymbolsChange, onColumnVisibilityStateChange: handleColumnVisibilityStateChange, onViewPresetSave: (meta) => promptMarketViewPresetSave({ market, listType: activeWatchList?.type || '', ...(meta || {}) }), ...listTableColumnProps };
   const showMarketsSidebar = !(fullTableMode && !selectedSymbol);
 
   if (localDirect) {
@@ -1244,9 +1261,9 @@ export function MarketsExperience() {
             if (symbol) setWatch(removeFromWatchlist('cn', symbol, watch.activeListId));
           }}
           onMarketAction={handleMarketAction}
-          onSwitchCloud={() => setLocalDirect(false)}
+          initialSelectedSymbol={localDirectEntrySymbol}
+          onSwitchCloud={switchToCloud}
         />
-        <LocalDirectModeFloat enabled={localDirect} onChange={setLocalDirect} />
       </MarketSentimentPageSurface>
       </>
     );
@@ -1261,7 +1278,6 @@ export function MarketsExperience() {
       onSubmit={handleWatchlistDialogSubmit}
     />
     <MarketSentimentPageSurface padBottom={false} fillHeight>
-    <LocalDirectModeFloat enabled={localDirect} onChange={setLocalDirect} />
     {!selectedSymbol ? <MarketSentimentStrip /> : null}
     {showExpandedWatchListOverlay ? (
       <Suspense fallback={null}>
@@ -1372,6 +1388,7 @@ export function MarketsExperience() {
         onRefreshSummary={() => refreshSummary(true)}
         selectedSymbol={selectedSymbol}
         fullTableMode={fullTableMode}
+        detailNotice={market === 'cn' ? <MarketsSourceNotice onSwitch={switchToLocalDirect} className="mx-3 sm:mx-1" /> : null}
         fullTablePanel={(
           <Suspense fallback={<FullTableLoadingFallback />}>
             <MarketsFullTablePanel {...fullTablePanelProps} />

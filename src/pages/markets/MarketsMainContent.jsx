@@ -28,6 +28,8 @@ export function MarketsMainContent({
   selectedSymbol = '',
   fullTableMode = false,
   fullTablePanel,
+  // 详情顶部的数据源横条（云端 / 本地直连切换）。
+  detailNotice = null,
   detail,
 }) {
   const showFullTable = fullTableMode && !selectedQuote;
@@ -85,6 +87,8 @@ export function MarketsMainContent({
           {fullTablePanel}
         </div>
       ) : selectedQuote ? (
+        <>
+        {detailNotice}
         <Suspense fallback={<div className="h-72 animate-pulse rounded-xl bg-[#f1f3f4]" />}>
           <SymbolDetailPanel
             row={selectedQuote}
@@ -129,6 +133,7 @@ export function MarketsMainContent({
             localDirect={Boolean(detail.localDirect)}
           />
         </Suspense>
+        </>
       ) : (
         noSelectedContent
       )}

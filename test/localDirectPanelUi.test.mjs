@@ -134,7 +134,10 @@ test('markets and fundSwitch pages wire the local-direct entry', () => {
   assert.match(view, /MarketsMainContent/);
   assert.match(view, /localDirect: true/);
   assert.match(view, /omitColumnIds=\{omitColumnIds\}/);
-  assert.match(view, /本地直连已精简部分数据，需要更详细的数据请使用云端/);
+  assert.match(view, /detailNotice=\{<MarketsSourceNotice localDirect/);
+  const panelSrc = readFileSync(new URL('../src/components/markets/LocalDirectPanel.jsx', import.meta.url), 'utf8');
+  assert.match(panelSrc, /本地直连已精简部分数据，需要更详细的数据请使用云端/);
+  assert.match(panelSrc, /若云端数据刷新失败，请使用本地直连/);
   assert.match(view, /classList\.toggle\('markets-full-table-active', showFullTable\)/);
   const mobileList = readFileSync(new URL('../src/pages/markets/MobileFundList.jsx', import.meta.url), 'utf8');
   assert.match(mobileList, /expandable=\{!localDirect\}/);
@@ -142,7 +145,9 @@ test('markets and fundSwitch pages wire the local-direct entry', () => {
   const detail = readFileSync(new URL('../src/pages/markets/MarketSymbolDetailPanel.jsx', import.meta.url), 'utf8');
   assert.match(detail, /!summaryMode && !localDirect \? <ChartToolbarPopover/);
   // 数据源切换改为右侧悬浮标签，云端/直连两种视图都挂载，保证可切回。
-  assert.equal((markets.match(/<LocalDirectModeFloat enabled=\{localDirect\}/g) || []).length, 2);
+  assert.match(markets, /<MarketsSourceNotice onSwitch=\{switchToLocalDirect\}/);
+  assert.match(markets, /initialSelectedSymbol=\{localDirectEntrySymbol\}/);
+  assert.match(markets, /onSwitchCloud=\{switchToCloud\}/);
   // 列表锁滚动只在列表态生效，详情态放开（手机端详情页可滑动）。
   assert.match(markets, /typeof document === 'undefined' \|\| localDirect\) return undefined/);
 

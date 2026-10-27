@@ -17,7 +17,7 @@ import { FullTableLoadingFallback } from '../../pages/markets/FullTableLoadingFa
 import { MarketsMainContent } from '../../pages/markets/MarketsMainContent.jsx';
 import { chartKlineCacheKeyForRange } from '../../pages/markets/marketFundMetrics.js';
 import { resolveMetricDisplay } from '../../pages/markets/mobileFundMetrics.js';
-import { Cloud, Info } from 'lucide-react';
+import { MarketsSourceNotice } from './LocalDirectPanel.jsx';
 import { cx } from '../experience-ui.jsx';
 
 const MarketsFullTablePanel = lazy(() => import('../../pages/markets/MarketsFullTablePanel.jsx').then((module) => ({ default: module.MarketsFullTablePanel })));
@@ -60,19 +60,13 @@ export function computeLocalDirectOmittedColumns(rows = []) {
   return Object.keys(OPTIONAL_COLUMN_FIELDS).filter((id) => !rows.some((row) => columnHasData(id, row)));
 }
 
-/** 统一提示：本地直连只保留浏览器能直连拿到的数据。 */
-export function LocalDirectNotice({ onSwitchCloud, className = '' }) {
-  return (
-    <div data-testid="local-direct-notice" className={cx('flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-1.5 text-[11px] leading-4 text-indigo-800', className)}>
-      <Info size={13} className="shrink-0" />
-      <span className="min-w-0 flex-1">本地直连已精简部分数据，需要更详细的数据请使用云端</span>
-      {onSwitchCloud ? (
-        <button type="button" onClick={onSwitchCloud} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2 py-0.5 font-semibold text-indigo-700 shadow-2xs">
-          <Cloud size={12} />切换云端
-        </button>
-      ) : null}
-    </div>
-  );
+// 云端详情的代码可能带交易所前缀，匹配到自选里同一只基金的写法。
+function normalizeEntrySymbol(symbol, symbols = []) {
+  const raw = String(symbol || '').trim().toUpperCase();
+  const code = (raw.match(/\d{6}/) || [])[0];
+  if (!code) return raw;
+  const listed = (symbols || []).map((item) => String(item || '').trim().toUpperCase()).find((item) => (item.match(/\d{6}/) || [])[0] === code);
+  return listed || code;
 }
 
 function directFeedHealth({ error, updatedAt, rows }) {
@@ -102,6 +96,8 @@ export function LocalDirectMarketsView({
   onRemoveSymbol,
   onMarketAction,
   onSwitchCloud,
+  // 从云端详情切过来时直接打开同一只基金。
+  initialSelectedSymbol = '',
   header = null,
 }) {
   const [quotes, setQuotes] = useState({});
@@ -109,8 +105,8 @@ export function LocalDirectMarketsView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [updatedAt, setUpdatedAt] = useState('');
-  const [extraSymbols, setExtraSymbols] = useState([]);
-  const [selectedSymbol, setSelectedSymbol] = useState('');
+  const [extraSymbols, setExtraSymbols] = useState(() => (initialSelectedSymbol ? [normalizeEntrySymbol(initialSelectedSymbol, symbols)] : []));
+  const [selectedSymbol, setSelectedSymbol] = useState(() => (initialSelectedSymbol ? normalizeEntrySymbol(initialSelectedSymbol, symbols) : ''));
   const [chartRange, setChartRange] = useState('6mo');
   const [chartCustomRange, setChartCustomRange] = useState(null);
   const [detailTab, setDetailTab] = useState('overview');
@@ -280,7 +276,6 @@ export function LocalDirectMarketsView({
       showFullTable ? 'flex-1 min-h-0 overflow-hidden pb-0' : (isMobile ? 'pb-[calc(140px+env(safe-area-inset-bottom))]' : 'pb-4')
     )}>
       {header}
-      {!showFullTable ? <LocalDirectNotice onSwitchCloud={onSwitchCloud} className="mx-3 sm:mx-1" /> : null}
       {error && showFullTable ? (
         <div role="alert" className="mx-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:mx-6">
           {error}，可点刷新重试或切回云端
@@ -296,6 +291,7 @@ export function LocalDirectMarketsView({
         summary={{ themes: [], generatedAt: '' }}
         selectedSymbol={selectedSymbol}
         fullTableMode
+        detailNotice={<MarketsSourceNotice localDirect onSwitch={() => onSwitchCloud?.(selectedSymbol, selectedRow?.name)} className="mx-3 sm:mx-1" />}
         fullTablePanel={(
           <Suspense fallback={<FullTableLoadingFallback />}>
             <MarketsFullTablePanel
@@ -333,7 +329,7 @@ export function LocalDirectMarketsView({
               hideTrendColumn
               localDirect
               omitColumnIds={omitColumnIds}
-              notice={<LocalDirectNotice onSwitchCloud={onSwitchCloud} className={isMobile ? 'mt-2 mx-3 mb-1' : ''} />}
+              notice={<MarketsSourceNotice localDirect onSwitch={() => onSwitchCloud?.('')} className={isMobile ? 'mt-2 mx-3 mb-1' : ''} />}
             />
           </Suspense>
         )}
