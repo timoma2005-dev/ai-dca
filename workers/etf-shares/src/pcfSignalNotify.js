@@ -25,8 +25,26 @@ export async function sendPcfSignalNotifications(env, events) {
 
   const results = [];
   const token = env.INTERNAL_NOTIFY_TOKEN || '';
+  // 同一天多次定时运行（08:30/08:45/09:00）会重复检出同一事件，按 日期+代码+档位 去重。
+  const kv = env?.FUND_LIMIT_KV;
+  const sentByDate = new Map();
+  const sentFor = async (date) => {
+    const day = String(date || '').replaceAll('-', '');
+    if (!sentByDate.has(day)) {
+      let list = [];
+      try { const raw = kv ? await kv.get('etf-pcf-signal-notified:' + day) : null; list = raw ? JSON.parse(raw) : []; } catch (_e) { list = []; }
+      sentByDate.set(day, { key: 'etf-pcf-signal-notified:' + day, set: new Set(Array.isArray(list) ? list : []), dirty: false });
+    }
+    return sentByDate.get(day);
+  };
 
   for (const signal of signals) {
+    const day = await sentFor(signal.date);
+    const id = signal.code + ':' + signal.tier;
+    if (day.set.has(id)) {
+      results.push({ code: signal.code, tier: signal.tier, ok: true, skipped: true, dedupe: 'hit' });
+      continue;
+    }
     try {
       // 尝试获取当前溢价（通过 MARKETS 服务，如果可用）
       let premium = null;
@@ -55,6 +73,7 @@ export async function sendPcfSignalNotifications(env, events) {
         ok: response.ok && result.ok,
         status: response.status,
       });
+      if (response.ok && result.ok) { day.set.add(id); day.dirty = true; }
 
       console.log(`[pcf-signal] notified ${signal.code} tier=${signal.tier} status=${response.status}`);
     } catch (e) {
@@ -68,7 +87,11 @@ export async function sendPcfSignalNotifications(env, events) {
     }
   }
 
-  const sent = results.filter(r => r.ok).length;
+  for (const day of sentByDate.values()) {
+    if (!day.dirty || !kv) continue;
+    try { await kv.put(day.key, JSON.stringify([...day.set]), { expirationTtl: 7 * 24 * 3600 }); } catch (_e) { /* 去重写入失败不影响本次推送 */ }
+  }
+  const sent = results.filter(r => r.ok && !r.skipped).length;
   return { ok: true, sent, total: signals.length, results };
 }
 

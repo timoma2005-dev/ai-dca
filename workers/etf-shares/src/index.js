@@ -1,7 +1,7 @@
 /* global console, URL */
 /* eslint no-unused-vars: ["error", { "caughtErrorsIgnorePattern": "^_" }] */
 // ai-dca-etf-shares：13 只纳指 ETF 的 PCF 申购限额 + 每日份额 + 限额环比投影。
-// 路由 api.freebacktrack.tech/api/etf-pcf*；定时见 wrangler.toml（工作日北京时间 09:00 / 09:30）。
+// 路由 api.freebacktrack.tech/api/etf-pcf*；定时见 wrangler.toml（工作日北京时间 08:30 主跑，08:45 / 09:00 不完整时补抓）。
 // 从 ocr-proxy 拆出（2026-10-22），只保留 ETF 限额/份额相关代码。
 import { handleEtfPcfShares } from './etfPcfSharesRoute.js';
 import { runEtfPcfEvents } from './etfPcfEvents.js';
@@ -16,7 +16,37 @@ import { isTradingDayShanghai } from '../../../shared/etfPcfTradingCalendar.js';
 // 注意：Cloudflare cron 星期 1=周日…7=周六，「1-5」是周日到周四，周五不会触发；工作日必须写 MON-FRI。
 // 30 1 * * MON-FRI：北京时间 09:30 补跑，覆盖 09:00 时交易所数据尚未就绪的情况。
 // 旧写法（1-5）保留识别，避免定时切换期间被当成 wrong-cron。
-const ETF_PCF_DAILY_CRONS = new Set(['0 1 * * *', '0 1 * * MON-FRI', '30 1 * * MON-FRI', '0 1 * * 1-5', '30 1 * * 1-5']);
+const ETF_PCF_DAILY_CRONS = new Set(['30 0 * * MON-FRI', '45 0 * * MON-FRI', '0 1 * * *', '0 1 * * MON-FRI', '30 1 * * MON-FRI', '0 1 * * 1-5', '30 1 * * 1-5']);
+// 08:30 主跑必定执行；其余为补抓：当天已完整（KV 完成标记存在）就跳过。
+export const ETF_PCF_PRIMARY_CRON = '30 0 * * MON-FRI';
+const COMPLETE_KEY_PREFIX = 'etf-pcf-daily-complete:';
+const COMPLETE_TTL_SECONDS = 3 * 24 * 3600;
+
+export function isEtfPcfDailyRunComplete(result) {
+  const sse = result?.sse;
+  const szse = result?.szse;
+  const sseOk = Boolean(sse?.ok && sse.stats && sse.stats.success + sse.stats.notFound === sse.stats.total);
+  const szseOk = Boolean(szse?.ok && Number.isFinite(szse.total) && szse.success + (szse.notFound || 0) === szse.total);
+  return sseOk && szseOk && Boolean(result?.events?.ok);
+}
+
+async function readDailyComplete(env, date) {
+  try { return Boolean(await env?.FUND_LIMIT_KV?.get(COMPLETE_KEY_PREFIX + date)); } catch (_e) { return false; }
+}
+
+export async function runEtfPcfDailyWithCompletion({ env, cron, scheduledTime, date, refresh = runEtfPcfDailyRefresh }) {
+  if (cron !== ETF_PCF_PRIMARY_CRON && await readDailyComplete(env, date)) {
+    console.log(`[etf-pcf] ${date} already complete, skip follow-up ${cron}`);
+    return { skipped: true, reason: 'already-complete' };
+  }
+  const result = await refresh({ env, scheduledTime });
+  const complete = isEtfPcfDailyRunComplete(result);
+  if (complete) {
+    try { await env?.FUND_LIMIT_KV?.put(COMPLETE_KEY_PREFIX + date, new Date().toISOString(), { expirationTtl: COMPLETE_TTL_SECONDS }); } catch (_e) { /* 标记失败下一轮再跑一次 */ }
+  }
+  console.log(`[etf-pcf] ${date} cron=${cron} complete=${complete}`);
+  return { ...result, complete };
+}
 
 export function resolveEtfPcfDailyTrigger({ cron, scheduledTime } = {}) {
   if (!ETF_PCF_DAILY_CRONS.has(cron)) {
@@ -112,7 +142,7 @@ export default {
         console.log(`[etf-pcf] skip daily refresh: ${trigger.reason}`, trigger);
         return;
       }
-      ctx.waitUntil(runEtfPcfDailyRefresh({ env, scheduledTime: controller?.scheduledTime }));
+      ctx.waitUntil(runEtfPcfDailyWithCompletion({ env, cron, scheduledTime: controller?.scheduledTime, date: trigger.date }));
     }
   },
 
