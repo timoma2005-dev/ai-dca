@@ -9,7 +9,7 @@ import { TARGET_CODES } from './etfPcfShares.js';
 import { handleEtfPcfEvents, handleEtfPcfLimit } from './etfPcfRoutes.js';
 import { runEtfPcfScheduledRefresh } from './etfPcfUniverse.js';
 import { refreshSsePcfLimitCache } from './ssePcfLimit.js';
-import { sendPcfSignalNotifications, sendPcfAtLimitNotifications } from './pcfSignalNotify.js';
+import { sendPcfAtLimitNotifications } from './pcfSignalNotify.js';
 import { emptyResponse, jsonResponse } from './util.js';
 import { isTradingDayShanghai } from '../../../shared/etfPcfTradingCalendar.js';
 
@@ -108,16 +108,8 @@ export async function runEtfPcfDailyRefresh({
   }
   let events;
   try { events = await eventsRefresh({ env, pcfs: pcfs.map(({ code, date }) => ({ code, date })), pcfData: pcfs, scheduledTime, deadlineMs: ETF_PCF_EVENTS_STAGE_DEADLINE_MS }); } catch (_e) { events = { ok: false, reason: 'events_stage_error' }; }
-  // PCF 限额放开信号推送：检测到 5x/10x/unlimited 事件后发送通知
-  let pcfSignal = null;
-  if (events?.ok && Array.isArray(events.detectedEvents) && events.detectedEvents.length > 0) {
-    try {
-      pcfSignal = await sendPcfSignalNotifications(env, events.detectedEvents);
-    } catch (e) {
-      console.log('[etf-pcf][pcf-signal] notification failed: ' + ((e && e.message) || e));
-      pcfSignal = { ok: false, reason: 'notification_error' };
-    }
-  }
+  // 限额放开信号不再推送（2026-10-28 移除），只在雷达/份额页展示。
+  const pcfSignal = null;
   let pcfAtLimit = null;
   if (events?.ok && Array.isArray(events.detectedEvents) && events.detectedEvents.some(
     event => event?.signal_type === 'net_creation_near_total_limit' && event.basis === 'total'

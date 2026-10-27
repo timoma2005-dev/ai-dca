@@ -150,14 +150,13 @@ const refresh = (env, events) => runEtfPcfDailyRefresh({
   eventsRefresh: async () => events
 });
 
-test('daily refresh appends at-limit delivery after the unchanged relaxation path', async (t) => {
+test('daily refresh no longer pushes limit relaxation, only at-limit', async (t) => {
   const fetch = mockFetch(t);
   const relaxation = { code: '159513', date, signal_type: 'limit_relaxation', basis: 'net', tier: '5x', prev: {}, cur: {}, ratio: 5 };
   const result = await refresh({ FUND_LIMIT_KV: new KV() }, { ok: true, detectedEvents: [relaxation, event()] });
-  assert.equal(result.pcfSignal.sent, 1);
+  assert.equal(result.pcfSignal, null);
   assert.equal(result.pcfAtLimit.sent, 1);
-  assert.deepEqual(fetch.mock.calls.map(call => call.arguments[0].split('/').at(-1)), ['pcf-signal', 'pcf-at-limit']);
-  assert.equal(JSON.parse(fetch.mock.calls[0].arguments[1].body).tier, '5x');
+  assert.deepEqual(fetch.mock.calls.map(call => call.arguments[0].split('/').at(-1)), ['pcf-at-limit']);
 });
 
 test('daily refresh does not call at-limit delivery for failed stages or other signals', async (t) => {
@@ -170,15 +169,6 @@ test('daily refresh does not call at-limit delivery for failed stages or other s
   assert.equal((await runEtfPcfDailyRefresh()).pcfAtLimit, null);
 });
 
-test('relaxation block errors are isolated from at-limit delivery', async (t) => {
-  let accesses = 0;
-  const env = {
-    FUND_LIMIT_KV: new KV(),
-    get INTERNAL_NOTIFY_TOKEN() { if (!accesses++) throw Error('signal setup failed'); return ''; }
-  };
-  mockFetch(t);
-  const relaxation = { code: '159513', date, signal_type: 'limit_relaxation', tier: '5x' };
-  const result = await refresh(env, { ok: true, detectedEvents: [relaxation, event()] });
   assert.deepEqual(result.pcfSignal, { ok: false, reason: 'notification_error' });
   assert.equal(result.pcfAtLimit.sent, 1);
 });
