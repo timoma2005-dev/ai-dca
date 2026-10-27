@@ -1242,8 +1242,7 @@ export function MarketsExperience() {
         onCancel={() => setWatchlistDialog(null)}
         onSubmit={handleWatchlistDialogSubmit}
       />
-      <div className="relative h-full min-h-[calc(100vh-var(--brand-bar-h,48px))]">
-        <div className="relative z-[1] flex h-full min-h-0 flex-col pt-4">
+      <MarketSentimentPageSurface padBottom={false} fillHeight direct>
         <LocalDirectMarketsView
           isMobile={isMobile}
           watchLists={watchLists}
@@ -1269,8 +1268,7 @@ export function MarketsExperience() {
           initialSelectedSymbol={localDirectEntrySymbol}
           onSwitchCloud={switchToCloud}
         />
-        </div>
-      </div>
+      </MarketSentimentPageSurface>
       </>
     );
   }

@@ -1,8 +1,9 @@
 import { cx } from '../../components/experience-ui.jsx';
 import { useMarketSentimentWeather } from './marketSentimentWeather.js';
 
-export function MarketSentimentPageSurface({ children, className = '', padBottom = true, fillHeight = false }) {
-  const { weather } = useMarketSentimentWeather();
+export function MarketSentimentPageSurface({ children, className = '', padBottom = true, fillHeight = false, direct = false }) {
+  // direct：本地直连模式，天气背景改用浏览器直连行情，不请求云端。
+  const { weather } = useMarketSentimentWeather(undefined, { direct });
 
   return (
     <div

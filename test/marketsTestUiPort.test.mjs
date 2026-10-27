@@ -45,7 +45,7 @@ test('standard markets include the migrated market sentiment strip', () => {
   assert.match(sentiment, /F&G/);
   assert.match(sentiment, /VIX/);
   assert.match(sentiment, /晴雨比/);
-  assert.match(sentiment, /研报/);
+  assert.doesNotMatch(sentiment, /研报|刷新市场情绪/);
   assert.match(sentiment, /设置/);
   assert.doesNotMatch(experience, /MarketsBetaExperience|MarketsViewTabs|marketsView/);
 });

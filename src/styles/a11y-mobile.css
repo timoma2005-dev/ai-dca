@@ -68,11 +68,11 @@
 /* #16 移动端情绪条：指标行横向滚动、文字可截断，按钮组换行不撑破容器 */
 @media (max-width: 480px) {
   .market-sentiment-strip { max-width: 100%; }
-  .market-sentiment-strip__row { flex-wrap: wrap; }
+  .market-sentiment-strip__row { flex-wrap: nowrap; }
   .market-sentiment-strip__chips {
-    /* 原来 w-full + flex-1 的 basis 为 0，窄屏不会换行，被挤在按钮右侧并被裁切；这里强制独占一行。 */
-    flex: 1 1 100%;
-    max-width: 100%;
+    /* 单行布局：天气 | 可横滑指标 | 设置，指标区占剩余宽度。 */
+    flex: 1 1 0;
+    min-width: 0;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
@@ -82,5 +82,4 @@
   .market-sentiment-strip__chips::-webkit-scrollbar { display: none; }
   .market-sentiment-strip__chips > * { max-width: 70vw; }
   .market-sentiment-strip__chips span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .market-sentiment-strip__actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 100%; }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, RefreshCw, Sliders, X } from 'lucide-react';
+import { Sliders, X } from 'lucide-react';
 import { cx } from '../../components/experience-ui.jsx';
 import { BREADTH_ITEMS, DEFAULT_RULES, useMarketSentimentWeather } from './marketSentimentWeather.js';
 import { setMobileBottomSheetOpen } from '../../app/mobileBottomSheet.js';
@@ -35,10 +35,9 @@ function formatChangePercent(value) {
 
 export function MarketSentimentStrip() {
   const [settings, setSettings] = useState(createDefaultSettings);
-  const [reportOpen, setReportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const {
-    refreshing, error, refresh, fearGreed, vix, breadth, tempLabel, weather, snapshot, ready,
+    error, fearGreed, vix, breadth, tempLabel, weather, snapshot,
   } = useMarketSentimentWeather(settings.rules);
   const snapshotTime = formatSentimentTime(snapshot.lastSuccessAt);
 
@@ -58,23 +57,25 @@ export function MarketSentimentStrip() {
   return (
     <>
       <div className="market-collapsible">
-      <section className={cx('market-sentiment-strip relative z-10 isolate overflow-hidden rounded-2xl border px-3 py-2.5 shadow-sm transition-colors sm:px-4', weather.surfaceClass)} aria-label="市场情绪指标">
-        <span className={cx('pointer-events-none absolute -right-2 -top-5 select-none text-7xl opacity-30', weather.decorClass)} aria-hidden="true">{weather.icon}</span>
+      {/* 情绪条：一行展示。天气为主指标在左，其余指标横向滑动，右侧只留设置；刷新统一用列表头的刷新按钮。 */}
+      <section className={cx('market-sentiment-strip relative z-10 isolate overflow-hidden rounded-2xl border px-2.5 py-2 shadow-sm transition-colors sm:px-3', weather.surfaceClass)} aria-label="市场情绪指标">
+        <span className={cx('pointer-events-none absolute -right-1 -top-4 select-none text-6xl opacity-20', weather.decorClass)} aria-hidden="true">{weather.icon}</span>
         <span className={cx('pointer-events-none absolute -bottom-12 -left-4 h-28 w-28 rounded-full blur-3xl', weather.orbClass)} aria-hidden="true" />
-        <div className="market-sentiment-strip__row relative z-[1] flex min-w-0 flex-wrap items-center gap-2">
-          <div className="order-1 shrink-0 text-xs font-bold text-[var(--market-text-muted)]">市场情绪</div>
-          <div className="market-sentiment-strip__chips order-3 flex min-w-0 w-full flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap pb-0.5 sm:order-2 sm:w-auto" role="group" aria-label="市场情绪指标（可横向滑动）">
-            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--market-border)] bg-white/60 backdrop-blur-sm dark:bg-slate-900/35 px-2.5 py-1" title="由纳指、F&G、VIX和ETF晴雨比综合计算">
-              <span className={cx('text-sm', weather.glow)}>{weather.icon}</span>
-              <span className="text-xs font-bold text-[var(--market-text-strong)]">{weather.name}</span>
-              <span className="font-mono text-xs font-black text-[var(--market-rise)]">{tempLabel}</span>
+        <div className="market-sentiment-strip__row relative z-[1] flex min-w-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 border-r border-[var(--market-border)] pr-2.5" title="市场情绪：由纳指、F&G、VIX 和 ETF 晴雨比综合计算">
+            <span className={cx('text-xl leading-none', weather.glow)}>{weather.icon}</span>
+            <div className="leading-tight">
+              <div className="text-xs font-bold text-[var(--market-text-strong)]">{weather.name}</div>
+              <div className="font-mono text-[11px] font-black text-[var(--market-rise)]">{tempLabel}</div>
             </div>
-            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--market-border)] bg-white/60 backdrop-blur-sm dark:bg-slate-900/35 px-2 py-1" title="CNN 贪婪与恐慌指数">
+          </div>
+          <div className="market-sentiment-strip__chips flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto whitespace-nowrap" role="group" aria-label="市场情绪指标（可横向滑动）">
+            <div className="flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 backdrop-blur-sm dark:bg-slate-900/40" title="CNN 贪婪与恐慌指数">
               <span className="text-[10px] text-[var(--market-text-muted)]">F&G</span>
               <span className="font-mono text-xs font-black text-sky-500">{fearGreed ?? '—'}</span>
               {fearGreed != null ? <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400">{fearGreedLabel(fearGreed)}</span> : null}
             </div>
-            <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--market-border)] bg-white/60 backdrop-blur-sm dark:bg-slate-900/35 px-2 py-1" title="CBOE 波动率指数">
+            <div className="flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 backdrop-blur-sm dark:bg-slate-900/40" title="CBOE 波动率指数">
               <span className="text-[10px] text-[var(--market-text-muted)]">VIX</span>
               <span className="font-mono text-xs font-black text-emerald-500">{vix == null ? '—' : vix.toFixed(1)}</span>
               {vix != null ? <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">{vixLabel(vix)}</span> : null}
@@ -85,19 +86,14 @@ export function MarketSentimentStrip() {
             ].map(([symbol, view]) => {
               const cell = sentimentCellState(view, { loading: snapshot.loading, format: formatChangePercent });
               return (
-                <div
-                  key={symbol}
-                  className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--market-border)] bg-white/60 px-2 py-1 backdrop-blur-sm dark:bg-slate-900/35"
-                  title={symbol + ' 当日涨幅 · ' + cell.title}
-                  data-testid={'sentiment-' + symbol}
-                >
+                <div key={symbol} className="flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 backdrop-blur-sm dark:bg-slate-900/40" title={symbol + ' 当日涨幅 · ' + cell.title} data-testid={'sentiment-' + symbol}>
                   <span className="text-[10px] text-[var(--market-text-muted)]">{symbol}</span>
                   <span className={cx('font-mono text-xs font-black', changeToneClass(view.value))}>{cell.text}</span>
                   {cell.note ? <span className="text-[10px] font-bold text-amber-600">{cell.note}</span> : null}
                 </div>
               );
             })}
-            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--market-border)] bg-white/60 backdrop-blur-sm dark:bg-slate-900/35 px-2 py-1">
+            <div className="flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 backdrop-blur-sm dark:bg-slate-900/40" title="纳指 ETF 当日涨跌家数">
               <span className="text-[10px] text-[var(--market-text-muted)]">晴雨比</span>
               <span className="font-mono text-xs font-bold text-[var(--market-rise)]">{breadth.up}晴</span>
               <div className="h-1.5 w-6 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
@@ -106,40 +102,13 @@ export function MarketSentimentStrip() {
               <span className="font-mono text-xs font-bold text-[var(--market-text-muted)]">{breadth.down}雨</span>
             </div>
           </div>
-          <div className="market-sentiment-strip__actions order-2 ml-auto flex shrink-0 items-center gap-1.5 sm:order-3">
-            <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-[var(--market-border)] px-2 py-1 text-xs font-medium text-[var(--market-text-muted)] transition hover:bg-[var(--market-surface-muted)]" title="展开或收起研报" onClick={() => setReportOpen((value) => !value)}>
-              <span>💡</span><span>研报</span><ChevronDown size={12} className={cx('transition-transform', reportOpen && 'rotate-180')} />
-            </button>
-            <button type="button" className="inline-flex items-center gap-1 rounded-lg bg-[var(--market-accent)] px-2.5 py-1 text-xs font-bold text-white transition hover:opacity-90" onClick={() => setSettingsOpen(true)}>
-              <Sliders size={12} /><span>设置</span>
-            </button>
-            <button type="button" aria-label="刷新市场情绪" title={error || '刷新市场情绪'} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--market-border)] text-[var(--market-text-muted)] transition hover:bg-[var(--market-surface-muted)]" onClick={() => refresh(true)} disabled={refreshing}>
-              <RefreshCw size={13} className={cx(refreshing && 'animate-spin')} />
-            </button>
-          </div>
+          <button type="button" aria-label="市场情绪设置" title="设置天气分界线" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/70 text-[var(--market-text-muted)] transition hover:text-[var(--market-text-strong)] dark:bg-slate-900/40" onClick={() => setSettingsOpen(true)}>
+            <Sliders size={13} />
+          </button>
         </div>
-        {error || snapshot.stale ? <div className="mt-1 text-[10px] text-amber-600">{snapshotTime ? `数据延迟，显示 ${snapshotTime} 的最近可用值` : '行情指标暂不可用'}</div> : null}
+        {error || snapshot.stale ? <div className="relative z-[1] mt-1 text-[10px] text-amber-600">{snapshotTime ? `数据延迟，显示 ${snapshotTime} 的最近可用值` : '行情指标暂不可用'}</div> : null}
       </section>
       </div>
-
-      {reportOpen ? (
-        <section className="mt-2 rounded-2xl border border-indigo-100 bg-indigo-50/80 px-3 py-3 text-xs text-slate-700 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-slate-300">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="font-bold text-indigo-950 dark:text-indigo-200">纳指市场情绪研报</div>
-              <p className="mt-0.5 text-[10px] text-slate-500" data-testid="sentiment-report-asof">
-                {ready ? `数据时间 ${snapshotTime || '—'}（与上方情绪条为同一份快照）` : '行情数据加载中，暂不生成研报'}
-              </p>
-              {ready ? <p className="mt-1 leading-6">
-                当前体感温标为 <strong>{tempLabel}</strong>，晴雨比为 <strong>{breadth.up} 晴 / {breadth.down} 雨</strong>。{fearGreed != null ? <>F&G 为 <strong>{fearGreed}</strong>，处于“{fearGreedLabel(fearGreed)}”；</> : null}{vix != null ? <>VIX 为 <strong>{vix.toFixed(1)}</strong>，处于“{vixLabel(vix)}”。</> : null}温标综合 QQQ 当日涨跌、市场情绪和纳指 ETF 广度计算，仅用于快速观察市场状态。
-              </p> : null}
-            </div>
-            <button type="button" aria-label="关闭研报" className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-white/70 hover:text-slate-700 dark:hover:bg-slate-800" onClick={() => setReportOpen(false)}>
-              <X size={15} />
-            </button>
-          </div>
-        </section>
-      ) : null}
 
       {settingsOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-end bg-slate-900/45 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-label="市场情绪设置">

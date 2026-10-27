@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { fetchQuotes } from './marketsApiLoader.js';
+import { fetchDirectQuotes } from '../../app/directMarketData.js';
 import { createSentimentStore } from './marketSentimentSnapshot.js';
 
 export const BREADTH_ITEMS = [
@@ -91,7 +92,20 @@ export function selectWeatherState({ compositeTemp = 0, fearGreed = 50, vix = 18
 }
 
 let sharedStore = null;
-function sentimentStore() {
+let directStore = null;
+// 本地直连：腾讯直连拿 ETF 广度和 QQQ/VOO；F&G、VIX 浏览器拿不到（CNN 拒绝跨域，腾讯无 VIX），按中性值参与计算。
+const DIRECT_SENTIMENT_POLL_MS = 60 * 1000;
+function sentimentStore(direct = false) {
+  if (direct) {
+    if (!directStore) {
+      directStore = createSentimentStore({
+        fetchQuotes: (codes) => fetchDirectQuotes(codes.filter((code) => !String(code).startsWith('^') && code !== 'CNN_FNG')),
+        breadthCodes: BREADTH_ITEMS.map(([code]) => code),
+        pollMs: DIRECT_SENTIMENT_POLL_MS,
+      });
+    }
+    return directStore;
+  }
   if (!sharedStore) {
     sharedStore = createSentimentStore({ fetchQuotes: (codes) => fetchQuotes(codes), breadthCodes: BREADTH_ITEMS.map(([code]) => code) });
   }
@@ -99,8 +113,8 @@ function sentimentStore() {
 }
 
 // 情绪条 / 研报 / 页面背景共用同一个快照；未拿到数据时不再用写死的兜底值冒充实时行情。
-export function useMarketSentimentWeather(rules = DEFAULT_RULES) {
-  const store = sentimentStore();
+export function useMarketSentimentWeather(rules = DEFAULT_RULES, { direct = false } = {}) {
+  const store = sentimentStore(direct);
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [refreshing, setRefreshing] = useState(false);
 
