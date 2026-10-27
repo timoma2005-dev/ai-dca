@@ -112,7 +112,7 @@ test('migration 003 creates notify_user_records with D1-compatible schema', (t) 
   for (const index of ['idx_notify_user_records_type_id', 'idx_notify_user_records_owner_type']) {
     assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?").get(index), `has index ${index}`);
   }
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, 5);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n, 6);
 });
 
 test('notify phase 2 routes: auth failures return 401', async (t) => {
