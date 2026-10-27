@@ -585,9 +585,8 @@ async function fetchDirectKlineUncached(symbol, { timeframe = '1d' } = {}) {
     beg: '19700101',
     end: '20500101'
   });
-  const res = await fetch(`${EM_KLINE_URL}?${params.toString()}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error('eastmoney kline HTTP ' + res.status);
-  const payload = await res.json();
+  // 东财 push2his 不返回 CORS 头，fetch 会被浏览器拦截，与竞价看板一致走 JSONP。
+  const payload = await fetchJsonp(`${EM_KLINE_URL}?${params.toString()}`);
   if (payload?.rc !== 0 || !payload?.data) throw new Error('eastmoney kline empty');
   const normalized = parseEastmoneyKlinePayload(payload, { symbol: meta.code, timeframe });
   klineMemoryCache.set(cacheKey, { payload: normalized, expiresAt: now + KLINE_CACHE_TTL_MS });
@@ -867,13 +866,17 @@ export function parseEastmoneyFundNavPayload(body, codes = []) {
   return out;
 }
 
-function fetchEastmoneyFundNavJsonp(codes, { signal } = {}) {
+/**
+ * 通用 JSONP：东财接口（push2his / fundmobapi）不返回 CORS 头，
+ * fetch 会被浏览器拦截，统一走 script 标签，与竞价看板 adminAuction 同方式。
+ */
+function fetchJsonp(url, { signal, callbackParam = 'cb' } = {}) {
   return new Promise((resolve, reject) => {
     if (typeof document === 'undefined' || typeof window === 'undefined') {
-      reject(new Error('eastmoney fund nav requires browser'));
+      reject(new Error('jsonp requires browser'));
       return;
     }
-    const callback = `emfnav_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    const callback = `aiDcaJsonp_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
     const script = document.createElement('script');
     let settled = false;
     const cleanup = () => {
@@ -893,29 +896,19 @@ function fetchEastmoneyFundNavJsonp(codes, { signal } = {}) {
       cleanup();
       resolve(payload);
     };
-    const params = new URLSearchParams({
-      pageIndex: '1',
-      pageSize: '200',
-      plat: 'Android',
-      appType: 'ttjj',
-      product: 'EFund',
-      Version: '1',
-      deviceid: 'ai-dca-direct',
-      Fcodes: codes.join(','),
-      callback,
-    });
-    script.src = `${EM_FUND_NAV_URL}?${params.toString()}`;
+    const joiner = url.includes('?') ? '&' : '?';
+    script.src = `${url}${joiner}${callbackParam}=${encodeURIComponent(callback)}&_=${Date.now()}`;
     script.onload = () => {
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error('eastmoney fund nav jsonp callback missing'));
+      reject(new Error('jsonp callback missing'));
     };
     script.onerror = () => {
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error('eastmoney fund nav script failed'));
+      reject(new Error('jsonp script failed'));
     };
     if (signal) {
       if (signal.aborted) { abort(); return; }
@@ -923,6 +916,21 @@ function fetchEastmoneyFundNavJsonp(codes, { signal } = {}) {
     }
     document.body.appendChild(script);
   });
+}
+
+function fetchEastmoneyFundNavJsonp(codes, { signal } = {}) {
+  const params = new URLSearchParams({
+    pageIndex: '1',
+    pageSize: '200',
+    plat: 'Android',
+    appType: 'ttjj',
+    product: 'EFund',
+    Version: '1',
+    deviceid: 'ai-dca-direct',
+    Fcodes: codes.join(','),
+  });
+  // FundMNFInfo 的回调参数名是 callback，与 push2his 的 cb 不同。
+  return fetchJsonp(`${EM_FUND_NAV_URL}?${params.toString()}`, { signal, callbackParam: 'callback' });
 }
 
 /**

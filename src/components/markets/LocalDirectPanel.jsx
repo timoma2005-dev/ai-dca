@@ -127,7 +127,7 @@ function KlineChart({ candles }) {
   );
 }
 
-function DirectDetail({ row, onBack, onTimeframe, timeframe, kline, klineLoading }) {
+function DirectDetail({ row, onBack, onTimeframe, timeframe, kline, klineLoading, klineError, onRetryKline }) {
   return (
     <section className="ldp-detail" data-testid="local-direct-detail">
       <div className="ldp-detail-head">
@@ -174,6 +174,11 @@ function DirectDetail({ row, onBack, onTimeframe, timeframe, kline, klineLoading
 
       {klineLoading ? (
         <div className="ldp-state"><Loader2 className="ldp-spin" size={18} /> 正在直连东财读取 K 线…</div>
+      ) : klineError ? (
+        <div className="ldp-state is-error" role="alert">
+          <AlertCircle size={17} /> K 线加载失败：{klineError}
+          <button type="button" className="ldp-retry" onClick={onRetryKline}>重试</button>
+        </div>
       ) : (
         <KlineChart candles={kline?.candles} />
       )}
@@ -195,6 +200,8 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
   const [timeframe, setTimeframe] = useState('1d');
   const [kline, setKline] = useState(null);
   const [klineLoading, setKlineLoading] = useState(false);
+  const [klineError, setKlineError] = useState('');
+  const [klineReloadTick, setKlineReloadTick] = useState(0);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -286,17 +293,22 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  // 详情 K 线
+  // 详情 K 线（东财 push2his 走 JSONP；klineReloadTick 驱动手动重试）
   useEffect(() => {
-    if (!selectedCode) { setKline(null); return undefined; }
+    if (!selectedCode) { setKline(null); setKlineError(''); return undefined; }
     let cancelled = false;
     setKlineLoading(true);
+    setKlineError('');
     fetchDirectKline(selectedCode, { timeframe })
       .then((payload) => { if (!cancelled) setKline(payload); })
-      .catch(() => { if (!cancelled) setKline(null); })
+      .catch((err) => {
+        if (cancelled) return;
+        setKline(null);
+        setKlineError(err?.name === 'AbortError' ? '请求已取消' : (err?.message || '直连失败'));
+      })
       .finally(() => { if (!cancelled) setKlineLoading(false); });
     return () => { cancelled = true; };
-  }, [selectedCode, timeframe]);
+  }, [selectedCode, timeframe, klineReloadTick]);
 
   const summary = useMemo(() => summarizeDirectRows(rows), [rows]);
   const selectedRow = rows.find((row) => row.code === selectedCode) || null;
@@ -316,6 +328,8 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
           timeframe={timeframe}
           kline={kline}
           klineLoading={klineLoading}
+          klineError={klineError}
+          onRetryKline={() => setKlineReloadTick((tick) => tick + 1)}
           onBack={() => setSelectedCode('')}
           onTimeframe={setTimeframe}
         />

@@ -1,8 +1,11 @@
+/* global document, setTimeout, URL */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
 
 import {
   fetchDirectKline,
+  fetchEastmoneyFundNavs,
   normalizeDirectSymbol,
   parseEastmoneyFundNavPayload,
   parseEastmoneyKlinePayload,
@@ -10,7 +13,50 @@ import {
   parseTencentSearchText
 } from '../src/app/directMarketData.js';
 
-const { Response } = globalThis;
+// 东财接口不发 CORS 头，生产链路走 script 标签 JSONP；在 node 下用 jsdom 模拟。
+// handle 返回响应体（触发回调）或字符串 'error'（触发 script.onerror）。
+function installJsonpHarness(handle) {
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
+  const originals = {
+    window: globalThis.window,
+    document: globalThis.document,
+    DOMException: globalThis.DOMException,
+  };
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.DOMException = dom.window.DOMException;
+  const realCreate = document.createElement.bind(document);
+  const seenUrls = [];
+  document.createElement = (tagName) => {
+    const el = realCreate(tagName);
+    if (tagName === 'script') {
+      Object.defineProperty(el, 'src', {
+        get() { return el.getAttribute('src') || ''; },
+        set(value) {
+          el.setAttribute('src', value);
+          seenUrls.push(value);
+          setTimeout(() => {
+            const url = new URL(value);
+            const cb = url.searchParams.get('cb') || url.searchParams.get('callback');
+            const outcome = handle(value);
+            if (outcome === 'error') { el.onerror?.(); return; }
+            if (cb && typeof globalThis.window[cb] === 'function') globalThis.window[cb](outcome);
+            el.onload?.();
+          }, 0);
+        },
+      });
+    }
+    return el;
+  };
+  return {
+    seenUrls,
+    restore() {
+      globalThis.window = originals.window;
+      globalThis.document = originals.document;
+      globalThis.DOMException = originals.DOMException;
+    },
+  };
+}
 
 test('direct symbol normalization maps CN ETF symbols to Tencent and Eastmoney ids', () => {
   assert.deepEqual(normalizeDirectSymbol('513100'), {
@@ -128,33 +174,56 @@ test('FundMNFInfo parser filters by requested codes and tolerates bad payloads',
   assert.deepEqual(parseEastmoneyFundNavPayload({ Datas: [{ FCODE: 'bad', NAV: '1' }] }, ['bad']), {});
 });
 
-test('direct Eastmoney kline limit does not truncate memory cache payload', async () => {
-  const originalFetch = globalThis.fetch;
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    return new Response(JSON.stringify({
-      rc: 0,
-      data: {
-        code: '513111',
-        name: '测试ETF',
-        klines: [
-          '2026-07-01,1.000,1.010,1.020,0.990,100,1000,0,0,0,0',
-          '2026-07-02,1.010,1.020,1.030,1.000,100,1000,0,0,0,0',
-          '2026-07-03,1.020,1.030,1.040,1.010,100,1000,0,0,0,0'
-        ]
-      }
-    }), { status: 200, headers: { 'content-type': 'application/json' } });
+test('direct Eastmoney kline uses JSONP (cb param) and limit does not truncate memory cache', async () => {
+  const payload = {
+    rc: 0,
+    data: {
+      code: '513111',
+      name: '测试ETF',
+      klines: [
+        '2026-07-01,1.000,1.010,1.020,0.990,100,1000,0,0,0,0',
+        '2026-07-02,1.010,1.020,1.030,1.000,100,1000,0,0,0,0',
+        '2026-07-03,1.020,1.030,1.040,1.010,100,1000,0,0,0,0'
+      ]
+    }
   };
-
+  const harness = installJsonpHarness(() => payload);
   try {
     const limited = await fetchDirectKline('513111', { timeframe: '1d', limit: 2 });
     const cachedFull = await fetchDirectKline('513111', { timeframe: '1d' });
 
-    assert.equal(calls, 1);
+    // inflight 去重 + 内存缓存：只插一次 script。
+    assert.equal(harness.seenUrls.length, 1);
     assert.equal(limited.candles.length, 2);
     assert.equal(cachedFull.candles.length, 3);
+    assert.match(harness.seenUrls[0], /push2his\.eastmoney\.com/);
+    assert.match(harness.seenUrls[0], /secid=1\.513111/);
+    assert.match(harness.seenUrls[0], /klt=101/);
+    assert.match(harness.seenUrls[0], /[?&]cb=aiDcaJsonp_/);
   } finally {
-    globalThis.fetch = originalFetch;
+    harness.restore();
+  }
+});
+
+test('direct Eastmoney kline rejects when the JSONP script fails', async () => {
+  const harness = installJsonpHarness(() => 'error');
+  try {
+    await assert.rejects(fetchDirectKline('513222', { timeframe: '1d' }), /jsonp script failed/);
+  } finally {
+    harness.restore();
+  }
+});
+
+test('FundMNFInfo loads via JSONP with the callback (not cb) parameter', async () => {
+  const body = { Datas: [{ FCODE: '513100', NAV: '2.0500', PDATE: '2026-10-24', ZJL: '-2.3800' }] };
+  const harness = installJsonpHarness(() => body);
+  try {
+    const res = await fetchEastmoneyFundNavs(['513100']);
+    assert.equal(res.quotes['513100'].premiumPercent, 2.38);
+    assert.match(harness.seenUrls[0], /fundmobapi\.eastmoney\.com/);
+    assert.match(harness.seenUrls[0], /[?&]callback=aiDcaJsonp_/);
+    assert.doesNotMatch(harness.seenUrls[0], /[?&]cb=/);
+  } finally {
+    harness.restore();
   }
 });
