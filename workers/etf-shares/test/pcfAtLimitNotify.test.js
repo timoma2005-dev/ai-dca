@@ -168,7 +168,3 @@ test('daily refresh does not call at-limit delivery for failed stages or other s
   assert.equal(fetch.mock.callCount(), 0);
   assert.equal((await runEtfPcfDailyRefresh()).pcfAtLimit, null);
 });
-
-  assert.deepEqual(result.pcfSignal, { ok: false, reason: 'notification_error' });
-  assert.equal(result.pcfAtLimit.sent, 1);
-});
