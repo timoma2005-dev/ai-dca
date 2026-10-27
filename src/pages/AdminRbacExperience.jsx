@@ -34,6 +34,7 @@ function readHashSection() {
 }
 
 const capped = (count) => (count === null ? null : `${count}${count >= PEOPLE_LIMIT ? '+' : ''}`);
+const plain = (count) => (count === null || count === undefined ? null : String(count));
 
 /** 权限管理（adminRbac）：需要 api:rbac-admin；任命管理员需要 api:rbac-grant-admin（超级管理员）。 */
 export default function AdminRbacExperience() {
@@ -62,9 +63,16 @@ export default function AdminRbacExperience() {
     refreshRbac({ force: true });
   }, [reload]);
 
-  const handleUsersLoaded = useCallback((count, rows, query) => {
+  const handleUsersLoaded = useCallback((count, rows, query, meta = {}) => {
     if (query) return;
-    setUserStats({ count, privileged: Array.isArray(rows) ? rows.filter((user) => user.roles?.length).length : null });
+    // 优先用服务端全量统计（不受列表 limit 截断）；旧后端没有时退回列表本身。
+    const fallbackPrivileged = Array.isArray(rows)
+      ? rows.filter((user) => user.roles?.some((role) => role.code !== 'vip' && !role.expired)).length
+      : null;
+    setUserStats({
+      count: Number.isFinite(meta.total) ? meta.total : count,
+      privileged: Number.isFinite(meta.privileged) ? meta.privileged : fallbackPrivileged,
+    });
   }, []);
 
   useEffect(() => {
@@ -87,7 +95,7 @@ export default function AdminRbacExperience() {
 
   const enabledMenus = data.menus.filter((menu) => menu.enabled).length;
   const counts = {
-    users: capped(userStats.count),
+    users: plain(userStats.count),
     guests: capped(guestCount),
     matrix: data.roles.length ? String(data.roles.length) : null,
     menus: data.menus.length ? String(data.menus.length) : null,
@@ -113,7 +121,7 @@ export default function AdminRbacExperience() {
       </header>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="概览">
         <StatCard label="注册用户" value={userStats.count} />
-        <StatCard label="特权用户" value={userStats.privileged} hint="拥有额外角色" />
+        <StatCard label="特权用户" value={userStats.privileged} hint="SVIP / 管理员等（不含 VIP）" />
         <StatCard label="角色" value={data.roles.length || null} hint={data.roles.length ? `${data.roles.filter((role) => role.privileged).length} 个管理员级` : undefined} />
         <StatCard label="菜单" value={data.menus.length || null} hint={data.menus.length ? `${enabledMenus} 个启用` : undefined} />
       </div>

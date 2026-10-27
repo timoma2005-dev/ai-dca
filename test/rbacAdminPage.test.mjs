@@ -535,9 +535,9 @@ test('audit renders a humanized timeline and filters by action', async () => {
   assert.deepEqual(calls.audit.at(-1), { before: '', target: '', action: 'role.revoke' });
 });
 
-test('the client retains the CF guest source and the 200-row search limit', () => {
+test('the client retains the CF guest source and the 500-row user search limit', () => {
   const api = readFileSync(join(root, 'src/app/rbac/rbacAdminApi.js'), 'utf8');
-  assert.match(api, /searchUsers:.*limit=200/);
+  assert.match(api, /searchUsers:.*limit=500/);
   assert.match(api, /fetch\(apiUrl\('\/api\/sync\/analytics\/guests\?limit=200'\)/);
   const users = readFileSync(join(root, 'src/pages/rbac/RbacUsersPanel.jsx'), 'utf8');
   assert.doesNotMatch(users, /window\.confirm/);

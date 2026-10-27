@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { openAnalyticsDb, userLastActiveDates } from '../src/analyticsRead.js';
 import { openDb, closeDb } from '../src/db.js';
 import { registerUser } from '../src/auth.js';
-import { listGuests, searchUsers } from '../src/rbacAdmin.js';
+import { listGuests, searchUsers, userStats } from '../src/rbacAdmin.js';
 import { createApp } from '../src/server.js';
 
 describe('rbac admin user and guest activity lists', () => {
@@ -54,6 +54,13 @@ describe('rbac admin user and guest activity lists', () => {
     if (previousPath === undefined) delete process.env.AI_DCA_CN_DATA_DB;
     else process.env.AI_DCA_CN_DATA_DB = previousPath;
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('userStats counts every user and only non-VIP active roles as privileged', () => {
+    assert.deepEqual(userStats(db), { total: 3, privileged: 0 });
+    db.prepare("INSERT INTO user_roles (user_id, role_code, granted_by, created_at) VALUES ('usr_plain', 'svip', 't', 'x')").run();
+    db.prepare("INSERT INTO user_roles (user_id, role_code, expires_at, granted_by, created_at) VALUES ('usr_session', 'admin', '2000-01-01T00:00:00.000Z', 't', 'x')").run();
+    assert.deepEqual(userStats(db), { total: 3, privileged: 1 });
   });
 
   it('includes all three users, including users without role rows, and combines activity before limiting', () => {

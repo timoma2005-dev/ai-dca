@@ -21,8 +21,11 @@ function UserDrawer({ user, roles, canGrantAdmin, onClose, onGrant, onRevoke, bu
   const [error, setError] = useState('');
   useEffect(() => { setDraft({ role: '', preset: 'forever', expires: '' }); setError(''); }, [user?.id]);
   if (!user) return null;
-  const grantable = roles.filter((role) => !NON_GRANTABLE.has(role.code) && !role.isVirtual && !user.roles.some((owned) => owned.code === role.code));
+  // 已有的角色也可再次选择：服务端是 upsert，等于续期 / 改有效期（例如注册赠送的 VIP 到期后续上）。
+  const grantable = roles.filter((role) => !NON_GRANTABLE.has(role.code) && !role.isVirtual);
   const selected = grantable.find((role) => role.code === draft.role);
+  const ownedRole = (code) => user.roles.find((owned) => owned.code === code);
+  const renewing = Boolean(selected && ownedRole(selected.code));
   const blocked = !selected || (selected.privileged && !canGrantAdmin) || (draft.preset === 'custom' && !draft.expires);
 
   async function submit(event) {
@@ -75,7 +78,7 @@ function UserDrawer({ user, roles, canGrantAdmin, onClose, onGrant, onRevoke, bu
           <option value="">选择角色…</option>
           {grantable.map((role) => (
             <option key={role.code} value={role.code} disabled={role.privileged && !canGrantAdmin}>
-              {role.name}（{role.code}）{role.privileged && !canGrantAdmin ? ' · 仅超级管理员' : ''}
+              {role.name}（{role.code}）{role.privileged && !canGrantAdmin ? ' · 仅超级管理员' : ''}{ownedRole(role.code) ? ` · 已有，${ownedRole(role.code).expired ? '已过期，可续期' : '可改有效期'}` : ''}
             </option>
           ))}
         </select>
@@ -99,7 +102,7 @@ function UserDrawer({ user, roles, canGrantAdmin, onClose, onGrant, onRevoke, bu
           <p className="text-xs text-slate-500">{draft.preset === 'forever' ? '长期有效' : `到期 ${draft.expires}（北京时间当天 23:59）`}</p>
         )}
         <ErrorNote error={error} />
-        <button type="submit" className={`${buttonClass} w-full`} disabled={blocked || busy}>{busy ? '处理中…' : '确认授予'}</button>
+        <button type="submit" className={`${buttonClass} w-full`} disabled={blocked || busy}>{busy ? '处理中…' : renewing ? '更新有效期' : '确认授予'}</button>
       </form>
     </Drawer>
   );
@@ -139,7 +142,7 @@ export function RbacUsersPanel({ roles = [], canGrantAdmin = false, onChanged, o
         setUsers(rows);
         setActiveQuery(searchQuery);
         if (!keepPage) setPage(1);
-        onLoaded?.(rows.length, rows, searchQuery);
+        onLoaded?.(rows.length, rows, searchQuery, { total: data.total, privileged: data.privileged });
       }
     } catch (err) {
       if (requestId === latestSearch.current) setError(err.message);

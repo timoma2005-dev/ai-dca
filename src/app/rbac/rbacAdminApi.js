@@ -25,7 +25,7 @@ async function request(method, path, body) {
 const enc = encodeURIComponent;
 
 export const rbacAdminApi = {
-  searchUsers: (q) => request('GET', `/users?q=${enc(q || '')}&limit=200`),
+  searchUsers: (q) => request('GET', `/users?q=${enc(q || '')}&limit=500`),
   // 分析事件存于 CF sync Worker 的 D1，游客聚合从 CF 接口读取。
   listGuests: async () => {
     const token = loadCloudSession()?.accessToken || '';

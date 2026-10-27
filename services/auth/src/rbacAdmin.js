@@ -75,6 +75,17 @@ function normalizeExpiresAt(value) {
 
 // ── 用户与角色 ──
 
+/** 概览统计：注册总数 + 特权用户（拥有 VIP 之外的有效角色，如 SVIP / 管理员）。不受列表 limit 影响。 */
+export function userStats(db) {
+  const now = nowIso();
+  const total = Number(db.prepare('SELECT COUNT(*) AS n FROM users').get()?.n || 0);
+  const privileged = Number(db.prepare(
+    `SELECT COUNT(DISTINCT user_id) AS n FROM user_roles
+     WHERE role_code <> 'vip' AND (expires_at IS NULL OR expires_at > ?)`
+  ).get(now)?.n || 0);
+  return { total, privileged };
+}
+
 export function searchUsers(db, { q = '', limit = 20 } = {}) {
   const query = text(q, 48).toLowerCase();
   const max = Math.min(Math.max(Math.floor(Number(limit) || 20), 1), 500);
