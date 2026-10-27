@@ -2,6 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  LOCAL_DIRECT_HIDDEN_RANGES,
+  buildLocalDirectDetailData,
+  buildLocalDirectMarketRows,
+  localDirectKlineTimeframe,
   buildDirectRows,
   buildLinePath,
   computePremiumPercent,
@@ -143,4 +147,40 @@ test('normalizeDirectSearchResults keeps only 6-digit CN fund codes', () => {
     { code: '159941', name: '纳指ETF广发' },
   ]);
   assert.deepEqual(normalizeDirectSearchResults(null), []);
+});
+
+test('buildLocalDirectMarketRows maps direct quotes to cloud-shaped rows', () => {
+  const rows = buildLocalDirectMarketRows(['159509', '513100', '159509'], {
+    quotes: {
+      159509: { name: '纳指科技ETF', price: 3.012, previousClose: 2.957, change: 0.055, changePercent: 1.86, high: 3.033, low: 2.99, turnover: 12345.6, time: '20261027150003' },
+    },
+    navs: {
+      159509: { latestNav: 2.2335, latestNavDate: '2026-10-24', premiumPercent: 34.86 },
+      513100: { latestNav: 1.8, latestNavDate: '2026-10-24', premiumPercent: null, navChangePercent: 0.5 },
+    },
+    heldCodes: new Set(['513100']),
+  });
+  assert.equal(rows.length, 2);
+  const [etf, navOnly] = rows;
+  assert.equal(etf.symbol, '159509');
+  assert.equal(etf.price, 3.012);
+  assert.equal(etf.premiumPercent, 34.86);
+  assert.equal(etf.turnover, 123456000);
+  assert.equal(etf.fundKind, 'exchange_fund');
+  assert.equal(etf.lastUpdated, new Date('2026-10-27T15:00:03+08:00').toISOString());
+  // 无场内行情只有净值时按净值展示，不编造溢价。
+  assert.equal(navOnly.fundKind, 'otc');
+  assert.equal(navOnly.price, 1.8);
+  assert.equal(navOnly.changePercent, 0.5);
+  assert.equal(navOnly.premiumPercent, null);
+  assert.equal(navOnly.isHeld, true);
+});
+
+test('local direct chart helpers skip intraday ranges', () => {
+  assert.deepEqual([...LOCAL_DIRECT_HIDDEN_RANGES], ['1d', '5d']);
+  assert.equal(localDirectKlineTimeframe('6mo'), '1d');
+  assert.equal(localDirectKlineTimeframe('max'), '1w');
+  const detail = buildLocalDirectDetailData({ latestNav: 1.2, latestNavDate: '2026-10-24', premiumPercent: 3.1, turnover: 100 });
+  assert.equal(detail.premiumPercent, 3.1);
+  assert.equal(detail.amount, 100);
 });

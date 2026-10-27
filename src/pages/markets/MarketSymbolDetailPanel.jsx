@@ -50,6 +50,7 @@ import { formatMarketPrice, formatNumber, formatPercent, formatSignedPercent, fo
 import { dedupeCompareCandidates } from './marketOtcHelpers.js';
 import { getCompareFromUrl, updateCompareInUrl, getChartConfigFromUrl, updateChartConfigInUrl } from './marketsUrlSync.js';
 import { readSwitchPrefs } from '../switchStrategyHelpers.js';
+import { LOCAL_DIRECT_HIDDEN_RANGES } from '../../app/localDirectModel.js';
 
 const BacktestSidePanel = lazy(() => import('../../components/markets/BacktestSidePanel.jsx').then((module) => ({ default: module.BacktestSidePanel })));
 const CnFundFlowPanel = lazy(() => import('./MarketFinancialPanels.jsx').then((module) => ({ default: module.CnFundFlowPanel })));
@@ -163,14 +164,16 @@ export function SymbolDetailPanel({
   isMobile = false, summaryMode = false,
   tradeMarkers = [],
   buildOtcCandidate = () => null,
+  // 本地直连：数据来自浏览器直连行情厂商，隐藏依赖服务端的对比 / 回测 / 溢价历史 / 资金年报。
+  localDirect = false,
 }) {
   const urlChartConfig = getChartConfigFromUrl();
   const [chartType, setChartType] = useState(urlChartConfig.chartType);
-  const [cnFundParam, setCnFundParam] = useState(urlChartConfig.cnFundParam);
+  const [cnFundParam, setCnFundParam] = useState(localDirect ? 'price' : urlChartConfig.cnFundParam);
   const [premiumView, setPremiumView] = useState('trend');
   const [chartFullscreen, setChartFullscreen] = useState(false);
   const [indicators, setIndicators] = useState(urlChartConfig.indicators);
-  const [compareSymbols, setCompareSymbols] = useState(() => getCompareFromUrl());
+  const [compareSymbols, setCompareSymbols] = useState(() => (localDirect ? [] : getCompareFromUrl()));
   const [compareInput, setCompareInput] = useState('');
   const [compareSearchResults, setCompareSearchResults] = useState([]);
   const [compareSearchLoading, setCompareSearchLoading] = useState(false);
@@ -271,7 +274,7 @@ export function SymbolDetailPanel({
     return () => window.removeEventListener('markets:open-backtest', handleOpenBacktestEvent);
   }, [chartRange, market, onBacktestEvent, rowSymbol]);
   // 对比列表变化时同步到 URL
-  useEffect(() => { updateCompareInUrl(compareSymbols); }, [compareSymbols]);
+  useEffect(() => { if (!localDirect) updateCompareInUrl(compareSymbols); }, [compareSymbols, localDirect]);
   // 图表配置变化时同步到 URL
   useEffect(() => {
     updateChartConfigInUrl({ chartType, indicators, cnFundParam });
@@ -1016,7 +1019,7 @@ export function SymbolDetailPanel({
               </div>
             )}
           </ChartToolbarPopover>
-          {market === 'cn' ? (
+          {market === 'cn' && !localDirect ? (
             <ChartToolbarPopover
               icon={TOOLBAR_ICONS.params}
               label={CN_FUND_PARAM_LABEL[cnFundParam] || '参数'}
@@ -1095,7 +1098,7 @@ export function SymbolDetailPanel({
             </div>
           </ChartToolbarPopover>
 
-          {!summaryMode ? <ChartToolbarPopover
+          {!summaryMode && !localDirect ? <ChartToolbarPopover
             icon={TOOLBAR_ICONS.compare}
             label={compareSymbols.length ? `对比 · ${compareSymbols.length}` : '对比'}
             active={compareSymbols.length > 0}
@@ -1170,7 +1173,7 @@ export function SymbolDetailPanel({
           </ChartToolbarPopover> : null}
 
           {/* 回测按钮 */}
-          {!summaryMode && !chartFullscreen ? <button
+          {!summaryMode && !localDirect && !chartFullscreen ? <button
             type="button"
             onClick={() => {
               console.log('[MarketSymbolDetailPanel] 回测按钮点击，打开面板');
@@ -1343,7 +1346,7 @@ export function SymbolDetailPanel({
               role="tablist"
               aria-label="行情图时间区间"
             >
-              {CHART_RANGE_TABS.map((tab) => {
+              {CHART_RANGE_TABS.filter((tab) => !localDirect || !LOCAL_DIRECT_HIDDEN_RANGES.includes(tab.key)).map((tab) => {
                 const selected = chartRange === tab.key;
                 const highlighted = selected || (tab.key === 'custom' && customRangePickerOpen);
                 return (
@@ -1483,7 +1486,7 @@ export function SymbolDetailPanel({
 
         {/* 详情 tab */}
         <div className="mt-1.5 flex gap-4 border-b border-[#e8eaed] text-[12px] font-medium text-[#5f6368] sm:mt-2 sm:text-[13px]">
-          {(market === 'us' ? SYMBOL_DETAIL_TABS.filter((tab) => tab.key === 'overview' || tab.key === 'earnings' || tab.key === 'financials') : SYMBOL_DETAIL_TABS.filter((tab) => tab.key === 'overview' || (!isCnOtcFund && (tab.key === 'fundFlow' || tab.key === 'fundReport')))).map((tab) => (
+          {(localDirect ? SYMBOL_DETAIL_TABS.filter((tab) => tab.key === 'overview') : market === 'us' ? SYMBOL_DETAIL_TABS.filter((tab) => tab.key === 'overview' || tab.key === 'earnings' || tab.key === 'financials') : SYMBOL_DETAIL_TABS.filter((tab) => tab.key === 'overview' || (!isCnOtcFund && (tab.key === 'fundFlow' || tab.key === 'fundReport')))).map((tab) => (
             <button
               key={tab.key}
               type="button"
@@ -1513,13 +1516,13 @@ export function SymbolDetailPanel({
                 </div>
               ))}
             </div>
-            <div className="border-t border-[#e8eaed] pt-4">
+            {localDirect ? null : <div className="border-t border-[#e8eaed] pt-4">
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-[#1f1f1f]">相关新闻</h3>
                 <span className="text-[12px] text-[#5f6368]">按决策优先级后置</span>
               </div>
               <NewsList items={(relatedNews.length ? relatedNews : news.slice(0, 5)).slice(0, 5)} />
-            </div>
+            </div>}
           </div>
         ) : activeTab === 'fundFlow' ? (
           <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-[#f1f3f4]" />}>

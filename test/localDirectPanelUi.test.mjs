@@ -127,7 +127,15 @@ test('markets and fundSwitch pages wire the local-direct entry', () => {
   const markets = readFileSync(new URL('../src/pages/MarketsExperience.jsx', import.meta.url), 'utf8');
   assert.match(markets, /useLocalDirectMode\(LOCAL_DIRECT_SCOPES\.MARKETS\)/);
   assert.match(markets, /if \(localDirect\) \{/);
-  assert.match(markets, /<LocalDirectPanel\s+scope=\{LOCAL_DIRECT_SCOPES\.MARKETS\}[^>]*showPremium/);
+  // 行情中心直连沿用云端列表/详情组件，只换数据源。
+  assert.match(markets, /<LocalDirectMarketsView/);
+  const view = readFileSync(new URL('../src/components/markets/LocalDirectMarketsView.jsx', import.meta.url), 'utf8');
+  assert.match(view, /MarketsFullTablePanel/);
+  assert.match(view, /MarketsMainContent/);
+  assert.match(view, /localDirect: true/);
+  assert.match(view, /fetchEastmoneyFundNavs/);
+  const detail = readFileSync(new URL('../src/pages/markets/MarketSymbolDetailPanel.jsx', import.meta.url), 'utf8');
+  assert.match(detail, /!summaryMode && !localDirect \? <ChartToolbarPopover/);
   // 云端视图仍保留 compact 切换条，保证可切回。
   assert.match(markets, /<LocalDirectModeBar compact/);
 

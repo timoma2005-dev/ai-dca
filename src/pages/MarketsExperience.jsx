@@ -14,7 +14,8 @@ import {
   searchSymbols,
 } from './markets/marketsApiLoader.js';
 import { addToWatchlist, CN_ETF_WATCHLIST_PRESETS, createWatchlist, deleteWatchlist, loadWatchlist, removeFromWatchlist, renameWatchlist, setActiveWatchlist } from '../app/marketsWatchlistStorage.js';
-import { LocalDirectModeBar, LocalDirectPanel, useLocalDirectMode } from '../components/markets/LocalDirectPanel.jsx';
+import { LocalDirectModeBar, useLocalDirectMode } from '../components/markets/LocalDirectPanel.jsx';
+import { LocalDirectMarketsView } from '../components/markets/LocalDirectMarketsView.jsx';
 import { LOCAL_DIRECT_SCOPES } from '../app/localDirectMode.js';
 import { useMarketsPageSync } from './markets/useMarketsPageSync.js';
 import { useVisibleMarketSymbols } from './markets/useVisibleMarketSymbols.js';
@@ -86,10 +87,6 @@ export function MarketsExperience() {
   const [market, setMarket] = useState(A_SHARE_MARKET.key);
   // 本地直连：开启后本 tab 改为浏览器直连行情厂商接口（腾讯/东财），不经过后端/Worker。
   const [localDirect, setLocalDirect] = useLocalDirectMode(LOCAL_DIRECT_SCOPES.MARKETS);
-  const localDirectUniverse = useMemo(
-    () => CN_ETF_WATCHLIST_PRESETS.map((item) => ({ code: item.symbol, name: item.name })),
-    []
-  );
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [earnings, setEarnings] = useState([]);
@@ -1210,13 +1207,50 @@ export function MarketsExperience() {
   const showMarketsSidebar = !(fullTableMode && !selectedSymbol);
 
   if (localDirect) {
+    // 本地直连：沿用云端列表 / 详情组件，只换数据源（浏览器直连腾讯 / 东财），自选列表与云端共用。
+    const localDirectSymbols = Array.isArray(activeWatchList.cn) && activeWatchList.cn.length
+      ? activeWatchList.cn
+      : (isActiveOtcList ? [] : CN_ETF_WATCHLIST_PRESETS.map((item) => item.symbol));
+    const localDirectHeldCodes = new Set(Array.from(heldCodeMap.keys()).map((key) => (String(key).match(/\d{6}/) || [])[0]).filter(Boolean));
     return (
+      <>
+      <WatchlistNameDialog
+        dialog={watchlistDialog}
+        onChangeName={(name) => setWatchlistDialog((prev) => prev ? { ...prev, name } : prev)}
+        onCancel={() => setWatchlistDialog(null)}
+        onSubmit={handleWatchlistDialogSubmit}
+      />
       <MarketSentimentPageSurface padBottom={false} fillHeight>
-        <div className="mx-auto w-full max-w-7xl space-y-3 px-3 py-2 sm:px-6 lg:px-8">
-          <LocalDirectModeBar scope={LOCAL_DIRECT_SCOPES.MARKETS} enabled={localDirect} onChange={setLocalDirect} />
-          <LocalDirectPanel scope={LOCAL_DIRECT_SCOPES.MARKETS} universe={localDirectUniverse} showPremium />
-        </div>
+        <LocalDirectMarketsView
+          isMobile={isMobile}
+          watchLists={watchLists}
+          activeWatchListId={watch.activeListId}
+          symbols={localDirectSymbols}
+          isOtcList={isActiveOtcList}
+          heldCodes={localDirectHeldCodes}
+          onSelectWatchlist={handleSelectWatchlist}
+          onCreateWatchlist={handleCreateWatchlist}
+          onRenameWatchlist={handleRenameWatchlist}
+          onDeleteWatchlist={handleDeleteWatchlist}
+          onAddSymbol={(row) => {
+            const symbol = String(row?.symbol || row?.code || '').trim().toUpperCase();
+            if (!symbol) return;
+            setWatch(addToWatchlist('cn', symbol, watch.activeListId));
+            showActionToast('已加入自选', 'success');
+          }}
+          onRemoveSymbol={(row) => {
+            const symbol = String(row?.symbol || row?.code || '').trim().toUpperCase();
+            if (symbol) setWatch(removeFromWatchlist('cn', symbol, watch.activeListId));
+          }}
+          onMarketAction={handleMarketAction}
+          header={(
+            <div className="px-3 sm:px-6 lg:px-8">
+              <LocalDirectModeBar compact scope={LOCAL_DIRECT_SCOPES.MARKETS} enabled={localDirect} onChange={setLocalDirect} />
+            </div>
+          )}
+        />
       </MarketSentimentPageSurface>
+      </>
     );
   }
 

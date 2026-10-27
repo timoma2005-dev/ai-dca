@@ -125,3 +125,96 @@ export function normalizeDirectSearchResults(results = []) {
     .filter((item) => /^\d{6}$/.test(String(item?.code || '')))
     .map((item) => ({ code: String(item.code), name: String(item.name || item.code) }));
 }
+
+function tencentTimeToIso(value) {
+  // 腾讯 time 形如 20260703161434（北京时间）。
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length < 14) return '';
+  const iso = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}T${digits.slice(8, 10)}:${digits.slice(10, 12)}:${digits.slice(12, 14)}+08:00`;
+  return Number.isFinite(Date.parse(iso)) ? new Date(iso).toISOString() : '';
+}
+
+/**
+ * 把直连行情 + 东财净值整理成与云端行情列表同形的行（MarketsFullTablePanel /
+ * MobileFundList / SymbolDetailPanel 直接可用）。云端独有的字段（近 1 月收益、
+ * 历史水位、费率、申购限额等）保持缺失，由各组件按缺失值显示「—」。
+ * @param {string[]} symbols 列表内的代码（保持顺序）
+ * @param {Record<string, any>} quotes fetchDirectQuotes().quotes
+ * @param {Record<string, any>} navs   东财/蛋卷净值映射
+ * @param {{isOtcList?: boolean, heldCodes?: Set<string>|Record<string, any>, names?: Record<string,string>}} options
+ */
+export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {}, isOtcList = false, heldCodes = null, names = {} } = {}) {
+  const isHeld = (code) => {
+    if (!heldCodes) return false;
+    if (heldCodes instanceof Set || heldCodes instanceof Map) return heldCodes.has(code);
+    return Boolean(heldCodes[code]);
+  };
+  const seen = new Set();
+  return (Array.isArray(symbols) ? symbols : []).map((raw) => {
+    const symbol = String(raw || '').trim().toUpperCase();
+    const code = (symbol.match(/\d{6}/) || [symbol])[0];
+    if (!symbol || seen.has(code)) return null;
+    seen.add(code);
+    const quote = quotes?.[raw] || quotes?.[symbol] || quotes?.[code] || null;
+    const nav = navs?.[code] || null;
+    const latestNav = finiteNumber(nav?.latestNav);
+    const navDate = String(nav?.latestNavDate || nav?.navDate || '');
+    const quotePrice = finiteNumber(quote?.price);
+    const hasQuote = Boolean(quote && quotePrice != null && quotePrice > 0);
+    const otc = isOtcList || (!hasQuote && latestNav != null);
+    const price = otc ? latestNav : quotePrice;
+    const previousClose = otc ? null : finiteNumber(quote?.previousClose);
+    const changePercent = otc ? finiteNumber(nav?.navChangePercent) : finiteNumber(quote?.changePercent);
+    const change = otc ? null : finiteNumber(quote?.change);
+    const turnoverWan = otc ? null : finiteNumber(quote?.turnover ?? quote?.amount);
+    const premiumPercent = otc ? null : (finiteNumber(nav?.premiumPercent) ?? computePremiumPercent(quotePrice, latestNav));
+    return {
+      symbol: code,
+      code,
+      name: String(names?.[code] || quote?.name || nav?.name || code),
+      market: 'cn',
+      price,
+      change,
+      changePercent,
+      previousClose,
+      open: otc ? null : finiteNumber(quote?.open),
+      high: otc ? null : finiteNumber(quote?.high),
+      low: otc ? null : finiteNumber(quote?.low),
+      volume: otc ? null : finiteNumber(quote?.volume),
+      // 腾讯成交额单位为万元，云端列表按元格式化。
+      turnover: turnoverWan == null ? null : turnoverWan * 10000,
+      amount: turnoverWan == null ? null : turnoverWan * 10000,
+      marketCapital: otc ? null : finiteNumber(quote?.marketCapital),
+      premiumPercent,
+      latestNav,
+      latestNavDate: navDate,
+      lastUpdated: otc ? '' : tencentTimeToIso(quote?.time),
+      marketState: '',
+      fundKind: otc ? 'otc' : 'exchange_fund',
+      isHeld: isHeld(code),
+      source: otc ? 'eastmoney-fund-direct' : 'tencent-direct',
+      localDirect: true,
+    };
+  }).filter(Boolean);
+}
+
+/** 详情页概览里的 ETF 补充指标（单位净值 / 净值日期 / 溢价率），与云端 cnDetailData 同形。 */
+export function buildLocalDirectDetailData(row) {
+  if (!row) return null;
+  return {
+    open: row.open,
+    high: row.high,
+    low: row.low,
+    volume: row.volume,
+    amount: row.turnover,
+    latestNav: row.latestNav,
+    latestNavDate: row.latestNavDate,
+    premiumPercent: row.premiumPercent,
+  };
+}
+
+/** 云端区间 → 直连 K 线周期：腾讯/东财直连只有日/周/月线，没有分钟线。 */
+export const LOCAL_DIRECT_HIDDEN_RANGES = Object.freeze(['1d', '5d']);
+export function localDirectKlineTimeframe(rangeKey) {
+  return rangeKey === '5y' || rangeKey === 'max' ? '1w' : '1d';
+}

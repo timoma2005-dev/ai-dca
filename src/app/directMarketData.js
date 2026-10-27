@@ -922,6 +922,7 @@ export function parseEastmoneyFundNavPayload(body, codes = []) {
       latestNavDate: pdate,
       // 显式溢价率，上层优先使用，不再按价格/净值本地重算。
       premiumPercent,
+      navChangePercent: item.NAVCHGRT === '' || item.NAVCHGRT == null ? null : compactNumber(item.NAVCHGRT),
       navSource: premiumPercent != null ? 'eastmoney-zjl' : 'eastmoney-nav',
       source: 'eastmoney-fund-direct',
     };
