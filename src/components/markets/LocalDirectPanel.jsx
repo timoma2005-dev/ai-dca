@@ -182,7 +182,12 @@ function DirectDetail({ row, onBack, onTimeframe, timeframe, kline, klineLoading
       ) : (
         <KlineChart candles={kline?.candles} />
       )}
-      <p className="ldp-source-note">K 线来源：push2his.eastmoney.com（浏览器直连 · {kline?.source || 'eastmoney-direct'}）</p>
+      <p className="ldp-source-note">
+        K 线来源：{String(kline?.source || '').startsWith('tencent')
+          ? '腾讯 web.ifzq.gtimg.cn（浏览器直连）'
+          : '东财 push2his.eastmoney.com（JSONP 兜底）'}
+        {kline?.fallbackFrom ? ` · 腾讯源失败已切换：${kline.fallbackFrom}` : ''}
+      </p>
     </section>
   );
 }
@@ -440,7 +445,7 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
         </div>
       )}
       <p className="ldp-source-note">
-        链路：浏览器 → qt.gtimg.cn（行情）/ push2his.eastmoney.com（K线）{showPremium ? ' / fundmobapi.eastmoney.com（基金净值与折价率 ZJL，蛋卷兜底）' : ''}，与竞价看板 adminAuction 同为厂商直连；失败时不影响云端数据源。
+        链路：浏览器 → qt.gtimg.cn（行情）/ web.ifzq.gtimg.cn（K线，东财 push2his JSONP 兜底）{showPremium ? ' / fundmobapi.eastmoney.com（基金净值与折价率 ZJL，蛋卷兜底）' : ''}，与竞价看板 adminAuction 同为厂商直连；失败时不影响云端数据源。
       </p>
     </div>
   );

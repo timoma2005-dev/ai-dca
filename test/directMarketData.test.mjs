@@ -9,6 +9,7 @@ import {
   normalizeDirectSymbol,
   parseEastmoneyFundNavPayload,
   parseEastmoneyKlinePayload,
+  parseTencentKlinePayload,
   parseTencentQuoteText,
   parseTencentSearchText
 } from '../src/app/directMarketData.js';
@@ -174,43 +175,131 @@ test('FundMNFInfo parser filters by requested codes and tolerates bad payloads',
   assert.deepEqual(parseEastmoneyFundNavPayload({ Datas: [{ FCODE: 'bad', NAV: '1' }] }, ['bad']), {});
 });
 
-test('direct Eastmoney kline uses JSONP (cb param) and limit does not truncate memory cache', async () => {
-  const payload = {
-    rc: 0,
+function mockFetchJson(body) {
+  const originalFetch = globalThis.fetch;
+  const seenUrls = [];
+  globalThis.fetch = async (url) => {
+    seenUrls.push(String(url));
+    return { ok: true, status: 200, json: async () => body };
+  };
+  return {
+    seenUrls,
+    restore() { globalThis.fetch = originalFetch; },
+  };
+}
+
+function mockFetchReject(message) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error(message); };
+  return { restore() { globalThis.fetch = originalFetch; } };
+}
+
+test('Tencent fqkline payload maps qfqday/day rows to the candle schema', () => {
+  const body = {
+    code: 0,
     data: {
-      code: '513111',
-      name: '测试ETF',
-      klines: [
-        '2026-07-01,1.000,1.010,1.020,0.990,100,1000,0,0,0,0',
-        '2026-07-02,1.010,1.020,1.030,1.000,100,1000,0,0,0,0',
-        '2026-07-03,1.020,1.030,1.040,1.010,100,1000,0,0,0,0'
-      ]
+      sh513100: {
+        qfqday: [
+          ['2026-07-01', '2.100', '2.120', '2.130', '2.090', '12345'],
+          ['2026-07-02', '2.120', '2.110', '2.140', '2.100', '23456']
+        ],
+        qt: { sh513100: ['1', '纳指ETF国泰', '513100'] }
+      }
     }
   };
-  const harness = installJsonpHarness(() => payload);
+  const normalized = parseTencentKlinePayload(body, { symbol: '513100', timeframe: '1d' });
+  assert.equal(normalized.symbol, '513100');
+  assert.equal(normalized.name, '纳指ETF国泰');
+  assert.equal(normalized.source, 'tencent-kline-direct');
+  assert.equal(normalized.candles.length, 2);
+  assert.equal(normalized.candles[0].o, 2.1);
+  assert.equal(normalized.candles[0].c, 2.12);
+  assert.equal(normalized.candles[0].v, 12345);
+  assert.equal(normalized.candles[0].amount, null);
+  assert.ok(normalized.candles[0].t > 0);
+
+  // 无前复权键时回退普通 day/week/month 键。
+  const fallback = parseTencentKlinePayload(
+    { data: { sz159941: { week: [['2026-07-03', '1.9', '2.0', '2.05', '1.85', '99']] } } },
+    { symbol: '159941', timeframe: '1w' }
+  );
+  assert.equal(fallback.candles.length, 1);
+  assert.equal(fallback.candles[0].c, 2);
+  assert.deepEqual(parseTencentKlinePayload(null, { symbol: '513100', timeframe: '1d' }).candles, []);
+});
+
+test('direct kline prefers Tencent fqkline fetch and caches without touching JSONP', async () => {
+  const body = {
+    code: 0,
+    data: {
+      sh513111: {
+        qfqday: [
+          ['2026-07-01', '1.000', '1.010', '1.020', '0.990', '100'],
+          ['2026-07-02', '1.010', '1.020', '1.030', '1.000', '100'],
+          ['2026-07-03', '1.020', '1.030', '1.040', '1.010', '100']
+        ]
+      }
+    }
+  };
+  const fetchMock = mockFetchJson(body);
+  const harness = installJsonpHarness(() => { throw new Error('JSONP must not be used on the primary path'); });
   try {
     const limited = await fetchDirectKline('513111', { timeframe: '1d', limit: 2 });
     const cachedFull = await fetchDirectKline('513111', { timeframe: '1d' });
 
-    // inflight 去重 + 内存缓存：只插一次 script。
-    assert.equal(harness.seenUrls.length, 1);
+    assert.equal(limited.source, 'tencent-kline-direct');
     assert.equal(limited.candles.length, 2);
     assert.equal(cachedFull.candles.length, 3);
-    assert.match(harness.seenUrls[0], /push2his\.eastmoney\.com/);
-    assert.match(harness.seenUrls[0], /secid=1\.513111/);
-    assert.match(harness.seenUrls[0], /klt=101/);
-    assert.match(harness.seenUrls[0], /[?&]cb=aiDcaJsonp_/);
+    // 内存缓存命中：只 fetch 一次，且不插任何 script。
+    assert.equal(fetchMock.seenUrls.length, 1);
+    assert.equal(harness.seenUrls.length, 0);
+    assert.match(fetchMock.seenUrls[0], /web\.ifzq\.gtimg\.cn\/appstock\/app\/fqkline\/get/);
+    assert.match(fetchMock.seenUrls[0], /param=sh513111%2Cday/);
+    assert.match(fetchMock.seenUrls[0], /qfq$/);
   } finally {
     harness.restore();
+    fetchMock.restore();
   }
 });
 
-test('direct Eastmoney kline rejects when the JSONP script fails', async () => {
-  const harness = installJsonpHarness(() => 'error');
+test('direct kline falls back to Eastmoney JSONP (cb param, kline token) when Tencent fetch fails', async () => {
+  const eastmoneyPayload = {
+    rc: 0,
+    data: {
+      code: '513222',
+      name: '兜底ETF',
+      klines: [
+        '2026-07-01,1.000,1.010,1.020,0.990,100,1000,0,0,0,0',
+        '2026-07-02,1.010,1.020,1.030,1.000,100,1000,0,0,0,0'
+      ]
+    }
+  };
+  const fetchMock = mockFetchReject('tencent network down');
+  const harness = installJsonpHarness(() => eastmoneyPayload);
   try {
-    await assert.rejects(fetchDirectKline('513222', { timeframe: '1d' }), /jsonp script failed/);
+    const payload = await fetchDirectKline('513222', { timeframe: '1d' });
+    assert.equal(payload.source, 'eastmoney-direct');
+    assert.equal(payload.candles.length, 2);
+    assert.match(payload.fallbackFrom, /tencent network down/);
+    assert.equal(harness.seenUrls.length, 1);
+    assert.match(harness.seenUrls[0], /push2his\.eastmoney\.com/);
+    assert.match(harness.seenUrls[0], /secid=1\.513222/);
+    assert.match(harness.seenUrls[0], /ut=fa5fd1943c7b386f172d6893dbfba10b/);
+    assert.match(harness.seenUrls[0], /[?&]cb=aiDcaJsonp_/);
   } finally {
     harness.restore();
+    fetchMock.restore();
+  }
+});
+
+test('direct kline rejects when both Tencent fetch and Eastmoney JSONP fail', async () => {
+  const fetchMock = mockFetchReject('tencent blocked');
+  const harness = installJsonpHarness(() => 'error');
+  try {
+    await assert.rejects(fetchDirectKline('513333', { timeframe: '1d' }), /jsonp script failed/);
+  } finally {
+    harness.restore();
+    fetchMock.restore();
   }
 });
 
