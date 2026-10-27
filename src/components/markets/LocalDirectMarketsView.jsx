@@ -4,6 +4,7 @@ import {
   fetchDirectKline,
   fetchDirectQuotes,
   fetchEastmoneyFundNavs,
+  fetchDirectFundProfiles,
   searchDirectSymbols,
 } from '../../app/directMarketData.js';
 import {
@@ -118,6 +119,7 @@ export function LocalDirectMarketsView({
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [names, setNames] = useState({});
+  const [profiles, setProfiles] = useState({});
   const abortRef = useRef(null);
   const seqRef = useRef(0);
 
@@ -197,9 +199,34 @@ export function LocalDirectMarketsView({
     return () => window.clearTimeout(timer);
   }, [searchValue]);
 
-  const rows = useMemo(
+  const baseRows = useMemo(
     () => buildLocalDirectMarketRows(allSymbols, { quotes, navs, isOtcList, heldCodes, names }),
     [allSymbols, quotes, navs, isOtcList, heldCodes, names]
+  );
+  // 区间收益 / 年费率 / 场内总份额：东财 CORS 接口逐只拉，12 小时缓存；场内外判定要等行情回来。
+  const profileRequestKey = useMemo(
+    () => baseRows.filter((row) => row.price != null).map((row) => `${row.code}:${row.fundKind === 'otc' ? 'o' : 'x'}`).join(','),
+    [baseRows]
+  );
+  useEffect(() => {
+    if (!profileRequestKey) return undefined;
+    const controller = new AbortController();
+    const items = profileRequestKey.split(',').map((part) => {
+      const [code, kind] = part.split(':');
+      return { code, exchange: kind === 'x' };
+    });
+    fetchDirectFundProfiles(items, { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setProfiles((prev) => ({ ...prev, ...(result?.profiles || {}) }));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [profileRequestKey]);
+  const rows = useMemo(
+    () => (Object.keys(profiles).length
+      ? buildLocalDirectMarketRows(allSymbols, { quotes, navs, isOtcList, heldCodes, names, profiles })
+      : baseRows),
+    [allSymbols, quotes, navs, isOtcList, heldCodes, names, profiles, baseRows]
   );
   const listRows = useMemo(() => {
     const listed = new Set(symbols.map((item) => String(item || '').trim().toUpperCase()));

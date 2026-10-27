@@ -1027,3 +1027,179 @@ export async function fetchEastmoneyFundNavs(codes = [], { signal } = {}) {
   }
   return { quotes: out, generatedAt: new Date().toISOString(), source: 'eastmoney-fund-direct' };
 }
+
+// ---------------------------------------------------------------------------
+// 基金档案（区间收益 / 费率 / ETF 总份额）——东财接口均返回 CORS 头，浏览器可直接 fetch。
+//   FundMNPeriodIncrease：近1周…成立以来、今年以来（场内 ETF 也支持，按净值计）
+//   FundMNDetailInformation：管理费 / 托管费 / 销售服务费
+//   push2 stock/get f84：场内基金总份额（份）
+// 都是日频数据，按代码缓存 12 小时（内存 + localStorage），一次只查一只，限并发。
+// ---------------------------------------------------------------------------
+const EM_PERIOD_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNPeriodIncrease';
+const EM_FUND_DETAIL_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNDetailInformation';
+const EM_PUSH2_STOCK_URL = 'https://push2.eastmoney.com/api/qt/stock/get';
+const FUND_PROFILE_STORAGE_KEY = 'aiDcaDirectFundProfile:v1';
+const FUND_PROFILE_TTL_MS = 12 * 60 * 60 * 1000;
+const FUND_PROFILE_CONCURRENCY = 4;
+const MAX_LOCAL_FUND_PROFILES = 300;
+const fundProfileMemoryCache = new Map();
+const fundProfileInflight = new Map();
+const EM_MOBILE_PARAMS = { plat: 'Android', appType: 'ttjj', product: 'EFund', Version: '1', deviceid: 'ai-dca-direct' };
+
+const PERIOD_TITLE_FIELDS = {
+  Z: 'return1w',
+  Y: 'return1m',
+  '3Y': 'return3m',
+  '6Y': 'return6m',
+  '1N': 'return1y',
+  '2N': 'return2y',
+  '3N': 'return3y',
+  '5N': 'return5y',
+  JN: 'ytdReturn',
+  LN: 'returnBase',
+};
+
+function emNumber(value) {
+  if (value === '' || value == null || value === '--') return null;
+  const n = Number(String(value).replace('%', ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** FundMNPeriodIncrease → { return1w, return1m, …, ytdReturn, returnBase, returnsAsOf } */
+export function parseEastmoneyPeriodIncrease(body) {
+  const datas = body?.Datas;
+  if (!Array.isArray(datas)) return {};
+  const out = {};
+  for (const item of datas) {
+    const field = PERIOD_TITLE_FIELDS[String(item?.title || '').trim()];
+    if (!field) continue;
+    const value = emNumber(item.syl);
+    if (value != null) out[field] = value;
+  }
+  const asOf = String(body?.Expansion?.TIME || '').slice(0, 10);
+  if (asOf && Object.keys(out).length) out.returnsAsOf = asOf;
+  return out;
+}
+
+/** FundMNDetailInformation → { annualFeeRate（管理+托管+销售服务费，%）, fundScale（元） } */
+export function parseEastmoneyFundDetail(body) {
+  const d = body?.Datas;
+  if (!d || typeof d !== 'object') return {};
+  const parts = [d.MGREXP, d.TRUSTEXP, d.SALESEXP].map(emNumber);
+  const out = {};
+  if (parts.some((value) => value != null)) out.annualFeeRate = round2(parts.reduce((sum, value) => sum + (value || 0), 0));
+  const scale = emNumber(d.ENDNAV);
+  if (scale != null && scale > 0) out.fundScale = scale;
+  if (d.SHORTNAME) out.name = String(d.SHORTNAME).trim();
+  return out;
+}
+
+function exchangeSecid(code) {
+  return /^[56]/.test(code) ? `1.${code}` : `0.${code}`;
+}
+
+function readLocalFundProfiles() {
+  if (typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(FUND_PROFILE_STORAGE_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalFundProfile(key, entry) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const bucket = readLocalFundProfiles();
+    bucket[key] = entry;
+    const entries = Object.entries(bucket)
+      .sort((a, b) => Number(b[1]?.savedAt || 0) - Number(a[1]?.savedAt || 0))
+      .slice(0, MAX_LOCAL_FUND_PROFILES);
+    window.localStorage.setItem(FUND_PROFILE_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function readCachedFundProfile(key, now) {
+  const mem = fundProfileMemoryCache.get(key);
+  if (mem && now - mem.savedAt < FUND_PROFILE_TTL_MS) return mem.profile;
+  const local = readLocalFundProfiles()[key];
+  if (local?.profile && now - Number(local.savedAt || 0) < FUND_PROFILE_TTL_MS) {
+    fundProfileMemoryCache.set(key, local);
+    return local.profile;
+  }
+  return null;
+}
+
+async function fetchJsonCors(url, signal) {
+  const res = await fetch(url, { signal, cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchOneFundProfile(code, { exchange, signal }) {
+  const params = new URLSearchParams({ FCODE: code, ...EM_MOBILE_PARAMS });
+  const tasks = [
+    fetchJsonCors(`${EM_PERIOD_URL}?${params.toString()}`, signal).then(parseEastmoneyPeriodIncrease),
+    fetchJsonCors(`${EM_FUND_DETAIL_URL}?${params.toString()}`, signal).then(parseEastmoneyFundDetail),
+  ];
+  if (exchange) {
+    const q = new URLSearchParams({ secid: exchangeSecid(code), fields: 'f57,f84' });
+    tasks.push(fetchJsonCors(`${EM_PUSH2_STOCK_URL}?${q.toString()}`, signal).then((body) => {
+      const shares = emNumber(body?.data?.f84);
+      return shares != null && shares > 0 ? { totalShares: shares } : {};
+    }));
+  }
+  const results = await Promise.allSettled(tasks);
+  if (results.every((item) => item.status === 'rejected')) throw results[0].reason;
+  return Object.assign({}, ...results.map((item) => (item.status === 'fulfilled' ? item.value : {})));
+}
+
+/**
+ * 批量拉基金档案。items: [{ code, exchange }]，exchange=true 时额外取总份额。
+ * 返回 { profiles: { [code]: profile } }；单只失败不影响其它。
+ */
+export async function fetchDirectFundProfiles(items = [], { signal } = {}) {
+  const list = [];
+  const seen = new Set();
+  for (const item of Array.isArray(items) ? items : []) {
+    const code = (String(item?.code || '').match(/\d{6}/) || [])[0];
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    list.push({ code, exchange: Boolean(item?.exchange) });
+  }
+  const now = Date.now();
+  const profiles = {};
+  const missing = [];
+  for (const item of list) {
+    const key = `${item.code}|${item.exchange ? 'x' : 'o'}`;
+    const cached = readCachedFundProfile(key, now);
+    if (cached) profiles[item.code] = cached;
+    else missing.push({ ...item, key });
+  }
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < missing.length) {
+      const item = missing[cursor++];
+      if (signal?.aborted) return;
+      let promise = fundProfileInflight.get(item.key);
+      if (!promise) {
+        promise = fetchOneFundProfile(item.code, { exchange: item.exchange, signal }).finally(() => fundProfileInflight.delete(item.key));
+        fundProfileInflight.set(item.key, promise);
+      }
+      try {
+        const profile = await promise;
+        profiles[item.code] = profile;
+        const entry = { profile, savedAt: Date.now() };
+        fundProfileMemoryCache.set(item.key, entry);
+        writeLocalFundProfile(item.key, entry);
+      } catch {
+        // 单只失败忽略，下一轮刷新再试
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(FUND_PROFILE_CONCURRENCY, missing.length) }, worker));
+  return { profiles, generatedAt: new Date().toISOString(), source: 'eastmoney-fund-profile-direct' };
+}

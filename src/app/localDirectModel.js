@@ -143,7 +143,7 @@ function tencentTimeToIso(value) {
  * @param {Record<string, any>} navs   东财/蛋卷净值映射
  * @param {{isOtcList?: boolean, heldCodes?: Set<string>|Record<string, any>, names?: Record<string,string>}} options
  */
-export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {}, isOtcList = false, heldCodes = null, names = {} } = {}) {
+export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {}, isOtcList = false, heldCodes = null, names = {}, profiles = {} } = {}) {
   const isHeld = (code) => {
     if (!heldCodes) return false;
     if (heldCodes instanceof Set || heldCodes instanceof Map) return heldCodes.has(code);
@@ -168,10 +168,26 @@ export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {
     const change = otc ? null : finiteNumber(quote?.change);
     const turnoverWan = otc ? null : finiteNumber(quote?.turnover ?? quote?.amount);
     const premiumPercent = otc ? null : (finiteNumber(nav?.premiumPercent) ?? computePremiumPercent(quotePrice, latestNav));
+    // 东财基金档案（fetchDirectFundProfiles）：区间收益、今年以来、年费率、场内总份额。
+    const profile = profiles?.[code] || null;
+    const profileFields = {};
+    if (profile) {
+      for (const field of ['return1w', 'return1m', 'return3m', 'return6m', 'return1y', 'return2y', 'return3y', 'return5y', 'returnBase', 'ytdReturn']) {
+        const value = finiteNumber(profile[field]);
+        if (value != null) profileFields[field] = value;
+      }
+      if (profileFields.ytdReturn != null) profileFields.currentYearPercent = profileFields.ytdReturn;
+      const fee = finiteNumber(profile.annualFeeRate);
+      if (fee != null) profileFields.feeRate = fee;
+      const shares = otc ? null : finiteNumber(profile.totalShares);
+      if (shares != null && shares > 0) profileFields.totalShares = shares;
+      const scale = finiteNumber(profile.fundScale);
+      if (scale != null) profileFields.fundScale = scale;
+    }
     return {
       symbol: code,
       code,
-      name: String(names?.[code] || quote?.name || nav?.name || code),
+      name: String(names?.[code] || quote?.name || nav?.name || profile?.name || code),
       market: 'cn',
       price,
       change,
@@ -194,6 +210,7 @@ export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {
       isHeld: isHeld(code),
       source: otc ? 'eastmoney-fund-direct' : 'tencent-direct',
       localDirect: true,
+      ...profileFields,
     };
   }).filter(Boolean);
 }
