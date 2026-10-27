@@ -77,7 +77,7 @@ export function LocalDirectModeBar({ scope, enabled, onChange, compact = false }
       </div>
       {!compact ? (
         <span className="ldp-bar-note">
-          <Wifi size={13} /> 本地直连：浏览器直连腾讯 qt.gtimg.cn / 东财 push2his 行情接口，不经过后端与 Worker（与竞价看板同链路）
+          <Wifi size={13} /> 本地直连：浏览器直连行情接口，不经过美股策略助手服务，如接口不可用请切换云端
         </span>
       ) : null}
     </div>

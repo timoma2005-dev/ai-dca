@@ -67,7 +67,10 @@ test('mode bar renders cloud/local segments with active state and scope-agnostic
   assert.match(off, /data-testid="local-direct-mode-bar"/);
   assert.match(off, /云端/);
   assert.match(off, /本地直连/);
-  assert.match(off, /qt\.gtimg\.cn/);
+  // 说明文案：浏览器直连、不经本服务、失败切云端。
+  assert.match(off, /浏览器直连行情接口/);
+  assert.match(off, /不经过美股策略助手服务/);
+  assert.match(off, /如接口不可用请切换云端/);
   // 分段条始终恰好一个激活按钮；关闭态激活的是排在前面的「云端」。
   assert.equal((off.match(/aria-pressed="true"/g) || []).length, 1);
   const offButtons = off.split('<button').slice(1);
@@ -80,9 +83,9 @@ test('mode bar renders cloud/local segments with active state and scope-agnostic
   assert.doesNotMatch(onButtons[0], /is-active/);
   assert.match(onButtons[1], /is-active/);
   assert.match(onButtons[1], /本地直连/);
-  // compact 模式隐藏链路说明。
+  // compact 模式隐藏说明文案。
   const compact = mod.renderModeBar({ scope: mod.LOCAL_DIRECT_SCOPES.MARKETS, enabled: true, compact: true });
-  assert.doesNotMatch(compact, /qt\.gtimg\.cn/);
+  assert.doesNotMatch(compact, /如接口不可用请切换云端/);
   assert.match(compact, /is-compact/);
 });
 
