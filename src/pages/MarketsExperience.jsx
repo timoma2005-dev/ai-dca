@@ -13,7 +13,9 @@ import {
   fetchSummary,
   searchSymbols,
 } from './markets/marketsApiLoader.js';
-import { addToWatchlist, createWatchlist, deleteWatchlist, loadWatchlist, removeFromWatchlist, renameWatchlist, setActiveWatchlist } from '../app/marketsWatchlistStorage.js';
+import { addToWatchlist, CN_ETF_WATCHLIST_PRESETS, createWatchlist, deleteWatchlist, loadWatchlist, removeFromWatchlist, renameWatchlist, setActiveWatchlist } from '../app/marketsWatchlistStorage.js';
+import { LocalDirectModeBar, LocalDirectPanel, useLocalDirectMode } from '../components/markets/LocalDirectPanel.jsx';
+import { LOCAL_DIRECT_SCOPES } from '../app/localDirectMode.js';
 import { useMarketsPageSync } from './markets/useMarketsPageSync.js';
 import { useVisibleMarketSymbols } from './markets/useVisibleMarketSymbols.js';
 import { useMarketsWatchRefresh } from './markets/useMarketsWatchRefresh.js';
@@ -82,6 +84,12 @@ export function MarketsExperience() {
   const totalAlertCount = marketAlerts.length;
   const isFirstAlert = totalAlertCount === 0;
   const [market, setMarket] = useState(A_SHARE_MARKET.key);
+  // 本地直连：开启后本 tab 改为浏览器直连行情厂商接口（腾讯/东财），不经过后端/Worker。
+  const [localDirect, setLocalDirect] = useLocalDirectMode(LOCAL_DIRECT_SCOPES.MARKETS);
+  const localDirectUniverse = useMemo(
+    () => CN_ETF_WATCHLIST_PRESETS.map((item) => ({ code: item.symbol, name: item.name })),
+    []
+  );
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [earnings, setEarnings] = useState([]);
@@ -1201,6 +1209,17 @@ export function MarketsExperience() {
   const fullTablePanelProps = { fullTableMode, rows: activeSidebarRows, activeWatchListName: activeWatchList?.name, watchLists, activeWatchListId: watch.activeListId, market, isMobile, klineMap, selectedSymbol, marketRefreshAt, onSelectWatchlist: handleSelectWatchlist, onCreateWatchlist: handleCreateWatchlist, onRenameWatchlist: handleRenameWatchlist, onDeleteWatchlist: handleDeleteWatchlist, onSelectSymbol: handleSelectSymbol, searchOpen: watchOverlaySearchOpen, searchValue: watchOverlaySearchInput, searchResults: watchOverlaySearchResults, searchLoading: watchOverlaySearchLoading, searchError: watchOverlaySearchError, watchSymbols, onSearchToggle: handleToggleWatchOverlaySearch, onSearchChange: setWatchOverlaySearchInput, onSearchClear: handleClearWatchOverlaySearch, onSearchResultSelect: handlePickSymbolSearch, onSearchResultAdd: handleAddSearchResult, onRefresh: refreshMarketsData, feedHealth, refreshing: watchLoading, onVisibleSymbolsChange: handleVisibleWatchSymbolsChange, onColumnVisibilityStateChange: handleColumnVisibilityStateChange, onViewPresetSave: (meta) => promptMarketViewPresetSave({ market, listType: activeWatchList?.type || '', ...(meta || {}) }), ...listTableColumnProps };
   const showMarketsSidebar = !(fullTableMode && !selectedSymbol);
 
+  if (localDirect) {
+    return (
+      <MarketSentimentPageSurface padBottom={false} fillHeight>
+        <div className="mx-auto w-full max-w-7xl space-y-3 px-3 py-2 sm:px-6 lg:px-8">
+          <LocalDirectModeBar scope={LOCAL_DIRECT_SCOPES.MARKETS} enabled={localDirect} onChange={setLocalDirect} />
+          <LocalDirectPanel scope={LOCAL_DIRECT_SCOPES.MARKETS} universe={localDirectUniverse} />
+        </div>
+      </MarketSentimentPageSurface>
+    );
+  }
+
   return (
     <>
     <WatchlistNameDialog
@@ -1210,6 +1229,9 @@ export function MarketsExperience() {
       onSubmit={handleWatchlistDialogSubmit}
     />
     <MarketSentimentPageSurface padBottom={false} fillHeight>
+    <div className="px-3 sm:px-6 lg:px-8">
+      <LocalDirectModeBar compact scope={LOCAL_DIRECT_SCOPES.MARKETS} enabled={localDirect} onChange={setLocalDirect} />
+    </div>
     {!selectedSymbol ? <MarketSentimentStrip /> : null}
     {showExpandedWatchListOverlay ? (
       <Suspense fallback={null}>
