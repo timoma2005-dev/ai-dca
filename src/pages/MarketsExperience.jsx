@@ -1214,7 +1214,7 @@ export function MarketsExperience() {
       <MarketSentimentPageSurface padBottom={false} fillHeight>
         <div className="mx-auto w-full max-w-7xl space-y-3 px-3 py-2 sm:px-6 lg:px-8">
           <LocalDirectModeBar scope={LOCAL_DIRECT_SCOPES.MARKETS} enabled={localDirect} onChange={setLocalDirect} />
-          <LocalDirectPanel scope={LOCAL_DIRECT_SCOPES.MARKETS} universe={localDirectUniverse} />
+          <LocalDirectPanel scope={LOCAL_DIRECT_SCOPES.MARKETS} universe={localDirectUniverse} showPremium />
         </div>
       </MarketSentimentPageSurface>
     );

@@ -597,6 +597,7 @@ async function fetchDirectKlineUncached(symbol, { timeframe = '1d' } = {}) {
 export function clearDirectMarketDataCaches() {
   quoteMemoryCache.clear();
   klineMemoryCache.clear();
+  fundNavMemoryCache.clear();
   quoteInflight.clear();
   searchInflight.clear();
   klineInflight.clear();
@@ -809,4 +810,147 @@ export async function fetchDanjuanDirectQuotes(codes = [], { signal } = {}) {
   }
 
   return { quotes: out, generatedAt: new Date().toISOString(), source: 'danjuan-direct' };
+}
+
+// ── 东财基金净值直连（FundMNFInfo，JSONP；与 public/auction-board.html 同口径） ──
+// 盘中场外净值未公布时，用 NEWPRICE 与 ZJL（估算涨跌幅）反推参考净值，
+// 保证交易时段也能算溢价；收盘后回退官方单位净值 NAV。
+
+const EM_FUND_NAV_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
+const EM_FUND_NAV_CACHE_TTL_MS = 60 * 1000;
+const fundNavMemoryCache = new Map();
+
+function sixDigitCodes(codes = []) {
+  return Array.from(new Set(
+    (Array.isArray(codes) ? codes : [codes])
+      .map((c) => String(c || '').trim().replace(/^(sh|sz|bj)/i, ''))
+      .filter((c) => /^\d{6}$/.test(c))
+  ));
+}
+
+/**
+ * 解析 FundMNFInfo JSONP 响应体为 { code: navQuote }。
+ * 纯函数，无 DOM 依赖，node:test 可直接覆盖。
+ */
+export function parseEastmoneyFundNavPayload(body, codes = []) {
+  const wanted = new Set(sixDigitCodes(codes));
+  const datas = body?.Datas;
+  if (!Array.isArray(datas)) return {};
+  const out = {};
+  for (const item of datas) {
+    const code = String(item?.FCODE || '').trim();
+    if (!/^\d{6}$/.test(code) || (wanted.size > 0 && !wanted.has(code))) continue;
+    const officialNav = compactNumber(item.NAV);
+    const pdate = String(item.PDATE || '').slice(0, 10);
+    const zjl = safeNumber(item.ZJL);
+    const newPrice = safeNumber(item.NEWPRICE);
+    let referenceNav = null;
+    if (zjl != null && newPrice != null && newPrice > 0) {
+      const denominator = 1 - zjl / 100;
+      if (denominator > 0) referenceNav = compactNumber(newPrice / denominator);
+    }
+    const latestNav = referenceNav ?? (officialNav != null && officialNav > 0 ? officialNav : null);
+    if (latestNav == null) continue;
+    out[code] = {
+      code,
+      symbol: code,
+      name: '',
+      latestNav,
+      officialNav: officialNav != null && officialNav > 0 ? officialNav : null,
+      referenceNav,
+      // 与竞价看板一致：盘中参考净值直接把口径写进日期标签。
+      latestNavDate: referenceNav != null ? '东财参考净值' : pdate,
+      navSource: referenceNav != null ? 'eastmoney-ref' : 'eastmoney-nav',
+      source: 'eastmoney-fund-direct',
+    };
+  }
+  return out;
+}
+
+function fetchEastmoneyFundNavJsonp(codes, { signal } = {}) {
+  return new Promise((resolve, reject) => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      reject(new Error('eastmoney fund nav requires browser'));
+      return;
+    }
+    const callback = `emfnav_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    const script = document.createElement('script');
+    let settled = false;
+    const cleanup = () => {
+      try { delete window[callback]; } catch { window[callback] = undefined; }
+      script.remove();
+      if (signal) signal.removeEventListener('abort', abort);
+    };
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    window[callback] = (payload) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(payload);
+    };
+    const params = new URLSearchParams({
+      pageIndex: '1',
+      pageSize: '200',
+      plat: 'Android',
+      appType: 'ttjj',
+      product: 'EFund',
+      Version: '1',
+      deviceid: 'ai-dca-direct',
+      Fcodes: codes.join(','),
+      callback,
+    });
+    script.src = `${EM_FUND_NAV_URL}?${params.toString()}`;
+    script.onload = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('eastmoney fund nav jsonp callback missing'));
+    };
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('eastmoney fund nav script failed'));
+    };
+    if (signal) {
+      if (signal.aborted) { abort(); return; }
+      signal.addEventListener('abort', abort, { once: true });
+    }
+    document.body.appendChild(script);
+  });
+}
+
+/**
+ * 批量拉取东财基金净值（一次 JSONP 最多 200 只），60s 内存缓存去重。
+ * 与竞价看板 adminAuction 的 loadFM 同链路、同参考净值公式。
+ */
+export async function fetchEastmoneyFundNavs(codes = [], { signal } = {}) {
+  const list = sixDigitCodes(codes);
+  if (!list.length) return null;
+  const now = Date.now();
+  const out = {};
+  const missing = [];
+  for (const code of list) {
+    const cached = fundNavMemoryCache.get(code);
+    if (cached?.expiresAt > now && cached.quote) out[code] = cached.quote;
+    else missing.push(code);
+  }
+  if (!missing.length) {
+    return { quotes: out, generatedAt: new Date().toISOString(), source: 'eastmoney-fund-direct-cache' };
+  }
+  const body = await fetchEastmoneyFundNavJsonp(missing, { signal });
+  const parsed = parseEastmoneyFundNavPayload(body, missing);
+  for (const code of missing) {
+    const quote = parsed[code];
+    if (quote) {
+      out[code] = quote;
+      fundNavMemoryCache.set(code, { quote, expiresAt: now + EM_FUND_NAV_CACHE_TTL_MS });
+    }
+  }
+  return { quotes: out, generatedAt: new Date().toISOString(), source: 'eastmoney-fund-direct' };
 }

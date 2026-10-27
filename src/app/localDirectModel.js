@@ -49,6 +49,7 @@ export function buildDirectRows({ universe = [], quotes = {}, navs = {} } = {}) 
       source: String(quote?.source || 'tencent-direct'),
       latestNav,
       navDate: String(nav?.latestNavDate || ''),
+      navSource: String(nav?.navSource || nav?.source || ''),
       premiumPercent: computePremiumPercent(price, latestNav),
     };
   });

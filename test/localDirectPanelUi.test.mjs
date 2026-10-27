@@ -98,14 +98,18 @@ test('panel SSR shell shows scope, premium title, search input and loading skele
   // 初始 loading：摘要仍按 universe 计数。
   assert.match(html, /标的/);
   assert.match(html, /正在直连行情厂商接口/);
-  assert.match(html, /蛋卷/);
+  // 东财基金净值为主、蛋卷兜底。
+  assert.match(html, /东财净值/);
+  assert.match(html, /fundmobapi\.eastmoney\.com/);
+  assert.match(html, /蛋卷兜底/);
 });
 
-test('panel without premium hides danjuan wording and uses plain title', () => {
+test('panel without premium hides nav wording and uses plain title', () => {
   const html = mod.renderPanel({ scope: mod.LOCAL_DIRECT_SCOPES.MARKETS });
   assert.match(html, /本地直连行情/);
   assert.doesNotMatch(html, /溢价看板/);
   assert.doesNotMatch(html, /danjuanfunds\.com/);
+  assert.doesNotMatch(html, /fundmobapi\.eastmoney\.com/);
   assert.match(html, /data-scope="markets"/);
 });
 
@@ -120,9 +124,14 @@ test('markets and fundSwitch pages wire the local-direct entry', () => {
   const markets = readFileSync(new URL('../src/pages/MarketsExperience.jsx', import.meta.url), 'utf8');
   assert.match(markets, /useLocalDirectMode\(LOCAL_DIRECT_SCOPES\.MARKETS\)/);
   assert.match(markets, /if \(localDirect\) \{/);
-  assert.match(markets, /<LocalDirectPanel\s+scope=\{LOCAL_DIRECT_SCOPES\.MARKETS\}/);
+  assert.match(markets, /<LocalDirectPanel\s+scope=\{LOCAL_DIRECT_SCOPES\.MARKETS\}[^>]*showPremium/);
   // 云端视图仍保留 compact 切换条，保证可切回。
   assert.match(markets, /<LocalDirectModeBar compact/);
+
+  // 面板净值走东财 FundMNFInfo（与竞价看板同链路），蛋卷仅兜底。
+  const panel = readFileSync(new URL('../src/components/markets/LocalDirectPanel.jsx', import.meta.url), 'utf8');
+  assert.match(panel, /fetchEastmoneyFundNavs/);
+  assert.match(panel, /fetchDanjuanDirectQuotes/);
 
   const fundSwitch = readFileSync(new URL('../src/pages/FundSwitchExperience.jsx', import.meta.url), 'utf8');
   assert.match(fundSwitch, /\{ id: 'local', label: '本地直连'/);

@@ -4,10 +4,13 @@ import assert from 'node:assert/strict';
 import {
   fetchDirectKline,
   normalizeDirectSymbol,
+  parseEastmoneyFundNavPayload,
   parseEastmoneyKlinePayload,
   parseTencentQuoteText,
   parseTencentSearchText
 } from '../src/app/directMarketData.js';
+
+const { Response } = globalThis;
 
 test('direct symbol normalization maps CN ETF symbols to Tencent and Eastmoney ids', () => {
   assert.deepEqual(normalizeDirectSymbol('513100'), {
@@ -77,6 +80,48 @@ test('Eastmoney kline payload maps csv rows to candle schema', () => {
   assert.equal(normalized.candles[0].o, 2.1);
   assert.equal(normalized.candles[0].c, 2.12);
   assert.equal(normalized.source, 'eastmoney-direct');
+});
+
+test('FundMNFInfo payload: intraday reference nav is preferred and labelled', () => {
+  // 与 auction-board.html loadFM 同公式：ref = NEWPRICE / (1 - ZJL/100)
+  const body = {
+    Datas: [
+      { FCODE: '513100', NAV: '2.0500', PDATE: '2026-10-24T00:00:00', ZJL: '-25.0000', NEWPRICE: '2.0000' },
+      { FCODE: '159941', NAV: '1.9800', PDATE: '2026-10-24T00:00:00', ZJL: '', NEWPRICE: '' },
+      { FCODE: '513500', NAV: '', PDATE: '', ZJL: 'bad', NEWPRICE: '0' }
+    ]
+  };
+  const quotes = parseEastmoneyFundNavPayload(body, ['513100', '159941', '513500']);
+
+  assert.equal(quotes['513100'].latestNav, 1.6); // 2 / (1 + 0.25)
+  assert.equal(quotes['513100'].referenceNav, 1.6);
+  assert.equal(quotes['513100'].officialNav, 2.05);
+  assert.equal(quotes['513100'].latestNavDate, '东财参考净值');
+  assert.equal(quotes['513100'].navSource, 'eastmoney-ref');
+  assert.equal(quotes['513100'].source, 'eastmoney-fund-direct');
+
+  // 无 ZJL/NEWPRICE 时回退官方 NAV，日期取 PDATE。
+  assert.equal(quotes['159941'].latestNav, 1.98);
+  assert.equal(quotes['159941'].referenceNav, null);
+  assert.equal(quotes['159941'].latestNavDate, '2026-10-24');
+  assert.equal(quotes['159941'].navSource, 'eastmoney-nav');
+
+  // 无任何可用净值的代码被跳过。
+  assert.equal(quotes['513500'], undefined);
+});
+
+test('FundMNFInfo parser filters by requested codes and tolerates bad payloads', () => {
+  const body = {
+    Datas: [
+      { FCODE: '513100', NAV: '2.05', PDATE: '2026-10-24' },
+      { FCODE: '159941', NAV: '1.98', PDATE: '2026-10-24' }
+    ]
+  };
+  const only = parseEastmoneyFundNavPayload(body, ['sh513100']);
+  assert.deepEqual(Object.keys(only), ['513100']);
+  assert.deepEqual(parseEastmoneyFundNavPayload(null, ['513100']), {});
+  assert.deepEqual(parseEastmoneyFundNavPayload({ Datas: 'x' }, ['513100']), {});
+  assert.deepEqual(parseEastmoneyFundNavPayload({ Datas: [{ FCODE: 'bad', NAV: '1' }] }, ['bad']), {});
 });
 
 test('direct Eastmoney kline limit does not truncate memory cache payload', async () => {

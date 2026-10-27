@@ -29,8 +29,8 @@ const quotes = {
 };
 
 const navs = {
-  513100: { latestNav: 2.05, latestNavDate: '2026-07-02' },
-  159941: { latestNav: 2.0, latestNavDate: '2026-07-02' },
+  513100: { latestNav: 2.05, latestNavDate: '东财参考净值', navSource: 'eastmoney-ref' },
+  159941: { latestNav: 2.0, latestNavDate: '2026-07-02', navSource: 'danjuan-direct' },
 };
 
 test('computePremiumPercent guards invalid inputs', () => {
@@ -50,7 +50,8 @@ test('buildDirectRows merges quotes and navs, marks missing symbols', () => {
     { code: first.code, name: first.name, available: first.available, price: first.price, premiumPercent: first.premiumPercent },
     { code: '513100', name: '纳指ETF国泰', available: true, price: 2.167, premiumPercent: 5.71 }
   );
-  assert.equal(first.navDate, '2026-07-02');
+  assert.equal(first.navDate, '东财参考净值');
+  assert.equal(first.navSource, 'eastmoney-ref');
   assert.equal(second.available, true);
   assert.equal(second.premiumPercent, -3);
   assert.equal(third.available, false);

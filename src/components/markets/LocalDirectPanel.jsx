@@ -14,6 +14,7 @@ import {
   fetchDanjuanDirectQuotes,
   fetchDirectKline,
   fetchDirectQuotes,
+  fetchEastmoneyFundNavs,
   searchDirectSymbols,
 } from '../../app/directMarketData.js';
 import {
@@ -161,7 +162,10 @@ function DirectDetail({ row, onBack, onTimeframe, timeframe, kline, klineLoading
           <div><small>溢价率(对净值)</small><strong className={`num ${pctClass(row.premiumPercent)}`}>{row.premiumPercent > 0 ? '+' : ''}{row.premiumPercent}%</strong></div>
         ) : null}
         {row.latestNav != null ? (
-          <div><small>单位净值</small><span className="num">{row.latestNav} <em>{row.navDate}</em></span></div>
+          <div>
+            <small>{row.navSource === 'eastmoney-ref' ? '参考净值' : '单位净值'}</small>
+            <span className="num">{row.latestNav} <em>{row.navDate}</em></span>
+          </div>
         ) : null}
       </div>
 
@@ -216,16 +220,28 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const [quoteResult, navResult] = await Promise.allSettled([
-        fetchDirectQuotes(codes, { signal: controller.signal }),
-        showPremium ? fetchDanjuanDirectQuotes(codes, { signal: controller.signal }) : Promise.resolve(null),
-      ]);
+      const tasks = [fetchDirectQuotes(codes, { signal: controller.signal })];
+      if (showPremium) {
+        // 东财基金净值为主（盘中含参考净值，与竞价看板同口径），蛋卷兜底缺失代码。
+        tasks.push(
+          fetchEastmoneyFundNavs(codes, { signal: controller.signal }),
+          fetchDanjuanDirectQuotes(codes, { signal: controller.signal })
+        );
+      }
+      const results = await Promise.allSettled(tasks);
       if (controller.signal.aborted || seq !== seqRef.current) return;
+      const quoteResult = results[0];
       if (quoteResult.status === 'rejected') throw quoteResult.reason;
+      const navs = {};
+      if (showPremium) {
+        const [, fmResult, danjuanResult] = results;
+        if (danjuanResult?.status === 'fulfilled') Object.assign(navs, danjuanResult.value?.quotes || {});
+        if (fmResult?.status === 'fulfilled') Object.assign(navs, fmResult.value?.quotes || {});
+      }
       const nextRows = buildDirectRows({
         universe: fullUniverse,
         quotes: quoteResult.value?.quotes || {},
-        navs: navResult.status === 'fulfilled' ? navResult.value?.quotes || {} : {},
+        navs,
       });
       setRows(sortDirectRows(nextRows, { byPremium: showPremium }));
       setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
@@ -310,7 +326,7 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
         <div className="ldp-head-main">
           <h2>{showPremium ? '本地直连 · 溢价看板' : '本地直连行情'}</h2>
           <span className="ldp-source-tag" title="数据不经后端/Worker，浏览器直接请求厂商接口">
-            <PlugZap size={13} /> 腾讯行情 · 东财K线{showPremium ? ' · 蛋卷净值' : ''}
+            <PlugZap size={13} /> 腾讯行情 · 东财K线{showPremium ? ' · 东财净值' : ''}
           </span>
         </div>
         <div className="ldp-head-actions">
@@ -407,7 +423,7 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
         </div>
       )}
       <p className="ldp-source-note">
-        链路：浏览器 → qt.gtimg.cn（行情）/ push2his.eastmoney.com（K线）{showPremium ? ' / danjuanfunds.com（净值）' : ''}，与竞价看板 adminAuction 同为厂商直连；失败时不影响云端数据源。
+        链路：浏览器 → qt.gtimg.cn（行情）/ push2his.eastmoney.com（K线）{showPremium ? ' / fundmobapi.eastmoney.com（基金净值，盘中为参考净值，蛋卷兜底）' : ''}，与竞价看板 adminAuction 同为厂商直连；失败时不影响云端数据源。
       </p>
     </div>
   );
