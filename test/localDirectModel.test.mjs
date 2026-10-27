@@ -29,7 +29,7 @@ const quotes = {
 };
 
 const navs = {
-  513100: { latestNav: 2.05, latestNavDate: '东财参考净值', navSource: 'eastmoney-ref' },
+  513100: { latestNav: 2.05, latestNavDate: '2026-10-24', navSource: 'eastmoney-zjl', premiumPercent: 2.38 },
   159941: { latestNav: 2.0, latestNavDate: '2026-07-02', navSource: 'danjuan-direct' },
 };
 
@@ -48,10 +48,11 @@ test('buildDirectRows merges quotes and navs, marks missing symbols', () => {
 
   assert.deepEqual(
     { code: first.code, name: first.name, available: first.available, price: first.price, premiumPercent: first.premiumPercent },
-    { code: '513100', name: '纳指ETF国泰', available: true, price: 2.167, premiumPercent: 5.71 }
+    // 东财 ZJL 显式溢价率优先，不用本地 price/nav 重算的 5.71。
+    { code: '513100', name: '纳指ETF国泰', available: true, price: 2.167, premiumPercent: 2.38 }
   );
-  assert.equal(first.navDate, '东财参考净值');
-  assert.equal(first.navSource, 'eastmoney-ref');
+  assert.equal(first.navDate, '2026-10-24');
+  assert.equal(first.navSource, 'eastmoney-zjl');
   assert.equal(second.available, true);
   assert.equal(second.premiumPercent, -3);
   assert.equal(third.available, false);
@@ -60,6 +61,24 @@ test('buildDirectRows merges quotes and navs, marks missing symbols', () => {
   // 缺省 name 时回退到代码。
   const fallback = buildDirectRows({ universe: [{ code: '000001' }], quotes: {}, navs: {} });
   assert.equal(fallback[0].name, '000001');
+});
+
+test('explicit eastmoney premium wins over local calc, including zero; missing falls back', () => {
+  const rows = buildDirectRows({
+    universe: [{ code: '513100', name: '纳指ETF国泰' }, { code: '159941', name: '纳指ETF广发' }],
+    quotes: {
+      513100: { price: 2.167 },
+      159941: { price: 1.94 },
+    },
+    navs: {
+      // 显式 0 是合法溢价率，不能被 ?? 之后的本地重算覆盖。
+      513100: { latestNav: 2.05, premiumPercent: 0, navSource: 'eastmoney-zjl' },
+      159941: { latestNav: 2.0, navSource: 'danjuan-direct' },
+    },
+  });
+  assert.equal(rows[0].premiumPercent, 0);
+  // 无显式溢价率时回退 (1.94 / 2 - 1) * 100 = -3。
+  assert.equal(rows[1].premiumPercent, -3);
 });
 
 test('summarizeDirectRows counts availability and directions', () => {

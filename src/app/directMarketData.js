@@ -812,9 +812,9 @@ export async function fetchDanjuanDirectQuotes(codes = [], { signal } = {}) {
   return { quotes: out, generatedAt: new Date().toISOString(), source: 'danjuan-direct' };
 }
 
-// ── 东财基金净值直连（FundMNFInfo，JSONP；与 public/auction-board.html 同口径） ──
-// 盘中场外净值未公布时，用 NEWPRICE 与 ZJL（估算涨跌幅）反推参考净值，
-// 保证交易时段也能算溢价；收盘后回退官方单位净值 NAV。
+// ── 东财基金净值直连（FundMNFInfo，JSONP；与 public/auction-board.html 同接口） ──
+// ZJL 即东财行情页的折价率（%）：负值代表溢价，溢价率直接取反即可，
+// 盘中也由东财服务端实时给出，无需 NEWPRICE 反推；NAV 为官方单位净值（T-1）。
 
 const EM_FUND_NAV_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
 const EM_FUND_NAV_CACHE_TTL_MS = 60 * 1000;
@@ -828,9 +828,13 @@ function sixDigitCodes(codes = []) {
   ));
 }
 
+function round2(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 /**
  * 解析 FundMNFInfo JSONP 响应体为 { code: navQuote }。
- * 纯函数，无 DOM 依赖，node:test 可直接覆盖。
+ * 溢价率直接取 ZJL 反号；纯函数，无 DOM 依赖，node:test 可直接覆盖。
  */
 export function parseEastmoneyFundNavPayload(body, codes = []) {
   const wanted = new Set(sixDigitCodes(codes));
@@ -840,27 +844,23 @@ export function parseEastmoneyFundNavPayload(body, codes = []) {
   for (const item of datas) {
     const code = String(item?.FCODE || '').trim();
     if (!/^\d{6}$/.test(code) || (wanted.size > 0 && !wanted.has(code))) continue;
-    const officialNav = compactNumber(item.NAV);
+    const nav = compactNumber(item.NAV);
+    const latestNav = nav != null && nav > 0 ? nav : null;
     const pdate = String(item.PDATE || '').slice(0, 10);
-    const zjl = safeNumber(item.ZJL);
-    const newPrice = safeNumber(item.NEWPRICE);
-    let referenceNav = null;
-    if (zjl != null && newPrice != null && newPrice > 0) {
-      const denominator = 1 - zjl / 100;
-      if (denominator > 0) referenceNav = compactNumber(newPrice / denominator);
-    }
-    const latestNav = referenceNav ?? (officialNav != null && officialNav > 0 ? officialNav : null);
-    if (latestNav == null) continue;
+    // 注意 safeNumber('') === 0，空串必须先显式排除。
+    const rawZjl = item.ZJL;
+    const zjl = rawZjl === '' || rawZjl == null ? null : safeNumber(rawZjl);
+    const premiumPercent = zjl == null ? null : round2(-zjl);
+    if (premiumPercent == null && latestNav == null) continue;
     out[code] = {
       code,
       symbol: code,
       name: '',
       latestNav,
-      officialNav: officialNav != null && officialNav > 0 ? officialNav : null,
-      referenceNav,
-      // 与竞价看板一致：盘中参考净值直接把口径写进日期标签。
-      latestNavDate: referenceNav != null ? '东财参考净值' : pdate,
-      navSource: referenceNav != null ? 'eastmoney-ref' : 'eastmoney-nav',
+      latestNavDate: pdate,
+      // 显式溢价率，上层优先使用，不再按价格/净值本地重算。
+      premiumPercent,
+      navSource: premiumPercent != null ? 'eastmoney-zjl' : 'eastmoney-nav',
       source: 'eastmoney-fund-direct',
     };
   }

@@ -82,32 +82,36 @@ test('Eastmoney kline payload maps csv rows to candle schema', () => {
   assert.equal(normalized.source, 'eastmoney-direct');
 });
 
-test('FundMNFInfo payload: intraday reference nav is preferred and labelled', () => {
-  // 与 auction-board.html loadFM 同公式：ref = NEWPRICE / (1 - ZJL/100)
+test('FundMNFInfo payload: premium is ZJL negated directly, NAV kept separately', () => {
+  // ZJL = 东财折价率（%），负值即溢价；不再依赖 NEWPRICE 反推参考净值。
   const body = {
     Datas: [
-      { FCODE: '513100', NAV: '2.0500', PDATE: '2026-10-24T00:00:00', ZJL: '-25.0000', NEWPRICE: '2.0000' },
+      { FCODE: '513100', NAV: '2.0500', PDATE: '2026-10-24T00:00:00', ZJL: '-2.3800', NEWPRICE: '2.1000' },
       { FCODE: '159941', NAV: '1.9800', PDATE: '2026-10-24T00:00:00', ZJL: '', NEWPRICE: '' },
-      { FCODE: '513500', NAV: '', PDATE: '', ZJL: 'bad', NEWPRICE: '0' }
+      { FCODE: '513500', NAV: '', PDATE: '', ZJL: '1.2500' },
+      { FCODE: '513660', NAV: '', PDATE: '', ZJL: 'bad' }
     ]
   };
-  const quotes = parseEastmoneyFundNavPayload(body, ['513100', '159941', '513500']);
+  const quotes = parseEastmoneyFundNavPayload(body, ['513100', '159941', '513500', '513660']);
 
-  assert.equal(quotes['513100'].latestNav, 1.6); // 2 / (1 + 0.25)
-  assert.equal(quotes['513100'].referenceNav, 1.6);
-  assert.equal(quotes['513100'].officialNav, 2.05);
-  assert.equal(quotes['513100'].latestNavDate, '东财参考净值');
-  assert.equal(quotes['513100'].navSource, 'eastmoney-ref');
+  // 折价率 -2.38% → 溢价率 +2.38%，与 NEWPRICE 无关。
+  assert.equal(quotes['513100'].premiumPercent, 2.38);
+  assert.equal(quotes['513100'].latestNav, 2.05);
+  assert.equal(quotes['513100'].latestNavDate, '2026-10-24');
+  assert.equal(quotes['513100'].navSource, 'eastmoney-zjl');
   assert.equal(quotes['513100'].source, 'eastmoney-fund-direct');
 
-  // 无 ZJL/NEWPRICE 时回退官方 NAV，日期取 PDATE。
+  // 无 ZJL：保留官方 NAV，溢价留空，交由上层按价格/净值重算。
+  assert.equal(quotes['159941'].premiumPercent, null);
   assert.equal(quotes['159941'].latestNav, 1.98);
-  assert.equal(quotes['159941'].referenceNav, null);
-  assert.equal(quotes['159941'].latestNavDate, '2026-10-24');
   assert.equal(quotes['159941'].navSource, 'eastmoney-nav');
 
-  // 无任何可用净值的代码被跳过。
-  assert.equal(quotes['513500'], undefined);
+  // 只有 ZJL 也能出溢价（正折价率 → 负溢价），净值可空。
+  assert.equal(quotes['513500'].premiumPercent, -1.25);
+  assert.equal(quotes['513500'].latestNav, null);
+
+  // 两者都缺失的代码被跳过。
+  assert.equal(quotes['513660'], undefined);
 });
 
 test('FundMNFInfo parser filters by requested codes and tolerates bad payloads', () => {

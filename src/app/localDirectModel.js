@@ -50,7 +50,8 @@ export function buildDirectRows({ universe = [], quotes = {}, navs = {} } = {}) 
       latestNav,
       navDate: String(nav?.latestNavDate || ''),
       navSource: String(nav?.navSource || nav?.source || ''),
-      premiumPercent: computePremiumPercent(price, latestNav),
+      // 东财 ZJL 折价率换算出的溢价率优先；没有显式值时再按价格/净值本地计算。
+      premiumPercent: finiteNumber(nav?.premiumPercent) ?? computePremiumPercent(price, latestNav),
     };
   });
 }

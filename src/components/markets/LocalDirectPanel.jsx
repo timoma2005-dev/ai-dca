@@ -159,11 +159,14 @@ function DirectDetail({ row, onBack, onTimeframe, timeframe, kline, klineLoading
         <div><small>今开 / 昨收</small><span className="num">{row.open ?? '—'} / {row.previousClose ?? '—'}</span></div>
         <div><small>最高 / 最低</small><span className="num">{row.high ?? '—'} / {row.low ?? '—'}</span></div>
         {row.premiumPercent != null ? (
-          <div><small>溢价率(对净值)</small><strong className={`num ${pctClass(row.premiumPercent)}`}>{row.premiumPercent > 0 ? '+' : ''}{row.premiumPercent}%</strong></div>
+          <div>
+            <small>{row.navSource === 'eastmoney-zjl' ? '溢价率(东财折价率)' : '溢价率(对净值)'}</small>
+            <strong className={`num ${pctClass(row.premiumPercent)}`}>{row.premiumPercent > 0 ? '+' : ''}{row.premiumPercent}%</strong>
+          </div>
         ) : null}
         {row.latestNav != null ? (
           <div>
-            <small>{row.navSource === 'eastmoney-ref' ? '参考净值' : '单位净值'}</small>
+            <small>单位净值</small>
             <span className="num">{row.latestNav} <em>{row.navDate}</em></span>
           </div>
         ) : null}
@@ -222,7 +225,7 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
     try {
       const tasks = [fetchDirectQuotes(codes, { signal: controller.signal })];
       if (showPremium) {
-        // 东财基金净值为主（盘中含参考净值，与竞价看板同口径），蛋卷兜底缺失代码。
+        // 东财基金接口为主：ZJL 折价率直接给溢价率（盘中可用），NAV 给官方净值，蛋卷兜底缺失代码。
         tasks.push(
           fetchEastmoneyFundNavs(codes, { signal: controller.signal }),
           fetchDanjuanDirectQuotes(codes, { signal: controller.signal })
@@ -423,7 +426,7 @@ export function LocalDirectPanel({ scope = LOCAL_DIRECT_SCOPES.MARKETS, universe
         </div>
       )}
       <p className="ldp-source-note">
-        链路：浏览器 → qt.gtimg.cn（行情）/ push2his.eastmoney.com（K线）{showPremium ? ' / fundmobapi.eastmoney.com（基金净值，盘中为参考净值，蛋卷兜底）' : ''}，与竞价看板 adminAuction 同为厂商直连；失败时不影响云端数据源。
+        链路：浏览器 → qt.gtimg.cn（行情）/ push2his.eastmoney.com（K线）{showPremium ? ' / fundmobapi.eastmoney.com（基金净值与折价率 ZJL，蛋卷兜底）' : ''}，与竞价看板 adminAuction 同为厂商直连；失败时不影响云端数据源。
       </p>
     </div>
   );
