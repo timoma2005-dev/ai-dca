@@ -14,7 +14,7 @@ import {
   searchSymbols,
 } from './markets/marketsApiLoader.js';
 import { addToWatchlist, CN_ETF_WATCHLIST_PRESETS, createWatchlist, deleteWatchlist, loadWatchlist, removeFromWatchlist, renameWatchlist, setActiveWatchlist } from '../app/marketsWatchlistStorage.js';
-import { LocalDirectModeBar, useLocalDirectMode } from '../components/markets/LocalDirectPanel.jsx';
+import { LocalDirectModeFloat, useLocalDirectMode } from '../components/markets/LocalDirectPanel.jsx';
 import { LocalDirectMarketsView } from '../components/markets/LocalDirectMarketsView.jsx';
 import { LOCAL_DIRECT_SCOPES } from '../app/localDirectMode.js';
 import { useMarketsPageSync } from './markets/useMarketsPageSync.js';
@@ -223,14 +223,15 @@ export function MarketsExperience() {
   const isFullTableOnly = fullTableMode && !selectedSymbol;
   const isMarketListTableActive = isFullTableOnly || showExpandedWatchListOverlay;
   useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
+    // 本地直连视图自己管理这个滚动锁（列表锁、详情放开）。
+    if (typeof document === 'undefined' || localDirect) return undefined;
     document.documentElement.classList.toggle('markets-full-table-active', isMarketListTableActive);
     document.body.classList.toggle('markets-full-table-active', isMarketListTableActive);
     return () => {
       document.documentElement.classList.remove('markets-full-table-active');
       document.body.classList.remove('markets-full-table-active');
     };
-  }, [isMarketListTableActive]);
+  }, [isMarketListTableActive, localDirect]);
   useEffect(() => {
     selectedSymbolRef.current = selectedSymbol;
   }, [selectedSymbol]);
@@ -1243,12 +1244,9 @@ export function MarketsExperience() {
             if (symbol) setWatch(removeFromWatchlist('cn', symbol, watch.activeListId));
           }}
           onMarketAction={handleMarketAction}
-          header={(
-            <div className="px-3 sm:px-6 lg:px-8">
-              <LocalDirectModeBar compact scope={LOCAL_DIRECT_SCOPES.MARKETS} enabled={localDirect} onChange={setLocalDirect} />
-            </div>
-          )}
+          onSwitchCloud={() => setLocalDirect(false)}
         />
+        <LocalDirectModeFloat enabled={localDirect} onChange={setLocalDirect} />
       </MarketSentimentPageSurface>
       </>
     );
@@ -1263,9 +1261,7 @@ export function MarketsExperience() {
       onSubmit={handleWatchlistDialogSubmit}
     />
     <MarketSentimentPageSurface padBottom={false} fillHeight>
-    <div className="px-3 sm:px-6 lg:px-8">
-      <LocalDirectModeBar compact scope={LOCAL_DIRECT_SCOPES.MARKETS} enabled={localDirect} onChange={setLocalDirect} />
-    </div>
+    <LocalDirectModeFloat enabled={localDirect} onChange={setLocalDirect} />
     {!selectedSymbol ? <MarketSentimentStrip /> : null}
     {showExpandedWatchListOverlay ? (
       <Suspense fallback={null}>

@@ -16,6 +16,8 @@ import {
 import { FullTableLoadingFallback } from '../../pages/markets/FullTableLoadingFallback.jsx';
 import { MarketsMainContent } from '../../pages/markets/MarketsMainContent.jsx';
 import { chartKlineCacheKeyForRange } from '../../pages/markets/marketFundMetrics.js';
+import { resolveMetricDisplay } from '../../pages/markets/mobileFundMetrics.js';
+import { Cloud, Info } from 'lucide-react';
 import { cx } from '../experience-ui.jsx';
 
 const MarketsFullTablePanel = lazy(() => import('../../pages/markets/MarketsFullTablePanel.jsx').then((module) => ({ default: module.MarketsFullTablePanel })));
@@ -24,6 +26,54 @@ const REFRESH_INTERVAL_MS = 30_000;
 const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY_OBJECT = Object.freeze({});
 const EMPTY_LIST = Object.freeze([]);
+
+// 桌面表格里可能整列无数据的列：本地直连拿不到的直接不渲染。
+const OPTIONAL_COLUMN_FIELDS = {
+  highDrawdown: 'metric',
+  closeHighDrawdown: 'metric',
+  historicalPercentile: 'metric',
+  turnover: 'metric',
+  limit: 'metric',
+  premium: 'metric',
+  currentYearPercent: 'metric',
+  return1w: 'metric',
+  return1m: 'metric',
+  return3m: 'metric',
+  return6m: 'metric',
+  return1y: 'metric',
+  returnBase: ['returnBase'],
+  totalShares: ['totalShares'],
+  feeRate: ['feeRate', 'annualFeeRate'],
+  redeemFeeRate: ['redeemFeeRate'],
+};
+
+function columnHasData(id, row) {
+  const spec = OPTIONAL_COLUMN_FIELDS[id];
+  if (spec === 'metric') {
+    const text = resolveMetricDisplay(id, row).text;
+    return Boolean(text) && text !== '—' && text !== '--';
+  }
+  return spec.some((field) => row?.[field] != null && row[field] !== '' && Number.isFinite(Number(row[field])));
+}
+
+export function computeLocalDirectOmittedColumns(rows = []) {
+  return Object.keys(OPTIONAL_COLUMN_FIELDS).filter((id) => !rows.some((row) => columnHasData(id, row)));
+}
+
+/** 统一提示：本地直连只保留浏览器能直连拿到的数据。 */
+export function LocalDirectNotice({ onSwitchCloud, className = '' }) {
+  return (
+    <div data-testid="local-direct-notice" className={cx('flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-1.5 text-[11px] leading-4 text-indigo-800', className)}>
+      <Info size={13} className="shrink-0" />
+      <span className="min-w-0 flex-1">本地直连已精简部分数据，需要更详细的数据请使用云端</span>
+      {onSwitchCloud ? (
+        <button type="button" onClick={onSwitchCloud} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2 py-0.5 font-semibold text-indigo-700 shadow-2xs">
+          <Cloud size={12} />切换云端
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 function directFeedHealth({ error, updatedAt, rows }) {
   if (error) return { status: 'delayed', label: '直连行情接口异常', title: error };
@@ -51,6 +101,7 @@ export function LocalDirectMarketsView({
   onAddSymbol,
   onRemoveSymbol,
   onMarketAction,
+  onSwitchCloud,
   header = null,
 }) {
   const [quotes, setQuotes] = useState({});
@@ -210,6 +261,18 @@ export function LocalDirectMarketsView({
   const inWatch = Boolean(selectedRow && symbols.map((item) => String(item).toUpperCase()).includes(selectedRow.symbol));
   const health = directFeedHealth({ error, updatedAt, rows: listRows });
   const showFullTable = !selectedRow;
+  const omitColumnIds = useMemo(() => computeLocalDirectOmittedColumns(listRows), [listRows]);
+
+  // 列表态锁住页面滚动（列表自己滚动），详情态放开，否则手机端详情页无法滑动。
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    document.documentElement.classList.toggle('markets-full-table-active', showFullTable);
+    document.body.classList.toggle('markets-full-table-active', showFullTable);
+    return () => {
+      document.documentElement.classList.remove('markets-full-table-active');
+      document.body.classList.remove('markets-full-table-active');
+    };
+  }, [showFullTable]);
 
   return (
     <div data-market="cn" data-testid="local-direct-markets" className={cx(
@@ -217,6 +280,7 @@ export function LocalDirectMarketsView({
       showFullTable ? 'flex-1 min-h-0 overflow-hidden pb-0' : (isMobile ? 'pb-[calc(140px+env(safe-area-inset-bottom))]' : 'pb-4')
     )}>
       {header}
+      {!showFullTable ? <LocalDirectNotice onSwitchCloud={onSwitchCloud} className="mx-3 sm:mx-1" /> : null}
       {error && showFullTable ? (
         <div role="alert" className="mx-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:mx-6">
           {error}，可点刷新重试或切回云端
@@ -267,6 +331,9 @@ export function LocalDirectMarketsView({
               showLimitColumn={isOtcList}
               hidePremiumColumn={isOtcList}
               hideTrendColumn
+              localDirect
+              omitColumnIds={omitColumnIds}
+              notice={<LocalDirectNotice onSwitchCloud={onSwitchCloud} className={isMobile ? 'mt-2 mx-3 mb-1' : ''} />}
             />
           </Suspense>
         )}

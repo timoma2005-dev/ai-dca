@@ -84,6 +84,54 @@ export function LocalDirectModeBar({ scope, enabled, onChange, compact = false }
   );
 }
 
+/**
+ * 行情数据源的右侧悬浮切换：收起时贴右边缘一枚小标签（当前模式），
+ * 点开后弹出「云端 / 本地直连」两项和一句说明，不再占顶部一整行。
+ */
+export function LocalDirectModeFloat({ enabled, onChange }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
+  const pick = (next) => {
+    setOpen(false);
+    if (next !== enabled) onChange(next);
+  };
+  return (
+    <div ref={rootRef} className="ldp-float" data-testid="local-direct-mode-float" data-open={open ? 'true' : 'false'}>
+      {open ? (
+        <div className="ldp-float-panel" role="dialog" aria-label="行情数据源">
+          <div className="ldp-float-title">行情数据源</div>
+          <button type="button" className={!enabled ? 'is-active' : ''} aria-pressed={!enabled} onClick={() => pick(false)}>
+            <Cloud size={15} />
+            <span><b>云端</b><small>数据最全，含收益、费率、溢价历史等</small></span>
+          </button>
+          <button type="button" className={enabled ? 'is-active' : ''} aria-pressed={enabled} onClick={() => pick(true)}>
+            <PlugZap size={15} />
+            <span><b>本地直连</b><small>浏览器直连腾讯/东财，数据精简</small></span>
+          </button>
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className={enabled ? 'ldp-float-tab is-direct' : 'ldp-float-tab'}
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-label={`行情数据源：${enabled ? '本地直连' : '云端'}，点击切换`}
+      >
+        {enabled ? <PlugZap size={14} /> : <Cloud size={14} />}
+        <span>{enabled ? '直连' : '云端'}</span>
+      </button>
+    </div>
+  );
+}
+
 function formatTime(value) {
   if (!value) return '—';
   // 腾讯 time 形如 20260703161434

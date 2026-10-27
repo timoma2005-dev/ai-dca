@@ -46,6 +46,10 @@ export function MarketsFullTablePanel({
   onVisibleSymbolsChange,
   onColumnVisibilityStateChange,
   onViewPresetSave,
+  // 本地直连：桌面端不渲染无数据列；移动端只显示有值的指标、点卡片直接进详情。
+  omitColumnIds = null,
+  localDirect = false,
+  notice = null,
 }) {
   useEffect(() => {
     if (!fullTableMode || !isMobile) return;
@@ -182,6 +186,7 @@ export function MarketsFullTablePanel({
             {toolbarButtons}
           </div>
         </div>
+        {notice}
       </div>
     );
   };
@@ -196,6 +201,8 @@ export function MarketsFullTablePanel({
         <MobileFundList
           key={`mobile-list:${viewStorageScope}`}
           rows={rows}
+          localDirect={localDirect}
+          notice={notice}
           isOtcList={showLimitColumn}
           market={market}
           marketLabel={marketLabel}
@@ -251,6 +258,7 @@ export function MarketsFullTablePanel({
         onViewPresetSave={onViewPresetSave}
         viewStorageScope={viewStorageScope}
         rowTestIdPrefix="market-row"
+        omitColumnIds={omitColumnIds}
       />
     </div>
   );

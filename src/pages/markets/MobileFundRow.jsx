@@ -34,7 +34,7 @@ function MetricCell({ metric }) {
   );
 }
 
-export function MobileFundRow({ row, isOtcList = false, metricIds = [], expandedMetricIds = [], expanded = false, onToggleExpand, onOpenDetail, rowTestIdPrefix = 'market-row-mobile' }) {
+export function MobileFundRow({ row, isOtcList = false, metricIds = [], expandedMetricIds = [], expanded = false, onToggleExpand, onOpenDetail, rowTestIdPrefix = 'market-row-mobile', expandable = true }) {
   const isOtc = isOtcFundRow(row, isOtcList);
   const code = formatRowCode(row);
   const name = row?.name || code;
@@ -49,7 +49,7 @@ export function MobileFundRow({ row, isOtcList = false, metricIds = [], expanded
       data-row-symbol={row.symbol}
       className={cx('border-b border-slate-100 px-3.5 py-3 transition', expanded && 'bg-indigo-50/20')}
     >
-      <button type="button" onClick={() => onToggleExpand?.(row)} className="flex w-full flex-col gap-1.5 text-left" aria-expanded={expanded}>
+      <button type="button" onClick={() => (expandable ? onToggleExpand?.(row) : onOpenDetail?.(row))} className="flex w-full flex-col gap-1.5 text-left" aria-expanded={expandable ? expanded : undefined}>
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <span className="font-mono text-xs font-semibold tabular-nums text-slate-800">{code}</span>
@@ -60,7 +60,7 @@ export function MobileFundRow({ row, isOtcList = false, metricIds = [], expanded
               </span>
             ) : null}
           </div>
-          <span className="shrink-0 text-slate-400" aria-hidden>{expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
+          {expandable ? <span className="shrink-0 text-slate-400" aria-hidden>{expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span> : null}
         </div>
         <div className="truncate text-[10px] leading-4 text-slate-400">{buildIdentityLine(row, isOtc) || row?.meta || ''}</div>
         
@@ -95,17 +95,17 @@ export function MobileFundRow({ row, isOtcList = false, metricIds = [], expanded
           </div>
         </div>
 
-        <div className="mt-2 grid grid-cols-3 gap-2 rounded-xl bg-slate-50/80 border border-slate-100/80 p-2">
+        {primary.length ? <div className="mt-2 grid grid-cols-3 gap-2 rounded-xl bg-slate-50/80 border border-slate-100/80 p-2">
           {primary.map((metric) => (
             <div key={metric.id} className="min-w-0 text-left">
               <div className="truncate text-[10px] text-slate-400">{metric.label}</div>
               <div className={cx('mt-0.5 truncate text-[13px] font-semibold tabular-nums', metric.tone)}>{metric.text}</div>
             </div>
           ))}
-        </div>
+        </div> : null}
       </button>
 
-      {expanded ? (
+      {expandable && expanded ? (
         <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
           {secondary.length ? (
             <div className="grid grid-cols-3 gap-x-2 gap-y-2.5">

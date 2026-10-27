@@ -10,12 +10,31 @@ import { MobileMetricsDrawer } from './MobileMetricsDrawer.jsx';
 import {
   MOBILE_PAGE_SIZE,
   MOBILE_SORT_OPTIONS,
+  catalogForMode,
+  resolveMetricDisplay,
   defaultMobileExpanded,
   defaultMobileMetrics,
   queryMobileFundPage,
   readMobileMetricsConfig,
   writeMobileMetricsConfig,
 } from './mobileFundMetrics.js';
+
+const LOCAL_METRIC_ORDER = ['premium', 'turnover', 'highDrawdown', 'closeHighDrawdown', 'currentYearPercent', 'return1m', 'return3m', 'return1y', 'historicalPercentile', 'limit'];
+
+function metricHasValue(id, row) {
+  const text = resolveMetricDisplay(id, row).text;
+  return Boolean(text) && text !== '—' && text !== '--';
+}
+
+// 列表里至少一行有值的指标（顶部已展示最新价/涨跌幅，不重复）。
+function availableLocalMetricIds(rows, isOtcList) {
+  const allowed = new Set(catalogForMode(isOtcList).map((item) => item.id));
+  return LOCAL_METRIC_ORDER.filter((id) => allowed.has(id) && (rows || []).some((row) => metricHasValue(id, row)));
+}
+
+function localRowMetricIds(row, ids) {
+  return (ids || []).filter((id) => metricHasValue(id, row));
+}
 
 function sortOptionsForMode(isOtcList) {
   return MOBILE_SORT_OPTIONS.filter((item) => !((item.id === 'limit' && !isOtcList) || (item.id === 'premium' && isOtcList)));
@@ -49,6 +68,9 @@ export function MobileFundList({
   marketRefreshAt = '',
   onSelectSymbol,
   onVisibleSymbolsChange,
+  // 本地直连：只显示各行确有数据的指标，隐藏指标设置与展开，点卡片直接进详情。
+  localDirect = false,
+  notice = null,
 }) {
   const [metricIds, setMetricIds] = useState(() => readMobileMetricsConfig(isOtcList));
   const [metricsOpen, setMetricsOpen] = useState(false);
@@ -68,7 +90,13 @@ export function MobileFundList({
 
   useEffect(() => setVisibleLimit(MOBILE_PAGE_SIZE), [heldOnly, listQuery, sorting]);
 
-  const sortOptions = useMemo(() => sortOptionsForMode(isOtcList), [isOtcList]);
+  const localMetricIds = useMemo(() => (localDirect ? availableLocalMetricIds(rows, isOtcList) : null), [isOtcList, localDirect, rows]);
+  const sortOptions = useMemo(() => {
+    const base = sortOptionsForMode(isOtcList);
+    if (!localDirect) return base;
+    const available = new Set(['heldRank', 'name', 'symbol', 'price', 'changePercent', ...(localMetricIds || [])]);
+    return base.filter((item) => available.has(item.id));
+  }, [isOtcList, localDirect, localMetricIds]);
   const activeSort = sortOptions.find((item) => item.id === sorting.id) || sortOptions[0];
   const page = useMemo(() => queryMobileFundPage(rows, {
     sorting,
@@ -210,16 +238,17 @@ export function MobileFundList({
             </PopoverContent>
           </Popover>
 
-          <button type="button" onClick={() => setMetricsOpen(true)} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[var(--market-border)] px-2.5 text-xs font-medium text-[var(--market-text-muted)]"><SlidersHorizontal size={13} />指标</button>
+          {localDirect ? null : <button type="button" onClick={() => setMetricsOpen(true)} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[var(--market-border)] px-2.5 text-xs font-medium text-[var(--market-text-muted)]"><SlidersHorizontal size={13} />指标</button>}
           {heldOnly ? <button type="button" onClick={() => setHeldOnly(false)} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-[var(--market-surface-muted)] px-2.5 text-xs text-[var(--market-text-muted)]">仅看持仓<X size={12} /></button> : null}
         </div>
         </div>
+        {notice}
         </div>
       </div>
 
       <div className="markets-monitor-list-scroll min-h-0 flex-1 overflow-y-auto" onScroll={handleListScroll}>
         {page.items.length ? page.items.map((row) => (
-          <MobileFundRow key={row.symbol} row={row} isOtcList={isOtcList} metricIds={metricIds} expandedMetricIds={defaultMobileExpanded(isOtcList)} expanded={expandedSymbol === row.symbol} onToggleExpand={(target) => setExpandedSymbol((prev) => prev === target.symbol ? '' : target.symbol)} onOpenDetail={(target) => onSelectSymbol?.(target)} />
+          <MobileFundRow key={row.symbol} row={row} isOtcList={isOtcList} expandable={!localDirect} metricIds={localDirect ? localRowMetricIds(row, localMetricIds) : metricIds} expandedMetricIds={defaultMobileExpanded(isOtcList)} expanded={expandedSymbol === row.symbol} onToggleExpand={(target) => setExpandedSymbol((prev) => prev === target.symbol ? '' : target.symbol)} onOpenDetail={(target) => onSelectSymbol?.(target)} />
         )) : <div className="px-4 py-16 text-center text-sm text-[var(--market-text-muted)]">暂无匹配基金，可调整筛选或搜索</div>}
         <div className="px-4 py-4 text-center text-xs text-[var(--market-text-muted)]">
           {page.nextCursor ? <button type="button" onClick={() => setVisibleLimit((value) => value + MOBILE_PAGE_SIZE)} className="inline-flex flex-col items-center gap-1"><span>已显示 {page.items.length} / {page.total}</span><span className="font-semibold text-[var(--market-accent)]">加载更多</span></button> : page.total ? `已显示 ${page.items.length} / ${page.total}` : null}

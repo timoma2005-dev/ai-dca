@@ -133,11 +133,18 @@ test('markets and fundSwitch pages wire the local-direct entry', () => {
   assert.match(view, /MarketsFullTablePanel/);
   assert.match(view, /MarketsMainContent/);
   assert.match(view, /localDirect: true/);
+  assert.match(view, /omitColumnIds=\{omitColumnIds\}/);
+  assert.match(view, /本地直连已精简部分数据，需要更详细的数据请使用云端/);
+  assert.match(view, /classList\.toggle\('markets-full-table-active', showFullTable\)/);
+  const mobileList = readFileSync(new URL('../src/pages/markets/MobileFundList.jsx', import.meta.url), 'utf8');
+  assert.match(mobileList, /expandable=\{!localDirect\}/);
   assert.match(view, /fetchEastmoneyFundNavs/);
   const detail = readFileSync(new URL('../src/pages/markets/MarketSymbolDetailPanel.jsx', import.meta.url), 'utf8');
   assert.match(detail, /!summaryMode && !localDirect \? <ChartToolbarPopover/);
-  // 云端视图仍保留 compact 切换条，保证可切回。
-  assert.match(markets, /<LocalDirectModeBar compact/);
+  // 数据源切换改为右侧悬浮标签，云端/直连两种视图都挂载，保证可切回。
+  assert.equal((markets.match(/<LocalDirectModeFloat enabled=\{localDirect\}/g) || []).length, 2);
+  // 列表锁滚动只在列表态生效，详情态放开（手机端详情页可滑动）。
+  assert.match(markets, /typeof document === 'undefined' \|\| localDirect\) return undefined/);
 
   // 面板净值走东财 FundMNFInfo（与竞价看板同链路），蛋卷仅兜底。
   const panel = readFileSync(new URL('../src/components/markets/LocalDirectPanel.jsx', import.meta.url), 'utf8');

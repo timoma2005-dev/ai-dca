@@ -335,7 +335,10 @@ export function MarketListTable({
   viewStorageScope = '',
   rowTestIdPrefix = '',
   onViewPresetSave,
+  // 本地直连等数据源缺失的列直接不渲染（连同视图选项里也不出现）。
+  omitColumnIds = null,
 }) {
+  const omitColumnKey = Array.isArray(omitColumnIds) ? omitColumnIds.join(',') : '';
   const todayDate = getTodayShanghaiDate();
   const tableScrollRef = useRef(null);
   const baseLeft = useMemo(() => (stickyFirstColumn ? ['symbol', 'name'] : []), [stickyFirstColumn]);
@@ -796,7 +799,7 @@ export function MarketListTable({
       sortingFn: numericSortFn,
       filterFn: numberRangeFilterFn,
     } : null,
-  ].filter(Boolean)), [showLimitColumn, hidePremiumColumn, hideTrendColumn, klineMap, todayDate, limitFilterOptions, compact, numericSortFn]);
+  ].filter(Boolean).filter((column) => !omitColumnKey || !omitColumnKey.split(',').includes(column.id))), [showLimitColumn, hidePremiumColumn, hideTrendColumn, klineMap, todayDate, limitFilterOptions, compact, numericSortFn, omitColumnKey]);
   const table = useReactTable({
     data: rows,
     columns,
