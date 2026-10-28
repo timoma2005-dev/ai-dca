@@ -40,7 +40,13 @@ const FIELDS = [
   ['accountNet', '单账户净申购']
 ];
 const SHORT = { total: '累计', net: '净申购', accountTotal: '单户累计', accountNet: '单户净' };
-const MARK = { tightened: '▼收紧', relaxed: '▲放宽', unchanged: '—未变', mixed: '◆有升有降', incomparable: '—' };
+const MARK = {
+  tightened: '▼收紧',
+  relaxed: '▲放宽',
+  unchanged: '—未变',
+  mixed: '◆有升有降',
+  incomparable: '—'
+};
 const CLS = { tightened: 'tight', relaxed: 'relax', mixed: 'mixed' };
 const ORDER = { tightened: 0, mixed: 1, relaxed: 2, unchanged: 3, incomparable: 4 };
 const VIEW_KEY = 'etf-shares:view-mode';
@@ -62,7 +68,8 @@ const fmtRatio = (r) => (r >= 10 ? Math.round(r) : Math.round(r * 100) / 100);
 const isMoved = (c) => c === 'tightened' || c === 'relaxed';
 const md = (x) => (x ? String(x).slice(5) : '—');
 const overallLabel = (ov) => (ov === 'incomparable' ? '待对比' : MARK[ov]);
-const rowClass = (ov, prefix = 'is-') => (ov === 'tightened' ? `${prefix}tight` : ov === 'relaxed' ? `${prefix}relax` : '');
+const rowClass = (ov, prefix = 'is-') =>
+  ov === 'tightened' ? `${prefix}tight` : ov === 'relaxed' ? `${prefix}relax` : '';
 
 function deltaView(d, zeroText) {
   if (!Number.isFinite(d)) return { cls: 'muted', text: '暂无' };
@@ -131,7 +138,10 @@ function useLimitChanges(row, calendar) {
     let subs = [];
     const fetchPair = () => {
       subs.forEach((x) => x.release());
-      subs = [pcfDetailClient.subscribe(row.code, row.limitDate), pcfDetailClient.subscribe(row.code, prevDay)];
+      subs = [
+        pcfDetailClient.subscribe(row.code, row.limitDate),
+        pcfDetailClient.subscribe(row.code, prevDay)
+      ];
       return Promise.all(subs.map((x) => x.promise));
     };
     fetchPair()
@@ -166,9 +176,15 @@ function useLimitChanges(row, calendar) {
     const after = {};
     const base = fromRow(row);
     for (const [k] of FIELDS) after[k] = row.limitChanges[k]?.after || base[k];
-    return { after, changes: row.limitChanges, prevDay, overall: row.limitChange || overallOf(row.limitChanges) };
+    return {
+      after,
+      changes: row.limitChanges,
+      prevDay,
+      overall: row.limitChange || overallOf(row.limitChanges)
+    };
   }
-  if (state) return { after: state.after, changes: state.changes, prevDay, overall: overallOf(state.changes) };
+  if (state)
+    return { after: state.after, changes: state.changes, prevDay, overall: overallOf(state.changes) };
   return { after: fromRow(row), changes: null, prevDay, overall: 'incomparable' };
 }
 
@@ -235,11 +251,43 @@ function LimitCell({ label, after, change }) {
   );
 }
 
-function AtLimitBadge() {
-  return <span className="nx-pill tight" title="当日净申购达总限额（≥90%）">顶格</span>;
+// 「历史」入口（SVIP）：卡片底栏 / 表格末列 / 手机条目右下角，点了直接打开弹窗的历史页签。
+function HistoryLink({ onClick, className = '' }) {
+  return (
+    <button
+      type="button"
+      className={`nx-his-link ${className}`}
+      aria-haspopup="dialog"
+      title="近一年份额、额度与溢价历史（SVIP）"
+      onClick={onClick}
+    >
+      <Diamond size={11} aria-hidden="true" />
+      历史
+    </button>
+  );
 }
 
-function BoardCard({ row, calendar, onOpen, onOverall, atLimit }) {
+// 顶部提示条：告诉用户有 SVIP 历史，点了打开当前列表第一只的历史。
+function HistoryHint({ onClick, compact }) {
+  return (
+    <button type="button" className={`nx-his-hint${compact ? ' compact' : ''}`} onClick={onClick}>
+      <Diamond size={12} aria-hidden="true" />
+      <span>{compact ? '近一年份额/额度/溢价历史' : '每只 ETF 近一年份额、额度与溢价历史'}</span>
+      <span className="nx-svip-tag">SVIP</span>
+      {!compact && <span className="nx-his-hint-go">点卡片「历史」查看 ›</span>}
+    </button>
+  );
+}
+
+function AtLimitBadge() {
+  return (
+    <span className="nx-pill tight" title="当日净申购达总限额（≥90%）">
+      顶格
+    </span>
+  );
+}
+
+function BoardCard({ row, calendar, onOpen, onHistory, onOverall, atLimit }) {
   const info = useReportOverall(row, onOverall, calendar);
   const ov = info.overall;
   const delta = deltaView(row.deltaShares, '无变化');
@@ -260,7 +308,12 @@ function BoardCard({ row, calendar, onOpen, onOverall, atLimit }) {
       <div className="nx-body">
         <div className="nx-limits">
           {FIELDS.map(([k, label]) => (
-            <LimitCell key={k} label={label} after={info.after[k]} change={info.changes ? info.changes[k] : null} />
+            <LimitCell
+              key={k}
+              label={label}
+              after={info.after[k]}
+              change={info.changes ? info.changes[k] : null}
+            />
           ))}
         </div>
         <div className="nx-shares">
@@ -272,7 +325,8 @@ function BoardCard({ row, calendar, onOpen, onOverall, atLimit }) {
         </div>
       </div>
       <div className="nx-foot">
-        <span>{`总份额 ${fmtShares(row.shares)}`}</span>
+        <span className="nx-foot-total">{`总份额 ${fmtShares(row.shares)}`}</span>
+        <HistoryLink onClick={onHistory} />
         <button type="button" className="nx-link" aria-haspopup="dialog" onClick={onOpen}>
           PCF 清单 ›
         </button>
@@ -281,14 +335,22 @@ function BoardCard({ row, calendar, onOpen, onOverall, atLimit }) {
   );
 }
 
-function BoardRow({ row, calendar, onOpen, onOverall, atLimit }) {
+function BoardRow({ row, calendar, onOpen, onHistory, onOverall, atLimit }) {
   const info = useReportOverall(row, onOverall, calendar);
   const ov = info.overall;
   const delta = deltaView(row.deltaShares, '无变化');
   return (
     <tr className={rowClass(ov)}>
       <td>
-        <div className="nx-td-name">{row.name}{atLimit && <> <AtLimitBadge /></>}</div>
+        <div className="nx-td-name">
+          {row.name}
+          {atLimit && (
+            <>
+              {' '}
+              <AtLimitBadge />
+            </>
+          )}
+        </div>
         <CodePills row={row} />
       </td>
       <td>
@@ -317,9 +379,12 @@ function BoardRow({ row, calendar, onOpen, onOverall, atLimit }) {
       </td>
       <td className="num nx-td-muted">{fmtShares(row.shares)}</td>
       <td>
-        <button type="button" className="nx-link" aria-haspopup="dialog" onClick={onOpen}>
-          PCF 清单 ›
-        </button>
+        <div className="nx-td-actions">
+          <HistoryLink onClick={onHistory} />
+          <button type="button" className="nx-link" aria-haspopup="dialog" onClick={onOpen}>
+            PCF 清单 ›
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -327,7 +392,7 @@ function BoardRow({ row, calendar, onOpen, onOverall, atLimit }) {
 
 // 手机端三行条目：代码+名称/结论；限额（变动在前）；盘前份额变化 · 额度用满 · 总份额。
 const compact = (s) => s.replace(/,/g, '').replace(/份$/, '');
-function MobileRow({ row, calendar, shareRange, onOpen, onOverall, atLimit }) {
+function MobileRow({ row, calendar, shareRange, onOpen, onHistory, onOverall, atLimit }) {
   const info = useReportOverall(row, onOverall, calendar);
   const ov = info.overall;
   const moved = [],
@@ -359,47 +424,50 @@ function MobileRow({ row, calendar, shareRange, onOpen, onOverall, atLimit }) {
     ...rest.map((t, i) => <span key={`r${i}`}>{t}</span>)
   ];
   return (
-    <button type="button" className={`nx-m-row ${rowClass(ov)}`} onClick={onOpen} aria-haspopup="dialog">
-      <div className="nx-m-l1">
-        <div className="nx-title-line">
-          <span className="nx-m-name">
-            <b>{row.code}</b>
-            {` ${row.name}`}
-          </span>
-          {atLimit && <AtLimitBadge />}
+    <div className="nx-m-item">
+      <button type="button" className={`nx-m-row ${rowClass(ov)}`} onClick={onOpen} aria-haspopup="dialog">
+        <div className="nx-m-l1">
+          <div className="nx-title-line">
+            <span className="nx-m-name">
+              <b>{row.code}</b>
+              {` ${row.name}`}
+            </span>
+            {atLimit && <AtLimitBadge />}
+          </div>
+          <span className={`nx-m-status ${CLS[ov] || ''}`}>{overallLabel(ov)}</span>
         </div>
-        <span className={`nx-m-status ${CLS[ov] || ''}`}>{overallLabel(ov)}</span>
-      </div>
-      <div className="nx-m-l2">
-        {parts.map((p, i) => (
-          <Fragment key={p.key}>
-            {i > 0 && sep}
-            {p}
-          </Fragment>
-        ))}
-      </div>
-      <div className="nx-m-l2">
-        {`盘前 ${shareRange} `}
-        <span className={`nx-m-delta ${delta.cls}`}>{delta.text}</span>
-        {row.atLimit === true && (
-          <>
-            {sep}
-            <span className="nx-m-full">额度用满</span>
-          </>
-        )}
-        {Number.isFinite(row.shares) && (
-          <>
-            {sep}
-            {compact(fmtShares(row.shares))}
-          </>
-        )}
-      </div>
-    </button>
+        <div className="nx-m-l2">
+          {parts.map((p, i) => (
+            <Fragment key={p.key}>
+              {i > 0 && sep}
+              {p}
+            </Fragment>
+          ))}
+        </div>
+        <div className="nx-m-l2 nx-m-l3">
+          {`盘前 ${shareRange} `}
+          <span className={`nx-m-delta ${delta.cls}`}>{delta.text}</span>
+          {row.atLimit === true && (
+            <>
+              {sep}
+              <span className="nx-m-full">额度用满</span>
+            </>
+          )}
+          {Number.isFinite(row.shares) && (
+            <>
+              {sep}
+              {compact(fmtShares(row.shares))}
+            </>
+          )}
+        </div>
+      </button>
+      <HistoryLink onClick={onHistory} className="nx-m-his" />
+    </div>
   );
 }
 
-function PcfModal({ row, date, onClose, DetailDrawer }) {
-  const [tab, setTab] = useState('pcf');
+function PcfModal({ row, date, onClose, DetailDrawer, initialTab = 'pcf' }) {
+  const [tab, setTab] = useState(initialTab);
   useEffect(() => {
     const k = (ev) => ev.key === 'Escape' && onClose();
     document.addEventListener('keydown', k);
@@ -415,7 +483,9 @@ function PcfModal({ row, date, onClose, DetailDrawer }) {
     <div className="nx-modal-mask" onClick={(ev) => ev.target === ev.currentTarget && onClose()}>
       <div className="nx-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="nx-modal-head">
-          <h3 id={titleId}>{tab === 'history' ? `${row.name} ${row.code} · 历史` : `${row.name} ${row.code} · PCF 清单`}</h3>
+          <h3 id={titleId}>
+            {tab === 'history' ? `${row.name} ${row.code} · 历史` : `${row.name} ${row.code} · PCF 清单`}
+          </h3>
           <button type="button" className="nx-modal-close" aria-label="关闭" onClick={onClose}>
             <X size={16} aria-hidden="true" />
           </button>
@@ -424,7 +494,12 @@ function PcfModal({ row, date, onClose, DetailDrawer }) {
           <button type="button" role="tab" aria-selected={tab === 'pcf'} onClick={() => setTab('pcf')}>
             PCF 清单
           </button>
-          <button type="button" role="tab" aria-selected={tab === 'history'} onClick={() => setTab('history')}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'history'}
+            onClick={() => setTab('history')}
+          >
             历史
             <span className="nx-svip-tag">
               <Diamond size={9} aria-hidden="true" />
@@ -463,7 +538,15 @@ const FILTERS = [
 
 function GridIcon() {
   return (
-    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
       <rect x={3} y={3} width={7} height={7} rx={1.5} />
       <rect x={14} y={3} width={7} height={7} rx={1.5} />
       <rect x={3} y={14} width={7} height={7} rx={1.5} />
@@ -557,6 +640,7 @@ export default function SharesBoard({ DetailDrawer }) {
   const [tick, setTick] = useState(0);
   const [today, setToday] = useState(() => shanghaiAccessDay());
   const [openKey, setOpenKey] = useState(null);
+  const [openTab, setOpenTab] = useState('pcf');
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
   const [ov, setOv] = useState({});
@@ -597,9 +681,11 @@ export default function SharesBoard({ DetailDrawer }) {
   const rows = (c && c.records) || [];
   const refresh = () => setTick((x) => x + 1);
   const limitDate =
-    (c && c.limitDate) || rows.reduce((a, r) => (r.limitDate && (!a || r.limitDate > a) ? r.limitDate : a), null);
+    (c && c.limitDate) ||
+    rows.reduce((a, r) => (r.limitDate && (!a || r.limitDate > a) ? r.limitDate : a), null);
   const atLimitCodes = usePcfAtLimitCodes(limitDate);
-  const prevLimitDate = (c && c.prevLimitDate) || (limitDate && c ? previousSession(limitDate, c.calendar) : null);
+  const prevLimitDate =
+    (c && c.prevLimitDate) || (limitDate && c ? previousSession(limitDate, c.calendar) : null);
   const nTight = rows.filter((r) => ov[r.code] === 'tightened' || ov[r.code] === 'mixed').length;
   const nRelax = rows.filter((r) => ov[r.code] === 'relaxed' || ov[r.code] === 'mixed').length;
   const nFull = rows.filter((r) => r.atLimit === true).length;
@@ -611,12 +697,30 @@ export default function SharesBoard({ DetailDrawer }) {
     .slice()
     .sort((a, b) => (ORDER[ov[a.code]] ?? 4) - (ORDER[ov[b.code]] ?? 4));
   const stale = e.state === 'stale';
-  const open = (r) => () => setOpenKey(`${c.date}:${r.code}`);
+  const open =
+    (r, tab = 'pcf') =>
+    () => {
+      setOpenTab(tab);
+      setOpenKey(`${c.date}:${r.code}`);
+    };
+  const openHistory = (r) => open(r, 'history');
+  const firstHistory = () => {
+    const r = list[0] || rows[0];
+    if (r) open(r, 'history')();
+  };
   const openRow = c && openKey ? rows.find((x) => `${c.date}:${x.code}` === openKey) : null;
   const modal = openRow ? (
-    <PcfModal row={openRow} date={c.date} onClose={closeModal} DetailDrawer={DetailDrawer} />
+    <PcfModal
+      key={`${openKey}:${openTab}`}
+      row={openRow}
+      date={c.date}
+      onClose={closeModal}
+      DetailDrawer={DetailDrawer}
+      initialTab={openTab}
+    />
   ) : null;
-  const stateTitle = e.state === 'loading' ? '正在读取份额与限额…' : e.state === 'error' ? '读取失败' : '暂无已验证快照';
+  const stateTitle =
+    e.state === 'loading' ? '正在读取份额与限额…' : e.state === 'error' ? '读取失败' : '暂无已验证快照';
 
   if (mobile) {
     const head =
@@ -637,7 +741,10 @@ export default function SharesBoard({ DetailDrawer }) {
             </button>
           </div>
         )}
-        {c && <FilterChips rows={rows} ov={ov} filter={filter} setFilter={setFilter} className="nx-m-filters" />}
+        {c && (
+          <FilterChips rows={rows} ov={ov} filter={filter} setFilter={setFilter} className="nx-m-filters" />
+        )}
+        {c && rows.length > 0 && <HistoryHint compact onClick={firstHistory} />}
         {!c && (
           <div className={`state-view ${e.state}`} role={e.state === 'error' ? 'alert' : 'status'}>
             <h3>{stateTitle}</h3>
@@ -657,6 +764,7 @@ export default function SharesBoard({ DetailDrawer }) {
                 calendar={c.calendar}
                 shareRange={`${md(c.prevDate)}→${md(c.date)}`}
                 onOpen={open(r)}
+                onHistory={openHistory(r)}
                 onOverall={onOverall}
                 atLimit={atLimitCodes.has(r.code)}
               />
@@ -669,7 +777,7 @@ export default function SharesBoard({ DetailDrawer }) {
           </div>
         )}
         {c && (
-          <div className="nx-m-meta">{`抓取 ${fetchedTime(c.fetchedAt)}${stale ? ' · 本地缓存，待确认' : ''} · 点击查看 PCF 清单`}</div>
+          <div className="nx-m-meta">{`抓取 ${fetchedTime(c.fetchedAt)}${stale ? ' · 本地缓存，待确认' : ''} · 点击查看 PCF 清单 / 历史`}</div>
         )}
         {modal}
       </div>
@@ -729,7 +837,12 @@ export default function SharesBoard({ DetailDrawer }) {
           {stale && <span className="stale">本地缓存，待重新确认</span>}
         </div>
       )}
-      {c && <FilterChips rows={rows} ov={ov} filter={filter} setFilter={setFilter} />}
+      {c && (
+        <div className="nx-filter-bar">
+          <FilterChips rows={rows} ov={ov} filter={filter} setFilter={setFilter} />
+          {rows.length > 0 && <HistoryHint onClick={firstHistory} />}
+        </div>
+      )}
       {!c && (
         <section className="shares-card">
           <div className={`state-view ${e.state}`} role={e.state === 'error' ? 'alert' : 'status'}>
@@ -772,7 +885,15 @@ export default function SharesBoard({ DetailDrawer }) {
               </thead>
               <tbody>
                 {list.map((r) => (
-                  <BoardRow key={r.code} row={r} calendar={c.calendar} onOpen={open(r)} onOverall={onOverall} atLimit={atLimitCodes.has(r.code)} />
+                  <BoardRow
+                    key={r.code}
+                    row={r}
+                    calendar={c.calendar}
+                    onOpen={open(r)}
+                    onHistory={openHistory(r)}
+                    onOverall={onOverall}
+                    atLimit={atLimitCodes.has(r.code)}
+                  />
                 ))}
               </tbody>
             </table>
@@ -780,7 +901,15 @@ export default function SharesBoard({ DetailDrawer }) {
         ) : (
           <div className="nx-grid">
             {list.map((r) => (
-              <BoardCard key={r.code} row={r} calendar={c.calendar} onOpen={open(r)} onOverall={onOverall} atLimit={atLimitCodes.has(r.code)} />
+              <BoardCard
+                key={r.code}
+                row={r}
+                calendar={c.calendar}
+                onOpen={open(r)}
+                onHistory={openHistory(r)}
+                onOverall={onOverall}
+                atLimit={atLimitCodes.has(r.code)}
+              />
             ))}
           </div>
         ))}

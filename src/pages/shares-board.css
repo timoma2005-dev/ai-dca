@@ -123,3 +123,19 @@
 .nx-tools{width:100%}
 .nx-tools .search-box{flex:1;min-width:0}
 .nx-grid{grid-template-columns:1fr}}
+
+/* SVIP 历史入口 */
+.nx-foot-total{margin-right:auto}
+.nx-foot{justify-content:flex-start}
+.nx-his-link{border:1px solid #e9d5ff;background:#f5f3ff;color:#7c3aed;font-size:12px;font-weight:600;border-radius:7px;padding:2px 7px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;line-height:1.4}
+.nx-his-link:hover{background:#ede9fe}
+.nx-td-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;white-space:nowrap}
+.nx-filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.nx-filter-bar .filter-group{flex:0 1 auto}
+.nx-his-hint{margin-left:auto;border:1px solid #e9d5ff;background:linear-gradient(90deg,#f5f3ff,#fdf4ff);color:#6d28d9;border-radius:999px;padding:5px 12px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.nx-his-hint:hover{border-color:#c4b5fd}
+.nx-his-hint-go{color:#7c3aed;font-weight:600}
+.nx-his-hint.compact{margin:0;width:100%;border-radius:12px;padding:8px 12px;justify-content:flex-start}
+.nx-m-item{position:relative}
+.nx-m-l3{padding-right:58px}
+.nx-m-his{position:absolute;right:10px;bottom:10px}
