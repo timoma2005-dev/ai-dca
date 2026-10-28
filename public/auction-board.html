@@ -754,18 +754,17 @@
           if (!(qtyA > 0)) { out.err = "金额不足 100 份"; return out; }
           var gross = qtyA * sp, cash = gross * (1 - SIM.comm), qtyB = Math.floor(cash / (bp * (1 + SIM.comm)) / 100) * 100;
           var np = nqPct();
-          function devAt(px, r) { var pre = r.pre || (r.q && r.q.pre); return pre > 0 && np != null ? ((px / pre - 1) - np) * 100 : null; }
+          function devAt(px, r) { var pre = r.pre || (r.q && r.q.pre); return inWin(b) && pre > 0 && np != null ? ((px / pre - 1) - np) * 100 : null; }
           var da = devAt(sp, a), dz = devAt(bp, z), G = da != null && dz != null ? da - dz : null;
           var cost = 2 * SIM.comm * 100, slip = (pa - sp) / pa * 100 + (bp - pz) / pz * 100;
           if (qa.b1v > 0 && qtyA / 100 > qa.b1v) out.warn.push(a.name + " 买一只有 " + qa.b1v + " 手，卖 " + qtyA / 100 + " 手要吃到更深档位，预估偏乐观");
           if (qz.a1v > 0 && qtyB / 100 > qz.a1v) out.warn.push(z.name + " 卖一只有 " + qz.a1v + " 手，买 " + qtyB / 100 + " 手要吃到更深档位，预估偏乐观");
           var qq = S.quota[z.code];
           if (qq && qq.k === "relax") out.warn.push(z.name + " 今日份额放开，溢价可能继续下行");
-          if (!inWin(b)) out.warn.push("非交易时段：按最近价格演算，明早集合竞价重算");
           if (z.code === "161130" || a.code === "161130") out.warn.push("LOF 盘口较薄，且溢价按 T-2 公布净值计算");
           var trig = a.dev != null && a.dev >= 0 && inZone(z) && !qBlocks(z);
           out.trig = trig;
-          out.trigTxt = trig ? "符合策略：" + a.name + " 偏离 " + f2(a.dev) + " ≥ 0，" + z.name + " 偏离 " + f2(z.dev) + " 在买入区" :
+          out.trigTxt = !inWin(b) ? "非交易时段：偏离只在交易日 09:15–15:00 计算，以下按最近价格演算，明早集合竞价重算" : trig ? "符合策略：" + a.name + " 偏离 " + f2(a.dev) + " ≥ 0，" + z.name + " 偏离 " + f2(z.dev) + " 在买入区" :
             "未触发策略：" + (a.dev == null ? a.name + " 暂无偏离" : a.dev < 0 ? a.name + " 偏离 " + f2(a.dev) + "，尚未回到 0" :
               z.dev == null ? z.name + " 暂无偏离" : !inZone(z) ? z.name + " 偏离 " + f2(z.dev) + " 不在买入区 " + zoneTxt() : z.name + " 今日份额放开，策略会跳过");
           var bk = SIM_HIST[inWin(b) ? simBucket(b) : "d"];
