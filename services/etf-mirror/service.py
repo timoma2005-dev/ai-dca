@@ -356,6 +356,10 @@ def _bg_refresh_once():
         _background_refresh_lock.release()
 
 
+SSE_SCALE_URL = ("https://query.sse.com.cn/commonQuery.do?isPagination=true&pageHelp.pageSize=2000"
+                 "&pageHelp.pageNo=1&sqlId=COMMON_SSE_ZQPZ_ETFZL_XXPL_ETFGM_SEARCH_L&STAT_DATE=")
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -390,12 +394,36 @@ class Handler(BaseHTTPRequestHandler):
                 self._serve("shares", params)
             elif parsed.path == "/etf-pcf-limit":
                 self._serve("limit", params)
+            elif parsed.path == "/sse-etf-scale":
+                self._relay_sse_scale(params)
             else:
                 self._not_found()
         except BrokenPipeError:
             pass
         except Exception as e:
             self._send(502, json.dumps({"error": "mirror_error", "detail": str(e)[:200]}))
+
+    def _relay_sse_scale(self, params):
+        # CF worker 访问上交所 ETF 规模接口被 403/超时，经 CN 机中转（只放行这一个查询）。
+        token = os.environ.get("ETF_RELAY_TOKEN", "")
+        if not token or self.headers.get("X-Relay-Token", "") != token:
+            return self._send(403, json.dumps({"error": "forbidden"}))
+        date = (params.get("date") or [""])[0]
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            return self._send(400, json.dumps({"error": "invalid_date"}))
+        url = SSE_SCALE_URL + date
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        req = urllib.request.Request(url, headers={"Referer": "https://www.sse.com.cn/", "User-Agent": "Mozilla/5.0"})
+        try:
+            with opener.open(req, timeout=15) as resp:
+                body = resp.read(8 * 1024 * 1024).decode("utf-8", "replace")
+                self._send(resp.status, body)
+        except urllib.error.HTTPError as e:
+            self._send(502, json.dumps({"error": "upstream_http", "status": e.code}))
+        except Exception as e:
+            self._send(502, json.dumps({"error": "upstream_unavailable", "detail": str(e)[:200]}))
 
     def _serve(self, kind, params):
         # 组装缓存键（与回源路径保持一致）

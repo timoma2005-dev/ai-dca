@@ -443,7 +443,21 @@ export async function fetchEtfPcfShares({
 // 上交所 ETF 规模接口：513 系列每日份额（TOT_VOL 单位万份）。需要 Referer；SEC_CODE 参数过滤无效，本地按 codes 过滤。
 const SSE_SHARES_URL_BASE =
   'https://query.sse.com.cn/commonQuery.do?isPagination=true&pageHelp.pageSize=2000&pageHelp.pageNo=1&sqlId=COMMON_SSE_ZQPZ_ETFZL_XXPL_ETFGM_SEARCH_L&STAT_DATE=';
-export async function fetchSseEtfShares({ date, fetchImpl = fetch, timeoutMs = 6000, signal, codes = TARGET_CODES } = {}) {
+// 上交所规模接口对 CF 出口 403/超时：配置了中转（CN 机 etf-mirror /sse-etf-scale）时先走中转，失败再直连。
+export async function fetchSseEtfShares({ relay, ...opts } = {}) {
+  if (relay?.url && relay?.token) {
+    const relayFetch = (url, init) =>
+      (opts.fetchImpl || fetch)(relay.url + '?date=' + encodeURIComponent(url.slice(SSE_SHARES_URL_BASE.length)), {
+        signal: init?.signal,
+        headers: { 'X-Relay-Token': relay.token }
+      });
+    const viaRelay = await fetchSseEtfSharesDirect({ ...opts, fetchImpl: relayFetch });
+    if (viaRelay.ok) return viaRelay;
+    console.warn('sse_shares_relay_failed', JSON.stringify({ date: opts.date, reason: viaRelay.reason }));
+  }
+  return fetchSseEtfSharesDirect(opts);
+}
+async function fetchSseEtfSharesDirect({ date, fetchImpl = fetch, timeoutMs = 6000, signal, codes = TARGET_CODES } = {}) {
   if (!isWellFormedEtfPcfDateKey(date)) return { ok: false, reason: 'invalid_date' };
   if (signal?.aborted) return { ok: false, reason: 'timeout' };
   const controller = new AbortController(),

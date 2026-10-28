@@ -657,6 +657,9 @@ async function runStage({
       sseShareDates.map((d) =>
         sseSharesFetch({
           date: d,
+          relay: env.ETF_RELAY_TOKEN
+            ? { url: env.ETF_RELAY_URL || 'https://fast.freebacktrack.tech/api/etf-relay/sse-etf-scale', token: env.ETF_RELAY_TOKEN }
+            : null,
           timeoutMs: Math.max(1000, Math.min(8000, deadline - Date.now() - 2000))
         }).catch(() => ({ ok: false, reason: 'source_failure' }))
       )
