@@ -3,7 +3,8 @@ import {
   buildSharesProjection,
   persistSharesProjection,
   normalizeCreationStatus,
-  previousSession
+  previousSession,
+  sharesKey
 } from './etfPcfSharesProjection.js';
 import { buildSsePcfCacheKey, validateSsePcfCachedData } from './ssePcfLimit.js';
 import {
@@ -911,6 +912,24 @@ async function runStage({
       limitDayCache.set(limitDay, out);
       return out;
     };
+    // 深交所下载失败但上交所份额已取到：用 KV 里上一交易日的深交所份额快照 + 已有投影的 dateEvidence 重算投影，
+    // 513 份额不再被深交所超时连带丢掉。
+    if (!projectionBatches.length && sseShares.length && previous) {
+      try {
+        const fb = records.filter((r) => r.date === previous);
+        const rawProj = fb.length ? await read(sharesKey(previous), 'projection') : null;
+        const existing = rawProj ? parse(rawProj) : null;
+        if (existing?.dateEvidence && fb.length) {
+          projectionBatches.push({
+            fetchedAt: detectedAt,
+            records: fb.map((r) => ({ ...r, dateEvidence: existing.dateEvidence }))
+          });
+          console.log('shares_projection_sse_fallback', JSON.stringify({ date: previous, szse: fb.length, sse: sseShares.length }));
+        }
+      } catch (e) {
+        console.warn('shares_projection_sse_fallback_failed', e?.message);
+      }
+    }
     let todayLimits = [],
       prevDayLimits = [];
     try {
