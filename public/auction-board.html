@@ -184,6 +184,25 @@
         .mask { align-items:flex-end; padding:0; }
         .sheet { width:100%; border-radius:16px 16px 0 0; padding-bottom:calc(16px + env(safe-area-inset-bottom)); }
       }
+      /* 模拟切换 */
+      .sim-row { display:flex; gap:8px; margin-top:12px; }
+      .act .sim-btn { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.22); color:#fff; }
+      .sheet.sim { width:420px; max-height:calc(100vh - 96px); overflow:auto; }
+      .srow select { max-width:220px; padding:6px 8px; border:1px solid var(--line); border-radius:8px; font:inherit; background:#fff; }
+      .srow input.amt { width:120px; }
+      .sim-trig { font-size:12px; padding:8px 10px; border-radius:8px; margin:6px 0; background:#f1f5f9; color:var(--ink2); }
+      .sim-trig.ok { background:var(--zone); color:#166534; }
+      .sim-err { font-size:13px; color:var(--up); padding:10px 0; }
+      .sim-warn { font-size:12px; color:#b45309; margin-top:6px; line-height:1.5; }
+      .sim-est { margin-top:10px; border-top:1px solid var(--line2); padding-top:8px; }
+      .sim-est .kv b small { font-weight:400; color:var(--sub); margin-left:4px; }
+      .sim-note { font-size:11px; color:var(--mute); margin-top:8px; line-height:1.5; }
+      .sim-acts { display:flex; gap:8px; margin-top:12px; }
+      .sim-paper { margin-top:12px; border-top:1px solid var(--line2); padding-top:8px; }
+      .sim-paper .pi { display:flex; justify-content:space-between; gap:8px; font-size:12px; padding:6px 0; border-bottom:1px solid var(--line2); }
+      .sim-paper .pi span { color:var(--ink2); min-width:0; }
+      .sim-paper .pi small { display:block; color:var(--mute); font-size:11px; }
+      .sim-paper .pi button { border:0; background:transparent; color:var(--mute); cursor:pointer; font-size:14px; }
     </style>
   </head>
   <body>
@@ -218,6 +237,7 @@
         <div class="flow" id="act-flow"></div>
         <div class="step" id="act-step"></div>
         <div class="rule" id="act-rule"></div>
+        <div class="sim-row"><button class="btn sim-btn" type="button" id="sim-open">模拟切换</button></div>
       </section>
 
       <section class="card nq">
@@ -279,6 +299,17 @@
         <label class="srow"><span>偏离阈值<small>候选上限、持有卖出线（百分点）</small></span><input id="thr" type="number" step="0.05" min="0" value="0.2"/></label>
         <label class="srow"><span>买入下限<small>偏离低于此值不买（百分点）</small></span><input id="lo" type="number" step="0.05" min="0" value="0.5"/></label>
         <label class="srow"><span>停牌溢价<small>集合竞价时超过即推算停牌（%）</small></span><input id="halt-thr" type="number" step="0.5" min="0" value="10"/></label>
+      </div>
+    </div>
+    <div class="mask hide" id="sim-mask">
+      <div class="sheet sim" role="dialog" aria-label="模拟切换">
+        <h4>模拟切换 <button class="x" type="button" id="sim-close">×</button></h4>
+        <label class="srow"><span>切出<small>按买一卖出</small></span><select id="sim-from"></select></label>
+        <label class="srow"><span>切入<small>按卖一买入</small></span><select id="sim-to"></select></label>
+        <label class="srow"><span>金额<small>元，按 100 份取整</small></span><input class="amt" id="sim-amt" type="number" step="10000" min="0" value="100000"/></label>
+        <div id="sim-out"></div>
+        <div class="sim-acts"><button class="btn" type="button" id="sim-rec">记一笔（纸面跟踪）</button></div>
+        <div class="sim-paper" id="sim-paper"></div>
       </div>
     </div>
     <script>
@@ -681,6 +712,123 @@
           return act;
         }
 
+        /* ---------- 模拟切换 ---------- */
+        // 历史分布来自 2026-08-25～10-28 的 5 分钟回测：持有偏离 ≥ 0、切入当时偏离最低且在 −0.5～−0.15 的标的，
+        // 记录切换后到 当日收盘 / 第 3、5 个交易日收盘 的相对收益（%，未扣佣金）：[p25, 中位, p75, 样本数]。
+        // 分时段：a 09:30–10:30、b 10:30–11:30、c 13:00–14:00、d 14:00–15:00。结论：单次切换当日几乎不回归，收益靠反复轮动累积。
+        var SIM_HIST = {
+          a: { d0: [-0.1, 0.04, 0.21, 333], d3: [-0.19, -0.03, 0.29, 276], d5: [-0.28, -0.06, 0.28, 269] },
+          b: { d0: [-0.25, -0.01, 0.17, 877], d3: [-0.53, -0.01, 0.5, 690], d5: [-0.4, 0.09, 0.54, 665] },
+          c: { d0: [-0.16, -0.01, 0.14, 975], d3: [-0.42, -0.01, 0.41, 757], d5: [-0.4, 0.15, 0.64, 724] },
+          d: { d0: [-0.04, 0.01, 0.13, 1229], d3: [-0.33, 0.1, 0.55, 969], d5: [-0.51, 0.1, 0.61, 896] }
+        };
+        var SIM = { open: false, from: "", to: "", amt: 100000, comm: 0.00005, paper: [], last: null };
+        try {
+          var simSv = JSON.parse(localStorage.getItem(KP + "nqSim") || "{}");
+          if (simSv.amt > 0) SIM.amt = +simSv.amt;
+          if (Array.isArray(simSv.paper)) SIM.paper = simSv.paper;
+        } catch (e) {}
+        function simSave() { try { localStorage.setItem(KP + "nqSim", JSON.stringify({ amt: SIM.amt, paper: SIM.paper.slice(0, 30) })); } catch (e) {} }
+        function simBucket(b) { var hm = b.h * 100 + b.mi; return hm <= 1030 ? "a" : hm <= 1130 ? "b" : hm <= 1400 ? "c" : "d"; }
+        function lastPx(r) { var q = r.q || {}; return r.price || q.cur || q.pre || 0; }
+        function yuan(x) { return x == null || !isFinite(x) ? "—" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(Math.round(x)).toLocaleString("zh-CN") + " 元"; }
+        function pp(x) { return x == null || !isFinite(x) ? "—" : minus(f2(x)) + "%"; }
+        function simDefaults(list) {
+          var hl = list.filter(function (r) { return r.held && !r.halt; });
+          var from = hl[0] || list.filter(function (r) { return !r.halt && r.dev != null; }).sort(function (x, y) { return y.dev - x.dev; })[0] || list[0];
+          var pool = list.filter(function (r) { return r !== from && !r.halt && r.dev != null; }).sort(function (x, y) { return x.dev - y.dev; });
+          var to = pool.filter(function (r) { return inZone(r) && !qBlocks(r); })[0] || pool[0] || list.filter(function (r) { return r !== from; })[0];
+          return { from: from ? from.code : "", to: to ? to.code : "" };
+        }
+        // 纯计算：a 切出、z 切入（rows() 的行），amt 金额，b 北京时间。
+        function simCalc(a, z, amt, b) {
+          var out = { warn: [], ok: false };
+          if (!a || !z || a.code === z.code) { out.err = "请选择两只不同的基金"; return out; }
+          if (a.halt || z.halt) { out.err = (a.halt ? a.name : z.name) + " 停牌中，无法模拟"; return out; }
+          var qa = a.q || {}, qz = z.q || {}, pa = lastPx(a), pz = lastPx(z);
+          if (!(pa > 0) || !(pz > 0)) { out.err = "暂无行情"; return out; }
+          var sp = qa.b1 > 0 ? qa.b1 : pa * 0.9997, bp = qz.a1 > 0 ? qz.a1 : pz * 1.0003;
+          if (!(qa.b1 > 0)) out.warn.push(a.name + " 暂无买一，按现价 −3bp 估算");
+          if (!(qz.a1 > 0)) out.warn.push(z.name + " 暂无卖一，按现价 +3bp 估算");
+          var qtyA = Math.floor(amt / sp / 100) * 100;
+          if (!(qtyA > 0)) { out.err = "金额不足 100 份"; return out; }
+          var gross = qtyA * sp, cash = gross * (1 - SIM.comm), qtyB = Math.floor(cash / (bp * (1 + SIM.comm)) / 100) * 100;
+          var np = nqPct();
+          function devAt(px, r) { var pre = r.pre || (r.q && r.q.pre); return pre > 0 && np != null ? ((px / pre - 1) - np) * 100 : null; }
+          var da = devAt(sp, a), dz = devAt(bp, z), G = da != null && dz != null ? da - dz : null;
+          var cost = 2 * SIM.comm * 100, slip = (pa - sp) / pa * 100 + (bp - pz) / pz * 100;
+          if (qa.b1v > 0 && qtyA / 100 > qa.b1v) out.warn.push(a.name + " 买一只有 " + qa.b1v + " 手，卖 " + qtyA / 100 + " 手要吃到更深档位，预估偏乐观");
+          if (qz.a1v > 0 && qtyB / 100 > qz.a1v) out.warn.push(z.name + " 卖一只有 " + qz.a1v + " 手，买 " + qtyB / 100 + " 手要吃到更深档位，预估偏乐观");
+          var qq = S.quota[z.code];
+          if (qq && qq.k === "relax") out.warn.push(z.name + " 今日份额放开，溢价可能继续下行");
+          if (!inWin(b)) out.warn.push("非交易时段：按最近价格演算，明早集合竞价重算");
+          if (z.code === "161130" || a.code === "161130") out.warn.push("LOF 盘口较薄，且溢价按 T-2 公布净值计算");
+          var trig = a.dev != null && a.dev >= 0 && inZone(z) && !qBlocks(z);
+          out.trig = trig;
+          out.trigTxt = trig ? "符合策略：" + a.name + " 偏离 " + f2(a.dev) + " ≥ 0，" + z.name + " 偏离 " + f2(z.dev) + " 在买入区" :
+            "未触发策略：" + (a.dev == null ? a.name + " 暂无偏离" : a.dev < 0 ? a.name + " 偏离 " + f2(a.dev) + "，尚未回到 0" :
+              z.dev == null ? z.name + " 暂无偏离" : !inZone(z) ? z.name + " 偏离 " + f2(z.dev) + " 不在买入区 " + zoneTxt() : z.name + " 今日份额放开，策略会跳过");
+          var bk = SIM_HIST[inWin(b) ? simBucket(b) : "d"];
+          function est(h) { return { lo: h[0] - cost, mid: h[1] - cost, hi: h[2] - cost, n: h[3] }; }
+          out.ok = true;
+          out.a = a; out.z = z; out.sp = sp; out.bp = bp; out.qtyA = qtyA; out.qtyB = qtyB; out.gross = gross;
+          out.da = da; out.dz = dz; out.G = G; out.cost = cost; out.slip = slip;
+          out.d0 = est(bk.d0); out.d3 = est(bk.d3); out.d5 = est(bk.d5);
+          out.cap = G == null ? null : G - cost;
+          return out;
+        }
+        function simPaperRel(x, list) {
+          var a = list.filter(function (r) { return r.code === x.a; })[0], z = list.filter(function (r) { return r.code === x.z; })[0];
+          var pa = a && lastPx(a), pz = z && lastPx(z);
+          if (!(pa > 0) || !(pz > 0)) return null;
+          return ((pz / x.bp) / (pa / x.sp) - 1) * 100 - 2 * SIM.comm * 100;
+        }
+        function simRender(init) {
+          var list = rows(), b = bj();
+          if (init || !SIM.from || !SIM.to) { var df = simDefaults(list); if (init || !SIM.from) SIM.from = df.from; if (init || !SIM.to) SIM.to = df.to; }
+          function opts(sel) {
+            return list.map(function (r) {
+              return '<option value="' + r.code + '"' + (r.code === sel ? " selected" : "") + ">" + esc(r.name + " " + r.code) +
+                (r.held ? " · 持有" : "") + (r.halt ? " · 停牌" : r.dev != null ? " · " + minus(f2(r.dev)) : "") + "</option>";
+            }).join("");
+          }
+          $("sim-from").innerHTML = opts(SIM.from); $("sim-to").innerHTML = opts(SIM.to);
+          $("sim-from").value = SIM.from; $("sim-to").value = SIM.to;
+          if (document.activeElement !== $("sim-amt")) $("sim-amt").value = SIM.amt;
+          var pick = function (c) { return list.filter(function (r) { return r.code === c; })[0]; };
+          var o = SIM.last = simCalc(pick(SIM.from), pick(SIM.to), SIM.amt, b), h = "";
+          if (!o.ok) h = '<div class="sim-err">' + esc(o.err) + "</div>";
+          else {
+            var amt = o.gross / 100, kv = function (k, v, c) { return '<div class="kv"><span>' + k + '</span><b class="' + (c || "") + '">' + v + "</b></div>"; };
+            var rng = function (e) { return pp(e.mid) + "<small>" + pp(e.lo) + " ～ " + pp(e.hi) + "</small>"; };
+            h = '<div class="sim-trig' + (o.trig ? " ok" : "") + '">' + esc(o.trigTxt) + "</div>" +
+              kv("卖出 " + esc(o.a.name), o.qtyA + " 份 @ " + o.sp.toFixed(3) + "（偏离 " + (o.da == null ? "—" : minus(f2(o.da))) + "）") +
+              kv("买入 " + esc(o.z.name), o.qtyB + " 份 @ " + o.bp.toFixed(3) + "（偏离 " + (o.dz == null ? "—" : minus(f2(o.dz))) + "）") +
+              kv("成交价偏离差", o.G == null ? "—" : minus(f2(o.G)) + " 个百分点", o.G == null ? "" : cls(o.G)) +
+              kv("佣金（万0.5 × 2）", pp(-o.cost) + " · " + yuan(-o.cost * amt), "dn") +
+              kv("盘口滑点（已含在成交价）", pp(-o.slip) + " · " + yuan(-o.slip * amt)) +
+              '<div class="sim-est">' +
+              kv("今日到收盘（历史）", rng(o.d0) + " · " + yuan(o.d0.mid * amt), cls(o.d0.mid)) +
+              kv("持有 3 个交易日", rng(o.d3) + " · " + yuan(o.d3.mid * amt), cls(o.d3.mid)) +
+              kv("持有 5 个交易日", rng(o.d5) + " · " + yuan(o.d5.mid * amt), cls(o.d5.mid)) +
+              kv("理论上限（两边都回 0）", o.cap == null ? "—" : pp(o.cap) + " · " + yuan(o.cap * amt), o.cap == null ? "" : cls(o.cap)) +
+              "</div>" +
+              (o.warn.length ? '<div class="sim-warn">' + o.warn.map(esc).join("<br/>") + "</div>" : "") +
+              '<div class="sim-note">预估 = 同时段历史切换的中位数（括号为四分位区间）− 佣金。来源：2026-08-25～10-28 的 5 分钟回测，' +
+              "同时段样本 " + o.d0.n + " 次。单次切换当天几乎不回归，收益主要靠反复轮动累积，别把单笔预估当承诺。</div>";
+          }
+          $("sim-out").innerHTML = h;
+          $("sim-rec").disabled = !o.ok;
+          var pl = SIM.paper.map(function (x, i) {
+            var rel = simPaperRel(x, list);
+            return '<div class="pi"><span>' + esc(x.t) + " " + esc(x.aName) + " → " + esc(x.zName) + "<small>" + x.qtyA + " 份 @ " + (+x.sp).toFixed(3) + " → " + x.qtyB + " 份 @ " + (+x.bp).toFixed(3) + "</small></span>" +
+              '<b class="' + (rel == null ? "" : cls(rel)) + '">' + pp(rel) + "<small>" + (rel == null ? "" : yuan(rel * x.gross / 100)) + "</small></b>" +
+              '<button type="button" data-del="' + i + '" aria-label="删除">×</button></div>';
+          }).join("");
+          $("sim-paper").innerHTML = SIM.paper.length ? '<div class="lbl">纸面跟踪 · 相对一直持有切出基金（已扣佣金）</div>' + pl : "";
+        }
+        function simShow(on) { SIM.open = on; $("sim-mask").classList.toggle("hide", !on); if (on) simRender(true); }
+
         function stepTxt(b) {
           var t2 = secs(b);
           return !weekday(b) ? "今天非交易日" :
@@ -927,6 +1075,28 @@
         $("halt-thr").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { S.haltThr = v; saveCfg(); renderETF(); } });
         // 嵌在 ai-dca 里时，父页面按用户账户持仓（交易流水净份额>0）推送持有代码与本轮买入，自动判断持仓
         S.acct = false;
+        $("sim-open").addEventListener("click", function () { simShow(true); });
+        $("sim-close").addEventListener("click", function () { simShow(false); });
+        $("sim-mask").addEventListener("click", function (ev) { if (ev.target === this) simShow(false); });
+        document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && SIM.open) simShow(false); });
+        $("sim-from").addEventListener("change", function () { SIM.from = this.value; simRender(); });
+        $("sim-to").addEventListener("change", function () { SIM.to = this.value; simRender(); });
+        $("sim-amt").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { SIM.amt = v; simSave(); simRender(); } });
+        $("sim-rec").addEventListener("click", function () {
+          var o = SIM.last; if (!o || !o.ok) return;
+          var b = bj();
+          SIM.paper.unshift({ t: stamp(b).slice(5), a: o.a.code, aName: o.a.name, z: o.z.code, zName: o.z.name, sp: o.sp, bp: o.bp, qtyA: o.qtyA, qtyB: o.qtyB, gross: o.gross });
+          if (SIM.paper.length > 30) SIM.paper.length = 30;
+          simSave(); simRender();
+        });
+        $("sim-paper").addEventListener("click", function (ev) {
+          var t = ev.target, i = t && t.getAttribute && t.getAttribute("data-del");
+          if (i == null) return;
+          SIM.paper.splice(+i, 1); simSave(); simRender();
+        });
+        var renderETF0 = renderETF;
+        renderETF = function () { renderETF0.apply(this, arguments); if (SIM.open) simRender(); };
+
         function applyHeld(m, label) {
           var pool = {}; ETFS.forEach(function (e) { pool[e[0].slice(2)] = true; });
           S.acct = true; S.held = {}; S.rounds = {};
