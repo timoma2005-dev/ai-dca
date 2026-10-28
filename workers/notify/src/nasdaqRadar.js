@@ -65,8 +65,10 @@ export const NASDAQ_ETFS = Object.freeze([
 const KV_LATEST = 'nasdaq-radar:latest';
 const KV_HISTORY = 'nasdaq-radar:history';
 const KV_FEATURE_HISTORY = 'nasdaq-radar:feature-history:v1';
-const HISTORY_DAYS = 20;
-const FEATURE_HISTORY_DAYS = 90;
+// 2026-10-29 回填 360 个交易日（收盘价 × 前一披露净值，口径与每日计算一致），上限放到 400 天。
+const HISTORY_DAYS = 400; // 每日最优价差历史（存储）
+const SPREAD_PERCENTILE_DAYS = 60; // 价差分位只看最近 60 个交易日
+const FEATURE_HISTORY_DAYS = 400;
 
 function finiteNumber(value) {
   if (value == null || value === '') return null;
@@ -213,7 +215,8 @@ async function upsertFeatureHistory(env, today, featureSnapshot, currentHistory 
 
 const LIMIT_LOOKBACK_DAYS = 22;
 const KV_SCORE_HISTORY = 'nasdaq-radar:score-history:v1';
-const SERIES_DAYS = 60;
+const SERIES_DAYS = 360; // 复盘用日线序列
+const KV_LIMIT_HISTORY = 'nasdaq-radar:limit-history:v1'; // 申购上限汇总 { etfs: { code: [[date, limit(-1=不设限)]] } }
 const LIMIT_READ_DAYS = 30; // KV 单次调用有读次数上限：12 只 × 30 天 = 360 次
 
 /**
@@ -242,6 +245,34 @@ export async function readLimitHistory(env, codes, dates) {
     if (limit !== null) out[code].push({ date, limit });
   }
   for (const code of codes) out[code].sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
+/**
+ * 申购上限全历史：汇总键（回填一年 + 每日并入）+ 最近 LIMIT_READ_DAYS 天逐键读取（逐键优先），
+ * 合并后写回汇总键。KV 单次调用读次数有限，所以长历史只能走汇总键。
+ */
+export async function readLimitHistoryAll(env, codes, dates) {
+  let stored = null;
+  try { stored = await env.NOTIFY_STATE.get(KV_LIMIT_HISTORY, 'json'); } catch { stored = null; }
+  const merged = Object.fromEntries(codes.map((code) => [code, new Map(
+    (stored?.etfs?.[code] || []).map(([date, limit]) => [date, limit === -1 ? Infinity : limit])
+  )]));
+  const recent = await readLimitHistory(env, codes, dates.slice(-LIMIT_READ_DAYS));
+  for (const code of codes) for (const item of recent[code]) merged[code].set(item.date, item.limit);
+  const out = {};
+  const etfs = {};
+  for (const code of codes) {
+    const rows = [...merged[code].entries()].filter(([, limit]) => limit !== null && limit !== undefined)
+      .sort((a, b) => a[0].localeCompare(b[0])).slice(-FEATURE_HISTORY_DAYS);
+    out[code] = rows.map(([date, limit]) => ({ date, limit }));
+    etfs[code] = rows.map(([date, limit]) => [date, limit === Infinity ? -1 : limit]);
+  }
+  try {
+    await env.NOTIFY_STATE.put(KV_LIMIT_HISTORY, JSON.stringify({ updatedAt: new Date().toISOString(), etfs }));
+  } catch (err) {
+    console.log('[nasdaq-radar] limit history write failed:', err?.message || String(err));
+  }
   return out;
 }
 
@@ -419,7 +450,8 @@ export async function computeNasdaqRadar(env, { force = false } = {}) {
   const spread = +(highest.premium - lowest.premium).toFixed(4);
 
   // 计算分位数
-  const spreads = history.map(h => h.spread).filter(v => typeof v === 'number').sort((a, b) => a - b);
+  const spreads = history.filter((h) => h?.date && h.date < today).slice(-SPREAD_PERCENTILE_DAYS)
+    .map(h => h.spread).filter(v => typeof v === 'number').sort((a, b) => a - b);
   const pct = percentile(spreads, spread);
 
   // 更新历史（同日覆盖，保留近 HISTORY_DAYS 天）
@@ -469,8 +501,8 @@ export async function computeNasdaqRadar(env, { force = false } = {}) {
 
   // 评分 v2（影子运行，只展示不通知）：失败不影响主快照。
   try {
-    const limitDates = [...new Set([...featureHistory.map((day) => day.date), today])].sort().slice(-LIMIT_READ_DAYS);
-    const limitHistory = await readLimitHistory(env, codes, limitDates);
+    const limitDates = [...new Set([...featureHistory.map((day) => day.date), today])].sort();
+    const limitHistory = await readLimitHistoryAll(env, codes, limitDates);
     const recentLimits = Object.fromEntries(codes.map((code) => [code, limitHistory[code].filter((item) => limitDates.slice(-LIMIT_LOOKBACK_DAYS).includes(item.date))]));
     result.scoring = scoreRadar({
       etfs: featureSnapshot.etfs,
@@ -525,7 +557,7 @@ export async function refreshRadarQuota(env, { today = shanghaiDateStr() } = {})
     const stored = await env.NOTIFY_STATE.get(KV_HISTORY, 'json');
     if (Array.isArray(stored)) history = stored;
   } catch { history = []; }
-  const spreads = history.filter((h) => h?.date && h.date < latest.date).map((h) => h.spread).filter((v) => typeof v === 'number').sort((a, b) => a - b);
+  const spreads = history.filter((h) => h?.date && h.date < latest.date).slice(-SPREAD_PERCENTILE_DAYS).map((h) => h.spread).filter((v) => typeof v === 'number').sort((a, b) => a - b);
   const scoring = scoreRadar({ etfs: snap.etfs, featureHistory, limitHistory: recentLimits, spreadHistory: spreads, date: latest.date });
   scoring.quotaDate = today;
   scoring.quotaRefreshedAt = new Date().toISOString();
