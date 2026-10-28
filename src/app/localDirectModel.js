@@ -143,7 +143,7 @@ function tencentTimeToIso(value) {
  * @param {Record<string, any>} navs   东财/蛋卷净值映射
  * @param {{isOtcList?: boolean, heldCodes?: Set<string>|Record<string, any>, names?: Record<string,string>}} options
  */
-export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {}, isOtcList = false, heldCodes = null, names = {}, profiles = {} } = {}) {
+export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {}, isOtcList = false, heldCodes = null, names = {}, profiles = {}, yearBases = {} } = {}) {
   const isHeld = (code) => {
     if (!heldCodes) return false;
     if (heldCodes instanceof Set || heldCodes instanceof Map) return heldCodes.has(code);
@@ -176,7 +176,11 @@ export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {
         const value = finiteNumber(profile[field]);
         if (value != null) profileFields[field] = value;
       }
-      if (profileFields.ytdReturn != null) profileFields.currentYearPercent = profileFields.ytdReturn;
+      // 东财 JN 是净值口径；价格口径另算（场内）或与净值相同（场外）。
+      if (profileFields.ytdReturn != null) {
+        profileFields.navYtdReturn = profileFields.ytdReturn;
+        delete profileFields.ytdReturn;
+      }
       const fee = finiteNumber(profile.annualFeeRate);
       if (fee != null) profileFields.feeRate = fee;
       const shares = otc ? null : finiteNumber(profile.totalShares);
@@ -184,6 +188,15 @@ export function buildLocalDirectMarketRows(symbols = [], { quotes = {}, navs = {
       const scale = finiteNumber(profile.fundScale);
       if (scale != null) profileFields.fundScale = scale;
     }
+    // 价格口径今年以来：现价 / 上年末收盘（前复权）。场外只有净值，两者一致。
+    const yearBase = finiteNumber(yearBases?.[code]?.close);
+    if (!otc && quotePrice != null && quotePrice > 0 && yearBase != null && yearBase > 0) {
+      profileFields.ytdReturn = round2((quotePrice / yearBase - 1) * 100);
+    } else if (otc && profileFields.navYtdReturn != null) {
+      profileFields.ytdReturn = profileFields.navYtdReturn;
+    }
+    if (profileFields.ytdReturn != null) profileFields.currentYearPercent = profileFields.ytdReturn;
+    if (otc) delete profileFields.navYtdReturn;
     return {
       symbol: code,
       code,

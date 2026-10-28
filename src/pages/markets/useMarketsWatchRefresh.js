@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { trackActionResult } from '../../app/analytics.js';
+import { trackActionResult as trackRefreshResult } from '../../app/analytics.js';
 import { loadWatchQuotesWithEnhancements } from './marketsWatchData.js';
 
 function uniqueSymbols(symbols = []) {
@@ -74,7 +74,9 @@ export function useMarketsWatchRefresh({
   const inflightKeyRef = useRef('');
 
   // force：手动刷新 / 数据延迟自动重连时跳过 inflight 去重，作废旧请求并重新拉取。
-  return useCallback(async ({ force = false } = {}) => {
+  // auto：定时自动刷新，不转圈、不打埋点（避免每 30s 一条 watch_refresh）。
+  return useCallback(async ({ force = false, auto = false } = {}) => {
+    const trackActionResult = auto ? () => {} : trackRefreshResult;
     const trackedList = uniqueSymbols(trackedWatchSymbols);
     const { primarySymbols: list, remainingSymbols } = buildLazyWatchRefreshBatches({
       requestedWatchSymbols,
@@ -117,7 +119,7 @@ export function useMarketsWatchRefresh({
     refreshSeqRef.current = seq;
     inflightKeyRef.current = refreshKey;
     const isCurrent = () => refreshSeqRef.current === seq;
-    setWatchLoading(true);
+    if (!auto) setWatchLoading(true);
     const startedAt = Date.now();
 
     try {

@@ -339,6 +339,8 @@ export function MarketListTable({
   omitColumnIds = null,
 }) {
   const omitColumnKey = Array.isArray(omitColumnIds) ? omitColumnIds.join(',') : '';
+  // 本地直连同时有价格口径和净值口径（东财 JN）的今年以来，两列并排并标注口径；云端只有价格口径。
+  const hasNavYtd = useMemo(() => (rows || []).some((row) => Number.isFinite(Number(row?.navYtdReturn)) && row?.navYtdReturn != null), [rows]);
   const todayDate = getTodayShanghaiDate();
   const tableScrollRef = useRef(null);
   const baseLeft = useMemo(() => (stickyFirstColumn ? ['symbol', 'name'] : []), [stickyFirstColumn]);
@@ -619,9 +621,9 @@ export function MarketListTable({
     {
       id: 'currentYearPercent',
       accessorFn: (row) => Number(row.ytdReturn ?? row.currentYearPercent),
-      meta: { label: '今年以来', variant: 'number', align: 'center' },
-      size: 108,
-      header: ({ column }) => <DataTableColumnHeader column={column} label="今年以来" />,
+      meta: { label: hasNavYtd ? '今年以来(价格)' : '今年以来', variant: 'number', align: 'center' },
+      size: hasNavYtd ? 128 : 108,
+      header: ({ column }) => <DataTableColumnHeader column={column} label={hasNavYtd ? '今年以来(价格)' : '今年以来'} />,
       cell: ({ row }) => {
         const val = Number(row.original.ytdReturn ?? row.original.currentYearPercent);
         if (!Number.isFinite(val)) return <span className="text-slate-400">—</span>;
@@ -632,6 +634,20 @@ export function MarketListTable({
       sortingFn: numericSortFn,
       filterFn: numberRangeFilterFn,
     },
+    hasNavYtd ? {
+      id: 'navYtdPercent',
+      accessorFn: (row) => Number(row.navYtdReturn),
+      meta: { label: '今年以来(净值)', variant: 'number', align: 'center' },
+      size: 128,
+      header: ({ column }) => <DataTableColumnHeader column={column} label="今年以来(净值)" />,
+      cell: ({ row }) => {
+        const val = Number(row.original.navYtdReturn);
+        if (!Number.isFinite(val)) return <span className="text-slate-400">—</span>;
+        return <span className={cx('font-medium tabular-nums', val > 0 ? 'text-rose-500' : val < 0 ? 'text-emerald-600' : 'text-slate-400')}>{formatSignedPercent(val)}</span>;
+      },
+      sortingFn: numericSortFn,
+      filterFn: numberRangeFilterFn,
+    } : null,
     {
       id: 'return1w',
       accessorFn: (row) => Number(row.return1w),
@@ -799,7 +815,7 @@ export function MarketListTable({
       sortingFn: numericSortFn,
       filterFn: numberRangeFilterFn,
     } : null,
-  ].filter(Boolean).filter((column) => !omitColumnKey || !omitColumnKey.split(',').includes(column.id))), [showLimitColumn, hidePremiumColumn, hideTrendColumn, klineMap, todayDate, limitFilterOptions, compact, numericSortFn, omitColumnKey]);
+  ].filter(Boolean).filter((column) => !omitColumnKey || !omitColumnKey.split(',').includes(column.id))), [showLimitColumn, hidePremiumColumn, hideTrendColumn, klineMap, todayDate, limitFilterOptions, compact, numericSortFn, omitColumnKey, hasNavYtd]);
   const table = useReactTable({
     data: rows,
     columns,
@@ -1102,7 +1118,8 @@ export function MarketListTable({
             <th className={cx(cellPad, 'text-center')}>成交额</th>
             {showLimitColumn ? <th className={cx(cellPad, 'text-center')}>限额</th> : null}
             {!hidePremiumColumn ? <th className={cx(cellPad, 'text-center')}>溢价</th> : null}
-            <th className={cx(cellPad, 'text-center')}>今年以来</th>
+            <th className={cx(cellPad, 'text-center')}>{hasNavYtd ? '今年以来(价格)' : '今年以来'}</th>
+            {hasNavYtd ? <th className={cx(cellPad, 'text-center')}>今年以来(净值)</th> : null}
             {RETURN_COLUMNS.map((c) => isColVisible(c.id) ? <th key={c.id} className={cx(cellPad, 'text-center')}>{c.label}</th> : null)}
             <th className={cx(cellPad, 'text-center')}>总份额</th>
             <th className={cx(cellPad, 'text-center')}>费率</th>
@@ -1209,6 +1226,11 @@ export function MarketListTable({
                   <td className={cx(cellPad, 'whitespace-nowrap text-center font-semibold tabular-nums', changeToneClass(premiumPct))}>{formatPremiumPercent(row)}</td>
                 ) : null}
                 <td className={cx(cellPad, 'whitespace-nowrap text-center font-semibold tabular-nums', changeToneClass(Number(row.ytdReturn ?? row.currentYearPercent)))}>{formatYearPercent(row)}</td>
+                {hasNavYtd ? (
+                  <td className={cx(cellPad, 'whitespace-nowrap text-center font-semibold tabular-nums', Number.isFinite(Number(row.navYtdReturn)) && row.navYtdReturn != null ? changeToneClass(Number(row.navYtdReturn)) : 'text-[var(--market-text-subtle)]')}>
+                    {Number.isFinite(Number(row.navYtdReturn)) && row.navYtdReturn != null ? formatSignedPercent(Number(row.navYtdReturn)) : '—'}
+                  </td>
+                ) : null}
                 {RETURN_COLUMNS.map((c) => {
                   if (!isColVisible(c.id)) return null;
                   const v = Number(row[c.id]);

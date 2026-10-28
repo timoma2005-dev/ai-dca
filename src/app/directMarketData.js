@@ -25,7 +25,7 @@ const LOCAL_QUOTE_SOURCES = new Set(['tencent-direct', 'market-realtime']);
 
 // ── A股交易时间判断 ──────────────────────────────────────────
 // 北京时间 = UTC+8；盘中 09:30-15:00 周一至周五
-function isCnMarketOpen() {
+export function isCnMarketOpen() {
   const now = new Date();
   const beijing = new Date(now.getTime() + 8 * 3600 * 1000);
   const day = beijing.getUTCDay();
@@ -339,18 +339,20 @@ export function parseTencentQuoteText(text = '') {
   return quotes;
 }
 
-export async function fetchDirectQuotes(symbols = [], { signal } = {}) {
+// fresh：盘中跳过 45s 缓存直接请求（行情中心 1s 自动刷新用）；收盘后仍走缓存。
+export async function fetchDirectQuotes(symbols = [], { signal, fresh = false } = {}) {
   if (!signal) {
     const key = directQuoteInflightKey(symbols);
     if (!key) return null;
-    if (quoteInflight.has(key)) return quoteInflight.get(key);
-    const promise = fetchDirectQuotesUncached(symbols, { signal }).finally(() => {
-      quoteInflight.delete(key);
+    const inflightKey = fresh ? `fresh|${key}` : key;
+    if (quoteInflight.has(inflightKey)) return quoteInflight.get(inflightKey);
+    const promise = fetchDirectQuotesUncached(symbols, { signal, fresh }).finally(() => {
+      quoteInflight.delete(inflightKey);
     });
-    quoteInflight.set(key, promise);
+    quoteInflight.set(inflightKey, promise);
     return promise;
   }
-  return fetchDirectQuotesUncached(symbols, { signal });
+  return fetchDirectQuotesUncached(symbols, { signal, fresh });
 }
 
 function directQuoteInflightKey(symbols = []) {
@@ -361,7 +363,7 @@ function directQuoteInflightKey(symbols = []) {
   return Array.from(new Set(list)).join(',');
 }
 
-async function fetchDirectQuotesUncached(symbols = [], { signal } = {}) {
+async function fetchDirectQuotesUncached(symbols = [], { signal, fresh = false } = {}) {
   const normalized = (Array.isArray(symbols) ? symbols : [symbols])
     .map((symbol) => ({ raw: String(symbol || '').trim(), meta: normalizeDirectSymbol(symbol) }))
     .filter((item) => item.raw && item.meta?.tencent);
@@ -371,7 +373,7 @@ async function fetchDirectQuotesUncached(symbols = [], { signal } = {}) {
   const out = {};
   const missing = [];
   for (const item of normalized.slice(0, MAX_DIRECT_QUOTE_BATCH)) {
-    const cached = readCachedDirectQuote(item.meta.tencent, now);
+    const cached = fresh && marketOpen ? null : readCachedDirectQuote(item.meta.tencent, now);
     if (cached) {
       out[item.raw] = cached;
     } else {
@@ -1191,4 +1193,118 @@ export async function fetchDirectFundProfiles(items = [], { signal } = {}) {
   };
   await Promise.all(Array.from({ length: Math.min(FUND_PROFILE_CONCURRENCY, missing.length) }, worker));
   return { profiles, generatedAt: new Date().toISOString(), source: 'eastmoney-fund-profile-direct' };
+}
+
+// ---------------------------------------------------------------------------
+// 价格口径「今年以来」基准：上一年最后一个交易日的收盘价（腾讯 fqkline 前复权，
+// 只取 12 月中旬到 1 月上旬的一小段）。基准一年只变一次，按代码+年份缓存 1 天。
+// ---------------------------------------------------------------------------
+const YEAR_BASE_STORAGE_KEY = 'aiDcaDirectYearBase:v1';
+const YEAR_BASE_TTL_MS = 24 * 60 * 60 * 1000;
+const YEAR_BASE_CONCURRENCY = 6;
+const yearBaseMemoryCache = new Map();
+const yearBaseInflight = new Map();
+
+function shanghaiYear(nowMs = Date.now()) {
+  return new Date(nowMs + 8 * 3600 * 1000).getUTCFullYear();
+}
+
+/** 从日 K 里挑基准：year 之前最后一根收盘；当年才上市的退到当年第一根收盘。 */
+export function pickYearBaseClose(candles = [], year) {
+  const start = `${year}-01-01`;
+  let before = null;
+  let firstIn = null;
+  for (const candle of Array.isArray(candles) ? candles : []) {
+    const date = String(candle?.date || '').slice(0, 10);
+    const close = Number(candle?.c);
+    if (!date || !Number.isFinite(close) || close <= 0) continue;
+    if (date < start) before = { date, close };
+    else if (!firstIn) firstIn = { date, close };
+  }
+  return before || firstIn;
+}
+
+function readLocalYearBases() {
+  if (typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(YEAR_BASE_STORAGE_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalYearBase(key, entry) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const bucket = readLocalYearBases();
+    bucket[key] = entry;
+    const entries = Object.entries(bucket)
+      .sort((a, b) => Number(b[1]?.savedAt || 0) - Number(a[1]?.savedAt || 0))
+      .slice(0, MAX_LOCAL_FUND_PROFILES);
+    window.localStorage.setItem(YEAR_BASE_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+async function fetchOneYearBase(meta, year, signal) {
+  const params = new URLSearchParams({ param: `${meta.tencent},day,${year - 1}-12-10,${year}-01-15,40,qfq` });
+  const res = await fetch(`${TENCENT_KLINE_URL}?${params.toString()}`, { signal, cache: 'no-store' });
+  if (!res.ok) throw new Error('tencent kline HTTP ' + res.status);
+  const parsed = parseTencentKlinePayload(await res.json(), { symbol: meta.code, timeframe: '1d' });
+  let base = pickYearBaseClose(parsed.candles, year);
+  if (!base) {
+    // 1 月中旬之后才上市：用近 320 根日 K 里的当年第一根收盘。
+    const full = await fetchDirectKline(meta.code, { timeframe: '1d' });
+    base = pickYearBaseClose(full?.candles, year);
+  }
+  return base ? { ...base, year } : null;
+}
+
+/**
+ * 场内基金价格口径「今年以来」的基准收盘价。返回 { bases: { [code]: { close, date, year } } }。
+ */
+export async function fetchDirectYearBaseCloses(codes = [], { signal } = {}) {
+  const now = Date.now();
+  const year = shanghaiYear(now);
+  const bases = {};
+  const missing = [];
+  const seen = new Set();
+  const local = readLocalYearBases();
+  for (const raw of Array.isArray(codes) ? codes : []) {
+    const meta = normalizeDirectSymbol(raw);
+    if (!meta?.tencent || meta.market !== 'cn' || seen.has(meta.code)) continue;
+    seen.add(meta.code);
+    const key = `${meta.code}|${year}`;
+    const mem = yearBaseMemoryCache.get(key) || local[key];
+    if (mem && now - Number(mem.savedAt || 0) < YEAR_BASE_TTL_MS) {
+      if (mem.base) bases[meta.code] = mem.base;
+      continue;
+    }
+    missing.push({ meta, key });
+  }
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < missing.length) {
+      const item = missing[cursor++];
+      if (signal?.aborted) return;
+      let promise = yearBaseInflight.get(item.key);
+      if (!promise) {
+        promise = fetchOneYearBase(item.meta, year, signal).finally(() => yearBaseInflight.delete(item.key));
+        yearBaseInflight.set(item.key, promise);
+      }
+      try {
+        const base = await promise;
+        const entry = { base, savedAt: Date.now() };
+        yearBaseMemoryCache.set(item.key, entry);
+        writeLocalYearBase(item.key, entry);
+        if (base) bases[item.meta.code] = base;
+      } catch {
+        // 单只失败忽略，下次刷新再试
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(YEAR_BASE_CONCURRENCY, missing.length) }, worker));
+  return { bases, year, source: 'tencent-kline-year-base' };
 }

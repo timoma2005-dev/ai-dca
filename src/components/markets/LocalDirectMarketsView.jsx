@@ -5,6 +5,8 @@ import {
   fetchDirectQuotes,
   fetchEastmoneyFundNavs,
   fetchDirectFundProfiles,
+  fetchDirectYearBaseCloses,
+  isCnMarketOpen,
   searchDirectSymbols,
 } from '../../app/directMarketData.js';
 import {
@@ -22,7 +24,9 @@ import { cx } from '../experience-ui.jsx';
 
 const MarketsFullTablePanel = lazy(() => import('../../pages/markets/MarketsFullTablePanel.jsx').then((module) => ({ default: module.MarketsFullTablePanel })));
 
-const REFRESH_INTERVAL_MS = 30_000;
+// 净值/名称等慢数据 60s 一轮；盘中行情 1s 静默刷新（只换报价，不转圈、不打断请求）。
+const REFRESH_INTERVAL_MS = 60_000;
+export const DIRECT_QUOTE_TICK_MS = 1_000;
 const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY_OBJECT = Object.freeze({});
 const EMPTY_LIST = Object.freeze([]);
@@ -36,6 +40,7 @@ const OPTIONAL_COLUMN_FIELDS = {
   limit: 'metric',
   premium: 'metric',
   currentYearPercent: 'metric',
+  navYtdPercent: ['navYtdReturn'],
   return1w: 'metric',
   return1m: 'metric',
   return3m: 'metric',
@@ -120,8 +125,11 @@ export function LocalDirectMarketsView({
   const [searchError, setSearchError] = useState('');
   const [names, setNames] = useState({});
   const [profiles, setProfiles] = useState({});
+  const [yearBases, setYearBases] = useState({});
   const abortRef = useRef(null);
   const seqRef = useRef(0);
+  const tickBusyRef = useRef(false);
+  const quotesSigRef = useRef('');
 
   const allSymbols = useMemo(() => {
     const seen = new Set();
@@ -153,6 +161,7 @@ export function LocalDirectMarketsView({
       if (quoteResult.status === 'rejected' && fmResult.status === 'rejected') throw quoteResult.reason;
       const nextNavs = {};
       if (fmResult.status === 'fulfilled') Object.assign(nextNavs, fmResult.value?.quotes || {});
+      if (quoteResult.status === 'fulfilled') quotesSigRef.current = '';
       setQuotes(quoteResult.status === 'fulfilled' ? (quoteResult.value?.quotes || {}) : {});
       setNavs(nextNavs);
       setUpdatedAt(new Date().toISOString());
@@ -164,6 +173,37 @@ export function LocalDirectMarketsView({
       if (seq === seqRef.current) setLoading(false);
     }
   }, [allSymbols, isOtcList]);
+
+  // 盘中 1s 静默刷新报价：上一轮没回来就跳过；报价没变不触发重渲染；页面隐藏或收盘时不请求。
+  const tickQuotes = useCallback(async () => {
+    if (isOtcList || !allSymbols.length || tickBusyRef.current) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    if (!isCnMarketOpen()) return;
+    tickBusyRef.current = true;
+    const seq = seqRef.current;
+    try {
+      const result = await fetchDirectQuotes(allSymbols, { fresh: true });
+      if (seq !== seqRef.current) return;
+      const next = result?.quotes || {};
+      const sig = Object.entries(next).map(([key, q]) => `${key}:${q?.price}:${q?.time}:${q?.turnover}`).sort().join('|');
+      if (sig && sig !== quotesSigRef.current) {
+        quotesSigRef.current = sig;
+        setQuotes(next);
+        setUpdatedAt(new Date().toISOString());
+        setError('');
+      }
+    } catch {
+      // 单次失败忽略，下一秒再试；持续失败由 60s 全量刷新报错。
+    } finally {
+      tickBusyRef.current = false;
+    }
+  }, [allSymbols, isOtcList]);
+
+  useEffect(() => {
+    if (isOtcList) return undefined;
+    const timer = window.setInterval(() => { tickQuotes(); }, DIRECT_QUOTE_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [tickQuotes, isOtcList]);
 
   useEffect(() => {
     load();
@@ -222,11 +262,26 @@ export function LocalDirectMarketsView({
       .catch(() => {});
     return () => controller.abort();
   }, [profileRequestKey]);
+  // 价格口径今年以来：场内基金的上年末收盘（腾讯日 K 一小段，按年缓存）。
+  const yearBaseKey = useMemo(
+    () => baseRows.filter((row) => row.price != null && row.fundKind !== 'otc').map((row) => row.code).join(','),
+    [baseRows]
+  );
+  useEffect(() => {
+    if (!yearBaseKey) return undefined;
+    const controller = new AbortController();
+    fetchDirectYearBaseCloses(yearBaseKey.split(','), { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setYearBases((prev) => ({ ...prev, ...(result?.bases || {}) }));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [yearBaseKey]);
   const rows = useMemo(
-    () => (Object.keys(profiles).length
-      ? buildLocalDirectMarketRows(allSymbols, { quotes, navs, isOtcList, heldCodes, names, profiles })
+    () => (Object.keys(profiles).length || Object.keys(yearBases).length
+      ? buildLocalDirectMarketRows(allSymbols, { quotes, navs, isOtcList, heldCodes, names, profiles, yearBases })
       : baseRows),
-    [allSymbols, quotes, navs, isOtcList, heldCodes, names, profiles, baseRows]
+    [allSymbols, quotes, navs, isOtcList, heldCodes, names, profiles, yearBases, baseRows]
   );
   const listRows = useMemo(() => {
     const listed = new Set(symbols.map((item) => String(item || '').trim().toUpperCase()));

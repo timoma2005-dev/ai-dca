@@ -19,7 +19,7 @@ import {
   writeMobileMetricsConfig,
 } from './mobileFundMetrics.js';
 
-const LOCAL_METRIC_ORDER = ['premium', 'turnover', 'highDrawdown', 'closeHighDrawdown', 'currentYearPercent', 'return1m', 'return3m', 'return1y', 'historicalPercentile', 'limit'];
+const LOCAL_METRIC_ORDER = ['premium', 'turnover', 'highDrawdown', 'closeHighDrawdown', 'currentYearPercent', 'navYtdPercent', 'return1m', 'return3m', 'return1y', 'historicalPercentile', 'limit'];
 
 function metricHasValue(id, row) {
   const text = resolveMetricDisplay(id, row).text;
@@ -28,7 +28,7 @@ function metricHasValue(id, row) {
 
 // 列表里至少一行有值的指标（顶部已展示最新价/涨跌幅，不重复）。
 function availableLocalMetricIds(rows, isOtcList) {
-  const allowed = new Set(catalogForMode(isOtcList).map((item) => item.id));
+  const allowed = new Set(catalogForMode(isOtcList, { includeLocalOnly: true }).map((item) => item.id));
   return LOCAL_METRIC_ORDER.filter((id) => allowed.has(id) && (rows || []).some((row) => metricHasValue(id, row)));
 }
 
@@ -37,7 +37,7 @@ function localRowMetricIds(row, ids) {
 }
 
 function sortOptionsForMode(isOtcList) {
-  return MOBILE_SORT_OPTIONS.filter((item) => !((item.id === 'limit' && !isOtcList) || (item.id === 'premium' && isOtcList)));
+  return MOBILE_SORT_OPTIONS.filter((item) => !((item.id === 'limit' && !isOtcList) || (item.id === 'premium' && isOtcList) || (item.id === 'navYtdPercent' && isOtcList)));
 }
 
 export function MobileFundList({
@@ -93,7 +93,7 @@ export function MobileFundList({
   const localMetricIds = useMemo(() => (localDirect ? availableLocalMetricIds(rows, isOtcList) : null), [isOtcList, localDirect, rows]);
   const sortOptions = useMemo(() => {
     const base = sortOptionsForMode(isOtcList);
-    if (!localDirect) return base;
+    if (!localDirect) return base.filter((item) => !item.localOnly);
     const available = new Set(['heldRank', 'name', 'symbol', 'price', 'changePercent', ...(localMetricIds || [])]);
     return base.filter((item) => available.has(item.id));
   }, [isOtcList, localDirect, localMetricIds]);

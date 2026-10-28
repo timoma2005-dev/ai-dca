@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseEastmoneyPeriodIncrease, parseEastmoneyFundDetail } from '../src/app/directMarketData.js';
+import { parseEastmoneyPeriodIncrease, parseEastmoneyFundDetail, pickYearBaseClose } from '../src/app/directMarketData.js';
 import { buildLocalDirectMarketRows } from '../src/app/localDirectModel.js';
 
 test('FundMNPeriodIncrease maps period titles to row return fields', () => {
@@ -49,4 +49,31 @@ test('local direct rows merge fund profiles (otc ignores shares)', () => {
   assert.equal(otc.totalShares, undefined);
   assert.equal(etf.totalShares, 10678638592);
   assert.equal(etf.feeRate, 0.6);
+});
+
+test('exchange rows split price ytd (year base) and nav ytd (eastmoney JN)', () => {
+  const rows = buildLocalDirectMarketRows(['513100', '159509'], {
+    quotes: { 513100: { price: 2.291, changePercent: 1.87 }, 159509: { price: 3.104 } },
+    profiles: { 513100: { ytdReturn: 10.41 }, 159509: { ytdReturn: 18.2 } },
+    yearBases: { 513100: { close: 1.904, date: '2025-12-31', year: 2026 } },
+  });
+  const a = rows.find((row) => row.code === '513100');
+  const b = rows.find((row) => row.code === '159509');
+  assert.equal(a.ytdReturn, 20.33);
+  assert.equal(a.currentYearPercent, 20.33);
+  assert.equal(a.navYtdReturn, 10.41);
+  // 没有基准时价格口径留空，不拿净值冒充。
+  assert.equal(b.ytdReturn, undefined);
+  assert.equal(b.navYtdReturn, 18.2);
+});
+
+test('pickYearBaseClose uses last close before Jan 1, falls back to first close of year', () => {
+  const candles = [
+    { date: '2025-12-30', c: 1.914 },
+    { date: '2025-12-31', c: 1.904 },
+    { date: '2026-01-05', c: 1.93 },
+  ];
+  assert.deepEqual(pickYearBaseClose(candles, 2026), { date: '2025-12-31', close: 1.904 });
+  assert.deepEqual(pickYearBaseClose(candles.slice(2), 2026), { date: '2026-01-05', close: 1.93 });
+  assert.equal(pickYearBaseClose([], 2026), null);
 });

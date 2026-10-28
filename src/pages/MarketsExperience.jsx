@@ -70,6 +70,8 @@ import {
   loadRealtimePricePushToolsForMarkets,
 } from './markets/marketsNavServiceLoader.js';
 
+const CLOUD_MARKETS_AUTO_REFRESH_MS = 30_000;
+
 const AlertRuleDialog = lazy(() => import('../components/AlertRuleDialog.jsx').then((module) => ({ default: module.AlertRuleDialog })));
 const ExpandedMarketListOverlay = lazy(() => import('./markets/ExpandedMarketListOverlay.jsx').then((module) => ({ default: module.ExpandedMarketListOverlay })));
 const MarketsFullTablePanel = lazy(() => import('./markets/MarketsFullTablePanel.jsx').then((module) => ({ default: module.MarketsFullTablePanel })));
@@ -474,6 +476,16 @@ export function MarketsExperience() {
 
   useEffect(() => {
     if (!localDirect) refreshWatch();
+  }, [refreshWatch, localDirect]);
+
+  // 云端行情 30s 自动刷新（页面可见时）；本地直连由 LocalDirectMarketsView 自己 1s 刷新。
+  useEffect(() => {
+    if (localDirect) return undefined;
+    const timer = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      refreshWatch({ auto: true });
+    }, CLOUD_MARKETS_AUTO_REFRESH_MS);
+    return () => window.clearInterval(timer);
   }, [refreshWatch, localDirect]);
 
   // ---- WS 行情订阅：自选代码变化时重新订阅 ----

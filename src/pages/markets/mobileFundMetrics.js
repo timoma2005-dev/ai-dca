@@ -55,7 +55,9 @@ export const MOBILE_METRIC_CATALOG = [
   { id: 'premium', label: '溢价率', shortLabel: '溢价', etfOnly: true, resolve: (row) => ({ text: formatPremiumPercent(row), tone: changeToneClass(resolvePremiumPercent(row)) }) },
   { id: 'limit', label: '申购状态', shortLabel: '申购', otcOnly: true, resolve: limitMetric },
   { id: 'turnover', label: '成交额', shortLabel: '成交额', etfOnly: true, resolve: (row) => ({ text: resolveTurnoverDisplay(row).text, tone: 'text-[var(--market-text-strong)]' }) },
-  { id: 'currentYearPercent', label: '今年以来', shortLabel: '今年', resolve: (row) => ({ text: formatYearPercent(row), tone: changeToneClass(number(row.ytdReturn ?? row.currentYearPercent)) }) },
+  { id: 'currentYearPercent', label: '今年以来', shortLabel: '今年', dualShortLabel: '今年(价格)', resolve: (row) => ({ text: formatYearPercent(row), tone: changeToneClass(number(row.ytdReturn ?? row.currentYearPercent)) }) },
+  // 本地直连：东财 JN 净值口径，与价格口径并列（云端没有这个字段）。
+  { id: 'navYtdPercent', label: '今年以来(净值)', shortLabel: '今年(净值)', etfOnly: true, localOnly: true, resolve: (row) => percentMetric(row.navYtdReturn) },
   { id: 'return1w', label: '近1周', shortLabel: '近1周', resolve: (row) => percentMetric(row.return1w) },
   { id: 'return1m', label: '近1月', shortLabel: '近1月', resolve: (row) => percentMetric(row.return1m) },
   { id: 'return3m', label: '近3月', shortLabel: '近3月', resolve: (row) => percentMetric(row.return3m) },
@@ -74,6 +76,7 @@ export const MOBILE_SORT_OPTIONS = [
   { id: 'premium', label: '溢价率', desc: true },
   { id: 'turnover', label: '成交额', desc: true },
   { id: 'currentYearPercent', label: '今年以来', desc: true },
+  { id: 'navYtdPercent', label: '今年以来(净值)', desc: true, localOnly: true },
   { id: 'return1m', label: '近1月', desc: true },
   { id: 'return3m', label: '近3月', desc: true },
   { id: 'return1y', label: '近1年', desc: true },
@@ -88,8 +91,8 @@ export function isOtcFundRow(row, isOtcList = false) {
   return text.includes('otc') || text.includes('场外');
 }
 
-export function catalogForMode(isOtc) {
-  return MOBILE_METRIC_CATALOG.filter((item) => !(isOtc && item.etfOnly) && !(!isOtc && item.otcOnly));
+export function catalogForMode(isOtc, { includeLocalOnly = false } = {}) {
+  return MOBILE_METRIC_CATALOG.filter((item) => !(isOtc && item.etfOnly) && !(!isOtc && item.otcOnly) && (includeLocalOnly || !item.localOnly));
 }
 
 export function defaultMobileMetrics(isOtc) {
@@ -132,7 +135,8 @@ export function writeMobileMetricsConfig(isOtc, ids) {
 export function resolveMetricDisplay(metricId, row) {
   const definition = METRIC_BY_ID[metricId];
   const value = definition?.resolve(row) || { text: '—', tone: 'text-[var(--market-text-subtle)]' };
-  return { id: metricId, label: definition?.shortLabel || definition?.label || metricId, text: value.text ?? '—', tone: value.tone || 'text-[var(--market-text-strong)]' };
+  const dual = definition?.dualShortLabel && row?.navYtdReturn != null && Number.isFinite(Number(row.navYtdReturn));
+  return { id: metricId, label: (dual ? definition.dualShortLabel : definition?.shortLabel) || definition?.label || metricId, text: value.text ?? '—', tone: value.tone || 'text-[var(--market-text-strong)]' };
 }
 
 export function buildIdentityLine(row, isOtc) {
@@ -156,6 +160,7 @@ function sortValue(row, id) {
   if (id === 'premium') return number(resolvePremiumPercent(row));
   if (id === 'limit') return number(row?.fundLimit?.maxPurchasePerDay);
   if (id === 'currentYearPercent') return number(row?.ytdReturn ?? row?.currentYearPercent);
+  if (id === 'navYtdPercent') return number(row?.navYtdReturn);
   if (id === 'name' || id === 'symbol') return String(row?.[id] || '');
   if (id === 'price') return resolveMarketPriceValue(row) ?? Number.NaN;
   if (id === 'turnover') return toNumberOrNull(row?.turnover ?? row?.amount) ?? Number.NaN;
