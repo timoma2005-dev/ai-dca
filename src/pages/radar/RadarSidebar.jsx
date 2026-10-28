@@ -31,7 +31,8 @@ export function RadarSidebar({
   clockNow,
   computeState,
   onRequestCompute,
-  showPipeline
+  showPipeline,
+  className
 }) {
   const maturity = maturityView(data);
   const recent = recentOpportunities(data);
@@ -43,7 +44,7 @@ export function RadarSidebar({
   const hasSnapshot = Boolean(data);
 
   return (
-    <div className="min-w-0 space-y-5">
+    <div className={cx('min-w-0', className || 'space-y-5')}>
       <section className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-bold text-slate-900">计算控制台</h3>

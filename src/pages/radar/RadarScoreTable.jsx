@@ -104,6 +104,36 @@ function Breakdown({ data, row }) {
   );
 }
 
+function ratioText(row) {
+  if (row.quota?.unlimited) return '不设限';
+  return Number.isFinite(row.quota?.quotaRatioPct) ? `${row.quota.quotaRatioPct.toFixed(2)}%` : '—';
+}
+
+function peerText(row) {
+  if (!Number.isFinite(row.premiumVsPeer)) return '—';
+  return `${row.premiumVsPeer > 0 ? '+' : ''}${row.premiumVsPeer.toFixed(2)}`;
+}
+
+/** 首选卖出 / 首选买入行加左侧色条 */
+function accentClass(row) {
+  if (row.isRecommendedSell) return 'shadow-[inset_3px_0_0_#f43f5e]';
+  if (row.isRecommendedBuy) return 'shadow-[inset_3px_0_0_#10b981]';
+  return '';
+}
+
+function MiniScore({ label, value, tone }) {
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+      {label}
+      <b className={cx('tabular-nums', tone === 'sell' ? 'text-rose-600' : 'text-emerald-700')}>{pct}</b>
+      <span className="h-1 w-8 overflow-hidden rounded-full bg-slate-100">
+        <span className={cx('block h-full rounded-full', tone === 'sell' ? 'bg-rose-400' : 'bg-emerald-500')} style={{ width: `${pct}%` }} />
+      </span>
+    </span>
+  );
+}
+
 export function RadarScoreTable({ data }) {
   const [sort, setSort] = useState('overall');
   const [open, setOpen] = useState('');
@@ -114,13 +144,18 @@ export function RadarScoreTable({ data }) {
   const shown = rows.filter((row) => visibleCodes.has(row.code));
   const lockedCount = rows.length - shown.length;
   const toggle = (code) => setOpen((cur) => (cur === code ? '' : code));
+  // 「只看份额异动」随份额动态一起下线（2026-10 重设计），模型里的 quota 排序保留给测试/复盘复用
+  const sorts = Object.entries(SCORE_SORTS).filter(([key]) => key !== 'quota');
 
   return (
-    <section data-testid="radar-score-table" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-5">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-slate-900">{Object.keys(data?.scoring?.etfs || {}).length} 只纳指 ETF 评分</h3>
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="排序">
-          {Object.entries(SCORE_SORTS).map(([key, label]) => (
+    <section data-testid="radar-score-table" className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 sm:px-5">
+        <h3 className="text-sm font-bold text-slate-900">
+          {Object.keys(data?.scoring?.etfs || {}).length} 只纳指 ETF 评分
+          <span className="ml-2 hidden text-[11px] font-normal text-slate-400 sm:inline">点一行看分项得分与额度阶梯</span>
+        </h3>
+        <div className="inline-flex rounded-xl bg-slate-100 p-0.5" role="tablist" aria-label="排序">
+          {sorts.map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -128,8 +163,8 @@ export function RadarScoreTable({ data }) {
               aria-selected={sort === key}
               onClick={() => setSort(key)}
               className={cx(
-                'min-h-8 rounded-lg px-2.5 text-xs font-semibold transition-colors',
-                sort === key ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                'min-h-8 rounded-lg px-3 text-xs font-semibold transition-colors',
+                sort === key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               )}
             >
               {label}
@@ -139,17 +174,16 @@ export function RadarScoreTable({ data }) {
       </div>
 
       {/* 桌面表格 */}
-      <div className="hidden lg:block">
+      <div className="hidden px-5 pb-2 lg:block">
         <table className="w-full table-fixed text-left">
           <thead>
             <tr className="border-b border-slate-100 text-[11px] text-slate-400">
-              <th className="w-[22%] py-2 font-medium">基金</th>
-              <th className="w-[9%] py-2 font-medium">溢价</th>
-              <th className="w-[9%] py-2 font-medium">vs 同类</th>
-              <th className="w-[22%] py-2 font-medium">份额状态</th>
-              <th className="w-[10%] whitespace-nowrap py-2 font-medium">额度/成交</th>
-              <th className="w-[14%] py-2 font-medium">卖出紧迫度</th>
-              <th className="w-[14%] py-2 font-medium">买入吸引力</th>
+              <th className="w-[24%] py-2.5 pl-3 font-medium">基金</th>
+              <th className="w-[13%] py-2.5 font-medium">溢价 <span className="text-slate-300">/ vs 同类</span></th>
+              <th className="w-[23%] py-2.5 font-medium">份额状态</th>
+              <th className="w-[10%] whitespace-nowrap py-2.5 font-medium">额度/成交</th>
+              <th className="w-[15%] py-2.5 font-medium">卖出紧迫度</th>
+              <th className="w-[15%] py-2.5 font-medium">买入吸引力</th>
             </tr>
           </thead>
           <tbody>
@@ -159,29 +193,29 @@ export function RadarScoreTable({ data }) {
                   onClick={() => toggle(row.code)}
                   className={cx(
                     'cursor-pointer border-b border-slate-50 transition-colors hover:bg-slate-50',
-                    (row.isRecommendedSell || row.isRecommendedBuy) && 'bg-indigo-50/50',
-                    open === row.code && 'bg-indigo-50'
+                    accentClass(row),
+                    open === row.code && 'bg-indigo-50/70'
                   )}
                   aria-expanded={open === row.code}
                 >
-                  <td className="py-2.5 pr-2">
+                  <td className="py-3 pl-3 pr-2">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <b className="text-sm text-slate-800">{row.short}</b>
                       <span className="text-[11px] tabular-nums text-slate-400">{row.code}</span>
                       <Tag row={row} />
                     </span>
                   </td>
-                  <td className={cx('py-2.5 text-sm font-bold tabular-nums', row.premiumVsPeer > 1 ? 'text-rose-600' : 'text-slate-700')}>{row.premium?.toFixed(2)}%</td>
-                  <td className="py-2.5 text-xs tabular-nums text-slate-500">{row.premiumVsPeer > 0 ? '+' : ''}{row.premiumVsPeer?.toFixed(2)}</td>
-                  <td className="py-2.5 pr-2"><QuotaBadge badge={row.badge} /></td>
-                  <td className={cx('py-2.5 text-xs font-semibold tabular-nums', RATIO_TONES[quotaRatioTone(row.quota?.quotaRatioPct)])}>
-                    {row.quota?.unlimited ? '不设限' : Number.isFinite(row.quota?.quotaRatioPct) ? `${row.quota.quotaRatioPct.toFixed(2)}%` : '—'}
+                  <td className="whitespace-nowrap py-3">
+                    <b className={cx('text-sm tabular-nums', row.premiumVsPeer > 1 ? 'text-rose-600' : 'text-slate-700')}>{row.premium?.toFixed(2)}%</b>
+                    <span className="ml-1.5 text-[11px] tabular-nums text-slate-400">{peerText(row)}</span>
                   </td>
-                  <td className="py-2.5"><ScoreBar value={row.sellScore} tone="sell" /></td>
-                  <td className="py-2.5"><ScoreBar value={row.buyScore} tone="buy" /></td>
+                  <td className="py-3 pr-2"><QuotaBadge badge={row.badge} /></td>
+                  <td className={cx('py-3 text-xs font-semibold tabular-nums', RATIO_TONES[quotaRatioTone(row.quota?.quotaRatioPct)])}>{ratioText(row)}</td>
+                  <td className="py-3"><ScoreBar value={row.sellScore} tone="sell" /></td>
+                  <td className="py-3"><ScoreBar value={row.buyScore} tone="buy" /></td>
                 </tr>
                 {open === row.code ? (
-                  <tr><td colSpan={7} className="pb-3 pt-1"><Breakdown data={data} row={row} /></td></tr>
+                  <tr><td colSpan={6} className="pb-3 pt-1"><Breakdown data={data} row={row} /></td></tr>
                 ) : null}
               </Fragment>
             ))}
@@ -189,38 +223,42 @@ export function RadarScoreTable({ data }) {
         </table>
       </div>
 
-      {/* 移动卡片 */}
-      <ul className="space-y-2 lg:hidden">
+      {/* 移动卡片：两行紧凑布局 */}
+      <ul className="divide-y divide-slate-100 lg:hidden">
         {shown.map((row) => (
-          <li key={row.code} className={cx('rounded-xl border px-3 py-2.5', open === row.code ? 'border-indigo-300 bg-indigo-50/60' : 'border-slate-100')}>
-            <button type="button" className="w-full text-left" onClick={() => toggle(row.code)} aria-expanded={open === row.code}>
-              <span className="flex items-center justify-between gap-2">
+          <li key={row.code} className={cx(accentClass(row), open === row.code && 'bg-indigo-50/60')}>
+            <button type="button" className="w-full px-4 py-3 text-left" onClick={() => toggle(row.code)} aria-expanded={open === row.code}>
+              <span className="flex items-center justify-between gap-3">
                 <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <b className="text-sm text-slate-800">{row.short}</b>
+                  <b className="text-[15px] text-slate-800">{row.short}</b>
                   <span className="text-[11px] tabular-nums text-slate-400">{row.code}</span>
                   <Tag row={row} />
                 </span>
-                <b className={cx('shrink-0 text-sm tabular-nums', row.premiumVsPeer > 1 ? 'text-rose-600' : 'text-slate-700')}>{row.premium?.toFixed(2)}%</b>
-              </span>
-              <span className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-                <QuotaBadge badge={row.badge} />
-                <span className={cx('text-[11px] tabular-nums', RATIO_TONES[quotaRatioTone(row.quota?.quotaRatioPct)])}>
-                  额度/成交 {row.quota?.unlimited ? '不设限' : Number.isFinite(row.quota?.quotaRatioPct) ? `${row.quota.quotaRatioPct.toFixed(2)}%` : '—'}
+                <span className="shrink-0 text-right">
+                  <b className={cx('text-[15px] tabular-nums', row.premiumVsPeer > 1 ? 'text-rose-600' : 'text-slate-700')}>{row.premium?.toFixed(2)}%</b>
+                  <span className="ml-1 text-[11px] tabular-nums text-slate-400">{peerText(row)}</span>
                 </span>
               </span>
-              <span className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-                <span className="flex items-center gap-1.5">卖 <ScoreBar value={row.sellScore} tone="sell" /></span>
-                <span className="flex items-center gap-1.5">买 <ScoreBar value={row.buyScore} tone="buy" /></span>
+              <span className="mt-1.5 flex items-center justify-between gap-2">
+                <span className="min-w-0"><QuotaBadge badge={row.badge} /></span>
+                <span className="flex shrink-0 items-center gap-2.5">
+                  <MiniScore label="卖" value={row.sellScore} tone="sell" />
+                  <MiniScore label="买" value={row.buyScore} tone="buy" />
+                </span>
               </span>
             </button>
-            {open === row.code ? <div className="mt-2"><Breakdown data={data} row={row} /></div> : null}
+            {open === row.code ? (
+              <div className="px-4 pb-3">
+                <p className={cx('mb-2 text-[11px] tabular-nums', RATIO_TONES[quotaRatioTone(row.quota?.quotaRatioPct)])}>额度/日均成交 {ratioText(row)}</p>
+                <Breakdown data={data} row={row} />
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
-      {sort === 'quota' && !shown.length ? <p className="py-6 text-center text-xs text-slate-400">今天没有份额异动</p> : null}
-      {lockedCount > 0 && sort !== 'quota' ? <div className="mt-2 space-y-2"><DemoLockedRows count={lockedCount} /></div> : null}
-      <p className="mt-3 text-[11px] leading-5 text-slate-400">
-        点任一行看分项得分与额度阶梯。额度/日均成交 ≥2% 标红（套利资金充足，溢价难维持），0.5–2% 标橙。份额状态来自交易所 PCF 申购上限。
+      {lockedCount > 0 ? <div className="space-y-2 px-4 pb-2 sm:px-5"><DemoLockedRows count={lockedCount} /></div> : null}
+      <p className="border-t border-slate-100 px-4 py-3 text-[11px] leading-5 text-slate-400 sm:px-5">
+        额度/日均成交 ≥2% 标红（套利资金充足，溢价难维持），0.5–2% 标橙。份额状态来自交易所 PCF 申购上限。
       </p>
     </section>
   );

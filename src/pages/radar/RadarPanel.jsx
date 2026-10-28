@@ -12,14 +12,14 @@ import RadarSidebar from './RadarSidebar.jsx';
 import RadarComputeDialog from './RadarComputeDialog.jsx';
 import RadarScoreHero from './RadarScoreHero.jsx';
 import RadarScoreTable from './RadarScoreTable.jsx';
-import RadarQuotaCard from './RadarQuotaCard.jsx';
 import RadarReviewPanel from './RadarReviewPanel.jsx';
 import { hasScoring } from '../../app/radarScoreModel.js';
 
 /**
  * 雷达页编排（plan §4）：RadarPanel 只负责编排与状态分流，
  * 表现层在 src/pages/radar/*，纯函数在 src/app/radarModel.js。
- * 桌面 7:4 双列（lg = 1024px），移动单列；顶部保留同一计算入口。
+ * 评分 v2 快照：单列堆叠（换基建议 → 评分表 → 折叠控制台），份额动态卡已下线（2026-10 重设计）；
+ * 旧快照（无 scoring）仍走桌面 7:4 双列。顶部保留同一计算入口。
  */
 
 function SkeletonBlock({ className }) {
@@ -175,46 +175,50 @@ export default function RadarPanel({ session }) {
 
   return (
     <div className="min-w-0 space-y-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">纳指 ETF 套利雷达</h2>
-          <span className="rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">测试中</span>
-          <span className="hidden text-xs text-slate-400 sm:inline">VIP 及以上可见</span>
-          <div className="ml-1 inline-flex rounded-xl bg-slate-100 p-0.5" role="tablist" aria-label="雷达视图">
-            {[['radar', '今日雷达'], ['review', '切换复盘']].map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={view === key}
-                onClick={() => setView(key)}
-                className={cx(
-                  'min-h-8 rounded-lg px-3 text-xs font-semibold transition-colors',
-                  view === key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                )}
-              >
-                {label}
-              </button>
-            ))}
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">纳指 ETF 套利雷达</h2>
+            <span className="rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">测试中</span>
+            <span className="hidden text-xs text-slate-400 sm:inline">VIP 及以上可见</span>
           </div>
         </div>
         {canCompute ? <button
           type="button"
           onClick={radar.requestCompute}
           disabled={submitting}
-          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 text-[13px] font-semibold text-white shadow-sm shadow-indigo-200/70 transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 text-xs font-semibold text-white shadow-sm shadow-indigo-200/70 transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-10 sm:px-4 sm:text-[13px]"
         >
           {submitting ? '计算中…' : '手动触发计算'}
         </button> : null}
       </header>
 
-      <RadarFreshnessBanner
-        data={radar.data}
-        session={sessionInfo}
-        countdown={countdown}
-        freshness={freshness}
-        receivedAt={radar.receivedAt}
-      />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="inline-flex self-start rounded-xl bg-slate-100 p-0.5" role="tablist" aria-label="雷达视图">
+          {[['radar', '今日雷达'], ['review', '切换复盘']].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={view === key}
+              onClick={() => setView(key)}
+              className={cx(
+                'min-h-8 rounded-lg px-4 text-xs font-semibold transition-colors',
+                view === key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <RadarFreshnessBanner
+          data={radar.data}
+          session={sessionInfo}
+          countdown={countdown}
+          freshness={freshness}
+          className="lg:flex lg:justify-end"
+        />
+      </div>
 
       {radar.notice && (
         <div
@@ -244,6 +248,29 @@ export default function RadarPanel({ session }) {
         <RadarReviewPanel data={radar.data} />
       ) : firstLoading ? (
         leftColumn
+      ) : hasSnapshot && hasScoring(radar.data) ? (
+        <div data-testid="radar-dashboard-stack" className="min-w-0 space-y-5">
+          {leftColumn}
+          <details data-testid="radar-sidebar-fold" className="group rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-slate-700 sm:px-5">
+              <span>计算控制台 · 数据流水线 · 成熟度 · 近期机会</span>
+              <span className="text-xs font-normal text-slate-400 group-open:hidden">展开</span>
+              <span className="hidden text-xs font-normal text-slate-400 group-open:inline">收起</span>
+            </summary>
+            <div className="border-t border-slate-100 p-3">
+              <RadarSidebar
+                className="grid gap-5 space-y-0 lg:grid-cols-2"
+                data={radar.data}
+                receivedAt={radar.receivedAt}
+                session={sessionInfo}
+                clockNow={clockNow}
+                computeState={radar.computeState}
+                onRequestCompute={canCompute ? radar.requestCompute : undefined}
+                showPipeline={showPipelineInSidebar}
+              />
+            </div>
+          </details>
+        </div>
       ) : (
         <div
           data-testid="radar-dashboard-grid"
@@ -251,27 +278,6 @@ export default function RadarPanel({ session }) {
         >
           <div className="min-w-0">{leftColumn}</div>
           <div className="min-w-0 space-y-5">
-            {hasSnapshot && hasScoring(radar.data) ? <RadarQuotaCard data={radar.data} /> : null}
-            {hasSnapshot && hasScoring(radar.data) ? (
-              <details data-testid="radar-sidebar-fold" className="group rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-slate-700 sm:px-5">
-                  <span>计算控制台 · 数据流水线 · 成熟度</span>
-                  <span className="text-xs font-normal text-slate-400 group-open:hidden">展开</span>
-                  <span className="hidden text-xs font-normal text-slate-400 group-open:inline">收起</span>
-                </summary>
-                <div className="border-t border-slate-100 p-3">
-                  <RadarSidebar
-                    data={radar.data}
-                    receivedAt={radar.receivedAt}
-                    session={sessionInfo}
-                    clockNow={clockNow}
-                    computeState={radar.computeState}
-                    onRequestCompute={canCompute ? radar.requestCompute : undefined}
-                    showPipeline={showPipelineInSidebar}
-                  />
-                </div>
-              </details>
-            ) : (
             <RadarSidebar
               data={radar.data}
               receivedAt={radar.receivedAt}
@@ -281,7 +287,6 @@ export default function RadarPanel({ session }) {
               onRequestCompute={canCompute ? radar.requestCompute : undefined}
               showPipeline={showPipelineInSidebar}
             />
-            )}
           </div>
         </div>
       )}
