@@ -14,6 +14,7 @@
 import { createServer } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { readFileSync, mkdirSync } from 'node:fs';
+import { gunzipSync, brotliDecompressSync } from 'node:zlib';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -153,12 +154,12 @@ export function createRadarCache({ db, fetchUpstream, now = () => Date.now(), st
 }
 
 /** 上游请求：先走 DNS（family 4），再轮试固定 CF IPv4；SNI/Host 始终为真实域名。上次成功的目标排在最前。 */
-export function createUpstream({ keyFile, ips, timeoutMs = 45000 }) {
+export function createUpstream({ keyFile, ips, timeoutMs = 90000 }) {
   let preferred = null;
   function once(target, method, path, body, timeout) {
     const key = (() => { try { return readFileSync(keyFile, 'utf8').trim(); } catch { return ''; } })();
     return new Promise((resolve, reject) => {
-      const headers = { host: UPSTREAM_HOST, accept: 'application/json' };
+      const headers = { host: UPSTREAM_HOST, accept: 'application/json', 'accept-encoding': 'gzip, br' }; // 回填后快照 ~0.5MB，CN→CF 带宽很差，必须压缩
       if (key) headers['x-radar-key'] = key;
       const payload = body && body.length ? body : null;
       if (payload) { headers['content-type'] = 'application/json'; headers['content-length'] = String(payload.length); }
@@ -166,7 +167,10 @@ export function createUpstream({ keyFile, ips, timeoutMs = 45000 }) {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8');
+          let buf = Buffer.concat(chunks);
+          const enc = String(res.headers['content-encoding'] || '').toLowerCase();
+          try { if (enc === 'gzip') buf = gunzipSync(buf); else if (enc === 'br') buf = brotliDecompressSync(buf); } catch { /* 截断的压缩流 → 下面按非 JSON 处理 */ }
+          const text = buf.toString('utf8');
           let json = null;
           try { json = JSON.parse(text); } catch { /* 非 JSON */ }
           if (res.statusCode >= 500 || json == null) { const e = new Error(`upstream ${res.statusCode}${json == null ? ' non-json' : ''}`); e.target = target; reject(e); return; }
