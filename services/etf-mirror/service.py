@@ -32,6 +32,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 UPSTREAM = os.environ.get("ETF_MIRROR_UPSTREAM", "https://api.freebacktrack.tech")
+# 本机采集（services/etf-local，复用 worker 代码 + 本机 SQLite）为主数据源；CF worker 只做备份与完整性核对。
+LOCAL_UPSTREAM = os.environ.get("ETF_LOCAL_UPSTREAM", "http://127.0.0.1:8083")
 # CF anycast IPv4 候选池：服务器无 IPv6 路由（系统 DNS 会返回 AAAA），跨境 TLS
 # 握手 3~8s 且各 anycast 入口时延漂移大。故不再固定某个 IP，而是每轮后台同步前
 # 对候选池做一次“优选”（并发测 TCP+TLS 握手耗时，取最快）。
@@ -285,36 +287,100 @@ def refresh_one(path, kind, key):
     return status
 
 
-def refresh_loop():
-    # shares latest 同时落到 date:<date> 键，供 ?date= 当日查询命中
-    def refresh_shares():
-        path = "/api/etf-pcf-shares"
-        status, body = fetch_upstream(path)
-        if not (200 <= status < 300):
-            return status
-        db_put("shares", "latest", body, status)
-        try:
-            date = json.loads(body).get("date")
-            if date:
-                db_put("shares", f"date:{date}", body, status)
-        except Exception:
-            pass
-        return status
+_local_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def refresh_limit(code):
-        # 无 date 版预热后，顺带把 payload 里的 date 也落到 "{code}:{date}" 键，
-        # 让前端带 date 的明细请求命中缓存（否则首次必回源，跨境 3~8s）。
-        status, body = fetch_upstream(f"/api/etf-pcf-limit?code={code}")
+
+def fetch_local(path):
+    """读本机采集服务，返回 (status, body_text)；连不上抛异常。"""
+    try:
+        with _local_opener.open(LOCAL_UPSTREAM + path, timeout=10) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+
+
+def _try(fn, path):
+    try:
+        status, body = fn(path)
         if 200 <= status < 300:
-            db_put("limit", code, body, status)
-            try:
-                d = json.loads(body).get("date")
-                if d:
-                    db_put("limit", f"{code}:{d}", body, status)
-            except Exception:
-                pass
-        return status
+            return json.loads(body), body
+    except Exception as e:
+        print(f"[mirror] {fn.__name__} {path} failed: {str(e)[:120]}", flush=True)
+    return None, None
 
+
+def _record_complete(r):
+    return (r.get("shares") is not None and r.get("deltaShares") is not None
+            and r.get("effLimitKind") not in (None, "unknown"))
+
+
+def merge_shares(local, cf):
+    """本机为主；CF 同日期且本机某只不完整而 CF 完整 → 用 CF 那条补；CF 日期更新 → 整体用 CF。返回 (payload, note)。"""
+    if local is None:
+        return cf, "cf_only"
+    if cf is None:
+        return local, "local_only"
+    ld, cd = str(local.get("date") or ""), str(cf.get("date") or "")
+    if cd > ld:
+        return cf, f"cf_newer({cd}>{ld})"
+    if cd != ld:
+        return local, "local"
+    cf_by_code = {r.get("code"): r for r in cf.get("records") or []}
+    filled = []
+    records = []
+    for r in local.get("records") or []:
+        c = cf_by_code.get(r.get("code"))
+        if not _record_complete(r) and c and _record_complete(c):
+            records.append(c)
+            filled.append(r.get("code"))
+        else:
+            records.append(r)
+    if not filled:
+        return local, "local"
+    out = dict(local)
+    out["records"] = records
+    return out, "local+cf_fill:" + ",".join(filled)
+
+
+def refresh_shares():
+    path = "/api/etf-pcf-shares"
+    local, _ = _try(fetch_local, path)
+    cf, _ = _try(fetch_upstream, path)
+    payload, note = merge_shares(local, cf)
+    if payload is None:
+        return 502
+    missing = [r.get("code") for r in payload.get("records") or [] if not _record_complete(r)]
+    msg = f"[mirror] shares date={payload.get('date')} source={note}"
+    if missing:
+        msg += f" incomplete={','.join(missing)}"
+    if note != "local" or missing:
+        print(msg, flush=True)
+    body = json.dumps(payload, ensure_ascii=False)
+    db_put("shares", "latest", body, 200)
+    if payload.get("date"):
+        db_put("shares", f"date:{payload['date']}", body, 200)
+    return 200
+
+
+def refresh_limit(code):
+    # 无 date 版预热后，顺带把 payload 里的 date 也落到 "{code}:{date}" 键。
+    path = f"/api/etf-pcf-limit?code={code}"
+    local, lbody = _try(fetch_local, path)
+    cf, cbody = _try(fetch_upstream, path)
+    if local is not None and (cf is None or str(cf.get("date") or "") <= str(local.get("date") or "")):
+        payload, body = local, lbody
+    elif cf is not None:
+        payload, body = cf, cbody
+        print(f"[mirror] limit {code} from cf (local={local.get('date') if local else None} cf={cf.get('date')})", flush=True)
+    else:
+        return 502
+    db_put("limit", code, body, 200)
+    if payload.get("date"):
+        db_put("limit", f"{code}:{payload['date']}", body, 200)
+    return 200
+
+
+def refresh_loop():
     while True:
         refresh_best_ip()  # 每轮同步前重新优选 IP（不固定）
         ok, errs = 0, []
@@ -349,9 +415,9 @@ def trigger_background_refresh():
 def _bg_refresh_once():
     try:
         refresh_best_ip()  # 后台补刷前也重新优选 IP（不固定）
-        refresh_one("/api/etf-pcf-shares", "shares", "latest")
+        refresh_shares()
         for code in TARGET_CODES:
-            refresh_one(f"/api/etf-pcf-limit?code={code}", "limit", code)
+            refresh_limit(code)
     finally:
         _background_refresh_lock.release()
 
@@ -459,7 +525,12 @@ class Handler(BaseHTTPRequestHandler):
 
         # 未命中：同步回源 CF 并落库（?date= 历史 / 非目标 code 等）
         try:
-            status, body = fetch_upstream(upstream_path)
+            try:
+                status, body = fetch_local(upstream_path)
+            except Exception:
+                status, body = 0, ""
+            if not (200 <= status < 300):
+                status, body = fetch_upstream(upstream_path)
             if 200 <= status < 300:
                 db_put(kind, key, body, status)
             self._send(status, body)
