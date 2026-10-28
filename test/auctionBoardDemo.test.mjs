@@ -175,7 +175,7 @@ test('clock-driven states: auction halt, resume, regression switch, candidates i
   assert.match(page.$('etf-body').innerHTML, /<span class="st halt">停牌<\/span>/); // 嘉实真实停牌
 
   await page.at('09:55');
-  assert.match(page.log(), /国泰 偏离回到 0 → 回归/);
+  assert.match(page.log(), /国泰 偏离 ≥ \+0\.1 → 达切换线/);
   assert.match(page.$('act-h').innerHTML, /切换：卖出 <span class="hs">国泰<\/span> → 买入 <span class="hl">华泰柏瑞<\/span>/);
 
   await page.at('10:25');
@@ -186,8 +186,9 @@ test('clock-driven states: auction halt, resume, regression switch, candidates i
   await page.at('10:35');
   assert.match(page.log(), /嘉实 复牌/);
   await page.at('11:10');
-  assert.match(page.log(), /国泰 偏离 ≥ \+0\.2/);
-  assert.match(page.$('act-h').innerHTML, /卖出 <span class="hs">国泰<\/span>，等回 0 买回/);
+  assert.match(page.$('act-h').innerHTML, /继续持有 国泰/);
+  assert.match(page.$('act-p').innerHTML, /已达切换线，暂无买入区候选，继续持有不空仓/);
+  assert.doesNotMatch(page.$('act-h').innerHTML, /等回 0/);
 
   await page.at('12:00');
   assert.equal(page.$('phase').textContent, '午休');

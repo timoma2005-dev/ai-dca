@@ -213,8 +213,8 @@
         <div class="segs" id="segs"><span>集合竞价</span><span>上午连续</span><span>午休</span><span>下午连续</span><span>收盘竞价</span></div>
         <div class="sp"></div>
         <div class="chips">
-          <button class="chip" type="button" data-open="1">阈值<b id="c-thr">0.2</b></button>
-          <button class="chip" type="button" data-open="1">买入区<b id="c-zone">−0.50 ~ −0.20</b></button>
+          <button class="chip" type="button" data-open="1">切换线<b id="c-thr">+0.1</b></button>
+          <button class="chip" type="button" data-open="1">买入区<b id="c-zone">−0.50 ~ −0.15</b></button>
           <button class="chip" type="button" data-open="1">停牌溢价<b id="c-halt">10%</b></button>
         </div>
         <div class="meta">
@@ -296,7 +296,8 @@
     <div class="mask hide" id="mask">
       <div class="sheet" role="dialog" aria-label="设置">
         <h4>设置 <button class="x" type="button" id="close">×</button></h4>
-        <label class="srow"><span>偏离阈值<small>候选上限、持有卖出线（百分点）</small></span><input id="thr" type="number" step="0.05" min="0" value="0.2"/></label>
+        <label class="srow"><span>买入上限<small>偏离 ≤ −此值才算候选（百分点）</small></span><input id="thr" type="number" step="0.05" min="0" value="0.15"/></label>
+        <label class="srow"><span>切换线<small>持有偏离 ≥ 此值且有候选才切换（百分点）</small></span><input id="trig" type="number" step="0.05" min="0" value="0.1"/></label>
         <label class="srow"><span>买入下限<small>偏离低于此值不买（百分点）</small></span><input id="lo" type="number" step="0.05" min="0" value="0.5"/></label>
         <label class="srow"><span>停牌溢价<small>集合竞价时超过即推算停牌（%）</small></span><input id="halt-thr" type="number" step="0.5" min="0" value="10"/></label>
       </div>
@@ -328,18 +329,19 @@
         var QQ_URL = "https://qt.gtimg.cn/q=" + ETFS.map(function (e) { return e[0]; }).join(",") + "," + ETFS.map(function (e) { return "jj" + e[0].slice(2); }).join(",");
 
         var S = { nq: null, nqStale: false, etf: {}, etfTime: null, etfStale: false, haveEtf: false,
-          busy: false, timer: null, sort: { k: "dev", d: 1 }, thr: 0.2, lo: 0.5, phaseKey: null, held: {}, haltThr: 10, nav: {},
+          busy: false, timer: null, sort: { k: "dev", d: 1 }, thr: 0.15, trig: 0.1, lo: 0.5, phaseKey: null, held: {}, haltThr: 10, nav: {},
           rounds: {}, filter: "all", prevSig: null, log: [], logDay: "", quota: {}, quotaDate: "" };
         try { var hs = (window.localStorage && localStorage.getItem(KP + "nqHeld")) || ""; } catch (e) { hs = ""; }
         if (!hs && location.hash.indexOf("held=") >= 0) hs = decodeURIComponent(location.hash.split("held=")[1].split("&")[0]);
         hs.split(",").forEach(function (c) { if (c) S.held[c] = true; });
         try {
           var cfg = JSON.parse(localStorage.getItem(KP + "nqCfg") || "{}");
-          if (cfg.thr >= 0) S.thr = cfg.thr;
+          if (cfg.v === 2 && cfg.thr >= 0) S.thr = cfg.thr;
+          if (cfg.v === 2 && cfg.trig >= 0) S.trig = cfg.trig;
           if (cfg.lo > 0) S.lo = cfg.lo;
           if (cfg.haltThr > 0) S.haltThr = cfg.haltThr;
         } catch (e) {}
-        function saveCfg() { try { localStorage.setItem(KP + "nqCfg", JSON.stringify({ thr: S.thr, lo: S.lo, haltThr: S.haltThr })); } catch (e) {} }
+        function saveCfg() { try { localStorage.setItem(KP + "nqCfg", JSON.stringify({ v: 2, thr: S.thr, trig: S.trig, lo: S.lo, haltThr: S.haltThr })); } catch (e) {} }
         function saveHeld() {
           var v = Object.keys(S.held).filter(function (k) { return S.held[k]; }).join(",");
           try { localStorage.setItem(KP + "nqHeld", v); } catch (e) {}
@@ -673,7 +675,7 @@
         }
 
         function decide(list, b) {
-          var T = S.thr, act = { h: "", p: "", flow: "" };
+          var T = S.trig, act = { h: "", p: "", flow: "" };
           var cands = list.filter(function (r) { return !r.held && inZone(r) && !qBlocks(r); }).sort(function (x, y) { return x.dev - y.dev; });
           var qSkip = list.filter(function (r) { return !r.held && inZone(r) && qBlocks(r); });
           var qNote = qSkip.map(function (r) { return '<span class="qn">' + esc(r.name) + " 偏离 " + f2(r.dev) + " 在买入区，但今日" + esc((S.quota[r.code] || {}).txt || "份额放开") + "，溢价可能继续下行，已跳过。</span>"; }).join("");
@@ -682,11 +684,11 @@
           var dip = cands[0], hl = list.filter(function (r) { return r.held; });
           if (!inWin(b)) {
             act.h = "非交易时段";
-            act.p = "偏离只在交易日 09:15–15:00 计算。规则：持有偏离回到 0 且有候选 → 切换；持有 ≥ +" + T + " 且无候选 → 卖出等回 0 买回。";
+            act.p = "偏离只在交易日 09:15–15:00 计算。规则（纯轮动）：持有偏离 ≥ +" + T + " 且有买入区候选 → 切换；无候选继续持有，不空仓。";
             return act;
           }
           if (!hl.length) {
-            if (dip) { act.h = '空仓：买入 <span class="hl">' + esc(dip.name) + "</span>"; act.p = esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在买入区，买入后等偏离回到 0 卖出。" + qNote; act.flow = legHtml("b", dip, "买入 · 候选①"); }
+            if (dip) { act.h = '空仓：买入 <span class="hl">' + esc(dip.name) + "</span>"; act.p = esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在买入区，买入后持有，偏离 ≥ +" + T + " 且有候选时切换。" + qNote; act.flow = legHtml("b", dip, "买入 · 候选①"); }
             else { act.h = "空仓：等待"; act.p = "暂无偏离在 " + zoneTxt() + " 的标的。" + qNote; }
             return act;
           }
@@ -694,17 +696,13 @@
           hl.forEach(function (h) {
             if (h.halt) { hh.push(esc(h.name) + " 停牌中"); pp.push(esc(h.name) + " 停牌，复牌后按当时 NQ 和价格重算。"); return; }
             if (h.dev == null) { hh.push(esc(h.name) + " 暂无偏离"); pp.push("等待行情。"); return; }
-            if (h.dev >= 0 && dip) {
+            if (h.dev >= T && dip) {
               hh.push('切换：卖出 <span class="hs">' + esc(h.name) + '</span> → 买入 <span class="hl">' + esc(dip.name) + "</span>");
-              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + (h.dev < T ? "（≥0 视为回归）" : "（偏贵）") + "，" + esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在买入区，差 " + (h.dev - dip.dev).toFixed(2) + " 个百分点。");
+              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " ≥ +" + T + "，" + esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在买入区，差 " + (h.dev - dip.dev).toFixed(2) + " 个百分点。");
               ff.push(legHtml("s", h, "卖出 · 持有中") + '<div class="arrow">→</div>' + legHtml("b", dip, "买入 · 候选①"));
-            } else if (h.dev >= T) {
-              hh.push('卖出 <span class="hs">' + esc(h.name) + "</span>，等回 0 买回");
-              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " ≥ +" + T + "，暂无买入区候选。");
-              ff.push(legHtml("s", h, "卖出 · 持有中"));
             } else {
               hh.push("继续持有 " + esc(h.name));
-              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + (h.dev < 0 ? "，尚未回到 0。" : dip ? "" : "，暂无买入区候选。"));
+              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + (h.dev < T ? "，未到切换线 +" + T + "。" : "，已达切换线，暂无买入区候选，继续持有不空仓。"));
               ff.push('<div class="leg"><small>持有中</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + "</span>" + (dip ? '<span class="lp">最近候选 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" : "") + "</em></div>");
             }
           });
@@ -762,10 +760,10 @@
           var qq = S.quota[z.code];
           if (qq && qq.k === "relax") out.warn.push(z.name + " 今日份额放开，溢价可能继续下行");
           if (z.code === "161130" || a.code === "161130") out.warn.push("LOF 盘口较薄，且溢价按 T-2 公布净值计算");
-          var trig = a.dev != null && a.dev >= 0 && inZone(z) && !qBlocks(z);
+          var trig = a.dev != null && a.dev >= S.trig && inZone(z) && !qBlocks(z);
           out.trig = trig;
-          out.trigTxt = !inWin(b) ? "非交易时段：偏离只在交易日 09:15–15:00 计算，以下按最近价格演算，明早集合竞价重算" : trig ? "符合策略：" + a.name + " 偏离 " + f2(a.dev) + " ≥ 0，" + z.name + " 偏离 " + f2(z.dev) + " 在买入区" :
-            "未触发策略：" + (a.dev == null ? a.name + " 暂无偏离" : a.dev < 0 ? a.name + " 偏离 " + f2(a.dev) + "，尚未回到 0" :
+          out.trigTxt = !inWin(b) ? "非交易时段：偏离只在交易日 09:15–15:00 计算，以下按最近价格演算，明早集合竞价重算" : trig ? "符合策略：" + a.name + " 偏离 " + f2(a.dev) + " ≥ +" + S.trig + "，" + z.name + " 偏离 " + f2(z.dev) + " 在买入区" :
+            "未触发策略：" + (a.dev == null ? a.name + " 暂无偏离" : a.dev < S.trig ? a.name + " 偏离 " + f2(a.dev) + "，未到切换线 +" + S.trig :
               z.dev == null ? z.name + " 暂无偏离" : !inZone(z) ? z.name + " 偏离 " + f2(z.dev) + " 不在买入区 " + zoneTxt() : z.name + " 今日份额放开，策略会跳过");
           var bk = SIM_HIST[inWin(b) ? simBucket(b) : "d"];
           function est(h) { return { lo: h[0] - cost, mid: h[1] - cost, hi: h[2] - cost, n: h[3] }; }
@@ -837,13 +835,13 @@
             t2 < 34200 ? "09:25–09:30：竞价结束，等待连续交易" :
             t2 < 41400 ? "上午连续：按真实买一/卖一挂限价，卖出和买入数量对等" :
             t2 < 46800 ? "午休：13:00 后按当时 NQ 和价格重算" :
-            t2 < 53820 ? "下午连续：按真实买一/卖一挂限价；未回归可持有过夜" :
+            t2 < 53820 ? "下午连续：按真实买一/卖一挂限价；无候选继续持有，可持有过夜" :
             t2 < 54000 ? "收盘集合竞价：谨慎下单" : "已收盘：明天集合竞价起重新计算偏离";
         }
 
         function sigOf(r) {
           if (r.halt) return { t: "停牌", c: "pX", o: 5 };
-          if (r.held) return r.dev == null ? { t: "持有", c: "pH", o: 0 } : r.dev >= S.thr ? { t: "持有·偏贵", c: "pS", o: 0 } : r.dev >= 0 ? { t: "持有·已回归", c: "pH", o: 0 } : { t: "持有", c: "pH", o: 0 };
+          if (r.held) return r.dev == null ? { t: "持有", c: "pH", o: 0 } : r.dev >= S.trig ? { t: "持有·达切换线", c: "pS", o: 0 } : { t: "持有", c: "pH", o: 0 };
           if (r.cand) return { t: "候选" + "①②③④⑤⑥⑦⑧⑨⑩⑪⑫".charAt(r.cand - 1), c: "pB", o: r.cand };
           if (r.dev != null && r.dev < -S.lo) return { t: "低于下限", c: "pX", o: 3 };
           return null;
@@ -863,7 +861,7 @@
           if (!inWin(b) || !S.haveEtf || !S.nq) return;
           var cur = {};
           list.forEach(function (r) {
-            cur[r.code] = r.halt ? "halt" : r.dev == null ? "" : inZone(r) ? "zone" : r.held && r.dev >= S.thr ? "rich" : r.held && r.dev >= 0 ? "back" : "mid";
+            cur[r.code] = r.halt ? "halt" : r.dev == null ? "" : inZone(r) ? "zone" : r.held && r.dev >= S.trig ? "rich" : "mid";
           });
           if (S.prevSig) list.forEach(function (r) {
             var a = S.prevSig[r.code], c = cur[r.code];
@@ -872,8 +870,7 @@
             if (c === "halt") pushLog(b, r.name + " 停牌");
             else if (a === "halt") pushLog(b, r.name + " 复牌" + d);
             else if (c === "zone") pushLog(b, r.name + " 进入买入区" + d);
-            else if (c === "back") pushLog(b, r.name + " 偏离回到 0 → 回归" + d);
-            else if (c === "rich") pushLog(b, r.name + " 偏离 ≥ +" + S.thr + d);
+            else if (c === "rich") pushLog(b, r.name + " 偏离 ≥ +" + S.trig + " → 达切换线" + d);
             else if (a === "zone") pushLog(b, r.name + " 离开买入区" + d);
           });
           S.prevSig = cur;
@@ -881,7 +878,7 @@
 
         function devColor(r) {
           var v = r.dev;
-          return inZone(r) ? "#16a34a" : v < -S.lo ? "#86efac" : r.held ? "#2563eb" : v >= S.thr ? "#e5484d" : "#94a3b8";
+          return inZone(r) ? "#16a34a" : v < -S.lo ? "#86efac" : r.held ? "#2563eb" : v >= S.trig ? "#e5484d" : "#94a3b8";
         }
 
         function renderETF() {
@@ -894,9 +891,9 @@
           else if (S.etfStale) capT = "ETF 行情加载失败";
           if (!inWin(b)) capT = "非交易时段：偏离只在 09:15–15:00 显示";
           $("etf-cap").textContent = capT;
-          $("c-thr").textContent = S.thr; $("c-zone").textContent = zoneTxt(); $("c-halt").textContent = S.haltThr + "%";
+          $("c-thr").textContent = "+" + S.trig; $("c-zone").textContent = zoneTxt(); $("c-halt").textContent = S.haltThr + "%";
           $("m-zone").textContent = "买入区 " + zoneTxt(); $("rule-halt").textContent = S.haltThr;
-          $("rule-txt").textContent = "偏离 = ETF相对昨收涨跌 − NQ自前一交易日15:00涨跌。只买 " + zoneTxt() + "；持有偏离回到 0 且有候选 → 切换；持有 ≥ +" + S.thr + " 且无候选 → 卖出等回 0 买回；未回归可持有过夜。每次切换都有佣金、价差和滑点。";
+          $("rule-txt").textContent = "偏离 = ETF相对昨收涨跌 − NQ自前一交易日15:00涨跌。只买 " + zoneTxt() + "；持有偏离 ≥ +" + S.trig + " 且有候选 → 切到偏离最低的候选；无候选继续持有，不空仓；可持有过夜。每次切换都有佣金、价差和滑点。";
 
           var list = rows();
           var act = decide(list, b);
@@ -905,7 +902,7 @@
 
           $("act-h").innerHTML = act.h; $("act-p").innerHTML = act.p; $("act-flow").innerHTML = act.flow;
           $("act-step").textContent = stepTxt(b);
-          $("act-rule").innerHTML = "<span>回归点 0</span><span>买入区 " + zoneTxt() + "</span><span>未回归可持有过夜</span><span>停牌不参与比较</span>";
+          $("act-rule").innerHTML = "<span>切换线 +" + S.trig + "</span><span>买入区 " + zoneTxt() + "</span><span>纯轮动不空仓</span><span>停牌不参与比较</span>";
 
           // 持仓卡
           var hl = list.filter(function (r) { return r.held; });
@@ -928,9 +925,9 @@
 
           // 偏离分布
           var dv = list.filter(function (r) { return r.dev != null; }).map(function (r) { return r.dev; });
-          var lo = Math.min(-S.lo - 0.2, Math.min.apply(null, dv.concat([0])) - 0.1), hi = Math.max(S.thr + 0.3, Math.max.apply(null, dv.concat([0])) + 0.1);
+          var lo = Math.min(-S.lo - 0.2, Math.min.apply(null, dv.concat([0])) - 0.1), hi = Math.max(S.trig + 0.3, Math.max.apply(null, dv.concat([0])) + 0.1);
           var X = function (v) { return ((v - lo) / (hi - lo) * 100).toFixed(2); };
-          var zl = X(-S.lo), zw = X(-S.thr) - X(-S.lo), sl = X(S.thr), sw = 100 - X(S.thr);
+          var zl = X(-S.lo), zw = X(-S.thr) - X(-S.lo), sl = X(S.trig), sw = 100 - X(S.trig);
           var bySort = list.slice().sort(function (a, c) {
             if (a.dev == null && c.dev == null) return 0; if (a.dev == null) return 1; if (c.dev == null) return -1; return a.dev - c.dev;
           });
@@ -943,7 +940,7 @@
                 : '<div class="bar" style="left:' + X(Math.min(0, v)) + "%;width:" + Math.abs(X(v) - X(0)).toFixed(2) + "%;background:" + devColor(r) + '"></div>') +
               '</div><div class="v ' + (v == null ? "" : cls(v)) + '">' + (v == null ? "—" : f2(v)) + "</div></div>";
           }).join("");
-          var ticks = [Math.ceil(lo * 2) / 2, -S.lo, -S.thr, 0, S.thr];
+          var ticks = [Math.ceil(lo * 2) / 2, -S.lo, -S.thr, 0, S.trig];
           for (var tk = Math.ceil(lo * 2) / 2 + 0.5; tk < -S.lo - 0.25; tk += 0.5) ticks.push(tk);
           $("axis").innerHTML = ticks.filter(function (v, i, a) { return v >= lo && v <= hi && a.indexOf(v) === i; })
             .map(function (v) { return '<span style="left:' + X(v) + '%">' + minus(+v.toFixed(2)) + "</span>"; }).join("");
@@ -1000,7 +997,7 @@
               (v == null ? "" : '<i style="left:' + X(Math.min(0, v)) + "%;width:" + Math.abs(X(v) - X(0)).toFixed(2) + "%;background:" + devColor(r) + '"></i>') + "</div></div>";
           }).join("") : '<div class="item"><div class="it-m">没有符合的标的</div></div>';
 
-          $("log").innerHTML = S.log.length ? S.log.map(function (x) { return "<li><span>" + x.t + "</span><span>" + esc(x.text) + "</span></li>"; }).join("") : "<li>暂无（交易时段内记录买入区、回归、停牌/复牌变化）</li>";
+          $("log").innerHTML = S.log.length ? S.log.map(function (x) { return "<li><span>" + x.t + "</span><span>" + esc(x.text) + "</span></li>"; }).join("") : "<li>暂无（交易时段内记录买入区、切换线、停牌/复牌变化）</li>";
         }
 
         function tick() {
@@ -1061,10 +1058,14 @@
         $("close").addEventListener("click", function () { openSet(false); });
         $("mask").addEventListener("click", function (ev) { if (ev.target === this) openSet(false); });
         document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") openSet(false); });
-        $("thr").value = S.thr; $("lo").value = S.lo; $("halt-thr").value = S.haltThr;
+        $("thr").value = S.thr; $("trig").value = S.trig; $("lo").value = S.lo; $("halt-thr").value = S.haltThr;
         $("thr").addEventListener("input", function () {
           var v = parseFloat(this.value);
           if (isFinite(v) && v >= 0) { S.thr = v; saveCfg(); renderETF(); }
+        });
+        $("trig").addEventListener("input", function () {
+          var v = parseFloat(this.value);
+          if (isFinite(v) && v >= 0) { S.trig = v; saveCfg(); renderETF(); }
         });
         $("lo").addEventListener("input", function () {
           var v = parseFloat(this.value);
