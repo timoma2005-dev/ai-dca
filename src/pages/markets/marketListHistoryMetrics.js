@@ -49,6 +49,16 @@ function closeAtOrBefore(candles, targetT) {
   return selected;
 }
 
+// 今年以来基准：上一年最后一个交易日收盘（与直连口径一致）；当年才上市的退到当年第一根收盘。
+function lastCloseBefore(candles, datePrefix) {
+  let found = null;
+  for (const candle of candles) {
+    if (String(candle.date || '') < datePrefix) found = candle;
+    else break;
+  }
+  return found?.c ?? null;
+}
+
 function firstCloseOnOrAfter(candles, datePrefix) {
   const found = candles.find((candle) => String(candle.date || '') >= datePrefix);
   return found?.c ?? null;
@@ -110,6 +120,8 @@ export function deriveMarketListHistoryMetrics(candles = [], { currentPrice = nu
   }
 
   const year = String(last.date || '').slice(0, 4);
-  out.ytdReturn = year ? percentChange(current, firstCloseOnOrAfter(normalized, `${year}-01-01`)) : null;
+  out.ytdReturn = year
+    ? percentChange(current, lastCloseBefore(normalized, `${year}-01-01`) ?? firstCloseOnOrAfter(normalized, `${year}-01-01`))
+    : null;
   return out;
 }

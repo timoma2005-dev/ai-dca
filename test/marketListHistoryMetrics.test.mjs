@@ -49,3 +49,14 @@ test('list history normalization deduplicates by date and sorts ascending', () =
   assert.deepEqual(rows.map((item) => item.date), ['2026-07-03', '2026-07-04']);
   assert.equal(rows[1].c, 2.1);
 });
+
+test('ytd return uses last close of previous year as base', () => {
+  const candles = [
+    candle('2025-12-30', 0.9),
+    candle('2025-12-31', 1),
+    candle('2026-01-05', 1.1),
+    candle('2026-07-04', 1.2),
+  ];
+  const metrics = deriveMarketListHistoryMetrics(candles, { currentPrice: 1.5 });
+  assert.equal(metrics.ytdReturn, 50);
+});
