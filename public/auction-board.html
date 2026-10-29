@@ -457,6 +457,17 @@
       </div>
     </div>
     <script>
+      // 隔夜轮动仅超级管理员可见（2026-10-29）：读同源登录会话与 RBAC 菜单缓存里的角色码，只用于前端展示。
+      var IS_SUPER = (function () {
+        function codes(v) { return (v && Array.isArray(v.roles) ? v.roles : []).map(function (r) { return String((r && r.code) || r || ""); }); }
+        try {
+          var ss = JSON.parse(localStorage.getItem("aiDcaCloudSyncSession") || "null");
+          if (!ss || typeof ss !== "object") return false;
+          if (codes(ss).indexOf("superadmin") >= 0 || String((ss.topRole && ss.topRole.code) || "") === "superadmin") return true;
+          var rb = JSON.parse(localStorage.getItem("aiDcaRbacMenus_v1") || "null");
+          return !!(rb && rb.key === "user:" + (ss.userId || ss.username) && codes(rb.state).indexOf("superadmin") >= 0);
+        } catch (e) { return false; }
+      })();
       (function () {
         // 演示页 auction-board-demo.html 由本文件构建生成（scripts/vite/auctionBoardDemoPage.mjs），先注入 window.AUCTION_BOARD_ENV：
         // 模拟时钟 now、模拟行情 load、演示持仓 held/rounds、localStorage 键前缀 keyPrefix。正式页无 ENV，行为不变。
@@ -1413,7 +1424,7 @@
           });
         }
         function cycRender(list) {
-          if (!$("cyc")) return;
+          if (!$("cyc") || !IS_SUPER) return;
           list = list || rows();
           var b = bj(), t = secs(b), wk = weekday(b);
           var on1 = wk && t >= 34200 && t < 37800, on2 = wk && t >= 37800 && t < 41400, on3 = wk && t >= 52800 && t < 54000;
@@ -1530,11 +1541,13 @@
         $("cyc-thr").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { S.cycThr = v; saveCfg(); cycRender(); } });
         // 视图切换：偏离轮动 / 日循环（不放同一屏）
         function setView(v) {
+          if (!IS_SUPER) v = "dev";
           document.body.classList.toggle("v-cyc", v === "cyc");
           [].forEach.call(document.querySelectorAll("#vtabs button"), function (x) { x.classList.toggle("on", x.getAttribute("data-v") === v); });
           try { localStorage.setItem(KP + "nqView", v); } catch (e) {}
           if (v === "cyc") cycRender();
         }
+        if (!IS_SUPER) { var cbt = document.querySelector('#vtabs button[data-v="cyc"]'); if (cbt) cbt.remove(); var vt = $("vtabs"); if (vt && vt.querySelectorAll("button").length < 2) vt.style.display = "none"; }
         $("vtabs").addEventListener("click", function (ev) { var bt = ev.target && ev.target.closest && ev.target.closest("button[data-v]"); if (bt) setView(bt.getAttribute("data-v")); });
         try { if (localStorage.getItem(KP + "nqView") === "cyc") setView("cyc"); } catch (e) {}
 
