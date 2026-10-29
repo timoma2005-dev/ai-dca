@@ -168,12 +168,32 @@
       .modes button.on { background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(15,23,42,.12); }
       .modes button.on small { color:var(--sub); }
       body.v-cyc .chips .dv, body:not(.v-cyc) .chips .cy { display:none; }
-      .ntf-env { font-size:12px; color:var(--sub); margin:2px 0 8px; }
-      .ntf-chk { list-style:none; padding:0; margin:0; font-size:13px; }
-      .ntf-chk li { display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-top:1px solid var(--line2); }
-      .ntf-chk li b { font-weight:600; white-space:nowrap; } .ntf-chk .ok { color:#15803d; } .ntf-chk .no { color:#dc2626; } .ntf-chk .md { color:#b45309; }
-      .ntf-tip { font-size:12px; line-height:1.6; background:#f8fafc; border-radius:10px; padding:10px 12px; margin:10px 0; }
-      .ntf-act { display:flex; gap:8px; } .ntf-msg { font-size:12px; color:var(--sub); margin-top:8px; min-height:16px; }
+      .ntf-sheet { width:380px; }
+      .ntf-hd { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+      .ntf-hd h4 { margin:0; font-size:17px; } .ntf-hd small { font-size:12px; color:var(--mute); }
+      .ntf-hero { display:flex; gap:12px; align-items:center; border-radius:14px; padding:14px; background:#f1f5f9; }
+      .ntf-hero i { flex:none; width:40px; height:40px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-size:18px; font-weight:700; color:#fff; background:#94a3b8; }
+      .ntf-hero b { display:block; font-size:15px; } .ntf-hero small { font-size:12px; color:var(--sub); }
+      .ntf-hero[data-s="ok"] { background:#ecfdf5; } .ntf-hero[data-s="ok"] i { background:#16a34a; } .ntf-hero[data-s="ok"] b { color:#15803d; }
+      .ntf-hero[data-s="go"] { background:#eff6ff; } .ntf-hero[data-s="go"] i { background:var(--brand); } .ntf-hero[data-s="go"] b { color:#1d4ed8; }
+      .ntf-hero[data-s="md"] { background:#fffbeb; } .ntf-hero[data-s="md"] i { background:#f59e0b; } .ntf-hero[data-s="md"] b { color:#b45309; }
+      .ntf-hero[data-s="no"] { background:#fef2f2; } .ntf-hero[data-s="no"] i { background:#ef4444; } .ntf-hero[data-s="no"] b { color:#b91c1c; }
+      .ntf-sec { font-size:11px; letter-spacing:.06em; color:var(--mute); margin:14px 0 6px; }
+      .ntf-chk { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+      .ntf-chk li { display:flex; gap:8px; align-items:center; border:1px solid var(--line); border-radius:10px; padding:7px 9px; min-width:0; }
+      .ntf-chk li i { flex:none; width:18px; height:18px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-size:11px; font-weight:700; color:#fff; }
+      .ntf-chk li span { display:block; font-size:12px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .ntf-chk li em { display:block; font-style:normal; font-size:11px; color:var(--mute); }
+      .ntf-chk .ok i { background:#16a34a; } .ntf-chk .no i { background:#ef4444; } .ntf-chk .md i { background:#f59e0b; }
+      .ntf-tip { border-radius:12px; background:#f8fafc; padding:12px 14px; font-size:12px; color:var(--ink2); }
+      .ntf-tip b { display:block; font-size:14px; color:var(--ink); margin-bottom:6px; }
+      .ntf-tip ol { margin:0; padding-left:18px; line-height:1.7; } .ntf-tip p { margin:6px 0 0; color:var(--mute); }
+      .ntf-act { display:flex; gap:8px; margin-top:14px; }
+      .ntf-pri { flex:1; border:0; border-radius:10px; padding:11px; font-size:14px; font-weight:600; color:#fff; background:var(--brand); cursor:pointer; }
+      .ntf-pri.off { background:#fff; color:var(--up); border:1px solid #fecaca; }
+      .ntf-sec2 { border:1px solid var(--line); background:#fff; border-radius:10px; padding:11px 16px; font-size:14px; cursor:pointer; }
+      .ntf-pri:disabled, .ntf-sec2:disabled { opacity:.4; cursor:not-allowed; }
+      .ntf-msg { font-size:12px; color:var(--sub); margin:8px 0 0; min-height:16px; text-align:center; }
       #ntf.on { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8; }
       .cyc-now { background:linear-gradient(135deg,#0f172a,#1e293b); color:#fff; border-radius:12px; padding:14px 16px; margin-bottom:12px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
       .cyc-now .l { flex:1; min-width:220px; }
@@ -414,12 +434,14 @@
       </div>
     </div>
     <div class="mask hide" id="ntf-mask">
-      <div class="sheet">
-        <h4>通知 <button class="x" type="button" id="ntf-close">×</button></h4>
-        <div id="ntf-env" class="ntf-env"></div>
+      <div class="sheet ntf-sheet">
+        <div class="ntf-hd"><div><h4>通知</h4><small>备用提醒 · 页面开着时有效</small></div><button class="x" type="button" id="ntf-close">×</button></div>
+        <div class="ntf-hero" id="ntf-hero" data-s="no"><i id="ntf-ico"></i><div><b id="ntf-state"></b><small id="ntf-env"></small></div></div>
+        <div class="ntf-sec">环境检测</div>
         <ul class="ntf-chk" id="ntf-chk"></ul>
-        <p class="ntf-tip" id="ntf-tip"></p>
-        <div class="ntf-act"><button class="btn" type="button" id="ntf-toggle">开启通知</button><button class="btn" type="button" id="ntf-test">发送测试通知</button></div>
+        <div class="ntf-sec">建议</div>
+        <div class="ntf-tip" id="ntf-tip"></div>
+        <div class="ntf-act"><button class="ntf-pri" type="button" id="ntf-toggle">开启通知</button><button class="ntf-sec2" type="button" id="ntf-test">测试</button></div>
         <p class="ntf-msg" id="ntf-msg"></p>
       </div>
     </div>
@@ -1012,30 +1034,37 @@
           var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
           return { kind: ios ? "ios" : android ? "android" : "desktop", br: br, inapp: inapp, cn: cn, standalone: standalone };
         }
-        function ntfAdvice(d, ok) {
-          if (d.inapp) return "当前是" + d.br + "，不支持网页通知。请点右上角「在浏览器中打开」，" + (d.kind === "ios" ? "用 Safari。" : d.kind === "android" ? "用 Chrome。" : "用 Chrome 或 Edge。");
-          if (d.kind === "ios") return d.standalone ? "已从主屏幕打开，iOS 16.4 及以上可收通知。注意：切到后台或锁屏后页面会暂停，提醒可能延迟或收不到。"
-            : "iPhone / iPad 推荐 Safari：点分享 →「添加到主屏幕」，再从主屏幕图标打开并开启通知（需 iOS 16.4+）。在普通标签页里无法通知。";
-          if (d.kind === "android") return "安卓推荐 Chrome（Edge、Firefox、三星浏览器也可）" + (d.cn ? "；当前国产浏览器多数不支持或会被拦截，建议换 Chrome" : "") + "。在系统设置里把该浏览器的电池优化设为「不限制」，并允许通知。锁屏后页面可能被暂停，提醒会延迟。";
-          return "电脑推荐 Chrome 或 Edge（Firefox、macOS 13+ 的 Safari 也可）。页面放在后台标签页即可，但浏览器不能最小化到休眠、电脑不能睡眠。" + (ok ? "" : "");
+        function ntfAdvice(d) {
+          var to = d.kind === "ios" ? "Safari" : d.kind === "android" ? "Chrome" : "Chrome 或 Edge";
+          if (d.inapp) return { pick: "请改用 " + to, steps: ["点右上角「…」", "选「在浏览器中打开」"], note: d.br + "不支持网页通知。" };
+          if (d.kind === "ios") return d.standalone
+            ? { pick: "已从主屏幕打开", steps: ["点下方「开启通知」并允许", "需要 iOS 16.4 及以上"], note: "切到后台或锁屏后页面会暂停，提醒可能延迟。" }
+            : { pick: "推荐 Safari · 添加到主屏幕", steps: ["点底部分享按钮", "选「添加到主屏幕」", "从主屏幕图标打开，再开启通知"], note: "普通标签页无法通知，需要 iOS 16.4 及以上。" };
+          if (d.kind === "android") return { pick: "推荐 Chrome", steps: ["也可用 Edge、Firefox、三星浏览器", "系统设置里把浏览器电池优化设为「不限制」", "允许浏览器通知"], note: (d.cn ? "当前国产浏览器多数会拦截通知。" : "") + "锁屏后页面可能被暂停，提醒会延迟。" };
+          return { pick: "推荐 Chrome 或 Edge", steps: ["Firefox、macOS 13+ 的 Safari 也可", "放在后台标签页即可", "电脑不要睡眠"], note: "浏览器关掉或电脑休眠后不会提醒。" };
         }
         function ntfCheck() {
-          var d = devInfo(), perm = window.Notification ? Notification.permission : "none";
+          var d = devInfo(), perm = window.Notification ? Notification.permission : "none", esc = function (t) { return String(t).replace(/</g, "&lt;"); };
           var rows = [
-            ["安全连接（HTTPS）", window.isSecureContext ? ["ok", "是"] : ["no", "否"]],
+            ["HTTPS", window.isSecureContext ? ["ok", "安全连接"] : ["no", "不安全"]],
             ["通知 API", window.Notification ? ["ok", "支持"] : ["no", "不支持"]],
-            ["Service Worker", !("serviceWorker" in navigator) ? ["no", "不支持"] : NTF.reg ? ["ok", "已注册"] : NTF.regP ? ["md", "注册中/失败"] : ["md", "未注册"]],
-            ["后台计时 Worker", window.Worker ? ["ok", "支持"] : ["no", "不支持"]],
-            ["通知权限", perm === "granted" ? ["ok", "已允许"] : perm === "denied" ? ["no", "已拒绝"] : perm === "default" ? ["md", "未询问"] : ["no", "—"]]
+            ["Service Worker", !("serviceWorker" in navigator) ? ["no", "不支持"] : NTF.reg ? ["ok", "已注册"] : NTF.regP ? ["md", "注册中"] : ["md", "未注册"]],
+            ["后台 Worker", window.Worker ? ["ok", "支持"] : ["no", "不支持"]],
+            ["通知权限", perm === "granted" ? ["ok", "已允许"] : perm === "denied" ? ["no", "已拒绝"] : perm === "default" ? ["md", "未授权"] : ["no", "—"]]
           ];
-          if (d.kind === "ios") rows.push(["从主屏幕打开", d.standalone ? ["ok", "是"] : ["no", "否"]]);
+          if (d.kind === "ios") rows.push(["主屏幕打开", d.standalone ? ["ok", "是"] : ["no", "否"]]);
           var ok = window.isSecureContext && !!window.Notification && !d.inapp && (d.kind !== "android" || !!NTF.reg) && (d.kind !== "ios" || d.standalone);
-          $("ntf-env").textContent = (d.kind === "ios" ? "iPhone / iPad" : d.kind === "android" ? "安卓手机" : "电脑") + " · " + d.br + " · " + (!ok ? "当前环境收不到通知" : perm === "granted" ? (NTF.on ? "通知已开启" : "已授权，通知未开启") : "支持通知，点「开启通知」授权");
-          $("ntf-chk").innerHTML = rows.map(function (r) { return "<li><span>" + r[0] + '</span><b class="' + r[1][0] + '">' + r[1][1] + "</b></li>"; }).join("");
-          $("ntf-tip").textContent = ntfAdvice(d, ok);
+          var st = !ok ? ["no", "!", "当前环境收不到通知"] : perm === "denied" ? ["no", "!", "通知已被拒绝"] : perm !== "granted" ? ["go", "🔔", "支持通知，点下方开启"] : NTF.on ? ["ok", "✓", "通知已开启"] : ["md", "‖", "已授权，通知已暂停"];
+          $("ntf-hero").setAttribute("data-s", st[0]); $("ntf-ico").textContent = st[1]; $("ntf-state").textContent = st[2];
+          $("ntf-env").textContent = (d.kind === "ios" ? "iPhone / iPad" : d.kind === "android" ? "安卓手机" : "电脑") + " · " + d.br;
+          $("ntf-chk").innerHTML = rows.map(function (r) { return '<li class="' + r[1][0] + '"><i>' + (r[1][0] === "ok" ? "✓" : r[1][0] === "no" ? "✕" : "!") + "</i><div><span>" + r[0] + "</span><em>" + r[1][1] + "</em></div></li>"; }).join("");
+          var adv = ntfAdvice(d);
+          if (perm === "denied" && ok) adv.note = "已拒绝过通知：在浏览器地址栏左侧的网站设置里改回「允许」。 " + adv.note;
+          $("ntf-tip").innerHTML = "<b>" + esc(adv.pick) + "</b><ol>" + adv.steps.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ol>" + (adv.note ? "<p>" + esc(adv.note) + "</p>" : "");
           $("ntf-toggle").textContent = NTF.on ? "关闭通知" : "开启通知";
-          $("ntf-toggle").disabled = !window.Notification;
-          $("ntf-test").disabled = !(window.Notification && Notification.permission === "granted");
+          $("ntf-toggle").classList.toggle("off", !!NTF.on);
+          $("ntf-toggle").disabled = !window.Notification || (!NTF.on && perm === "denied");
+          $("ntf-test").disabled = !(window.Notification && perm === "granted");
           return ok;
         }
         function ntfShow(on) { $("ntf-mask").classList.toggle("hide", !on); if (on) { $("ntf-msg").textContent = ""; ntfCheck(); ntfReg().then(ntfCheck); } }
