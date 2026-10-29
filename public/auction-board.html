@@ -168,6 +168,7 @@
       .modes button.on { background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(15,23,42,.12); }
       .modes button.on small { color:var(--sub); }
       body.v-cyc .chips .dv, body:not(.v-cyc) .chips .cy { display:none; }
+      #ntf.on { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8; }
       .cyc-now { background:linear-gradient(135deg,#0f172a,#1e293b); color:#fff; border-radius:12px; padding:14px 16px; margin-bottom:12px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
       .cyc-now .l { flex:1; min-width:220px; }
       .cyc-now small { font-size:12px; color:#94a3b8; }
@@ -289,6 +290,7 @@
           <span class="src" title="腾讯ETF"><span class="sdot" id="s-qq"></span>腾讯</span>
           <span class="upd">更新 <b id="updated">--:--:--</b></span>
         </div>
+        <button class="btn" id="ntf" type="button" title="交易信号与隔夜轮动各步到点时发桌面通知（备用，浏览器不支持就不发）">🔔 通知</button>
         <button class="btn" id="refresh" type="button">刷新</button>
         <button class="btn gear" type="button" data-open="1">⚙ 设置</button>
         <div class="prog"><div class="bar-p"><i id="prog-i" style="width:0"></i></div><div class="prog-l"><span>09:15</span><span>09:30</span><span>11:30</span><span>13:00</span><span>15:00</span></div></div>
@@ -951,7 +953,38 @@
           return null;
         }
 
+        /* ---------- 通知（备用：能用就用，不能用静默） ---------- */
+        var NTF = { on: false };
+        try { NTF.on = localStorage.getItem(KP + "nqNtf") === "1" && window.Notification && Notification.permission === "granted"; } catch (e) {}
+        function ntfBtn() { var el = $("ntf"); if (el) { el.classList.toggle("on", NTF.on); el.textContent = NTF.on ? "🔔 通知已开" : "🔔 通知"; } }
+        function beep() {
+          try {
+            var C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+            NTF.ac = NTF.ac || new C(); var o = NTF.ac.createOscillator(), g = NTF.ac.createGain();
+            o.frequency.value = 880; g.gain.value = 0.08; o.connect(g); g.connect(NTF.ac.destination); o.start(); o.stop(NTF.ac.currentTime + 0.25);
+          } catch (e) {}
+        }
+        function notify(title, body, tag) {
+          if (!NTF.on || ENV.load) return;
+          beep();
+          try {
+            var n = new Notification(title, { body: body, tag: tag || title, renotify: true });
+            n.onclick = function () { try { window.focus(); n.close(); } catch (e) {} };
+          } catch (e) {
+            try { if (navigator.serviceWorker && navigator.serviceWorker.ready) navigator.serviceWorker.ready.then(function (r) { r.showNotification(title, { body: body, tag: tag || title }); }); } catch (e2) {}
+          }
+        }
+        function ntfOnce(key, title, body) {
+          var k = KP + "nqNtfSent", m = {};
+          try { m = JSON.parse(localStorage.getItem(k) || "{}"); } catch (e) {}
+          if (m[key]) return;
+          var d = key.slice(0, 10); for (var x in m) if (x.slice(0, 10) !== d) delete m[x];
+          m[key] = 1; try { localStorage.setItem(k, JSON.stringify(m)); } catch (e) {}
+          notify(title, body, key);
+        }
+        function plain(h) { var d = document.createElement("div"); d.innerHTML = h; return (d.textContent || "").replace(/\s+/g, " ").trim(); }
         function pushLog(b, text) {
+          notify("纳指盘中轮动", p2(b.h) + ":" + p2(b.mi) + " " + text, "dev-" + text);
           S.log.unshift({ t: p2(b.h) + ":" + p2(b.mi), text: text });
           if (S.log.length > 60) S.log.length = 60;
           try { localStorage.setItem(KP + "nqLog", JSON.stringify({ day: S.logDay, log: S.log })); } catch (e) {}
@@ -1129,7 +1162,7 @@
         }
         function cycle() {
           if (S.busy) return;
-          S.busy = true;
+          S.busy = true; S.lastCyc = Date.now();
           clearTimeout(S.timer);
           $("refresh").textContent = "刷新中…";
           // 份额每 30 分钟刷新一次（PCF 每天开盘前发布一次）
@@ -1349,6 +1382,7 @@
           else if (t < 52800) { nl = "盘中持有"; nh = op ? "持有 " + esc(op.name) : "空仓"; np = "14:50 起按③定隔夜仓。"; }
           else { nl = "③ 尾盘建仓 · 进行中"; nh = $("cyc-s3-h").innerHTML; np = "尽量在 14:50–14:57 完成。"; }
           $("cyc-now-l").textContent = nl; $("cyc-now-h").innerHTML = nh; $("cyc-now-p").innerHTML = np;
+          if (on1 || on2 || on3) { var sn = on1 ? 1 : on2 ? 2 : 3; if (!stepDone(sn)) ntfOnce(todayStr() + "-cyc" + sn, "隔夜轮动 · " + ["", "① 开盘卖出", "② 复牌换仓", "③ 尾盘建仓"][sn], plain(nh) + "。" + plain(np)); }
           // 统计
           var legs = cycLegs(list), done = legs.filter(function (l) { return !l.open && l.ex != null; });
           var sumEx = done.reduce(function (x, l) { return x + l.ex; }, 0), sumRet = done.reduce(function (x, l) { return x + l.ret; }, 0);
@@ -1437,9 +1471,29 @@
         $("etf-body").addEventListener("change", onChk);
         $("m-items").addEventListener("change", onChk);
 
+        ntfBtn();
+        $("ntf").addEventListener("click", function () {
+          if (NTF.on) { NTF.on = false; try { localStorage.setItem(KP + "nqNtf", "0"); } catch (e) {} ntfBtn(); return; }
+          if (!window.Notification) { alert("这个浏览器不支持网页通知（iPhone 需先添加到主屏幕）。"); return; }
+          Promise.resolve(Notification.requestPermission()).then(function (p) {
+            NTF.on = p === "granted"; try { localStorage.setItem(KP + "nqNtf", NTF.on ? "1" : "0"); } catch (e) {}
+            ntfBtn(); if (NTF.on) notify("纳指轮动", "通知已开启：盘中轮动信号与隔夜轮动各步到点会提醒。", "ntf-test");
+            else alert("通知权限被拒绝，可在浏览器地址栏左侧的网站设置里重新允许。");
+          }).catch(function () {});
+        });
+
         tick();
         setInterval(tick, ENV.tickMs || 1000);
         cycle();
+        // 后台标签页的定时器会被浏览器降频；用 Worker 计时兜底，页面在后台时照常刷新行情、检查信号
+        if (!ENV.load) try {
+          var hb = new Worker(URL.createObjectURL(new Blob(["setInterval(function(){postMessage(0)},1000)"], { type: "text/javascript" })));
+          hb.onmessage = function () {
+            if (!document.hidden) return;
+            tick();
+            if (!S.busy && Date.now() - (S.lastCyc || 0) > interval() + 2000) cycle();
+          };
+        } catch (e) {}
       })();
     </script>
   </body></html>
