@@ -13,6 +13,7 @@ import RadarComputeDialog from './RadarComputeDialog.jsx';
 import RadarScoreHero from './RadarScoreHero.jsx';
 import RadarScoreTable from './RadarScoreTable.jsx';
 import RadarReviewPanel from './RadarReviewPanel.jsx';
+import RadarPaperPanel from './RadarPaperPanel.jsx';
 import { hasScoring } from '../../app/radarScoreModel.js';
 
 /**
@@ -195,7 +196,7 @@ export default function RadarPanel({ session }) {
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="inline-flex self-start rounded-xl bg-slate-100 p-0.5" role="tablist" aria-label="雷达视图">
-          {[['radar', '今日雷达'], ['review', '切换复盘']].map(([key, label]) => (
+          {[['radar', '今日雷达'], ['paper', '纸面记录'], ['review', '切换复盘']].map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -246,6 +247,8 @@ export default function RadarPanel({ session }) {
 
       {view === 'review' ? (
         <RadarReviewPanel data={radar.data} />
+      ) : view === 'paper' ? (
+        firstLoading ? leftColumn : <RadarPaperPanel data={radar.data} />
       ) : firstLoading ? (
         leftColumn
       ) : hasSnapshot && hasScoring(radar.data) ? (

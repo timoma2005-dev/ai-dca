@@ -310,7 +310,8 @@ async function upsertScoreHistory(env, today, scoring) {
 export function buildRadarSeries(featureHistory = [], limitHistory = {}, days = SERIES_DAYS, scoreHistory = []) {
   const rows = featureHistory.slice(-days);
   const dates = rows.map((day) => day.date);
-  const scoresByDate = new Map((Array.isArray(scoreHistory) ? scoreHistory : []).map((item) => [item?.date, item?.etfs || {}]));
+  const scoreRows = new Map((Array.isArray(scoreHistory) ? scoreHistory : []).map((item) => [item?.date, item || {}]));
+  const scoresByDate = new Map([...scoreRows].map(([date, item]) => [date, item.etfs || {}]));
   const etfs = {};
   for (const meta of NASDAQ_ETFS) {
     const limits = new Map((limitHistory[meta.code] || []).map((item) => [item.date, item.limit]));
@@ -327,7 +328,14 @@ export function buildRadarSeries(featureHistory = [], limitHistory = {}, days = 
       }),
     };
   }
-  return { dates, etfs };
+  // 纸面记录：每天的主换基建议 [卖, 买, 换基分] 与平价换基 [卖, 买, 分数差]；backfill=1 表示上线前回算
+  const pick = (p, key) => (p && p.s && p.b ? [p.s, p.b, p[key] ?? null] : null);
+  const paper = {
+    pair: rows.map((day) => pick(scoreRows.get(day.date)?.pair, 'score')),
+    parity: rows.map((day) => pick(scoreRows.get(day.date)?.parity, 'edge')),
+    backfill: rows.map((day) => (scoreRows.get(day.date)?.backfill ? 1 : 0)),
+  };
+  return { dates, etfs, paper };
 }
 
 function shanghaiDateStr(d = new Date()) {
