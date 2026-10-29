@@ -984,7 +984,6 @@
         }
         function plain(h) { var d = document.createElement("div"); d.innerHTML = h; return (d.textContent || "").replace(/\s+/g, " ").trim(); }
         function pushLog(b, text) {
-          notify("纳指盘中轮动", p2(b.h) + ":" + p2(b.mi) + " " + text, "dev-" + text);
           S.log.unshift({ t: p2(b.h) + ":" + p2(b.mi), text: text });
           if (S.log.length > 60) S.log.length = 60;
           try { localStorage.setItem(KP + "nqLog", JSON.stringify({ day: S.logDay, log: S.log })); } catch (e) {}
@@ -1035,6 +1034,11 @@
           var list = rows();
           var act = decide(list, b);
           trackSignals(list, b);
+          // 盘中轮动：操作建议出现切换/买入时通知；同一建议 5 分钟内不重复
+          if (/切换：|空仓：买入/.test(act.h)) {
+            var ak = plain(act.h);
+            if (ak !== S.ntfAct || Date.now() - (S.ntfActAt || 0) > 3e5) { S.ntfAct = ak; S.ntfActAt = Date.now(); notify("盘中轮动 · " + ak, plain(act.p), "dev-act"); }
+          } else S.ntfAct = "";
           list.forEach(function (r) { r.sigObj = sigOf(r); r.sig = r.sigObj ? r.sigObj.o : 9; });
 
           $("act-h").innerHTML = act.h; $("act-p").innerHTML = act.p; $("act-flow").innerHTML = act.flow;
