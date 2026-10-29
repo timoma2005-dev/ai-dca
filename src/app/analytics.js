@@ -15,6 +15,7 @@ const RBAC_STORE_KEY = 'aiDcaRbacMenus_v1';
 const PRIVILEGED_ROLE_CODES = new Set(['admin', 'superadmin']);
 const SESSION_START_KEY = 'aiDcaAnalyticsSessionStarted_v1';
 const OPT_OUT_KEY = 'aiDcaAnalyticsOptOut_v1';
+const ANON_DAILY_KEY = 'aiDcaAnalyticsAnonDaily_v1';
 const EVENT_STORE_RETRY_LIMITS = [MAX_EVENTS, 1000, 250, 50];
 const PENDING_STORE_RETRY_LIMITS = [MAX_PENDING_EVENTS, 250, 50, 10];
 const SENSITIVE_META_KEYS = new Set([
@@ -185,6 +186,53 @@ export function setAnalyticsOptOut(optedOut) {
 
 export function isAnalyticsCollectionDisabled() {
   return getAnalyticsOptOut() || isDoNotTrackEnabled();
+}
+
+// 匿名页面访问（2026-10-29）：详细事件仍为 opt-in；未设置开关的用户只上报不带账号信息的 page_view，
+// 访客标识按天轮换（anon:<日期>:<随机>），用于 PV/UV 计数。明确关闭（'1'）或 DNT 时完全不上报。
+export function getAnalyticsMode() {
+  if (!isAnalyticsCollectionDisabled()) return 'full';
+  if (isDoNotTrackEnabled()) return 'off';
+  const ls = safeStorage();
+  if (!ls) return 'off';
+  return storageGetItem(ls, OPT_OUT_KEY) == null ? 'anonymous' : 'off';
+}
+
+function getAnonymousDailyVisitorId(date) {
+  const ls = safeStorage();
+  if (!ls) return '';
+  let saved = null;
+  try { saved = JSON.parse(storageGetItem(ls, ANON_DAILY_KEY) || 'null'); } catch (_error) { saved = null; }
+  if (saved && saved.date === date && typeof saved.id === 'string' && saved.id) return saved.id;
+  const id = `anon:${date}:${Math.random().toString(36).slice(2, 12)}`;
+  storageSetItem(ls, ANON_DAILY_KEY, JSON.stringify({ date, id }));
+  return id;
+}
+
+function trackAnonymousPageView(meta = {}) {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const visitorId = getAnonymousDailyVisitorId(date);
+  if (!visitorId) return null;
+  let referrer = '';
+  try { referrer = document.referrer ? new URL(document.referrer).origin : ''; } catch (_error) { referrer = ''; }
+  const nav = window.navigator || {};
+  const event = {
+    id: randomId('event'),
+    type: 'page_view',
+    createdAt: now.toISOString(),
+    date,
+    visitorId,
+    sessionId: '',
+    userId: '',
+    username: '',
+    path: window.location.pathname,
+    referrer,
+    userAgent: coarseUserAgent(nav.userAgent || ''),
+    meta: { tab: String(meta.tab || '').slice(0, 40), feature: 'navigation', action: 'page_view', anonymous: true }
+  };
+  enqueuePendingEvent(event);
+  return event;
 }
 
 function coarseUserAgent(ua = '') {
@@ -359,7 +407,7 @@ function installAnalyticsFlushHooks() {
 }
 
 function scheduleAnalyticsFlush({ immediate = false } = {}) {
-  if (typeof window === 'undefined' || isAnalyticsCollectionDisabled()) return;
+  if (typeof window === 'undefined' || getAnalyticsMode() === 'off') return;
   installAnalyticsFlushHooks();
   if (analyticsFlushInFlight || !readPendingEvents().length) return;
   if (analyticsFlushTimer) {
@@ -384,9 +432,15 @@ export async function flushAnalyticsEvents({ useBeacon = false } = {}) {
     window.clearTimeout?.(analyticsFlushTimer);
     analyticsFlushTimer = null;
   }
-  if (isAnalyticsCollectionDisabled()) {
+  const mode = getAnalyticsMode();
+  if (mode === 'off') {
     writePendingEvents([]);
     return { ok: false, sent: 0 };
+  }
+  if (mode === 'anonymous') {
+    const pending = readPendingEvents();
+    const anonOnly = pending.filter((event) => event?.meta?.anonymous === true);
+    if (anonOnly.length !== pending.length) writePendingEvents(anonOnly);
   }
   if (analyticsFlushInFlight) return analyticsFlushInFlight;
   const batch = readPendingEvents().slice(0, ANALYTICS_BATCH_SIZE);
@@ -529,6 +583,9 @@ export function trackAnalyticsEvent(type, meta = {}) {
 }
 
 export function trackPageView(tab) {
+  if (typeof window !== 'undefined' && getAnalyticsMode() === 'anonymous') {
+    return trackAnonymousPageView({ tab: tab || '' });
+  }
   // 同步到 PostHog
   try {
     trackPostHogPageView({ tab: tab || '' });

@@ -5,7 +5,9 @@ import {
   getAnalyticsVisitorId,
   isAnalyticsCollectionDisabled,
   setAnalyticsOptOut,
-  trackAnalyticsEvent
+  trackAnalyticsEvent,
+  trackPageView,
+  getAnalyticsMode
 } from '../src/app/analytics.js';
 
 function createStorage({ throwOnSetKeys = new Set() } = {}) {
@@ -239,4 +241,34 @@ test('analytics opt-in persists explicit choices and keeps an existing opt-out',
   setAnalyticsOptOut(true);
   assert.equal(env.localStorage.getItem('aiDcaAnalyticsOptOut_v1'), '1');
   assert.equal(isAnalyticsCollectionDisabled(), true);
+});
+
+test('unset users send only an anonymous page_view with a daily-rotating visitor id', async () => {
+  const env = installBrowserMock({ optIn: null });
+  assert.equal(getAnalyticsMode(), 'anonymous');
+  assert.equal(trackAnalyticsEvent('feature_use', { feature: 'x' }), null);
+  const event = trackPageView('strategy');
+  assert.equal(event.type, 'page_view');
+  assert.match(event.visitorId, /^anon:\d{4}-\d{2}-\d{2}:/);
+  assert.equal(event.userId, '');
+  assert.equal(event.username, '');
+  assert.equal(event.sessionId, '');
+  assert.equal(event.path, '/index.html');
+  assert.equal(event.referrer, 'https://referrer.test');
+  assert.equal(trackPageView('strategy').visitorId, event.visitorId);
+  assert.equal(env.localStorage.getItem('aiDcaAnalyticsVisitorId_v1'), null);
+  await flushAnalyticsEvents();
+  assert.equal(env.fetchCalls.length, 1);
+  const body = JSON.parse(env.fetchCalls[0].init.body);
+  assert.equal(body.events.length, 2);
+  assert.ok(body.events.every((e) => e.meta.anonymous === true));
+});
+
+test('explicit opt-out and DNT send nothing, not even anonymous page views', () => {
+  installBrowserMock({ optIn: '1' });
+  assert.equal(getAnalyticsMode(), 'off');
+  assert.equal(trackPageView('strategy'), null);
+  installBrowserMock({ optIn: null, dnt: '1' });
+  assert.equal(getAnalyticsMode(), 'off');
+  assert.equal(trackPageView('strategy'), null);
 });
