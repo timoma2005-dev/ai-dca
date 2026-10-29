@@ -168,6 +168,12 @@
       .modes button.on { background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(15,23,42,.12); }
       .modes button.on small { color:var(--sub); }
       body.v-cyc .chips .dv, body:not(.v-cyc) .chips .cy { display:none; }
+      .ntf-env { font-size:12px; color:var(--sub); margin:2px 0 8px; }
+      .ntf-chk { list-style:none; padding:0; margin:0; font-size:13px; }
+      .ntf-chk li { display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-top:1px solid var(--line2); }
+      .ntf-chk li b { font-weight:600; white-space:nowrap; } .ntf-chk .ok { color:#15803d; } .ntf-chk .no { color:#dc2626; } .ntf-chk .md { color:#b45309; }
+      .ntf-tip { font-size:12px; line-height:1.6; background:#f8fafc; border-radius:10px; padding:10px 12px; margin:10px 0; }
+      .ntf-act { display:flex; gap:8px; } .ntf-msg { font-size:12px; color:var(--sub); margin-top:8px; min-height:16px; }
       #ntf.on { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8; }
       .cyc-now { background:linear-gradient(135deg,#0f172a,#1e293b); color:#fff; border-radius:12px; padding:14px 16px; margin-bottom:12px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
       .cyc-now .l { flex:1; min-width:220px; }
@@ -405,6 +411,16 @@
         <label class="srow"><span>买入下限<small>偏离低于此值不买（百分点）</small></span><input id="lo" type="number" step="0.05" min="0" value="0.5"/></label>
         <label class="srow"><span>停牌溢价<small>集合竞价时超过即推算停牌（%）</small></span><input id="halt-thr" type="number" step="0.5" min="0" value="10"/></label>
         <label class="srow"><span>日循环 LOF 线<small>收盘时 ETF 溢价全部高于此值才隔夜拿 LOF（%）</small></span><input id="cyc-thr" type="number" step="0.5" min="0" value="10"/></label>
+      </div>
+    </div>
+    <div class="mask hide" id="ntf-mask">
+      <div class="sheet">
+        <h4>通知 <button class="x" type="button" id="ntf-close">×</button></h4>
+        <div id="ntf-env" class="ntf-env"></div>
+        <ul class="ntf-chk" id="ntf-chk"></ul>
+        <p class="ntf-tip" id="ntf-tip"></p>
+        <div class="ntf-act"><button class="btn" type="button" id="ntf-toggle">开启通知</button><button class="btn" type="button" id="ntf-test">发送测试通知</button></div>
+        <p class="ntf-msg" id="ntf-msg"></p>
       </div>
     </div>
     <div class="mask hide" id="sim-mask">
@@ -967,13 +983,62 @@
         function notify(title, body, tag) {
           if (!NTF.on || ENV.load) return;
           beep();
-          try {
-            var n = new Notification(title, { body: body, tag: tag || title, renotify: true });
-            n.onclick = function () { try { window.focus(); n.close(); } catch (e) {} };
-          } catch (e) {
-            try { if (navigator.serviceWorker && navigator.serviceWorker.ready) navigator.serviceWorker.ready.then(function (r) { r.showNotification(title, { body: body, tag: tag || title }); }); } catch (e2) {}
-          }
+          showN(title, body, tag);
         }
+        function showN(title, body, tag) {
+          var opt = { body: body, tag: tag || title, renotify: true };
+          var direct = function () {
+            try { var n = new Notification(title, opt); n.onclick = function () { try { window.focus(); n.close(); } catch (e) {} }; return Promise.resolve(true); }
+            catch (e) { return Promise.resolve(false); }
+          };
+          if (NTF.reg) return NTF.reg.showNotification(title, opt).then(function () { return true; }, direct);
+          return direct();
+        }
+        // 注册通知用 Service Worker（安卓必须；桌面也优先走它）。scope 限定在 /auction-board，不影响站内其他页面
+        function ntfReg() {
+          if (NTF.regP) return NTF.regP;
+          NTF.regP = !("serviceWorker" in navigator) || !window.isSecureContext ? Promise.resolve(null) :
+            navigator.serviceWorker.register("/auction-board-sw.js", { scope: "/auction-board" }).then(function (r) {
+              return navigator.serviceWorker.ready.then(function () { return r; }, function () { return r; });
+            }).then(function (r) { NTF.reg = r; return r; }, function () { return null; });
+          return NTF.regP;
+        }
+        function devInfo() {
+          var ua = navigator.userAgent || "", ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+          var android = /Android/i.test(ua), wx = /MicroMessenger/i.test(ua), inapp = wx || /QQ\/|Weibo|DingTalk|Lark|AlipayClient|; wv\)/i.test(ua);
+          var cn = /UCBrowser|MQQBrowser|QQBrowser|Quark|HuaweiBrowser|HeyTapBrowser|MiuiBrowser|VivoBrowser|baidubrowser|SogouMobile|360/i.test(ua);
+          var br = /EdgA?\//.test(ua) ? "Edge" : /SamsungBrowser/.test(ua) ? "三星浏览器" : /Firefox|FxiOS/.test(ua) ? "Firefox" : /CriOS|Chrome/.test(ua) && !cn ? "Chrome" : /Safari/.test(ua) && !cn ? "Safari" : cn ? "国产浏览器" : "其他浏览器";
+          if (wx) br = "微信内置浏览器"; else if (inapp) br = "App 内置浏览器";
+          var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+          return { kind: ios ? "ios" : android ? "android" : "desktop", br: br, inapp: inapp, cn: cn, standalone: standalone };
+        }
+        function ntfAdvice(d, ok) {
+          if (d.inapp) return "当前是" + d.br + "，不支持网页通知。请点右上角「在浏览器中打开」，" + (d.kind === "ios" ? "用 Safari。" : d.kind === "android" ? "用 Chrome。" : "用 Chrome 或 Edge。");
+          if (d.kind === "ios") return d.standalone ? "已从主屏幕打开，iOS 16.4 及以上可收通知。注意：切到后台或锁屏后页面会暂停，提醒可能延迟或收不到。"
+            : "iPhone / iPad 推荐 Safari：点分享 →「添加到主屏幕」，再从主屏幕图标打开并开启通知（需 iOS 16.4+）。在普通标签页里无法通知。";
+          if (d.kind === "android") return "安卓推荐 Chrome（Edge、Firefox、三星浏览器也可）" + (d.cn ? "；当前国产浏览器多数不支持或会被拦截，建议换 Chrome" : "") + "。在系统设置里把该浏览器的电池优化设为「不限制」，并允许通知。锁屏后页面可能被暂停，提醒会延迟。";
+          return "电脑推荐 Chrome 或 Edge（Firefox、macOS 13+ 的 Safari 也可）。页面放在后台标签页即可，但浏览器不能最小化到休眠、电脑不能睡眠。" + (ok ? "" : "");
+        }
+        function ntfCheck() {
+          var d = devInfo(), perm = window.Notification ? Notification.permission : "none";
+          var rows = [
+            ["安全连接（HTTPS）", window.isSecureContext ? ["ok", "是"] : ["no", "否"]],
+            ["通知 API", window.Notification ? ["ok", "支持"] : ["no", "不支持"]],
+            ["Service Worker", !("serviceWorker" in navigator) ? ["no", "不支持"] : NTF.reg ? ["ok", "已注册"] : NTF.regP ? ["md", "注册中/失败"] : ["md", "未注册"]],
+            ["后台计时 Worker", window.Worker ? ["ok", "支持"] : ["no", "不支持"]],
+            ["通知权限", perm === "granted" ? ["ok", "已允许"] : perm === "denied" ? ["no", "已拒绝"] : perm === "default" ? ["md", "未询问"] : ["no", "—"]]
+          ];
+          if (d.kind === "ios") rows.push(["从主屏幕打开", d.standalone ? ["ok", "是"] : ["no", "否"]]);
+          var ok = window.isSecureContext && !!window.Notification && !d.inapp && (d.kind !== "android" || !!NTF.reg) && (d.kind !== "ios" || d.standalone);
+          $("ntf-env").textContent = (d.kind === "ios" ? "iPhone / iPad" : d.kind === "android" ? "安卓手机" : "电脑") + " · " + d.br + " · " + (!ok ? "当前环境收不到通知" : perm === "granted" ? (NTF.on ? "通知已开启" : "已授权，通知未开启") : "支持通知，点「开启通知」授权");
+          $("ntf-chk").innerHTML = rows.map(function (r) { return "<li><span>" + r[0] + '</span><b class="' + r[1][0] + '">' + r[1][1] + "</b></li>"; }).join("");
+          $("ntf-tip").textContent = ntfAdvice(d, ok);
+          $("ntf-toggle").textContent = NTF.on ? "关闭通知" : "开启通知";
+          $("ntf-toggle").disabled = !window.Notification;
+          $("ntf-test").disabled = !(window.Notification && Notification.permission === "granted");
+          return ok;
+        }
+        function ntfShow(on) { $("ntf-mask").classList.toggle("hide", !on); if (on) { $("ntf-msg").textContent = ""; ntfCheck(); ntfReg().then(ntfCheck); } }
         function ntfOnce(key, title, body) {
           var k = KP + "nqNtfSent", m = {};
           try { m = JSON.parse(localStorage.getItem(k) || "{}"); } catch (e) {}
@@ -1476,15 +1541,25 @@
         $("m-items").addEventListener("change", onChk);
 
         ntfBtn();
-        $("ntf").addEventListener("click", function () {
-          if (NTF.on) { NTF.on = false; try { localStorage.setItem(KP + "nqNtf", "0"); } catch (e) {} ntfBtn(); return; }
-          if (!window.Notification) { alert("这个浏览器不支持网页通知（iPhone 需先添加到主屏幕）。"); return; }
-          Promise.resolve(Notification.requestPermission()).then(function (p) {
+        $("ntf").addEventListener("click", function () { ntfShow(true); });
+        $("ntf-close").addEventListener("click", function () { ntfShow(false); });
+        $("ntf-mask").addEventListener("click", function (ev) { if (ev.target === this) ntfShow(false); });
+        $("ntf-toggle").addEventListener("click", function () {
+          if (NTF.on) { NTF.on = false; try { localStorage.setItem(KP + "nqNtf", "0"); } catch (e) {} ntfBtn(); ntfCheck(); $("ntf-msg").textContent = "已关闭。"; return; }
+          if (!window.Notification) return;
+          ntfReg().then(function () { return Notification.requestPermission(); }).then(function (p) {
             NTF.on = p === "granted"; try { localStorage.setItem(KP + "nqNtf", NTF.on ? "1" : "0"); } catch (e) {}
-            ntfBtn(); if (NTF.on) notify("纳指轮动", "通知已开启：盘中轮动信号与隔夜轮动各步到点会提醒。", "ntf-test");
-            else alert("通知权限被拒绝，可在浏览器地址栏左侧的网站设置里重新允许。");
-          }).catch(function () {});
+            ntfBtn(); ntfCheck();
+            if (!NTF.on) { $("ntf-msg").textContent = "权限没有给到，可在浏览器的网站设置里重新允许通知。"; return; }
+            return showN("纳指轮动", "通知已开启：盘中轮动切换建议与隔夜轮动各步到点会提醒。", "ntf-test").then(function (ok) { $("ntf-msg").textContent = ok ? "已开启，并发了一条测试通知，没看到就是被系统拦了。" : "已开启，但这个浏览器发不出通知。"; });
+          }).catch(function () { $("ntf-msg").textContent = "这个浏览器拒绝了通知请求。"; });
         });
+        $("ntf-test").addEventListener("click", function () {
+          ntfReg().then(function () { return showN("纳指轮动 · 测试", "这是一条测试通知 " + hms(bj()), "ntf-test"); }).then(function (ok) {
+            $("ntf-msg").textContent = ok ? "已发送。没看到的话，检查系统通知设置或勿扰模式。" : "发送失败，这个浏览器不支持网页通知。";
+          });
+        });
+        if (NTF.on && !ENV.load) ntfReg();
 
         tick();
         setInterval(tick, ENV.tickMs || 1000);
