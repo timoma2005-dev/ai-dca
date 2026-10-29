@@ -582,7 +582,35 @@ export function trackAnalyticsEvent(type, meta = {}) {
   return event;
 }
 
+// GoatCounter 自建统计（CN 机 /gc/count，看板 stats.freebacktrack.tech）：只发路径/来源域/屏宽，无 Cookie、无账号信息。
+// 用户明确关闭统计或开启 DNT（mode=off）时不发送。
+function sendGoatCounterHit(tab) {
+  try {
+    if (typeof window === 'undefined' || window.__AI_DCA_GOATCOUNTER_DISABLED__) return;
+    const loc = window.location || {};
+    if (!/^https?:$/.test(loc.protocol || '')) return;
+    const path = `${loc.pathname || '/'}${tab ? `?tab=${encodeURIComponent(tab)}` : ''}`;
+    let ref = '';
+    try { ref = document.referrer ? new URL(document.referrer).origin : ''; } catch (_error) { ref = ''; }
+    if (ref && ref === loc.origin) ref = '';
+    const params = new URLSearchParams({
+      p: path,
+      t: String((typeof document !== 'undefined' && document.title) || '').slice(0, 120),
+      r: ref,
+      s: String(window.screen?.width || ''),
+      rnd: Math.random().toString(36).slice(2, 8)
+    });
+    const url = `${window.__AI_DCA_GOATCOUNTER_ENDPOINT__ || '/gc/count'}?${params}`;
+    const nav = window.navigator || {};
+    if (nav.sendBeacon && nav.sendBeacon(url)) return;
+    if (typeof Image === 'function') new Image().src = url;
+  } catch (_error) {
+    // 统计失败不影响页面
+  }
+}
+
 export function trackPageView(tab) {
+  if (typeof window !== 'undefined' && getAnalyticsMode() !== 'off') sendGoatCounterHit(tab || '');
   if (typeof window !== 'undefined' && getAnalyticsMode() === 'anonymous') {
     return trackAnonymousPageView({ tab: tab || '' });
   }

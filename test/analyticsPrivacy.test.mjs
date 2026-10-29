@@ -272,3 +272,19 @@ test('explicit opt-out and DNT send nothing, not even anonymous page views', () 
   assert.equal(getAnalyticsMode(), 'off');
   assert.equal(trackPageView('strategy'), null);
 });
+
+test('goatcounter hit is sent unless analytics is explicitly off', () => {
+  const env = installBrowserMock({ optIn: null });
+  window.location.protocol = 'https:';
+  window.location.origin = 'https://cn.freebacktrack.tech';
+  trackPageView('strategy');
+  const hit = env.beacons.find((b) => String(b.endpoint).startsWith('/gc/count?'));
+  assert.ok(hit);
+  const q = new URLSearchParams(String(hit.endpoint).split('?')[1]);
+  assert.equal(q.get('p'), '/index.html?tab=strategy');
+  assert.equal(q.get('r'), 'https://referrer.test');
+  const off = installBrowserMock({ optIn: '1' });
+  off && (window.location.protocol = 'https:');
+  trackPageView('strategy');
+  assert.equal(off.beacons.length, 0);
+});
