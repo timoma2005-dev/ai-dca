@@ -158,7 +158,14 @@
       .cyc .sec-h { margin-bottom:10px; }
       .cyc-ph { font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px; background:#f1f5f9; color:var(--sub); white-space:nowrap; }
       .cyc-ph.on { background:#dbeafe; color:#1d4ed8; }
-      .cyc-g { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+      .cyc-g { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; }
+      .vtabs { grid-column:span 12; display:flex; gap:6px; }
+      .vtabs button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 16px; font-size:13px; font-weight:600; color:var(--sub); cursor:pointer; }
+      .vtabs button.on { background:var(--ink); border-color:var(--ink); color:#fff; }
+      body:not(.v-cyc) .wrap > .cyc { display:none; }
+      body.v-cyc .wrap > :not(.cyc):not(.vtabs) { display:none; }
+      .cyc-log input.px { width:78px; padding:3px 6px; border:1px solid var(--line); border-radius:6px; font:inherit; font-size:12px; text-align:right; }
+      .cyc-log input.px.ed { border-color:#f59e0b; background:#fffbeb; }
       .cyc-s { border:1px solid var(--line); border-radius:12px; padding:12px 14px; min-width:0; }
       .cyc-s.on { border-color:#93c5fd; box-shadow:0 0 0 3px #eff6ff; }
       .cyc-s small { font-size:11px; color:var(--sub); }
@@ -167,6 +174,7 @@
       .cyc-s p { font-size:12px; color:var(--ink2); line-height:1.6; }
       .cyc-s .why { color:var(--sub); }
       .cyc-s .btn { margin-top:8px; font-size:12px; padding:4px 10px; }
+      .cyc-s .btn:disabled { opacity:.45; cursor:default; }
       .cyc-st { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; margin-top:12px; }
       .cyc-st div { background:#f8fafc; border-radius:10px; padding:8px 10px; min-width:0; }
       .cyc-st span { display:block; font-size:11px; color:var(--sub); }
@@ -257,6 +265,7 @@
     </header>
 
     <main class="wrap">
+      <nav class="vtabs" id="vtabs"><button type="button" class="on" data-v="dev">偏离轮动</button><button type="button" data-v="cyc">日循环</button></nav>
       <section class="card act" aria-live="polite">
         <div class="lbl">操作建议 · 按持仓偏离度</div>
         <h2 id="act-h">—</h2>
@@ -285,22 +294,28 @@
       <section class="card cyc" id="cyc" aria-live="polite">
         <div class="sec-h"><h3>日循环 · 隔夜低溢价 + 10:30 偏离轮动</h3><span class="cyc-ph" id="cyc-ph">—</span></div>
         <div class="cyc-g">
-          <div class="cyc-s" id="cyc-am">
-            <small>① 次日 10:30 后 · 卖隔夜仓，买偏离最负的 ETF</small>
-            <div class="pick" id="cyc-am-h">—</div>
-            <p id="cyc-am-p"></p>
-            <button class="btn" type="button" id="cyc-am-rec">按此记一笔</button>
+          <div class="cyc-s" id="cyc-s1">
+            <small>① 09:30–10:30 · 择机卖出隔夜仓</small>
+            <div class="pick" id="cyc-s1-h">—</div>
+            <p id="cyc-s1-p"></p>
+            <button class="btn" type="button" id="cyc-s1-rec">记卖出</button>
           </div>
-          <div class="cyc-s" id="cyc-pm">
-            <small>② 收盘前 14:50 · 定隔夜持仓（ETF 溢价全部 &gt; <span id="cyc-thr-t">10</span>% 才拿 LOF）</small>
-            <div class="pick" id="cyc-pm-h">—</div>
-            <p id="cyc-pm-p"></p>
-            <button class="btn" type="button" id="cyc-pm-rec">按此记一笔</button>
+          <div class="cyc-s" id="cyc-s2">
+            <small>② 10:30 · 买入偏离最负的 ETF，持有到收盘前</small>
+            <div class="pick" id="cyc-s2-h">—</div>
+            <p id="cyc-s2-p"></p>
+            <button class="btn" type="button" id="cyc-s2-rec">记买入</button>
+          </div>
+          <div class="cyc-s" id="cyc-s3">
+            <small>③ 14:50 · 定隔夜持仓（ETF 溢价全部 &gt; <span id="cyc-thr-t">10</span>% 才拿 LOF）</small>
+            <div class="pick" id="cyc-s3-h">—</div>
+            <p id="cyc-s3-p"></p>
+            <button class="btn" type="button" id="cyc-s3-rec">记换仓</button>
           </div>
         </div>
         <div class="cyc-st" id="cyc-st"></div>
         <details class="cyc-log" id="cyc-log"><summary>纸面记录 <span id="cyc-log-n"></span></summary><div id="cyc-log-b"></div></details>
-        <div class="cyc-note">回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录按切出买一、切入卖一、佣金万 0.5/边计；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</div>
+        <div class="cyc-note">回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</div>
       </section>
 
       <div class="main">
@@ -1144,12 +1159,23 @@
           if (i == null) return;
           SIM.paper.splice(+i, 1); simSave(); simRender();
         });
-        /* ---------- 日循环：收盘前定隔夜持仓（ETF 溢价全部 > 线才拿 LOF，否则最低溢价 ETF），10:30 后换到偏离最负的 ETF ---------- */
-        // 回测见 ai-dca CN 运维项目 backtest/daycycle_lof_bt.py。纸面记录存 localStorage nqCycle（最多 200 条）。
+        /* ---------- 日循环：① 09:30–10:30 卖隔夜仓 ② 10:30 买偏离最负 ETF ③ 14:50 定隔夜仓（ETF 溢价全部 > 线才拿 LOF，否则最低溢价 ETF） ---------- */
+        // 回测见 ai-dca CN 运维项目 backtest/daycycle_lof_bt.py。纸面记录 localStorage nqCycle v2：pos = 一段持仓
+        // { code, name, stage, bt, bp, snap, st?, sp?, endSnap? }，bp/sp 可手改（bpE/spE 标记）。
         var LOF_CODE = "161130";
-        var CYC = { recs: [] };
-        try { var cySv = JSON.parse(localStorage.getItem(KP + "nqCycle") || "{}"); if (cySv && cySv.v === 1 && Array.isArray(cySv.recs)) CYC.recs = cySv.recs; } catch (e) {}
-        function cycSave() { try { localStorage.setItem(KP + "nqCycle", JSON.stringify({ v: 1, recs: CYC.recs.slice(-200) })); } catch (e) {} }
+        var CYC = { pos: [] };
+        try {
+          var cySv = JSON.parse(localStorage.getItem(KP + "nqCycle") || "{}");
+          if (cySv && cySv.v === 2 && Array.isArray(cySv.pos)) CYC.pos = cySv.pos;
+          else if (cySv && cySv.v === 1 && Array.isArray(cySv.recs)) {
+            cySv.recs.forEach(function (r, i) {
+              var n = cySv.recs[i + 1], p = { code: r.to, name: r.toName, stage: r.stage === "am" ? 2 : 3, bt: r.t, bp: r.bp, snap: r.snap };
+              if (n) { p.st = n.t; p.sp = n.sp; p.endSnap = n.snap; }
+              CYC.pos.push(p);
+            });
+          }
+        } catch (e) {}
+        function cycSave() { try { localStorage.setItem(KP + "nqCycle", JSON.stringify({ v: 2, pos: CYC.pos.slice(-200) })); } catch (e) {} }
         function isEtf(r) { return r.code !== LOF_CODE; }
         function cycPm(list) {
           var etfs = list.filter(function (r) { return isEtf(r) && !r.halt && r.prem != null; }).sort(function (x, y) { return x.prem - y.prem; });
@@ -1164,68 +1190,82 @@
         }
         function bidOf(r) { var q = r.q || {}; return q.b1 > 0 ? q.b1 : lastPx(r); }
         function askOf(r) { var q = r.q || {}; return q.a1 > 0 ? q.a1 : lastPx(r); }
-        function cycHolding() { return CYC.recs.length ? CYC.recs[CYC.recs.length - 1].to : null; }
-        function cycRecord(stage, list) {
-          var o = stage === "am" ? cycAm(list) : cycPm(list), z = o.pick; if (!z) return;
-          var hc = cycHolding(), a = hc && list.filter(function (r) { return r.code === hc; })[0];
-          if (a && a.code === z.code) return;
-          var snap = {}; list.forEach(function (r) { var px = lastPx(r); if (px > 0) snap[r.code] = px; });
-          CYC.recs.push({ t: stamp(bj()), stage: stage, from: a ? a.code : null, fromName: a ? a.name : "", sp: a ? bidOf(a) : null,
-            to: z.code, toName: z.name, bp: askOf(z), snap: snap });
+        function openPos() { var p = CYC.pos[CYC.pos.length - 1]; return p && !p.st ? p : null; }
+        function snapOf(list) { var m = {}; list.forEach(function (r) { var px = lastPx(r); if (px > 0) m[r.code] = px; }); return m; }
+        function byCode(list, c) { return list.filter(function (r) { return r.code === c; })[0]; }
+        function cycClose(list, ts, snap) {
+          var p = openPos(); if (!p) return;
+          var r = byCode(list, p.code);
+          p.st = ts; p.sp = r ? bidOf(r) : null; p.endSnap = snap;
+        }
+        function cycAct(stage, list) {
+          var ts = stamp(bj()), snap = snapOf(list), p = openPos();
+          if (stage === 1) { if (p) cycClose(list, ts, snap); }
+          else {
+            var z = (stage === 2 ? cycAm(list) : cycPm(list)).pick; if (!z) return;
+            if (p && p.code === z.code) return;
+            if (p) cycClose(list, ts, snap);
+            CYC.pos.push({ code: z.code, name: z.name, stage: stage, bt: ts, bp: askOf(z), snap: snap });
+          }
           cycSave(); cycRender(list);
         }
-        // 每段：rec[i] 买入 → rec[i+1] 卖出（或当前价）；超额 = 持有段收益 − 同期 ETF 平均（12 只，按快照价）
+        // 持有段收益 = 卖出价 / 买入价 − 1 − 两边佣金；超额 = 持有段 − 同期 12 只 ETF 平均（按买入、卖出时快照价）
         function cycLegs(list) {
-          var legs = [], R = CYC.recs, now = {};
-          list.forEach(function (r) { var px = lastPx(r); if (px > 0) now[r.code] = px; });
-          for (var i = 0; i < R.length; i++) {
-            var a = R[i], n = R[i + 1], open = !n;
-            var exitPx = open ? (function () { var r = list.filter(function (x) { return x.code === a.to; })[0]; return r ? bidOf(r) : null; })() : n.sp;
-            var endSnap = open ? now : n.snap;
-            if (!(a.bp > 0) || !(exitPx > 0)) { legs.push({ rec: a, open: open }); continue; }
-            var ret = (exitPx / a.bp - 1) * 100 - 2 * SIM.comm * 100; // 买入、卖出各一次佣金
+          var now = snapOf(list);
+          return CYC.pos.map(function (p) {
+            var open = !p.st, r = open && byCode(list, p.code), exitPx = open ? (r ? bidOf(r) : null) : p.sp, endSnap = open ? now : p.endSnap || {};
+            var L = { p: p, open: open };
+            if (!(p.bp > 0) || !(exitPx > 0)) return L;
+            L.ret = (exitPx / p.bp - 1) * 100 - 2 * SIM.comm * 100;
             var ss = [], c;
-            for (c in a.snap) if (c !== LOF_CODE && endSnap[c] > 0 && a.snap[c] > 0) ss.push(endSnap[c] / a.snap[c] - 1);
-            var bench = ss.length ? ss.reduce(function (x, y) { return x + y; }, 0) / ss.length * 100 : null;
-            legs.push({ rec: a, open: open, ret: ret, bench: bench, ex: bench == null ? null : ret - bench, end: open ? "持有中" : n.t.slice(5) });
-          }
-          return legs;
+            for (c in p.snap || {}) if (c !== LOF_CODE && endSnap[c] > 0 && p.snap[c] > 0) ss.push(endSnap[c] / p.snap[c] - 1);
+            L.bench = ss.length ? ss.reduce(function (x, y) { return x + y; }, 0) / ss.length * 100 : null;
+            L.ex = L.bench == null ? null : L.ret - L.bench;
+            return L;
+          });
         }
         function cycRender(list) {
           if (!$("cyc")) return;
           list = list || rows();
           var b = bj(), t = secs(b), wk = weekday(b);
-          var amOn = wk && t >= 37800 && t < 41400, pmOn = wk && t >= 52800 && t < 54000;
+          var on1 = wk && t >= 34200 && t < 37800, on2 = wk && t >= 37800 && t < 41400, on3 = wk && t >= 52800 && t < 54000;
           $("cyc-thr-t").textContent = S.cycThr;
-          $("cyc-ph").textContent = !wk || t < 33300 || t >= 54000 ? "非交易时段" : t < 37800 ? "早盘：10:30 后执行①" : amOn ? "现在：执行①换基" : t < 52800 ? "盘中：14:50 起看②" : "现在：按②定隔夜持仓";
-          $("cyc-ph").classList.toggle("on", amOn || pmOn);
-          $("cyc-am").classList.toggle("on", amOn); $("cyc-pm").classList.toggle("on", pmOn);
-          var hc = cycHolding() || (list.filter(function (r) { return r.held; })[0] || {}).code;
-          var hr = hc && list.filter(function (r) { return r.code === hc; })[0];
+          $("cyc-ph").textContent = !wk || t < 33300 || t >= 54000 ? "非交易时段" : t < 34200 ? "集合竞价：09:30 起执行①" : on1 ? "现在：①择机卖出隔夜仓" : on2 ? "现在：②买偏离最负" : t < 52800 ? "盘中：14:50 起看③" : "现在：③定隔夜持仓";
+          $("cyc-ph").classList.toggle("on", on1 || on2 || on3);
+          $("cyc-s1").classList.toggle("on", on1); $("cyc-s2").classList.toggle("on", on2); $("cyc-s3").classList.toggle("on", on3);
+          var op = openPos(), hc = op ? op.code : (list.filter(function (r) { return r.held; })[0] || {}).code;
+          var hr = hc && byCode(list, hc);
           // ①
-          var am = cycAm(list);
-          if (!am.pick) { $("cyc-am-h").textContent = inWin(b) ? "等待偏离数据" : "—"; $("cyc-am-p").innerHTML = '<span class="why">偏离只在交易日 09:15–15:00 计算。</span>'; }
+          if (!hr) { $("cyc-s1-h").textContent = "无持仓"; $("cyc-s1-p").innerHTML = '<span class="why">前一日 ③ 记下隔夜仓后，这里提示卖出。</span>'; }
           else {
-            var same = hr && hr.code === am.pick.code;
-            var ref = !amOn && wk && t >= 41400 ? '<small class="why">参考 · </small>' : "";
-            $("cyc-am-h").innerHTML = ref + (same ? "继续持有 " + esc(am.pick.name) : (hr ? '卖 <span class="hs">' + esc(hr.name) + '</span> → 买 <span class="hl">' + esc(am.pick.name) + "</span>" : '买 <span class="hl">' + esc(am.pick.name) + "</span>"));
-            var nx = am.cands[1];
-            $("cyc-am-p").innerHTML = esc(am.pick.name) + " 偏离 " + minus(f2(am.pick.dev)) + "，ETF 中最低" + (nx ? "（次低 " + esc(nx.name) + " " + minus(f2(nx.dev)) + "）" : "") + "。" +
-              (hr && !same && hr.dev != null ? "持仓 " + esc(hr.name) + " 偏离 " + minus(f2(hr.dev)) + "，差 " + (hr.dev - am.pick.dev).toFixed(2) + " 个百分点。" : "") +
-              '<br/><span class="why">持有到收盘，14:50 再按②换成隔夜仓。</span>';
+            $("cyc-s1-h").innerHTML = (on1 || !op || op.stage === 3 ? (on1 ? "卖出 " : "隔夜仓 ") : "持有 ") + '<span class="' + (on1 ? "hs" : "") + '">' + esc(hr.name) + "</span>";
+            $("cyc-s1-p").innerHTML = "买一 " + fmt3(bidOf(hr)) + " · 涨跌 " + pctStr(hr.pct) + (hr.dev != null ? " · 偏离 " + minus(f2(hr.dev)) : "") + (hr.prem != null ? " · 溢价 " + hr.prem.toFixed(2) + "%" : "") +
+              (op && op.bp > 0 ? "<br/>较买入价 " + fmt3(op.bp) + " " + pctStr(bidOf(hr) / op.bp - 1) : "") +
+              '<br/><span class="why">09:30–10:30 内择机卖出，卖完空仓等 10:30。</span>';
           }
-          $("cyc-am-rec").disabled = !am.pick || (hr && hr.code === am.pick.code);
+          $("cyc-s1-rec").disabled = !op;
           // ②
-          var pm = cycPm(list);
-          if (!pm.pick) { $("cyc-pm-h").textContent = "等待溢价数据"; $("cyc-pm-p").textContent = ""; }
+          var am = cycAm(list);
+          if (!am.pick) { $("cyc-s2-h").textContent = inWin(b) ? "等待偏离数据" : "—"; $("cyc-s2-p").innerHTML = '<span class="why">偏离只在交易日 09:15–15:00 计算。</span>'; }
           else {
-            var same2 = hr && hr.code === pm.pick.code, low3 = pm.etfs.slice(0, 3).map(function (r) { return esc(r.name) + " " + r.prem.toFixed(2) + "%"; }).join("、");
-            $("cyc-pm-h").innerHTML = (same2 ? "隔夜继续持有 " : "隔夜拿 ") + '<span class="hl">' + esc(pm.pick.name) + "</span>" + (pm.useLof ? " <small>(LOF)</small>" : "");
-            $("cyc-pm-p").innerHTML = (pm.useLof ? "ETF 溢价全部 &gt; " + S.cycThr + "%（最低 " + low3 + "），换到 LOF" + (pm.lof && pm.lof.prem != null ? "（溢价 " + pm.lof.prem.toFixed(2) + "%）" : "") + "。"
-              : "溢价最低：" + low3 + "，未全部超过 " + S.cycThr + "%，隔夜拿最低溢价 ETF。") +
-              (hr && !same2 ? "<br/>需卖出 " + esc(hr.name) + "。" : "") + '<br/><span class="why">按收盘前实时溢价判断，尽量在 14:50–14:57 完成。</span>';
+            var same = op && op.code === am.pick.code, ref = wk && t >= 41400 ? '<small class="why">参考 · </small>' : "";
+            $("cyc-s2-h").innerHTML = ref + (same ? "继续持有 " + esc(am.pick.name) : (op ? '卖 <span class="hs">' + esc(op.name) + '</span> → 买 <span class="hl">' : '买 <span class="hl">') + esc(am.pick.name) + "</span>");
+            var nx = am.cands[1];
+            $("cyc-s2-p").innerHTML = esc(am.pick.name) + " 偏离 " + minus(f2(am.pick.dev)) + "，ETF 中最低" + (nx ? "（次低 " + esc(nx.name) + " " + minus(f2(nx.dev)) + "）" : "") + "。卖一 " + fmt3(askOf(am.pick)) + "。" +
+              '<br/><span class="why">持有到收盘前，14:50 再按③换隔夜仓。</span>';
           }
-          $("cyc-pm-rec").disabled = !pm.pick || (hr && hr.code === pm.pick.code);
+          $("cyc-s2-rec").disabled = !am.pick || !!(op && op.code === am.pick.code);
+          // ③
+          var pm = cycPm(list);
+          if (!pm.pick) { $("cyc-s3-h").textContent = "等待溢价数据"; $("cyc-s3-p").textContent = ""; }
+          else {
+            var same3 = op && op.code === pm.pick.code, low3 = pm.etfs.slice(0, 3).map(function (r) { return esc(r.name) + " " + r.prem.toFixed(2) + "%"; }).join("、");
+            $("cyc-s3-h").innerHTML = (same3 ? "隔夜继续持有 " : "隔夜拿 ") + '<span class="hl">' + esc(pm.pick.name) + "</span>" + (pm.useLof ? " <small>(LOF)</small>" : "");
+            $("cyc-s3-p").innerHTML = (pm.useLof ? "ETF 溢价全部 &gt; " + S.cycThr + "%（最低 " + low3 + "），换到 LOF" + (pm.lof && pm.lof.prem != null ? "（溢价 " + pm.lof.prem.toFixed(2) + "%）" : "") + "。"
+              : "溢价最低：" + low3 + "，未全部超过 " + S.cycThr + "%，隔夜拿最低溢价 ETF。") +
+              (op && !same3 ? "需卖出 " + esc(op.name) + "。" : "") + '<br/><span class="why">按收盘前实时溢价判断，尽量在 14:50–14:57 完成。</span>';
+          }
+          $("cyc-s3-rec").disabled = !pm.pick || !!(op && op.code === pm.pick.code);
           // 统计
           var legs = cycLegs(list), done = legs.filter(function (l) { return !l.open && l.ex != null; });
           var sumEx = done.reduce(function (x, l) { return x + l.ex; }, 0), sumRet = done.reduce(function (x, l) { return x + l.ret; }, 0);
@@ -1234,25 +1274,51 @@
           var cell = function (k, v, c) { return "<div><span>" + k + '</span><b class="' + (c || "") + '">' + v + "</b></div>"; };
           $("cyc-st").innerHTML = cell("已结束段数", String(done.length)) + cell("超额胜率", win == null ? "—" : win + "%", win == null ? "" : win >= 50 ? "up" : "dn") +
             cell("累计超额", done.length ? pp(sumEx) : "—", cls(sumEx)) + cell("累计收益 / 持有中", (done.length ? pp(sumRet) : "—") + " / " + (openL && openL.ret != null ? pp(openL.ret) : "—"), "");
-          $("cyc-log-n").textContent = CYC.recs.length ? "（" + CYC.recs.length + " 笔）" : "（还没有，点「按此记一笔」开始）";
-          $("cyc-log-b").innerHTML = legs.length ? '<div class="tbl-wrap"><table><thead><tr><th style="text-align:left">时间</th><th style="text-align:left">操作</th><th class="hm">买入价</th><th>持有段</th><th class="hm">同期 ETF 平均</th><th>超额</th><th></th></tr></thead><tbody>' +
-            legs.slice().reverse().map(function (l, j) {
-              var r = l.rec, idx = legs.length - 1 - j;
-              return '<tr><td style="text-align:left">' + esc(r.t.slice(5)) + (r.stage === "am" ? " ①" : " ②") + '</td><td style="text-align:left">' + (r.fromName ? esc(r.fromName) + " → " : "") + "<b>" + esc(r.toName) + "</b></td>" +
-                '<td class="hm">' + (r.bp > 0 ? r.bp.toFixed(3) : "—") + '</td><td class="' + cls(l.ret) + '">' + (l.ret == null ? "—" : pp(l.ret)) + (l.open ? " <small>持有中</small>" : "") + "</td>" +
+          $("cyc-log-n").textContent = CYC.pos.length ? "（" + CYC.pos.length + " 段）" : "（还没有，按 ①②③ 的按钮记录）";
+          if ($("cyc-log-b").contains(document.activeElement)) return; // 正在改价格时不重绘
+          var STG = { 2: "②", 3: "③" };
+          var inp = function (i, k, v, ed) { return '<input class="px' + (ed ? " ed" : "") + '" type="number" step="0.001" min="0" data-i="' + i + '" data-k="' + k + '" value="' + (v > 0 ? (+v).toFixed(3) : "") + '" title="改成实际成交价">'; };
+          $("cyc-log-b").innerHTML = legs.length ? '<div class="tbl-wrap"><table><thead><tr><th style="text-align:left">标的</th><th style="text-align:left">买入</th><th>买入价</th><th style="text-align:left">卖出</th><th>卖出价</th><th>持有段</th><th class="hm">同期 ETF 平均</th><th>超额</th><th></th></tr></thead><tbody>' +
+            legs.map(function (l, i) { return [l, i]; }).reverse().map(function (x) {
+              var l = x[0], i = x[1], p = l.p;
+              return '<tr><td style="text-align:left"><b>' + esc(p.name) + "</b></td>" +
+                '<td style="text-align:left">' + esc(String(p.bt).slice(5)) + " " + (STG[p.stage] || "") + "</td><td>" + inp(i, "bp", p.bp, p.bpE) + "</td>" +
+                '<td style="text-align:left">' + (l.open ? "<small>持有中</small>" : esc(String(p.st).slice(5))) + "</td><td>" + (l.open ? "—" : inp(i, "sp", p.sp, p.spE)) + "</td>" +
+                '<td class="' + cls(l.ret) + '">' + (l.ret == null ? "—" : pp(l.ret)) + "</td>" +
                 '<td class="hm">' + (l.bench == null ? "—" : pp(l.bench)) + '</td><td class="' + cls(l.ex) + '">' + (l.ex == null ? "—" : pp(l.ex)) + "</td>" +
-                "<td>" + (idx === legs.length - 1 ? '<button class="lnk" type="button" data-cyc-del="1">撤销</button>' : "") + "</td></tr>";
+                "<td>" + (i === legs.length - 1 ? '<button class="lnk" type="button" data-cyc-del="1">撤销</button>' : "") + "</td></tr>";
             }).join("") + '</tbody></table></div><div style="margin-top:6px"><button class="lnk" type="button" data-cyc-clear="1">清空纸面记录</button></div>' : "";
         }
-        $("cyc-am-rec").addEventListener("click", function () { cycRecord("am", rows()); });
-        $("cyc-pm-rec").addEventListener("click", function () { cycRecord("pm", rows()); });
+        $("cyc-s1-rec").addEventListener("click", function () { cycAct(1, rows()); });
+        $("cyc-s2-rec").addEventListener("click", function () { cycAct(2, rows()); });
+        $("cyc-s3-rec").addEventListener("click", function () { cycAct(3, rows()); });
+        $("cyc-log-b").addEventListener("change", function (ev) {
+          var t = ev.target, i = t && t.getAttribute && t.getAttribute("data-i"), k = t && t.getAttribute("data-k");
+          if (i == null || !k || !CYC.pos[+i]) return;
+          var v = parseFloat(t.value); if (!(v > 0)) return;
+          CYC.pos[+i][k] = v; CYC.pos[+i][k + "E"] = true; cycSave(); t.blur(); cycRender();
+        });
         $("cyc-log-b").addEventListener("click", function (ev) {
           var t = ev.target; if (!t || !t.getAttribute) return;
-          if (t.getAttribute("data-cyc-del")) { CYC.recs.pop(); cycSave(); cycRender(); }
-          else if (t.getAttribute("data-cyc-clear") && window.confirm("清空日循环纸面记录？")) { CYC.recs = []; cycSave(); cycRender(); }
+          if (t.getAttribute("data-cyc-del")) {
+            // 撤销最后一步：最后一段若已卖出则恢复持有；否则删掉这段，并把上一段的卖出（同一时刻产生的）也恢复
+            var p = CYC.pos[CYC.pos.length - 1];
+            if (p && p.st) { delete p.st; delete p.sp; delete p.spE; delete p.endSnap; }
+            else if (p) { CYC.pos.pop(); var q = CYC.pos[CYC.pos.length - 1]; if (q && q.st === p.bt) { delete q.st; delete q.sp; delete q.spE; delete q.endSnap; } }
+            cycSave(); cycRender();
+          } else if (t.getAttribute("data-cyc-clear") && window.confirm("清空日循环纸面记录？")) { CYC.pos = []; cycSave(); cycRender(); }
         });
         $("cyc-thr").value = S.cycThr;
         $("cyc-thr").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { S.cycThr = v; saveCfg(); cycRender(); } });
+        // 视图切换：偏离轮动 / 日循环（不放同一屏）
+        function setView(v) {
+          document.body.classList.toggle("v-cyc", v === "cyc");
+          [].forEach.call(document.querySelectorAll("#vtabs button"), function (x) { x.classList.toggle("on", x.getAttribute("data-v") === v); });
+          try { localStorage.setItem(KP + "nqView", v); } catch (e) {}
+          if (v === "cyc") cycRender();
+        }
+        $("vtabs").addEventListener("click", function (ev) { var v = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-v"); if (v) setView(v); });
+        try { if (localStorage.getItem(KP + "nqView") === "cyc") setView("cyc"); } catch (e) {}
 
         var renderETF0 = renderETF;
         renderETF = function () { renderETF0.apply(this, arguments); if (SIM.open) simRender(); try { cycRender(); } catch (e) {} };
