@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { readLedgerState } from '../app/holdingsLedger.js';
 import { getActiveHoldingCodeList } from '../app/holdingsLedgerCore.js';
 import { loadCloudSession } from '../app/authSession.js';
@@ -50,6 +50,7 @@ export const AUCTION_BOARD_DEMO_SRC = '/auction-board-demo.html';
 
 export default function AdminAuctionExperience() {
   const frameRef = useRef(null);
+  const boxRef = useRef(null);
   const readyRef = useRef(false);
   const demo = useDemoActive(); // 上下文或全局 flag：首帧即为演示地址，绝不先渲染受保护的正式页
 
@@ -90,8 +91,26 @@ export default function AdminAuctionExperience() {
     };
   }, [demo, pushHeld, loadHoldings]);
 
+  // 看板高度贴合视口：从容器顶部铺到窗口底部（扣掉外层布局的底部留白），避免下方出现大片空白或双滚动条
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = boxRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      let h = Math.max(window.innerHeight - top - 12, 560);
+      el.style.height = `${h}px`;
+      const extra = document.documentElement.scrollHeight - window.innerHeight;
+      if (extra > 0 && h - extra >= 560) el.style.height = `${h - extra}px`;
+    };
+    fit();
+    const raf = window.requestAnimationFrame(fit);
+    window.addEventListener('resize', fit);
+    return () => { window.cancelAnimationFrame(raf); window.removeEventListener('resize', fit); };
+  }, []);
+
   return (
     <section
+      ref={boxRef}
       className="h-[calc(100vh-10rem)] min-h-[560px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:h-[calc(100vh-8rem)] sm:min-h-[640px]"
       aria-label="竞价看板"
     >
