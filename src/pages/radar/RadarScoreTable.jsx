@@ -89,7 +89,11 @@ function Breakdown({ data, row }) {
             {scoreBreakdown(row, side).map((item) => (
               <li key={item.label} className="flex items-baseline justify-between gap-2 text-[11px]">
                 <span className="min-w-0 text-slate-600">{item.label}<span className="ml-1 text-slate-400">{item.detail}</span></span>
-                <b className="shrink-0 tabular-nums text-slate-800">{item.points ?? '—'}<span className="font-normal text-slate-400">/{item.max}</span></b>
+                {item.max != null ? (
+                  <b className="shrink-0 tabular-nums text-slate-800">{item.points ?? '—'}<span className="font-normal text-slate-400">/{item.max}</span></b>
+                ) : (
+                  <span className="shrink-0 text-slate-400">不计分</span>
+                )}
               </li>
             ))}
           </ul>

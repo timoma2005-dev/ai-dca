@@ -292,7 +292,14 @@ async function upsertScoreHistory(env, today, scoring) {
     history = [];
   }
   history = history.filter((item) => item?.date !== today);
-  history.push({ date: today, version: scoring.version, etfs: compactScores(scoring) });
+  const entry = { date: today, version: scoring.version, etfs: compactScores(scoring) };
+  // 纸面跟踪：记下当天的换基建议与平价换基信号（卖出/买入代码、两边溢价、分数），复盘时按后续溢价算收敛
+  const paper = (pair, extra) => (pair ? { s: pair.sell.code, b: pair.buy.code, sp: pair.sell.premium, bp: pair.buy.premium, ...extra } : null);
+  const rec = paper(scoring.recommendedPair, { score: scoring.recommendedPair?.score });
+  const par = paper(scoring.parityPair, { edge: scoring.parityPair?.edge });
+  if (rec) entry.pair = rec;
+  if (par) entry.parity = par;
+  history.push(entry);
   history.sort((a, b) => String(a.date).localeCompare(String(b.date)));
   history = history.slice(-FEATURE_HISTORY_DAYS);
   await env.NOTIFY_STATE.put(KV_SCORE_HISTORY, JSON.stringify(history));

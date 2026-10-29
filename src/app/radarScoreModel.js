@@ -93,6 +93,7 @@ export function scoredRows(data, sort = 'overall') {
     badge: quotaBadge(item.quota),
     isRecommendedSell: rec?.sell?.code === item.code,
     isRecommendedBuy: rec?.buy?.code === item.code,
+    weights: scoring.weights,
   }));
   const byPremium = (a, b) => (b.premium ?? -Infinity) - (a.premium ?? -Infinity);
   if (sort === 'sell') return rows.sort((a, b) => b.sellScore - a.sellScore || byPremium(a, b));
@@ -145,8 +146,6 @@ export function heroNotes(data) {
   }
   if (buy?.quota?.state === 'tight') {
     notes.push({ kind: 'buy', tag: '买入加分', text: `${shortName(buy.code, buy.name)}额度刚收紧（${quotaBadge(buy.quota).detail}），溢价下方有支撑` });
-  } else if (buy?.quota?.state === 'closed') {
-    notes.push({ kind: 'buy', tag: '买入加分', text: `${shortName(buy.code, buy.name)}暂停申购，没有新增套利盘压溢价` });
   }
   const skipped = blockedPairs.find((item) => item.buy.code !== pair.buy.code);
   if (skipped) {
@@ -160,20 +159,44 @@ export function heroNotes(data) {
   return notes;
 }
 
+const LEGACY_WEIGHTS = Object.freeze({ peer: 40, own: 20, quota: 25, liquidity: 15 });
+
+/**
+ * 平价换基（v2.1）：溢价差 ≤0.5pp 但卖出方在自身高位、买入方在自身低位。
+ * 回测 5 日相对溢价平均收敛约 0.27pp，纸面跟踪中，不发通知。
+ */
+export function parityHint(data) {
+  const pair = data?.scoring?.parityPair;
+  if (!hasScoring(data) || !pair) return null;
+  const rec = data.scoring.recommendedPair;
+  const sameAsRec = rec && rec.sell?.code === pair.sell.code && rec.buy?.code === pair.buy.code;
+  return {
+    ...pair,
+    sellShort: shortName(pair.sell.code, pair.sell.name),
+    buyShort: shortName(pair.buy.code, pair.buy.name),
+    sameAsRec: Boolean(sameAsRec),
+  };
+}
+
 /** 分项明细：用于展开行 / 侧栏「为什么卖 / 为什么买」 */
 export function scoreBreakdown(item, side = 'sell') {
   if (!item) return [];
   const parts = item.parts?.[side] || {};
+  const w = item.weights?.[side] || LEGACY_WEIGHTS;
   const q = item.quota || {};
   const vsPeer = Number.isFinite(item.premiumVsPeer) ? `${item.premiumVsPeer > 0 ? '+' : ''}${item.premiumVsPeer.toFixed(2)} pp` : '—';
   const own = item.premiumPercentile60 != null ? `p${item.premiumPercentile60}（${item.historyDays} 天）` : '历史不足';
   const ratio = Number.isFinite(q.quotaRatioPct) ? `额度≈日均成交 ${q.quotaRatioPct.toFixed(2)}%` : '';
-  return [
-    { label: side === 'sell' ? '溢价高于同类' : '溢价低于同类', detail: vsPeer, points: parts.peer, max: 40 },
-    { label: '自身历史分位', detail: own, points: parts.own, max: 20 },
-    { label: `份额：${q.label || '暂无'}`, detail: [quotaBadge(q).detail, ratio].filter(Boolean).join(' · '), points: parts.quota, max: 25 },
-    { label: side === 'sell' ? '可卖性' : '交易成本', detail: `流动性 ${item.liquidity ?? '—'}/100`, points: parts.liquidity, max: 15 },
+  const rows = [
+    { key: 'own', label: '自身历史分位', detail: own, points: parts.own, max: w.own },
+    { key: 'quota', label: `份额：${q.label || '暂无'}`, detail: [quotaBadge(q).detail, ratio].filter(Boolean).join(' · '), points: parts.quota, max: w.quota },
+    { key: 'liquidity', label: side === 'sell' ? '可卖性' : '交易成本', detail: `流动性 ${item.liquidity ?? '—'}/100`, points: parts.liquidity, max: w.liquidity },
   ];
+  const peer = { key: 'peer', label: side === 'sell' ? '溢价高于同类' : '溢价低于同类', detail: vsPeer, points: parts.peer, max: w.peer };
+  // v2.1 起同类溢价只展示、不计分（回测近 5 个月没有预测力）
+  if (w.peer > 0) rows.unshift(peer);
+  else rows.push({ ...peer, label: '同类溢价（仅参考）', points: null, max: null });
+  return rows;
 }
 
 /** 额度阶梯：从 series 取某只 ETF 的申购上限序列（-1 = 不设限） */

@@ -53,9 +53,10 @@ test('classifyQuota: 收紧 / 暂停 / 稳定 / 无数据', () => {
   assert.equal(classifyQuota([]).state, 'unknown');
 });
 
-test('quotaSellFactor 顺序：放开 > 稳定 > 收紧 > 暂停', () => {
+test('quotaSellFactor 顺序：放开 > 稳定 = 暂停 > 收紧（v2.1 暂停申购按中性）', () => {
   const f = (state, extra = {}) => quotaSellFactor({ state, ...extra });
-  assert.ok(f('relax', { strong: true }) > f('relaxing') && f('relaxing') > f('steady') && f('steady') > f('tight') && f('tight') > f('closed'));
+  assert.ok(f('relax', { strong: true }) > f('relaxing') && f('relaxing') > f('steady') && f('steady') > f('tight'));
+  assert.equal(f('closed'), f('steady'));
 });
 
 test('percentileRank: 样本不足返回 0.5', () => {
@@ -94,6 +95,35 @@ test('scoreRadar: 买入方刚放开时，即使价差最大也不推荐', () =>
   const r = scoreRadar({ etfs, limitHistory, date: 'd2' });
   assert.equal(r.recommendedPair.buy.code, 'C');
   assert.equal(r.blockedPairs[0].buy.code, 'B');
+});
+
+test('scoreRadar v2.1: 同类溢价不计分，权重 自身 60 / 份额 25 / 流动性 15', () => {
+  const r = scoreRadar({ etfs: { A: etf('A', 15), B: etf('B', 10) }, date: 'd' });
+  assert.deepEqual(r.weights.sell, { peer: 0, own: 60, quota: 25, liquidity: 15 });
+  assert.equal(r.etfs.A.parts.sell.peer, 0);
+  // 没有历史时自身分位取 0.5：两只同分，不因当日溢价高低拉开
+  assert.equal(r.etfs.A.sellScore, r.etfs.B.sellScore);
+});
+
+test('scoreRadar v2.1: 平价换基——溢价差 ≤0.5pp、自身高位卖 / 自身低位买', () => {
+  const hist = [];
+  for (let i = 1; i <= 20; i += 1) {
+    // A 平时 9~10%，B 平时 11~12%：今天两只都在 10.5% 附近，A 在自身高位、B 在自身低位
+    hist.push({ date: `h${String(i).padStart(2, '0')}`, etfs: { A: { premium: 9 + i / 20 }, B: { premium: 11 + i / 20 }, C: { premium: 5 } } });
+  }
+  const etfs = { A: etf('A', 10.6), B: etf('B', 10.4), C: etf('C', 5) };
+  const r = scoreRadar({ etfs, featureHistory: hist, date: 'd' });
+  assert.equal(r.parityPair.sell.code, 'A');
+  assert.equal(r.parityPair.buy.code, 'B');
+  assert.ok(r.parityPair.edge >= 10);
+  assert.ok(Math.abs(r.parityPair.spread) <= 0.5);
+  assert.ok(r.parityPairs.every((p) => Math.abs(p.spread) <= 0.5 && p.edge >= 10));
+});
+
+test('scoreRadar v2.1: 分数差不够时没有平价换基', () => {
+  const r = scoreRadar({ etfs: { A: etf('A', 10.2), B: etf('B', 10) }, date: 'd' });
+  assert.equal(r.parityPair, null);
+  assert.deepEqual(r.parityPairs, []);
 });
 
 test('scoreRadar: 成本扣除后净价差 ≤ 0 时提示', () => {

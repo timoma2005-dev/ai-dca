@@ -9,9 +9,22 @@
  *  - 限额收紧 ≥2 倍后 5 日，相对同类溢价平均上升 0.59pp；
  *  - 每日按新评分选对 vs 旧版「最高溢价→最低溢价」，持有 5 日相对收益 +0.21pp vs +0.14pp，胜率 60% vs 58%。
  * 结论：份额因子方向稳定但幅度不大，所以只占 25%~30%，价差仍是主项。
+ *
+ * v2.1（2026-10-29，360 交易日回填重测，见 ai-dca CN 运维项目 backfill/wbt*.py）：
+ *  - 「相对同类溢价」近 5 个月几乎没有预测力（卖出分 5 日 IC 0.02），自身 60 日分位三段都稳定在 0.2 以上，
+ *    单品权重改为 自身分位 60 / 份额 25 / 流动性 15，同类溢价只展示不计分；
+ *  - 「暂停申购 → 溢价有支撑」没有得到验证（10 日相对溢价反而 −0.09pp），暂停申购按中性处理；
+ *  - 新增「平价换基」：两只溢价相差 ≤0.5pp、卖出分 + 买入分 − 100 ≥ 10 时也值得换，
+ *    回测 5 日相对溢价平均收敛约 0.27pp、胜率 63%~77%，三段都稳定。纸面跟踪，不发通知。
  */
 
-export const SCORING_VERSION = 'v2-shadow-20261026';
+export const SCORING_VERSION = 'v2.1-shadow-20261029';
+
+/** 单品评分权重（满分 100）。peer=0：同类溢价只展示，不计分（v2.1）。 */
+export const ETF_WEIGHTS = Object.freeze({ peer: 0, own: 60, quota: 25, liquidity: 15 });
+/** 平价换基：溢价差绝对值上限（pp）与最低分数差 */
+export const PARITY_MAX_SPREAD = 0.5;
+export const PARITY_MIN_EDGE = 10;
 
 const DEFAULT_COMMISSION_PCT = 0.01; // 单边佣金（%），保守取万一
 const DEFAULT_SPREAD_BPS = 6; // 缺盘口时的默认买卖价差（bps）
@@ -169,7 +182,8 @@ export function quotaSellFactor(quota) {
     case 'relax': return quota.strong ? 1 : 0.85;
     case 'relaxing': return quota.strong ? 0.85 : 0.7;
     case 'tight': return 0.1;
-    case 'closed': return 0;
+    // v2.1：回测里暂停申购并没有让溢价更坚挺，按中性处理
+    case 'closed': return 0.45;
     case 'steady': {
       // 回测：额度/成交额 < 0.5% 的「近乎关门」基金相对同类溢价高 0.34pp，溢价更粘
       const r = quota.quotaRatioPct;
@@ -229,13 +243,14 @@ export function scoreRadar({ etfs = {}, featureHistory = [], limitHistory = {}, 
     const ownPct = percentileRank(hist, p);
     const liq = liquidityFactor(etf, maxDepth);
 
-    let sell = 100 * (0.40 * relPeer + 0.20 * ownPct + 0.25 * qs + 0.15 * liq);
+    const W = ETF_WEIGHTS;
+    let sell = W.peer * relPeer + W.own * ownPct + W.quota * qs + W.liquidity * liq;
     let sellTag = '';
     if (quota.state === 'relax' && quota.strong) {
       sell = Math.max(sell, 90);
       sellTag = '果断卖出';
     }
-    let buy = 100 * (0.40 * (1 - relPeer) + 0.20 * (1 - ownPct) + 0.25 * (1 - qs) + 0.15 * liq);
+    let buy = W.peer * (1 - relPeer) + W.own * (1 - ownPct) + W.quota * (1 - qs) + W.liquidity * liq;
     let buyBlocked = '';
     if ((quota.state === 'relax' || quota.state === 'relaxing') && quota.strong) {
       buyBlocked = '等放开结束';
@@ -256,8 +271,8 @@ export function scoreRadar({ etfs = {}, featureHistory = [], limitHistory = {}, 
       sellTag,
       buyBlocked,
       parts: {
-        sell: { peer: round(40 * relPeer, 1), own: round(20 * ownPct, 1), quota: round(25 * qs, 1), liquidity: round(15 * liq, 1) },
-        buy: { peer: round(40 * (1 - relPeer), 1), own: round(20 * (1 - ownPct), 1), quota: round(25 * (1 - qs), 1), liquidity: round(15 * liq, 1) },
+        sell: { peer: round(W.peer * relPeer, 1), own: round(W.own * ownPct, 1), quota: round(W.quota * qs, 1), liquidity: round(W.liquidity * liq, 1) },
+        buy: { peer: round(W.peer * (1 - relPeer), 1), own: round(W.own * (1 - ownPct), 1), quota: round(W.quota * (1 - qs), 1), liquidity: round(W.liquidity * liq, 1) },
       },
     };
   }
@@ -282,8 +297,7 @@ export function scoreRadar({ etfs = {}, featureHistory = [], limitHistory = {}, 
       const reasons = [];
       if (S.sellTag) reasons.push(`${S.name} ${S.quota.label}，溢价大概率回落`);
       else if (S.quota.state === 'relaxing') reasons.push(`${S.name} 额度放开中`);
-      if (B.quota.state === 'closed') reasons.push(`${B.name} 暂停申购，溢价有支撑`);
-      else if (B.quota.state === 'tight') reasons.push(`${B.name} 额度刚收紧，溢价易升`);
+      if (B.quota.state === 'tight') reasons.push(`${B.name} 额度刚收紧，溢价易升`);
       if (S.premiumPercentile60 != null && S.premiumPercentile60 >= 80) reasons.push(`${S.name} 溢价处于自身高位`);
       if (B.premiumPercentile60 != null && B.premiumPercentile60 <= 20) reasons.push(`${B.name} 溢价处于自身低位`);
       if (net <= 0) reasons.push('价差不够覆盖交易成本');
@@ -303,6 +317,42 @@ export function scoreRadar({ etfs = {}, featureHistory = [], limitHistory = {}, 
     }
   }
   pairs.sort((a, b) => b.score - a.score || b.netSpread - a.netSpread);
+
+  // 平价换基：溢价差不多（|价差| ≤ 0.5pp），但卖出方看跌、买入方看涨，分数差够大也换
+  const parity = [];
+  for (const s of codes) {
+    for (const b of codes) {
+      if (s === b) continue;
+      const S = perEtf[s]; const B = perEtf[b];
+      if (B.buyBlocked) continue;
+      const spread = premiums[s] - premiums[b];
+      if (Math.abs(spread) > PARITY_MAX_SPREAD) continue;
+      // 分数差只看「自身分位 + 份额」两项：流动性两边都是加分，算进来会让平均情形凭空多出 2×15×liq
+      // 中性（分位 0.5、份额稳定）时两边合计 = 100 − 15 = 85，所以减 85；与回测口径（流动性取中性）一致
+      const core = (side, item) => item.parts[side].own + item.parts[side].quota;
+      const edge = Math.round(core('sell', S) + core('buy', B) - (100 - ETF_WEIGHTS.liquidity));
+      if (edge < PARITY_MIN_EDGE) continue;
+      const cost = costOf(s) + costOf(b);
+      const reasons = [];
+      if (S.premiumPercentile60 != null) reasons.push(`${S.name} 溢价在自身 60 日 p${S.premiumPercentile60}`);
+      if (B.premiumPercentile60 != null) reasons.push(`${B.name} 溢价在自身 60 日 p${B.premiumPercentile60}`);
+      if (S.sellTag) reasons.push(`${S.name} ${S.quota.label}`);
+      else if (S.quota.state === 'relaxing') reasons.push(`${S.name} 额度放开中`);
+      if (B.quota.state === 'tight') reasons.push(`${B.name} 额度刚收紧`);
+      parity.push({
+        sell: { code: s, name: S.name, premium: S.premium },
+        buy: { code: b, name: B.name, premium: B.premium },
+        spread: round(spread, 2),
+        costPct: round(cost, 3),
+        netSpread: round(spread - cost, 2),
+        sellScore: S.sellScore,
+        buyScore: B.buyScore,
+        edge,
+        reasons,
+      });
+    }
+  }
+  parity.sort((a, b) => b.edge - a.edge || b.spread - a.spread);
   const top = pairs.filter((pair) => !pair.blocked).slice(0, 5);
   return {
     version: SCORING_VERSION,
@@ -311,12 +361,15 @@ export function scoreRadar({ etfs = {}, featureHistory = [], limitHistory = {}, 
     peerMeanPremium: round(peerMean, 2),
     weights: {
       switch: { spread: 45, sell: 30, buy: 25 },
-      sell: { peer: 40, own: 20, quota: 25, liquidity: 15 },
-      buy: { peer: 40, own: 20, quota: 25, liquidity: 15 },
+      sell: { ...ETF_WEIGHTS },
+      buy: { ...ETF_WEIGHTS },
+      parity: { maxSpread: PARITY_MAX_SPREAD, minEdge: PARITY_MIN_EDGE },
     },
     etfs: perEtf,
     recommendedPair: top[0] || null,
     pairs: top,
     blockedPairs: pairs.filter((pair) => pair.blocked).slice(0, 3),
+    parityPair: parity[0] || null,
+    parityPairs: parity.slice(0, 3),
   };
 }
