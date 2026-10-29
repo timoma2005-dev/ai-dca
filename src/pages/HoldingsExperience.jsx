@@ -76,7 +76,7 @@ import {
   persistHoldingTransactionMutation
 } from '../app/holdingTransactionMutations.js';
 import { getCodeFromUrl, updateCodeInUrl } from './holdings/holdingsUrlSync.js';
-import { clearAllLocalDataAsync, getDataStats, getClearDataConfirmMessage } from '../app/clearAllData.js';
+import { runClearAllDataAction } from '../app/clearAllDataAction.js';
 import { clearMarketActionDraft, readMarketActionDraft } from '../app/marketActionDraft.js';
 import { buildAggregatesTableData } from './holdings/buildAggregatesTableData.js';
 import { getAutoNavRefreshCodes, getManualNavRefreshCodes } from './holdings/holdingsNavRefreshPolicy.js';
@@ -339,30 +339,19 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     });
     trackFeatureEvent('holdings', 'demo_install', { hadExistingData: hasPotentialUserData() });
   }
-  async function handleClearAllData() {
-    if (typeof window === 'undefined' || !window.localStorage) {
-      showActionToast('清除数据失败', 'error', { description: '无法访问本地存储。' });
-      return;
-    }
-    const stats = getDataStats({ transactions, aggregates, tradeLedgerEntries });
-    if (!window.confirm(getClearDataConfirmMessage(stats))) {
-      trackFeatureEvent('holdings', 'clear_all_data_cancel', stats);
-      return;
-    }
-    const startedAt = Date.now();
-    try {
-      await clearAllLocalDataAsync();
-      setLedger(readLedgerState());
-      setAccountSettings(readAccountAllocationSettings());
-      setTradeLedgerEntries(readTradeLedger());
-      setSelectedCode(''); selectedAggregationKeyRef.current = '';
-      setSidePanelOpen(false);
-      showActionToast('已清除所有数据', 'success', { description: '所有持仓、交易、计划数据已清空。' });
-      trackActionResult('holdings', 'clear_all_data', 'success', { ...stats, durationMs: Date.now() - startedAt });
-    } catch (error) {
-      showActionToast('清除数据失败', 'error', { description: error?.message || '清除过程中出现错误。' });
-      trackActionResult('holdings', 'clear_all_data', 'error', { ...stats, durationMs: Date.now() - startedAt, errorMessage: error?.message || '' });
-    }
+  function handleClearAllData() {
+    return runClearAllDataAction({
+      transactions,
+      aggregates,
+      tradeLedgerEntries,
+      onCleared: () => {
+        setLedger(readLedgerState());
+        setAccountSettings(readAccountAllocationSettings());
+        setTradeLedgerEntries(readTradeLedger());
+        setSelectedCode(''); selectedAggregationKeyRef.current = '';
+        setSidePanelOpen(false);
+      }
+    });
   }
   const aggregateColumns = useMemo(() => createAggregateHoldingsColumns({
     kindFilterOptions,
