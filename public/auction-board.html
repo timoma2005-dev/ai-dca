@@ -159,7 +159,9 @@
       .cyc-ph { font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px; background:#f1f5f9; color:var(--sub); white-space:nowrap; }
       .cyc-ph.on { background:#dbeafe; color:#1d4ed8; }
       .cyc-g { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; }
-      .modes { display:inline-flex; background:#f1f5f9; border-radius:12px; padding:3px; gap:2px; }
+      .modes { grid-column:span 12; order:-2; display:flex; background:#e9edf3; border-radius:12px; padding:3px; gap:2px; justify-self:start; }
+      .shared-h { grid-column:span 12; display:flex; align-items:baseline; gap:10px; padding:6px 2px 0; border-top:1px dashed var(--line); margin-top:4px; }
+      .shared-h b { font-size:15px; } .shared-h span { font-size:12px; color:var(--sub); }
       .modes button { border:0; background:transparent; border-radius:9px; padding:6px 14px; cursor:pointer; text-align:left; line-height:1.2; color:var(--sub); }
       .modes button b { display:block; font-size:14px; font-weight:700; }
       .modes button small { display:block; font-size:11px; font-weight:500; margin-top:1px; }
@@ -231,7 +233,7 @@
         .prog-l { display:flex; justify-content:space-between; font-size:10px; color:var(--mute); margin-top:4px; }
         .wrap { padding:12px 12px 24px; gap:12px; }
         .cyc-g { grid-template-columns:minmax(0,1fr); }
-        .modes { order:4; flex-basis:100%; display:flex; } .modes button { flex:1; }
+        .modes { justify-self:stretch; } .modes button { flex:1; }
         .cyc-now h2 { font-size:19px; }
         .cyc-st { grid-template-columns:repeat(2, minmax(0,1fr)); }
         .cyc-log .hm { display:none; }
@@ -272,10 +274,6 @@
     <header class="top">
       <div class="top-in">
         <div class="logo"><i></i>纳指轮动</div>
-        <nav class="modes" id="vtabs" aria-label="策略">
-          <button type="button" class="on" data-v="dev"><b>盘中轮动</b><small>按 NQ 偏离 · T+0 随时切</small></button>
-          <button type="button" data-v="cyc"><b>隔夜轮动</b><small>尾盘低溢价过夜 · 10:30 复牌换仓</small></button>
-        </nav>
         <div class="phase" id="phase-pill"><span class="dot"></span><span id="phase">—</span><span>·</span><span id="clock">--:--:--</span></div>
         <div class="segs" id="segs"><span>集合竞价</span><span>上午连续</span><span>午休</span><span>下午连续</span><span>收盘竞价</span></div>
         <div class="sp"></div>
@@ -298,6 +296,10 @@
     </header>
 
     <main class="wrap">
+      <nav class="modes" id="vtabs" aria-label="策略（只切换上方卡片）">
+          <button type="button" class="on" data-v="dev"><b>盘中轮动</b><small>按 NQ 偏离 · T+0 随时切</small></button>
+          <button type="button" data-v="cyc"><b>隔夜轮动</b><small>尾盘低溢价过夜 · 10:30 复牌换仓</small></button>
+        </nav>
       <section class="card act" aria-live="polite">
         <div class="lbl">盘中轮动 · 操作建议（按持仓偏离度）</div>
         <h2 id="act-h">—</h2>
@@ -354,6 +356,7 @@
         <div class="cyc-note">回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</div>
       </section>
 
+      <div class="shared-h"><b>行情</b><span>偏离分布与 ETF 表两种策略共用，不随上方切换</span></div>
       <div class="main">
         <section class="card">
           <div class="sec-h"><h3>偏离分布</h3><div class="legend"><span><i style="background:var(--zone)"></i>买入区</span><span><i style="background:var(--zoneS)"></i>卖出线</span></div></div>
