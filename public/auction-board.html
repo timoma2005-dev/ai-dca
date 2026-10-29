@@ -163,7 +163,9 @@
       .vtabs button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 16px; font-size:13px; font-weight:600; color:var(--sub); cursor:pointer; }
       .vtabs button.on { background:var(--ink); border-color:var(--ink); color:#fff; }
       body:not(.v-cyc) .wrap > .cyc { display:none; }
-      body.v-cyc .wrap > :not(.cyc):not(.vtabs) { display:none; }
+      body.v-cyc .wrap > .act, body.v-cyc .wrap > .hold { display:none; }
+      .vtabs { order:-2; }
+      body.v-cyc .wrap > .cyc { order:-1; grid-column:span 9; }
       .cyc-log input.px { width:78px; padding:3px 6px; border:1px solid var(--line); border-radius:6px; font:inherit; font-size:12px; text-align:right; }
       .cyc-log input.px.ed { border-color:#f59e0b; background:#fffbeb; }
       .cyc-s { border:1px solid var(--line); border-radius:12px; padding:12px 14px; min-width:0; }
@@ -188,6 +190,7 @@
 
       @media (max-width:1280px) {
         .act { grid-column:span 12; } .nq, .hold { grid-column:span 6; }
+        body.v-cyc .wrap > .cyc, body.v-cyc .wrap > .nq { grid-column:span 12; }
         .main { grid-template-columns:minmax(0,1fr); }
         .segs { display:none; }
       }
