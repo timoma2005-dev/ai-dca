@@ -243,6 +243,16 @@
       .cyc-log summary { cursor:pointer; color:var(--sub); }
       .cyc-log table { margin-top:6px; }
       .cyc-log td, .cyc-log th { padding:5px 8px; font-size:12px; }
+      .spx-box { margin-top:12px; border:1px solid var(--line, #e2e8f0); border-radius:12px; padding:10px 12px; }
+      .spx-box .hd { display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap; font-size:13px; }
+      .spx-box .hd small { color:var(--mute); font-size:11px; }
+      .spx-box table { width:100%; border-collapse:collapse; margin-top:6px; font-size:12px; }
+      .spx-box th { text-align:right; color:var(--mute); font-weight:500; padding:4px 6px; }
+      .spx-box td { text-align:right; padding:5px 6px; border-top:1px solid #f1f5f9; font-variant-numeric:tabular-nums; }
+      .spx-box th:first-child, .spx-box td:first-child { text-align:left; }
+      .spx-box .ref { margin-top:6px; font-size:12px; line-height:1.55; color:#334155; }
+      .spx-box .ref b.on { color:#b45309; }
+      .cyc-s .spv { display:block; margin-top:4px; color:#b45309; }
       .cyc-note { margin-top:8px; font-size:11px; color:var(--mute); line-height:1.6; }
       .lnk { border:0; background:none; color:var(--brand); cursor:pointer; font-size:11px; padding:0; }
 
@@ -340,7 +350,6 @@
         <h2 id="act-h">—</h2>
         <p id="act-p"></p>
         <div class="flow" id="act-flow"></div>
-        <div class="spref" id="act-sp"></div>
         <div class="step" id="act-step"></div>
         <div class="rule" id="act-rule"></div>
         <div class="sim-row"><label class="amt">持仓金额<input id="act-amt" type="number" min="0" step="1000" inputmode="numeric"/>元</label><button class="btn sim-btn" type="button" id="sim-open">模拟切换</button></div>
@@ -387,6 +396,7 @@
             <div class="rec"><label>成交价 <input class="px" id="cyc-s3-px" type="number" step="0.001" min="0"/></label><button class="btn" type="button" id="cyc-s3-rec">记换仓</button></div>
           </div>
         </div>
+        <div class="spx-box" id="cyc-spx"></div>
         <div class="cyc-st" id="cyc-st"></div>
         <details class="cyc-log" id="cyc-log"><summary>纸面记录 <span id="cyc-log-n"></span></summary><div id="cyc-log-b"></div></details>
         <div class="cyc-note">回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</div>
@@ -437,7 +447,7 @@
         <label class="srow"><span>买入上限<small>偏离 ≤ −此值才算候选（百分点）</small></span><input id="thr" type="number" step="0.05" min="0" value="0.15"/></label>
         <label class="srow"><span>切换线<small>持有偏离 ≥ 此值且有候选才切换（百分点）</small></span><input id="trig" type="number" step="0.05" min="0" value="0.1"/></label>
         <label class="srow"><span>买入下限<small>偏离低于此值不买（百分点）</small></span><input id="lo" type="number" step="0.05" min="0" value="0.5"/></label>
-        <label class="srow"><span>标普参照容差<small>09:30–10:30 标普 ETF 相对 ES00Y 偏离为正且与纳指 ETF 偏离相差在此值内 → 不切（百分点）</small></span><input id="sp-tol" type="number" step="0.05" min="0" value="0.1"/></label>
+        <label class="srow"><span>标普参照容差<small>隔夜轮动 ①：09:30–10:30 标普 ETF 相对 ES00Y 偏离为正且与纳指 ETF 偏离相差在此值内 → 暂不卖出（百分点）</small></span><input id="sp-tol" type="number" step="0.05" min="0" value="0.1"/></label>
         <label class="srow"><span>停牌溢价<small>集合竞价时超过即推算停牌（%）</small></span><input id="halt-thr" type="number" step="0.5" min="0" value="10"/></label>
         <label class="srow"><span>日循环 LOF 线<small>收盘时 ETF 溢价全部高于此值才隔夜拿 LOF（%）</small></span><input id="cyc-thr" type="number" step="0.5" min="0" value="10"/></label>
       </div>
@@ -661,6 +671,7 @@
           var ep = esPct(), t = secs(b), out = { win: weekday(b) && t >= 34200 && t < 37800, sp: null, nq: null, n: 0, block: false };
           if (ep != null && inWin(b)) {
             var ds = SPX.map(function (e) { var q = S.spx[e[0]]; if (!q || /S|停/.test(q.flag) || !(q.pre > 0)) return null; var px = q.cur > 0 ? q.cur : 0; return px > 0 ? ((px / q.pre - 1) - ep) * 100 : null; }).filter(function (x) { return x != null; });
+            out.ep = ep;
             out.sp = median(ds); out.n = ds.length;
           }
           out.nq = median(list.filter(function (r) { return r.code !== "161130" && !r.halt && r.dev != null; }).map(function (r) { return r.dev; }));
@@ -669,9 +680,20 @@
           return out;
         }
         function spHtml(R) {
-          if (R.sp == null) return S.es || S.esStale ? "标普参照：暂无数据（ES00Y 或标普 ETF 行情不可用）" : "";
+          if (R.sp == null) return "标普参照：暂无数据（ES00Y 或标普 ETF 行情不可用，或非交易时段）";
           return "标普参照：标普 ETF 相对 ES00Y 偏离 <b" + (R.close ? ' class="on"' : "") + ">" + f2(R.sp) + "</b>（" + R.n + " 只中位），纳指 ETF 偏离中位 <b>" + f2(R.nq) + "</b>，相差 " + Math.abs(R.nq - R.sp).toFixed(2) +
-            (R.block ? "。两边同向且接近，是整体性偏离，09:30–10:30 暂不切换。" : R.win ? "。不属于整体性偏离，按规则执行。" : "。仅 09:30–10:30 用来过滤切换，现在只作参考。");
+            (R.block ? "。两边同向且接近，是整体性偏离，① 暂不卖出。" : R.win ? "。不属于整体性偏离，① 按计划卖出。" : "。只在 09:30–10:30 用于 ① 开盘卖出的判断，现在仅作参考。");
+        }
+        function spxHtml(R) {
+          var b = bj(), ep = esPct(), live = inWin(b);
+          var rowsH = SPX.map(function (e) {
+            var q = S.spx[e[0]] || {}, px = q.cur > 0 ? q.cur : q.pre, pct = px > 0 && q.pre > 0 ? px / q.pre - 1 : null;
+            var dev = live && pct != null && ep != null ? (pct - ep) * 100 : null, prem = q.nav > 0 && px > 0 ? (px / q.nav - 1) * 100 : null;
+            return "<tr><td>" + esc(e[1]) + ' <small style="color:var(--mute)">' + e[0].slice(2) + "</small></td><td>" + fmt3(px) + '</td><td class="' + cls(pct) + '">' + pctStr(pct) + '</td><td class="' + (dev == null ? "" : cls(dev)) + '">' + (dev == null ? "—" : minus(f2(dev))) + "</td><td>" + (prem == null ? "—" : prem.toFixed(2) + "%") + "</td></tr>";
+          }).join("");
+          return '<div class="hd"><b>标普 500 ETF · 偏离按 ES00Y</b><small>ES00Y 自昨日 15:00 ' + (ep == null ? "—" : pctStr(ep)) + (S.es ? " · " + esc(S.es.src) : "") + "</small></div>" +
+            "<table><thead><tr><th>基金</th><th>现价</th><th>涨跌</th><th>偏离</th><th>溢价</th></tr></thead><tbody>" + rowsH + "</tbody></table>" +
+            '<div class="ref">' + spHtml(R) + "</div>";
         }
         // 按盘口深度给限价：卖出逐档吃买盘、买入逐档吃卖盘，返回能全部成交的最差一档价格
         function depthFill(q, kind, amt) {
@@ -773,7 +795,7 @@
               var s3 = window["v_" + e[0]]; window["v_" + e[0]] = undefined;
               if (typeof s3 !== "string") return;
               var g = s3.split("~"); if (g.length < 41) return;
-              S.spx[e[0]] = { cur: +g[3] || 0, pre: +g[4] || 0, flag: (g[40] || "").trim() };
+              S.spx[e[0]] = { cur: +g[3] || 0, pre: +g[4] || 0, flag: (g[40] || "").trim(), nav: parseFloat(g[78]) || 0 };
             });
             if (!n) throw new Error("no quotes");
             for (var k in next) S.etf[k] = next[k];
@@ -919,7 +941,7 @@
           hl.forEach(function (h) {
             if (h.halt) { hh.push(esc(h.name) + " 停牌中"); pp.push(esc(h.name) + " 停牌，复牌后按当时 NQ 和价格重算。"); return; }
             if (h.dev == null) { hh.push(esc(h.name) + " 暂无偏离"); pp.push("等待行情。"); return; }
-            if (h.dev >= T && dip && R.block) {
+            if (false) {
               hh.push("暂不切换：继续持有 " + esc(h.name));
               pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " 已达切换线，但标普 ETF 相对 ES00Y 偏离 " + f2(R.sp) + " 也为正、与纳指 ETF 偏离 " + f2(R.nq) + " 接近，是整体性偏离（09:30–10:30 过滤）。");
               ff.push('<div class="leg"><small>持有中 · 标普参照过滤</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + '</span><span class="lp">候选 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" + depthHtml(h, "s") + "</em></div>");
@@ -1219,7 +1241,7 @@
           } else S.ntfAct = "";
           list.forEach(function (r) { r.sigObj = sigOf(r); r.sig = r.sigObj ? r.sigObj.o : 9; });
 
-          $("act-h").innerHTML = act.h; $("act-p").innerHTML = act.p; $("act-flow").innerHTML = act.flow; $("act-sp").innerHTML = spHtml(S.spR); if (document.activeElement !== $("act-amt")) $("act-amt").value = SIM.amt;
+          $("act-h").innerHTML = act.h; $("act-p").innerHTML = act.p; $("act-flow").innerHTML = act.flow; if (document.activeElement !== $("act-amt")) $("act-amt").value = SIM.amt;
           $("act-step").textContent = stepTxt(b);
           $("act-rule").innerHTML = "<span>切换线 +" + S.trig + "</span><span>买入区 " + zoneTxt() + "</span><span>纯轮动不空仓</span><span>停牌不参与比较</span>";
 
@@ -1528,10 +1550,12 @@
           // ①
           if (!hr) { $("cyc-s1-h").textContent = "无持仓"; $("cyc-s1-p").innerHTML = '<span class="why">前一日 ③ 记下隔夜仓后，这里提示卖出。</span>'; }
           else {
-            $("cyc-s1-h").innerHTML = (on1 || !op || op.stage === 3 ? (on1 ? "卖出 " : "隔夜仓 ") : "持有 ") + '<span class="' + (on1 ? "hs" : "") + '">' + esc(hr.name) + "</span>";
+            var spB = on1 && S.spR && S.spR.block;
+            $("cyc-s1-h").innerHTML = spB ? "暂不卖出 " + esc(hr.name) : (on1 || !op || op.stage === 3 ? (on1 ? "卖出 " : "隔夜仓 ") : "持有 ") + '<span class="' + (on1 ? "hs" : "") + '">' + esc(hr.name) + "</span>";
             $("cyc-s1-p").innerHTML = "买一 " + fmt3(bidOf(hr)) + " · 涨跌 " + pctStr(hr.pct) + (hr.dev != null ? " · 偏离 " + minus(f2(hr.dev)) : "") + (hr.prem != null ? " · 溢价 " + hr.prem.toFixed(2) + "%" : "") +
               (op && op.bp > 0 ? "<br/>较买入价 " + fmt3(op.bp) + " " + pctStr(bidOf(hr) / op.bp - 1) : "") +
-              '<br/><span class="why">09:30–10:30 内择机卖出，卖完空仓等 10:30。</span>';
+              '<br/><span class="why">09:30–10:30 内择机卖出，卖完空仓等 10:30。</span>' +
+              (S.spR && S.spR.sp != null ? '<span class="spv">标普偏离 ' + minus(f2(S.spR.sp)) + " / 纳指偏离 " + minus(f2(S.spR.nq)) + (spB ? "：同向接近，整体性偏离，先不卖" : on1 ? "：不是整体性偏离" : "") + "</span>" : "");
           }
           $("cyc-s1-rec").disabled = !op;
           // ②
@@ -1563,13 +1587,14 @@
           var nl = "现在", nh = "—", np = "";
           if (!wk || t < 33300 || t >= 54000) { nl = "非交易时段"; nh = hr ? "隔夜持有 " + esc(hr.name) : "空仓"; np = "下个交易日 09:30–10:30 先卖出隔夜仓，10:30 复牌后换到偏离最负的 ETF。"; }
           else if (t < 34200) { nl = "集合竞价"; nh = hr ? "准备卖出 " + esc(hr.name) : "空仓等待"; np = "09:30 开盘后择机卖出；停牌的 ETF 要等 10:30 复牌。"; }
-          else if (on1) { nl = "① 开盘卖出 · 进行中"; nh = hr && !stepDone(1) ? '卖出 <span class="hs">' + esc(hr.name) + "</span>" : "已空仓，等 10:30"; np = hr && !stepDone(1) ? "买一 " + fmt3(bidOf(hr)) + "，10:30 前择机卖出。" + (op ? "" : "（纸面还没记隔夜仓，今天 ③ 记录后开始跟踪）") : "10:30 复牌后按②买入。"; }
+          else if (on1) { nl = "① 开盘卖出 · 进行中"; nh = hr && !stepDone(1) ? (S.spR && S.spR.block ? "暂不卖出 " + esc(hr.name) + "（标普同向偏离）" : '卖出 <span class="hs">' + esc(hr.name) + "</span>") : "已空仓，等 10:30"; np = hr && !stepDone(1) ? "买一 " + fmt3(bidOf(hr)) + "，10:30 前择机卖出。" + (op ? "" : "（纸面还没记隔夜仓，今天 ③ 记录后开始跟踪）") : "10:30 复牌后按②买入。"; }
           else if (on2 || (t < 52800 && !stepDone(2) && !(op && op.stage === 2))) { nl = on2 ? "② 复牌换仓 · 进行中" : "② 复牌换仓 · 已过 10:30 未记录"; nh = $("cyc-s2-h").innerHTML; np = am.pick ? esc(am.pick.name) + " 偏离 " + minus(f2(am.pick.dev)) + "，卖一 " + fmt3(askOf(am.pick)) + "。" : ""; }
           else if (t < 52800) { nl = "盘中持有"; nh = op ? "持有 " + esc(op.name) : "空仓"; np = "14:50 起按③定隔夜仓。"; }
           else { nl = "③ 尾盘建仓 · 进行中"; nh = $("cyc-s3-h").innerHTML; np = "尽量在 14:50–14:57 完成。"; }
           $("cyc-now-l").textContent = nl; $("cyc-now-h").innerHTML = nh; $("cyc-now-p").innerHTML = np;
           if (on1 || on2 || on3) { var sn = on1 ? 1 : on2 ? 2 : 3; if (!stepDone(sn)) ntfOnce(todayStr() + "-cyc" + sn, "隔夜轮动 · " + ["", "① 开盘卖出", "② 复牌换仓", "③ 尾盘建仓"][sn], plain(nh) + "。" + plain(np)); }
           // 统计
+          try { $("cyc-spx").innerHTML = spxHtml(S.spR || {}); } catch (e) {}
           var legs = cycLegs(list), done = legs.filter(function (l) { return !l.open && l.ex != null; });
           var sumEx = done.reduce(function (x, l) { return x + l.ex; }, 0), sumRet = done.reduce(function (x, l) { return x + l.ret; }, 0);
           var win = done.length ? Math.round(done.filter(function (l) { return l.ex > 0; }).length / done.length * 100) : null;
