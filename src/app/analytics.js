@@ -229,7 +229,13 @@ function trackAnonymousPageView(meta = {}) {
     path: window.location.pathname,
     referrer,
     userAgent: coarseUserAgent(nav.userAgent || ''),
-    meta: { tab: String(meta.tab || '').slice(0, 40), feature: 'navigation', action: 'page_view', anonymous: true }
+    meta: {
+      tab: String(meta.tab || '').slice(0, 40),
+      feature: 'navigation',
+      action: 'page_view',
+      anonymous: true,
+      ...(meta.utm ? { utm: meta.utm } : {})
+    }
   };
   enqueuePendingEvent(event);
   return event;
@@ -290,11 +296,12 @@ function getRouteContext() {
 
 const ATTRIBUTION_UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 
-function getAttributionContext() {
-  if (typeof window === 'undefined') return {};
-  const out = {};
-  const referrer = String((typeof document !== 'undefined' && document.referrer) || '').trim();
-  if (referrer) out.referrer = referrer.slice(0, 240);
+export const UTM_SESSION_KEY = 'aiDcaUtm_v1';
+
+// 来源标记：URL 带 utm_* 时记入 sessionStorage（本次会话首次来源），之后切 tab 地址里没了 utm 也能带上。
+export function readUtmAttribution() {
+  if (typeof window === 'undefined') return null;
+  let fromUrl = null;
   try {
     const query = new URLSearchParams(window.location.search || '');
     const utm = {};
@@ -302,10 +309,29 @@ function getAttributionContext() {
       const value = String(query.get(key) || '').trim();
       if (value) utm[key] = value.slice(0, 120);
     }
-    if (Object.keys(utm).length) out.utm = utm;
+    if (Object.keys(utm).length) fromUrl = utm;
   } catch {
-    // 查询参数解析失败时仅保留 referrer。
+    fromUrl = null;
   }
+  let stored = null;
+  try {
+    const raw = window.sessionStorage?.getItem(UTM_SESSION_KEY);
+    stored = raw ? JSON.parse(raw) : null;
+    if (fromUrl && !stored) window.sessionStorage?.setItem(UTM_SESSION_KEY, JSON.stringify(fromUrl));
+  } catch {
+    stored = null;
+  }
+  const out = fromUrl || (stored && typeof stored === 'object' ? stored : null);
+  return out && Object.keys(out).length ? out : null;
+}
+
+function getAttributionContext() {
+  if (typeof window === 'undefined') return {};
+  const out = {};
+  const referrer = String((typeof document !== 'undefined' && document.referrer) || '').trim();
+  if (referrer) out.referrer = referrer.slice(0, 240);
+  const utm = readUtmAttribution();
+  if (utm) out.utm = utm;
   return out;
 }
 
@@ -593,7 +619,9 @@ function sendGoatCounterHit(tab) {
     let ref = '';
     try { ref = document.referrer ? new URL(document.referrer).origin : ''; } catch (_error) { ref = ''; }
     if (ref && ref === loc.origin) ref = '';
+    const utm = readUtmAttribution();
     const params = new URLSearchParams({
+      ...(utm ? { q: `?${new URLSearchParams(utm).toString()}` } : {}),
       p: path,
       t: String((typeof document !== 'undefined' && document.title) || '').slice(0, 120),
       r: ref,
@@ -612,7 +640,8 @@ function sendGoatCounterHit(tab) {
 export function trackPageView(tab) {
   if (typeof window !== 'undefined' && getAnalyticsMode() !== 'off') sendGoatCounterHit(tab || '');
   if (typeof window !== 'undefined' && getAnalyticsMode() === 'anonymous') {
-    return trackAnonymousPageView({ tab: tab || '' });
+    const utm = readUtmAttribution();
+    return trackAnonymousPageView({ tab: tab || '', ...(utm ? { utm } : {}) });
   }
   // 同步到 PostHog
   try {

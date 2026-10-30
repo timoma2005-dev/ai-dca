@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light only" />
+<title>纳指QDII溢价日报 · AI-DCA</title>
+<meta name="description" content="每个交易日开盘前、收盘后更新：纳指100 QDII ETF 溢价排名、预计停牌、隔夜参考。" />
+<style>
+  :root { --ink:#0f172a; --sub:#475569; --mute:#94a3b8; --line:#e2e8f0; --bg:#f8fafc; --brand:#4f46e5; --up:#dc2626; --dn:#16a34a; --hot:#b45309; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; color:var(--ink); background:var(--bg); }
+  .wrap { max-width:720px; margin:0 auto; padding:20px 16px 120px; }
+  header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .logo { width:30px; height:30px; border-radius:8px; background:linear-gradient(135deg,#6366f1,#8b5cf6); }
+  header b { font-size:16px; }
+  header small { color:var(--mute); margin-left:auto; font-size:12px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:12px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .meta { color:var(--mute); font-size:12px; }
+  .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+  .kpi { background:var(--bg); border-radius:10px; padding:10px; }
+  .kpi span { display:block; font-size:12px; color:var(--sub); }
+  .kpi b { font-size:18px; font-variant-numeric:tabular-nums; }
+  .pick { margin-top:12px; padding:10px 12px; border-radius:10px; background:#eef2ff; color:#3730a3; font-size:14px; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { padding:9px 6px; border-bottom:1px solid var(--line); text-align:right; font-size:14px; }
+  th { color:var(--mute); font-weight:500; font-size:12px; }
+  th:first-child, td:first-child { text-align:left; }
+  td small { color:var(--mute); margin-left:4px; }
+  tr.grp td { background:var(--bg); color:var(--sub); font-size:12px; text-align:left; }
+  .up { color:var(--up); } .dn { color:var(--dn); } .hot { color:var(--hot); font-weight:600; }
+  .tag { display:inline-block; font-size:11px; padding:0 6px; border-radius:999px; background:#fef3c7; color:#92400e; margin-left:4px; }
+  .tag.ok { background:#dcfce7; color:#166534; }
+  .note { color:var(--mute); font-size:12px; }
+  .cta { position:fixed; left:0; right:0; bottom:0; background:rgba(255,255,255,.96); border-top:1px solid var(--line); padding:10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .cta .in { max-width:720px; margin:0 auto; display:flex; gap:8px; align-items:center; }
+  .cta p { margin:0; flex:1; font-size:13px; color:var(--sub); line-height:1.4; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 16px; border-radius:999px; font-weight:700; font-size:14px; text-decoration:none; border:0; cursor:pointer; white-space:nowrap; }
+  .btn.pri { background:var(--brand); color:#fff; }
+  .btn.sec { background:#eef2ff; color:var(--brand); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  pre { white-space:pre-wrap; font:13px/1.6 inherit; background:var(--bg); border-radius:10px; padding:12px; margin:10px 0 0; color:var(--sub); }
+  .empty { text-align:center; color:var(--mute); padding:40px 0; }
+  @media (max-width:520px) { .cta p { display:none; } .cta .btn { flex:1; } th.hm, td.hm { display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><span class="logo"></span><b>AI-DCA</b><small>纳指 QDII 溢价日报</small></header>
+  <div id="root"><div class="card empty">加载中…</div></div>
+  <p class="note">溢价按最新公布净值估算，净值有 1～2 个交易日滞后；仅供参考，不构成投资建议。</p>
+</div>
+<div class="cta"><div class="in">
+  <p>溢价进入低位、出现切换机会时提醒你，每个交易日开盘前收日报。</p>
+  <a class="btn sec" id="cta-mk" href="/home.html?tab=markets">看实时行情</a>
+  <a class="btn pri" id="cta-ntf" href="/home.html?tab=notify">开启提醒</a>
+</div></div>
+<script>
+(function () {
+  var API = "https://api.freebacktrack.tech/api/notify/share-report/latest";
+  var HALT = 10;
+  var qs = new URLSearchParams(location.search);
+  var utm = {};
+  ["utm_source", "utm_medium", "utm_campaign"].forEach(function (k) { var v = qs.get(k); if (v) utm[k] = v.slice(0, 120); });
+  if (!utm.utm_source) { utm.utm_source = "daily_page"; utm.utm_medium = "direct"; }
+  try { if (!sessionStorage.getItem("aiDcaUtm_v1")) sessionStorage.setItem("aiDcaUtm_v1", JSON.stringify(utm)); } catch (e) {}
+  function withUtm(href, content) {
+    var u = new URL(href, location.origin);
+    Object.keys(utm).forEach(function (k) { u.searchParams.set(k, utm[k]); });
+    u.searchParams.set("utm_content", content);
+    return u.pathname + u.search;
+  }
+  document.getElementById("cta-mk").href = withUtm("/home.html?tab=markets", "daily_markets");
+  document.getElementById("cta-ntf").href = withUtm("/home.html?tab=notify&intent=alerts", "daily_notify");
+  // GoatCounter
+  try {
+    var p = new URLSearchParams({ p: "/daily.html", t: document.title, r: document.referrer ? new URL(document.referrer).origin : "", s: String(screen.width || ""), q: "?" + new URLSearchParams(utm).toString(), rnd: Math.random().toString(36).slice(2, 8) });
+    if (!(navigator.sendBeacon && navigator.sendBeacon("/gc/count?" + p))) new Image().src = "/gc/count?" + p;
+  } catch (e) {}
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function f2(n) { return n == null || !isFinite(n) ? "—" : Number(n).toFixed(2); }
+  function sp(n) { return n == null || !isFinite(n) ? "—" : (n > 0 ? "+" : "") + Number(n).toFixed(2) + "%"; }
+  function cls(n) { return n == null ? "" : n > 0 ? "up" : n < 0 ? "dn" : ""; }
+  function med(a) { a = a.filter(function (x) { return x != null && isFinite(x); }).sort(function (x, y) { return x - y; }); if (!a.length) return null; var m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
+
+  function render(d) {
+    var root = document.getElementById("root");
+    if (!d) { root.innerHTML = '<div class="card empty">日报还没生成，交易日 9:05 和 15:35 更新。</div>'; return; }
+    var pre = d.kind === "pre", field = pre ? "prevPremiumPct" : "premiumPct";
+    var rows = d.rows || [];
+    var nq = rows.filter(function (r) { return r.group === "nasdaq"; }).sort(function (a, b) { var x = a[field], y = b[field]; if (x == null) return 1; if (y == null) return -1; return x - y; });
+    var lof = rows.filter(function (r) { return r.group === "lof"; });
+    var spx = rows.filter(function (r) { return r.group === "sp500"; }).sort(function (a, b) { return (a[field] || 99) - (b[field] || 99); });
+    var m = med(nq.map(function (r) { return r[field]; }));
+    var lowR = nq[0], nHalt = nq.filter(function (r) { return r[field] > HALT; }).length;
+    var gen = d.generatedAt ? new Date(d.generatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "";
+    function tr(r) {
+      var v = r[field], halt = v != null && v > HALT;
+      return "<tr><td><b>" + esc(r.short) + "</b><small>" + r.code + "</small>" + (r.group !== "sp500" && v != null ? (halt ? '<span class="tag">' + (pre ? "停牌至10:30" : ">10%") + "</span>" : (pre ? '<span class="tag ok">9:30开盘</span>' : "")) : "") + "</td>" +
+        '<td class="hm">' + (r.price ? Number(r.price).toFixed(3) : "—") + "</td>" +
+        '<td class="' + cls(r.changePercent) + '">' + (pre ? "—" : sp(r.changePercent)) + "</td>" +
+        '<td class="' + (halt ? "hot" : "") + '">' + (v == null ? "—" : f2(v) + "%") + "</td></tr>";
+    }
+    var body = (d.kind === "weekly")
+      ? '<div class="card"><h1>' + esc(d.title) + '</h1><div class="meta">更新于 ' + esc(gen) + "</div><pre>" + esc(d.text) + "</pre></div>"
+      : '<div class="card"><h1>' + esc(d.title) + '</h1><div class="meta">' + (pre ? "按昨收价计算溢价 · " : "按收盘价计算溢价 · ") + "更新于 " + esc(gen) + "</div>" +
+        '<div class="kpis"><div class="kpi"><span>纳指100 溢价中位</span><b>' + f2(m) + '%</b></div><div class="kpi"><span>溢价最低</span><b>' + (lowR ? esc(lowR.short) : "—") + '</b></div><div class="kpi"><span>' + (pre ? "预计停牌" : "高于 10%") + "</span><b>" + nHalt + " 只</b></div></div>" +
+        (function () { var t = (d.text || "").split("\n").filter(function (l) { return /^隔夜参考|^9:30 正常开盘/.test(l); })[0]; return t ? '<div class="pick">' + esc(t) + "</div>" : ""; })() +
+        '<div class="row"><button class="btn sec" id="copy">复制文字版</button></div></div>' +
+        '<div class="card" style="padding:6px 10px"><table><thead><tr><th>基金</th><th class="hm">' + (pre ? "昨收" : "收盘") + "</th><th>涨跌</th><th>溢价</th></tr></thead><tbody>" +
+        '<tr class="grp"><td colspan="4">纳指 100 ETF · 按溢价从低到高</td></tr>' + nq.map(tr).join("") +
+        (lof.length ? '<tr class="grp"><td colspan="4">LOF</td></tr>' + lof.map(tr).join("") : "") +
+        '<tr class="grp"><td colspan="4">标普 500 ETF（参考）</td></tr>' + spx.map(tr).join("") + "</tbody></table></div>";
+    root.innerHTML = body;
+    var cp = document.getElementById("copy");
+    if (cp) cp.onclick = function () {
+      var txt = d.text || "";
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { cp.textContent = "已复制"; }, function () {
+        var ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); cp.textContent = "已复制"; } catch (e) {} ta.remove();
+      });
+    };
+  }
+  fetch(API, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (j) { render(j && j.data); }).catch(function () {
+    document.getElementById("root").innerHTML = '<div class="card empty">日报加载失败，请稍后刷新。</div>';
+  });
+})();
+</script>
+</body>
+</html>

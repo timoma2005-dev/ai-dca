@@ -13,8 +13,9 @@ import { getScenario } from '../app/scenarios.js';
 import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession } from '../app/authSession.js';
 import { trackPageEngagement, trackPageView, trackSessionHeartbeat, trackSessionStart } from '../app/analytics.js';
 import { saveWorkspaceReturn } from '../app/workspaceReturn.js';
-import { CONVERSION_PROMPT_EVENT } from '../app/conversionPrompts.js';
+import { CONVERSION_PROMPT_EVENT, CONVERSION_NAVIGATE_EVENT } from '../app/conversionPrompts.js';
 import { ConversionPromptCard } from '../components/conversion-prompt-card.jsx';
+import { ShareLandingBar } from '../components/share-landing-bar.jsx';
 import { ACCOUNT_AUTH_OPEN_EVENT, UPGRADE_QR_OPEN_EVENT, openAccountAuth } from '../app/accountAuthEvents.js';
 import { loadAccountMenu } from '../app/loadAccountMenu.js';
 import { useRbac } from '../app/rbac/useRbac.js';
@@ -260,6 +261,21 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
     }
     window.addEventListener(CONVERSION_PROMPT_EVENT, handleConversionPrompt);
     return () => window.removeEventListener(CONVERSION_PROMPT_EVENT, handleConversionPrompt);
+  }, []);
+
+  useEffect(() => {
+    // 注册成功后按引导目标跳转（如开启提醒 → 通知设置页）。
+    function handleConversionNavigate(event) {
+      const tab = String(event?.detail?.tab || '').trim();
+      if (!tab) return;
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set('tab', tab);
+      nextUrl.hash = '';
+      window.history.pushState({ tab }, '', nextUrl);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    window.addEventListener(CONVERSION_NAVIGATE_EVENT, handleConversionNavigate);
+    return () => window.removeEventListener(CONVERSION_NAVIGATE_EVENT, handleConversionNavigate);
   }, []);
 
   useEffect(() => {
@@ -892,6 +908,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         </Suspense>
       ) : null}
       <ConversionPromptCard prompt={conversionPrompt} onClose={() => setConversionPrompt(null)} />
+      {!conversionPrompt && !cloudSession?.accessToken && !mobileBottomSheetHidden ? <ShareLandingBar /> : null}
       <StepHintHost paused={mobileBottomSheetHidden} demoActive={demoActive} />
       {showQrModal ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/70 p-4" role="dialog" aria-modal="true" aria-label="Buy me coffee 二维码" onClick={() => setShowQrModal(false)}>

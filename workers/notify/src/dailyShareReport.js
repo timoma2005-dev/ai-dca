@@ -1,3 +1,4 @@
+/* global console, Response */
 // 每日溢价日报（开盘前 09:05 / 收盘后 15:35）与周末周报（周六 10:00）。
 // 生成一段可直接转发到微信群/雪球的文字，推送到管理员账号（默认 lovexl）的邮件通道，
 // 同时把最新一份写入 KV，供公开页 /daily.html 读取（GET /api/notify/share-report/latest）。
@@ -11,7 +12,7 @@ export const SHARE_REPORT_CRONS = Object.freeze({ pre: '5 1 * * MON-FRI', post: 
 const KV_LATEST = 'share-report:latest';
 const KV_DAY_PREFIX = 'share-report:day:';
 const DAY_TTL = 40 * 24 * 3600;
-const SITE = 'https://freebacktrack.tech';
+const SITE = 'https://fast.freebacktrack.tech';
 
 // 纳指 100 标准 ETF + LOF 161130（隔夜轮动用）+ 标普 500
 export const SHARE_NASDAQ = Object.freeze([
@@ -24,6 +25,7 @@ export const SHARE_SP500 = Object.freeze([['513500', '博时'], ['513650', '南�
 const HALT_LINE = 10;
 
 function f2(n) { return Number.isFinite(n) ? n.toFixed(2) : '—'; }
+function pp(n) { return Number.isFinite(n) ? `${n >= 0 ? '+' : ''}${n.toFixed(2)}pp` : '—'; }
 function sp(n) { return Number.isFinite(n) ? `${n >= 0 ? '+' : ''}${n.toFixed(2)}%` : '—'; }
 function median(arr) {
   const a = arr.filter(Number.isFinite).sort((x, y) => x - y);
@@ -87,7 +89,7 @@ export function composeDailyReport(kind, rows, date) {
     const avgChg = median(nq.map((r) => r.changePercent));
     const prevMed = median(nq.map((r) => r.prevPremiumPct));
     lines.push(`【${title}】`, '');
-    lines.push(`纳指100 ETF 涨跌中位 ${sp(avgChg)}，溢价中位 ${f2(med)}%${Number.isFinite(med) && Number.isFinite(prevMed) ? `（较昨收 ${sp(med - prevMed)}）` : ''}`);
+    lines.push(`纳指100 ETF 涨跌中位 ${sp(avgChg)}，溢价中位 ${f2(med)}%${Number.isFinite(med) && Number.isFinite(prevMed) ? `（较昨收 ${pp(med - prevMed)}）` : ''}`);
     lines.push(`溢价最低：${ranked.slice(0, 3).map(fmt).join('、') || '—'}`);
     lines.push(`溢价最高：${ranked.slice(-3).reverse().map(fmt).join('、') || '—'}`);
     lines.push(`高于 ${HALT_LINE}%（明早可能停牌到 10:30）：${ranked.filter((r) => r[field] > HALT_LINE).length} 只`);
@@ -112,7 +114,7 @@ export function composeWeeklyReport(days = [], date) {
       lines.push(`${mmdd(d.date)}：溢价中位 ${f2(d.median)}%，最低 ${nq[0] ? `${nq[0].short} ${f2(nq[0].premiumPct)}%` : '—'}`);
     });
     const first = posts[0].median; const last = posts[posts.length - 1].median;
-    if (Number.isFinite(first) && Number.isFinite(last)) lines.push('', `本周溢价中位 ${f2(first)}% → ${f2(last)}%（${sp(last - first)}）`);
+    if (Number.isFinite(first) && Number.isFinite(last)) lines.push('', `本周溢价中位 ${f2(first)}% → ${f2(last)}%（${pp(last - first)}）`);
     const counts = {};
     posts.forEach((d) => {
       const nq = (d.rows || []).filter((r) => r.group === 'nasdaq' && Number.isFinite(r.premiumPct)).sort((a, b) => a.premiumPct - b.premiumPct);

@@ -235,6 +235,14 @@ export async function registerCloudAccount({ username, password }) {
       trigger: conversionPrompt.trigger,
       ...(conversionPrompt.meta || {})
     });
+    // 以「开启提醒」为目标的引导：注册成功后直接带到通知设置页。
+    if (conversionPrompt.afterTab && typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('ai-dca:conversion-navigate', { detail: { tab: conversionPrompt.afterTab } }));
+      } catch {
+        // 导航失败不影响注册结果
+      }
+    }
   }
   return session;
 }

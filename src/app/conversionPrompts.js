@@ -13,17 +13,27 @@ const MAX_RECENT_ACTIONS = 20;
 const PROMPT_CONFIGS = {
   markets_new_visitor_guide: {
     minCount: 1,
-    title: '把这份行情带在身上',
-    description: '登录后自选列表自动同步到手机，异动提醒第一时间推送，不用每天手动来翻。',
-    ctaLabel: '免费开启',
-    secondaryLabel: '稍后再说'
+    title: '溢价到低位时提醒你',
+    description: '免费注册后可设置纳指 QDII 溢价和切换提醒，邮件或手机推送，不用每天盯盘。',
+    ctaLabel: '开启提醒',
+    secondaryLabel: '稍后再说',
+    afterTab: 'notify'
   },
   markets_symbol_select: {
     minCount: 2,
-    title: '保存你的行情关注',
-    description: '登录后自选列表、筛选视图和最近查看的标的会自动同步，换设备也能继续看。',
-    ctaLabel: '注册并保存',
-    secondaryLabel: '稍后'
+    title: '这只基金溢价变化时提醒你',
+    description: '免费注册后可给关注的基金设溢价/价格提醒，自选也会同步到手机。',
+    ctaLabel: '开启提醒',
+    secondaryLabel: '稍后',
+    afterTab: 'notify'
+  },
+  share_landing: {
+    minCount: 1,
+    title: '每个交易日收溢价日报',
+    description: '免费注册后开启提醒：溢价进入低位、出现切换机会时推送给你。',
+    ctaLabel: '开启提醒',
+    secondaryLabel: '稍后',
+    afterTab: 'notify'
   },
   markets_watchlist_save: {
     minCount: 1,
@@ -48,10 +58,11 @@ const PROMPT_CONFIGS = {
   },
   fund_switch_view_open: {
     minCount: 1,
-    title: '保存你的切换规则偏好',
-    description: '登录后切换规则和基金池会自动同步，后续可接通知规则持续跟踪。',
-    ctaLabel: '保存规则',
-    secondaryLabel: '稍后'
+    title: '切换机会出现时提醒你',
+    description: '免费注册后，持仓溢价达到切换条件会推送到邮件或手机，规则自动同步。',
+    ctaLabel: '开启提醒',
+    secondaryLabel: '稍后',
+    afterTab: 'notify'
   },
   holdings_transaction_save: {
     minCount: 1,
@@ -169,6 +180,7 @@ export function triggerConversionPrompt(trigger, meta = {}) {
     description: config.description,
     ctaLabel: config.ctaLabel,
     secondaryLabel: config.secondaryLabel,
+    afterTab: config.afterTab || '',
     meta: sanitizeMeta(meta),
     createdAt: now
   };
@@ -191,6 +203,7 @@ export function acceptConversionPrompt(prompt = {}) {
   if (!trigger) return;
   const payload = {
     trigger,
+    afterTab: String(prompt.afterTab || getConversionPromptConfig(trigger)?.afterTab || ''),
     meta: sanitizeMeta(prompt.meta),
     acceptedAt: Date.now()
   };
@@ -236,9 +249,38 @@ export function consumeAcceptedConversionPrompt({ maxAgeMs = DAY_MS } = {}) {
     window.localStorage?.removeItem(CONVERSION_LAST_ACCEPTED_KEY);
     return {
       trigger: String(parsed?.trigger || ''),
+      afterTab: String(parsed?.afterTab || ''),
       meta: sanitizeMeta(parsed?.meta)
     };
   } catch {
     return null;
   }
+}
+
+export const CONVERSION_NAVIGATE_EVENT = 'ai-dca:conversion-navigate';
+export const SHARE_LANDING_DISMISS_KEY = 'aiDcaShareLandingDismissed_v1';
+
+// 分享落地条：从日报/分享链接（带 utm）进来的未登录访客看到「开启提醒」入口。
+export function shouldShowShareLanding({ now = Date.now() } = {}) {
+  if (typeof window === 'undefined') return false;
+  if (loadCloudSession()?.accessToken) return false;
+  if (window.__AI_DCA_FEATURE_DEMO__) return false;
+  try {
+    if (!window.sessionStorage?.getItem('aiDcaUtm_v1')) return false;
+    const dismissedAt = Number(window.localStorage?.getItem(SHARE_LANDING_DISMISS_KEY)) || 0;
+    if (dismissedAt && now - dismissedAt < DISMISS_COOLDOWN_MS) return false;
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+export function dismissShareLanding() {
+  try { window.localStorage?.setItem(SHARE_LANDING_DISMISS_KEY, String(Date.now())); } catch { /* best effort */ }
+  trackFeatureEvent('conversion', 'prompt_dismiss', { trigger: 'share_landing' });
+}
+
+export function buildShareLandingPrompt() {
+  const config = getConversionPromptConfig('share_landing');
+  return { id: `share_landing:${Date.now()}`, trigger: 'share_landing', ...config, meta: {} };
 }
