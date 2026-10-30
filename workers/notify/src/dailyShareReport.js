@@ -1,10 +1,9 @@
-/* global console, Response */
+/* global console, Response, fetch */
 // 每日溢价日报（开盘前 09:05 / 收盘后 15:35）与周末周报（周六 10:00）。
 // 生成一段可直接转发到微信群/雪球的文字，推送到管理员账号（默认 lovexl）的邮件通道，
 // 同时把最新一份写入 KV，供公开页 /daily.html 读取（GET /api/notify/share-report/latest）。
 import { readSettings, writeSettings } from './notifyStorage.js';
-import { fetchFundMetricsPayload } from './getNav.js';
-import { normalizeMarketPremiumMetric, resolveMarketDigestClient } from './marketPremiumDigest.js';
+import { resolveMarketDigestClient } from './marketPremiumDigest.js';
 import { getClientRecord } from './clientSettings.js';
 import { getShanghaiDateParts, isTradingDayShanghai } from './holdingsNavSupport.js';
 import { jsonResponse, readOrigin } from './notifyHttp.js';
@@ -39,21 +38,6 @@ function median(arr) {
 function mmdd(date) { const [, m, d] = String(date).split('-'); return `${Number(m)}月${Number(d)}日`; }
 function link(campaign) { return `${SITE}/daily.html?utm_source=wechat&utm_medium=share&utm_campaign=${campaign}`; }
 
-export function buildShareRows(items = []) {
-  const byCode = new Map(items.map((raw) => normalizeMarketPremiumMetric(raw)).filter((it) => it.code).map((it) => [it.code, it]));
-  const pick = (list, group) => list.map(([code, short]) => {
-    const it = byCode.get(code) || { code };
-    return {
-      code, short, group,
-      price: Number.isFinite(it.price) ? it.price : null,
-      changePercent: Number.isFinite(it.changePercent) ? it.changePercent : null,
-      premiumPct: Number.isFinite(it.premiumPct) ? Number(it.premiumPct.toFixed(2)) : null,
-      prevPremiumPct: Number.isFinite(it.previousPremiumApproxPct) ? Number(it.previousPremiumApproxPct.toFixed(2)) : null
-    };
-  });
-  return [...pick(SHARE_NASDAQ, 'nasdaq'), ...pick(SHARE_LOF, 'lof'), ...pick(SHARE_SP500, 'sp500')];
-}
-
 function overnightPick(nq, lof) {
   const ok = nq.filter((r) => Number.isFinite(r.premiumPct));
   if (!ok.length) return null;
@@ -63,46 +47,46 @@ function overnightPick(nq, lof) {
   return { row: low, why: '溢价最低的 ETF' };
 }
 
+function navBaseOf(rows) {
+  return rows.filter((r) => r.group !== 'lof' && r.navDate).map((r) => r.navDate).sort().at(-1) || '';
+}
+
 export function composeDailyReport(kind, rows, date) {
   const nq = rows.filter((r) => r.group === 'nasdaq');
   const lof = rows.find((r) => r.group === 'lof');
   const spx = rows.filter((r) => r.group === 'sp500');
-  const field = kind === 'pre' ? 'prevPremiumPct' : 'premiumPct';
-  const ranked = nq.filter((r) => Number.isFinite(r[field])).sort((a, b) => a[field] - b[field]);
-  const med = median(nq.map((r) => r[field]));
-  const spMed = median(spx.map((r) => r[field]));
-  const fmt = (r) => `${r.short} ${r.code} ${f2(r[field])}%`;
-  const lines = [];
-  let title;
-  if (kind === 'pre') {
-    title = `纳指QDII溢价日报 · ${mmdd(date)} 开盘前`;
-    const halts = ranked.filter((r) => r[field] > HALT_LINE);
-    const open = ranked.filter((r) => r[field] <= HALT_LINE);
-    lines.push(`【${title}】`, '');
-    lines.push(`昨收溢价中位 ${f2(med)}%（纳指100 ETF ${ranked.length} 只）`);
-    lines.push(`最低：${ranked.slice(0, 3).map(fmt).join('、') || '—'}`);
-    lines.push(`最高：${ranked.slice(-3).reverse().map(fmt).join('、') || '—'}`);
-    lines.push(halts.length
-      ? `溢价>${HALT_LINE}% 预计 9:30 停牌至 10:30：${halts.length} 只`
-      : `没有溢价>${HALT_LINE}% 的 ETF，9:30 全部正常开盘`);
-    lines.push(`9:30 正常开盘：${open.length ? open.map((r) => r.short).join('、') : '无'}${lof && Number.isFinite(lof[field]) ? `；LOF 161130 溢价 ${f2(lof[field])}%` : ''}`);
-    lines.push(`标普500 ETF 溢价中位 ${f2(spMed)}%`);
+  const ranked = nq.filter((r) => Number.isFinite(r.premiumPct)).sort((a, b) => a.premiumPct - b.premiumPct);
+  const med = median(nq.map((r) => r.premiumPct));
+  const spMed = median(spx.map((r) => r.premiumPct));
+  const navBase = navBaseOf(rows);
+  const marks = ['①', '②', '③'];
+  const item = (r, i) => `${marks[i]} ${r.short} ${r.code}\u3000${f2(r.premiumPct)}%`;
+  const halts = ranked.filter((r) => r.premiumPct > HALT_LINE);
+  const pre = kind === 'pre';
+  const title = `纳指QDII溢价日报 · ${mmdd(date)} ${pre ? '开盘前' : '收盘'}`;
+  const lines = [`【${title}】`];
+  lines.push(`${pre ? '按昨收价' : '按收盘价'}，净值基准 ${navBase ? mmdd(navBase) : '—'}（东财口径）`, '');
+  lines.push(pre
+    ? `纳指100 ETF 溢价中位 ${f2(med)}%`
+    : `纳指100 ETF 溢价中位 ${f2(med)}%，涨跌中位 ${sp(median(nq.map((r) => r.changePercent)))}`);
+  lines.push('', '溢价最低', ...ranked.slice(0, 3).map(item));
+  lines.push('', '溢价最高', ...ranked.slice(-3).reverse().map(item), '');
+  if (pre) {
+    lines.push(halts.length ? `溢价>${HALT_LINE}%，预计 9:30 停牌到 10:30：${halts.length} 只` : `没有溢价>${HALT_LINE}% 的，9:30 全部正常开盘`);
+    const open = ranked.filter((r) => r.premiumPct <= HALT_LINE);
+    if (open.length && halts.length) lines.push(`9:30 正常开盘：${open.map((r) => r.short).join('、')}`);
   } else {
-    title = `纳指QDII溢价日报 · ${mmdd(date)} 收盘`;
-    const avgChg = median(nq.map((r) => r.changePercent));
-    const prevMed = median(nq.map((r) => r.prevPremiumPct));
-    lines.push(`【${title}】`, '');
-    lines.push(`纳指100 ETF 涨跌中位 ${sp(avgChg)}，溢价中位 ${f2(med)}%${Number.isFinite(med) && Number.isFinite(prevMed) ? `（较昨收 ${pp(med - prevMed)}）` : ''}`);
-    lines.push(`溢价最低：${ranked.slice(0, 3).map(fmt).join('、') || '—'}`);
-    lines.push(`溢价最高：${ranked.slice(-3).reverse().map(fmt).join('、') || '—'}`);
-    lines.push(`高于 ${HALT_LINE}%（明早可能停牌到 10:30）：${ranked.filter((r) => r[field] > HALT_LINE).length} 只`);
+    lines.push(`溢价>${HALT_LINE}%（明早可能停牌到 10:30）：${halts.length} 只`);
     const pick = overnightPick(nq, lof);
-    if (pick) lines.push(`隔夜参考：${pick.row.short} ${pick.row.code}（${pick.why}，${f2(pick.row[field])}%）`);
-    lines.push(`标普500 ETF 溢价中位 ${f2(spMed)}%`);
+    if (pick) lines.push(`隔夜参考：${pick.row.short} ${pick.row.code}\u3000${f2(pick.row.premiumPct)}%（${pick.why}）`);
   }
+  if (lof && Number.isFinite(lof.premiumPct)) lines.push(`LOF 161130 溢价 ${f2(lof.premiumPct)}%`);
+  lines.push(`标普500 ETF 溢价中位 ${f2(spMed)}%`);
   const url = link(`daily_${kind}_${date.replaceAll('-', '')}`);
-  lines.push('', `实时溢价、偏离和切换提醒 👉 ${url}`, '', '注：溢价按最新公布净值估算，仅供参考，不构成投资建议。');
-  return { kind, date, title, text: lines.join('\n'), url, median: med, spMedian: spMed };
+  const shareText = [...lines, '', `实时溢价/切换提醒 👉 ${url}`, '注：仅供参考，不构成投资建议。'].join('\n');
+  // 邮件正文：去掉与邮件标题重复的【】行和链接行（邮件底部有按钮）
+  const emailText = [...lines.slice(1), '', '可转发的文字版：打开详情页点「复制文字版」。', '注：仅供参考，不构成投资建议。'].join('\n');
+  return { kind, date, title, text: shareText, emailText, url, median: med, spMedian: spMed, navBase };
 }
 
 export function composeWeeklyReport(days = [], date) {
@@ -128,7 +112,7 @@ export function composeWeeklyReport(days = [], date) {
   }
   const url = link(`weekly_${date.replaceAll('-', '')}`);
   lines.push('', `下周每个交易日开盘前/收盘后更新 👉 ${url}`, '', '注：仅供参考，不构成投资建议。');
-  return { kind: 'weekly', date, title, text: lines.join('\n'), url };
+  return { kind: 'weekly', date, title, text: lines.join('\n'), emailText: lines.slice(2).join('\n'), url };
 }
 
 function toNotification(report) {
@@ -138,8 +122,8 @@ function toNotification(report) {
     ruleId: `share-report-${report.kind}`,
     title: report.title,
     summary: '可直接复制转发的溢价日报',
-    body: report.text,
-    body_md: report.text.split('\n').map((l) => (l ? `${l}  ` : '')).join('\n'),
+    body: report.emailText || report.text,
+    body_md: (report.emailText || report.text).split('\n').map((l) => (l ? `${l}  ` : '')).join('\n'),
     symbol: '纳指QDII',
     strategyName: '溢价日报',
     triggerCondition: report.kind === 'weekly' ? '周六周报' : (report.kind === 'pre' ? '开盘前' : '收盘后'),
@@ -173,11 +157,50 @@ async function deliver(env, report, runClientDetection, { channel = 'email', acc
   return { ok: true, clientId: client.clientId, summary: result.summary };
 }
 
-async function fetchRows(env) {
+const EM_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo?pageIndex=1&pageSize=50&plat=Android&appType=ttjj&product=EFund&Version=1&deviceid=ai-dca-share&Fcodes=';
+
+// 溢价统一用东方财富 FundMNFInfo 的 ZJL（与竞价看板同口径：净值未公布的按同类估算到同一基准日），
+// 不再用 fund-metrics（那里 IOPV / 最新净值混用，基准日不一致）。LOF 161130 东财无场内价，用腾讯价 / 最新净值。
+async function fetchRows() {
   const codes = [...SHARE_NASDAQ, ...SHARE_LOF, ...SHARE_SP500].map(([c]) => c);
-  const fundKinds = Object.fromEntries(codes.map((c) => [c, 'exchange']));
-  const payload = await fetchFundMetricsPayload(env, codes, { refresh: true, fundKinds });
-  return buildShareRows(Array.isArray(payload?.items) ? payload.items : []);
+  const resp = await fetch(EM_URL + codes.join(','), { headers: { 'user-agent': 'okhttp/3.12.0' } });
+  if (!resp.ok) throw new Error(`eastmoney HTTP ${resp.status}`);
+  const data = await resp.json();
+  const raw = {};
+  (Array.isArray(data?.Datas) ? data.Datas : []).forEach((it) => { raw[String(it.FCODE)] = it; });
+  let lofPx = null;
+  try {
+    const t = await (await fetch('https://qt.gtimg.cn/q=sz161130')).text();
+    const f = t.split('~');
+    lofPx = { cur: Number(f[3]) || null, pre: Number(f[4]) || null };
+  } catch { lofPx = null; }
+  return buildShareRowsFromEastmoney(raw, { lofPx, navBaseDate: String(data?.Expansion?.FSRQ || '') });
+}
+
+export function buildShareRowsFromEastmoney(raw = {}, { lofPx = null, navBaseDate = '' } = {}) {
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+  const pick = (list, group) => list.map(([code, short]) => {
+    const it = raw[code] || {};
+    const zjl = num(it.ZJL);
+    let price = num(it.NEWPRICE);
+    let changePercent = num(it.CHANGERATIO);
+    let premiumPct = zjl == null ? null : -zjl;
+    const nav = num(it.NAV);
+    if (group === 'lof' && lofPx?.cur && nav) {
+      price = lofPx.cur;
+      changePercent = lofPx.pre ? (lofPx.cur / lofPx.pre - 1) * 100 : null;
+      premiumPct = (lofPx.cur / nav - 1) * 100;
+    }
+    const navDate = String(it.PDATE || '').slice(0, 10);
+    return {
+      code, short, group, price,
+      changePercent: changePercent == null ? null : Number(changePercent.toFixed(2)),
+      premiumPct: premiumPct == null ? null : Number(premiumPct.toFixed(2)),
+      navDate,
+      navEstimated: Boolean(navBaseDate && navDate && navDate < navBaseDate && group !== 'lof')
+    };
+  });
+  return [...pick(SHARE_NASDAQ, 'nasdaq'), ...pick(SHARE_LOF, 'lof'), ...pick(SHARE_SP500, 'sp500')];
 }
 
 export async function runShareReport(env, kind, scheduledMs, { runClientDetection, send = true, force = false, clientId = '' } = {}) {
@@ -193,7 +216,7 @@ export async function runShareReport(env, kind, scheduledMs, { runClientDetectio
     }
     report = composeWeeklyReport(days, date);
   } else {
-    const rows = await fetchRows(env);
+    const rows = await fetchRows();
     report = { ...composeDailyReport(kind, rows, date), rows };
     await env.NOTIFY_STATE.put(`${KV_DAY_PREFIX}${date}:${kind}`, JSON.stringify(report), { expirationTtl: DAY_TTL });
   }

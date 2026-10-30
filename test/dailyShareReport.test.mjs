@@ -1,51 +1,54 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildShareRows, composeDailyReport, composeWeeklyReport, SHARE_REPORT_CRONS } from '../workers/notify/src/dailyShareReport.js';
+import { buildShareRowsFromEastmoney, composeDailyReport, composeWeeklyReport, SHARE_REPORT_CRONS } from '../workers/notify/src/dailyShareReport.js';
 
-function item(code, price, prev, nav, chg) {
-  return { code, price, previousClose: prev, navBase: nav, changePercent: chg, ok: true };
-}
+const RAW = {
+  513100: { FCODE: '513100', PDATE: '2026-10-28', NAV: '1.9943', NEWPRICE: '2.239', CHANGERATIO: '-2.23', ZJL: '-13.89' },
+  513110: { FCODE: '513110', PDATE: '2026-10-28', NAV: '2.2895', NEWPRICE: '2.455', CHANGERATIO: '-2.89', ZJL: '-8.75' },
+  513300: { FCODE: '513300', PDATE: '2026-10-29', NAV: '2.4365', NEWPRICE: '2.674', CHANGERATIO: '-2.59', ZJL: '-9.74' },
+  159513: { FCODE: '159513', PDATE: '2026-10-28', NAV: '1.6612', NEWPRICE: '1.781', CHANGERATIO: '-2.62', ZJL: '-8.72' },
+  161130: { FCODE: '161130', PDATE: '2026-10-29', NAV: '4.3963' },
+  513500: { FCODE: '513500', PDATE: '2026-10-28', NAV: '2.4597', NEWPRICE: '2.657', CHANGERATIO: '-1.15', ZJL: '-8.38' }
+};
+const rows = () => buildShareRowsFromEastmoney(RAW, { lofPx: { cur: 4.631, pre: 4.722 }, navBaseDate: '2026-10-29' });
 
-const ITEMS = [
-  item('513100', 2.20, 2.25, 2.00, -2.2), item('513110', 2.18, 2.19, 2.00, -0.5), item('513300', 2.30, 2.30, 2.00, 0),
-  item('161130', 4.60, 4.62, 4.45, -0.4), item('513500', 2.65, 2.66, 2.45, -0.4)
-];
-
-test('crons are distinct and new', () => {
+test('crons', () => {
   assert.deepEqual(Object.values(SHARE_REPORT_CRONS), ['5 1 * * MON-FRI', '35 7 * * MON-FRI', '0 2 * * SAT']);
 });
 
-test('rows group nasdaq / lof / sp500 and compute premium', () => {
-  const rows = buildShareRows(ITEMS);
-  const r = rows.find((x) => x.code === '513110');
-  assert.equal(r.group, 'nasdaq');
-  assert.equal(r.premiumPct, 9);
-  assert.equal(rows.find((x) => x.code === '161130').group, 'lof');
-  assert.equal(rows.find((x) => x.code === '513500').group, 'sp500');
-  assert.equal(rows.find((x) => x.code === '159941').premiumPct, null);
+test('premium = -ZJL (eastmoney), LOF from tencent price / nav, est flag', () => {
+  const r = rows();
+  assert.equal(r.find((x) => x.code === '513100').premiumPct, 13.89);
+  assert.equal(r.find((x) => x.code === '513100').navEstimated, true);
+  assert.equal(r.find((x) => x.code === '513300').navEstimated, false);
+  assert.equal(r.find((x) => x.code === '161130').premiumPct, 5.34);
+  assert.equal(r.find((x) => x.code === '159941').premiumPct, null);
 });
 
-test('pre-open report lists halts and open funds by previous-close premium', () => {
-  const rep = composeDailyReport('pre', buildShareRows(ITEMS), '2026-10-31');
-  assert.match(rep.title, /10月31日 开盘前/);
-  assert.match(rep.text, /预计 9:30 停牌至 10:30：2 只/);
-  assert.match(rep.text, /9:30 正常开盘：华泰柏瑞/);
-  assert.match(rep.url, /utm_campaign=daily_pre_20261031/);
+test('post report: one fund per line, overnight pick, email drops title + link', () => {
+  const rep = composeDailyReport('post', rows(), '2026-10-30');
+  assert.match(rep.text, /① 大成 159513　8\.72%/);
+  assert.match(rep.text, /隔夜参考：大成 159513/);
+  assert.match(rep.text, /净值基准 10月29日/);
+  assert.match(rep.url, /daily_post_20261030/);
+  assert.doesNotMatch(rep.emailText, /【|https:/);
 });
 
-test('post-close overnight pick: lowest ETF unless all above halt line', () => {
-  const rep = composeDailyReport('post', buildShareRows(ITEMS), '2026-10-30');
-  assert.match(rep.text, /隔夜参考：华泰柏瑞 513110/);
-  const high = ITEMS.map((x) => (x.code === '513110' ? item('513110', 2.30, 2.30, 2.0, 0) : x.code === '513100' ? item('513100', 2.25, 2.25, 2.0, 0) : x));
-  const rep2 = composeDailyReport('post', buildShareRows(high), '2026-10-30');
-  assert.match(rep2.text, /隔夜参考：易方达LOF 161130/);
+test('overnight pick goes to LOF when all ETFs above halt line', () => {
+  const raw = Object.fromEntries(Object.entries(RAW).map(([k, v]) => [k, v.ZJL ? { ...v, ZJL: '-12' } : v]));
+  const rep = composeDailyReport('post', buildShareRowsFromEastmoney(raw, { lofPx: { cur: 4.631, pre: 4.722 } }), '2026-10-30');
+  assert.match(rep.text, /隔夜参考：易方达LOF 161130/);
 });
 
-test('weekly report summarises stored post snapshots', () => {
-  const rows = buildShareRows(ITEMS);
-  const d1 = { ...composeDailyReport('post', rows, '2026-10-26'), rows };
-  const d2 = { ...composeDailyReport('post', rows, '2026-10-27'), rows };
-  const rep = composeWeeklyReport([d1, d2], '2026-10-31');
-  assert.match(rep.text, /10月26日：溢价中位/);
-  assert.match(rep.text, /最常出现的最低溢价：华泰柏瑞（2 天）/);
+test('pre report lists halts', () => {
+  const rep = composeDailyReport('pre', rows(), '2026-10-31');
+  assert.match(rep.text, /预计 9:30 停牌到 10:30：1 只/);
+  assert.match(rep.text, /9:30 正常开盘：大成、华泰柏瑞、华夏/);
+});
+
+test('weekly', () => {
+  const r = rows();
+  const d = [{ ...composeDailyReport('post', r, '2026-10-26'), rows: r }, { ...composeDailyReport('post', r, '2026-10-27'), rows: r }];
+  const rep = composeWeeklyReport(d, '2026-10-31');
+  assert.match(rep.text, /最常出现的最低溢价：大成（2 天）/);
 });

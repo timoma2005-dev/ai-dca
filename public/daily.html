@@ -88,7 +88,7 @@
   function render(d) {
     var root = document.getElementById("root");
     if (!d) { root.innerHTML = '<div class="card empty">日报还没生成，交易日 9:05 和 15:35 更新。</div>'; return; }
-    var pre = d.kind === "pre", field = pre ? "prevPremiumPct" : "premiumPct";
+    var pre = d.kind === "pre", field = "premiumPct";
     var rows = d.rows || [];
     var nq = rows.filter(function (r) { return r.group === "nasdaq"; }).sort(function (a, b) { var x = a[field], y = b[field]; if (x == null) return 1; if (y == null) return -1; return x - y; });
     var lof = rows.filter(function (r) { return r.group === "lof"; });
@@ -98,14 +98,14 @@
     var gen = d.generatedAt ? new Date(d.generatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "";
     function tr(r) {
       var v = r[field], halt = v != null && v > HALT;
-      return "<tr><td><b>" + esc(r.short) + "</b><small>" + r.code + "</small>" + (r.group !== "sp500" && v != null ? (halt ? '<span class="tag">' + (pre ? "停牌至10:30" : ">10%") + "</span>" : (pre ? '<span class="tag ok">9:30开盘</span>' : "")) : "") + "</td>" +
+      return "<tr><td><b>" + esc(r.short) + "</b><small>" + r.code + "</small>" + (r.navEstimated ? '<small title="该基金净值未更新到基准日，按同类估算">估</small>' : "") + (r.group !== "sp500" && v != null ? (halt ? '<span class="tag">' + (pre ? "停牌至10:30" : ">10%") + "</span>" : (pre ? '<span class="tag ok">9:30开盘</span>' : "")) : "") + "</td>" +
         '<td class="hm">' + (r.price ? Number(r.price).toFixed(3) : "—") + "</td>" +
         '<td class="' + cls(r.changePercent) + '">' + (pre ? "—" : sp(r.changePercent)) + "</td>" +
         '<td class="' + (halt ? "hot" : "") + '">' + (v == null ? "—" : f2(v) + "%") + "</td></tr>";
     }
     var body = (d.kind === "weekly")
       ? '<div class="card"><h1>' + esc(d.title) + '</h1><div class="meta">更新于 ' + esc(gen) + "</div><pre>" + esc(d.text) + "</pre></div>"
-      : '<div class="card"><h1>' + esc(d.title) + '</h1><div class="meta">' + (pre ? "按昨收价计算溢价 · " : "按收盘价计算溢价 · ") + "更新于 " + esc(gen) + "</div>" +
+      : '<div class="card"><h1>' + esc(d.title) + '</h1><div class="meta">' + (pre ? "按昨收价" : "按收盘价") + (d.navBase ? "，净值基准 " + esc(d.navBase.slice(5)) + "（东财口径，未公布的按同类估算）" : "") + " · 更新于 " + esc(gen) + "</div>" +
         '<div class="kpis"><div class="kpi"><span>纳指100 溢价中位</span><b>' + f2(m) + '%</b></div><div class="kpi"><span>溢价最低</span><b>' + (lowR ? esc(lowR.short) : "—") + '</b></div><div class="kpi"><span>' + (pre ? "预计停牌" : "高于 10%") + "</span><b>" + nHalt + " 只</b></div></div>" +
         (function () { var t = (d.text || "").split("\n").filter(function (l) { return /^隔夜参考|^9:30 正常开盘/.test(l); })[0]; return t ? '<div class="pick">' + esc(t) + "</div>" : ""; })() +
         '<div class="row"><button class="btn sec" id="copy">复制文字版</button></div></div>' +
