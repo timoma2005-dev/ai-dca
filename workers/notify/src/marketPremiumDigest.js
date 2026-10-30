@@ -306,7 +306,7 @@ function normalizeTargetChannel(value = '') {
   return '';
 }
 
-function resolveMarketDigestClient(settings = {}, env = {}, payload = {}) {
+export function resolveMarketDigestClient(settings = {}, env = {}, payload = {}) {
   const explicitClientId = normalizeClientId(payload?.clientId || env?.ADMIN_NOTIFY_CLIENT_ID || env?.ADMIN_CLIENT_ID || '');
   if (explicitClientId) {
     const explicitClient = getClientRecord(settings, explicitClientId);

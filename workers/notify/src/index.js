@@ -46,6 +46,7 @@ import {
   runHoldingsNotificationsAll
 } from './holdingsNotificationRoutes.js';
 import { handleAdminMarketPremiumDigest } from './marketPremiumDigest.js';
+import { SHARE_REPORT_CRONS, runShareReport, handleShareReportLatest, handleAdminShareReport } from './dailyShareReport.js';
 import { getShanghaiDateParts, isTradingDayShanghai } from './holdingsNavSupport.js';
 import { normalizeServerChan3Config } from './channels/serverChan3.js';
 import {
@@ -62,7 +63,7 @@ import {
   handleEmailStatus,
   handleEmailVerify
 } from './emailRoutes.js';
-import { requireAdminToken } from './security.js';
+import { requireAdminToken, isValidAdminToken, readRequestAdminToken } from './security.js';
 import { authenticateNotifyAccountRequest, requiresNotifyAccountAuth } from './notifyAccountAuth.js';
 
 // 把 Durable Object 类型重新导出，让 Workers runtime 能在加载 wrangler 绑定时
@@ -279,6 +280,8 @@ export default {
     }
 
     try {
+      if (request.method === 'GET' && url.pathname === '/api/notify/share-report/latest') return handleShareReportLatest(request, env);
+      if (request.method === 'POST' && url.pathname === '/api/notify/admin/share-report') return await handleAdminShareReport(request, env, { runClientDetection, isValidAdminToken, readRequestAdminToken });
       if (request.method === 'POST' && url.pathname === '/api/notify/internal/sync-rules') return handleInternalSyncRules(request, env, origin);
       if (request.method === 'POST' && url.pathname === '/api/notify/internal/pcf-signal') return handlePcfSignal(request, env);
       if (request.method === 'POST' && url.pathname === '/api/notify/internal/pcf-at-limit') return handlePcfAtLimit(request, env);
@@ -467,6 +470,14 @@ export default {
       shanghaiDate,
       shanghaiHHMM
     }));
+    // 溢价日报 / 周报（推送到管理员账号邮件，并写 KV 供 /daily.html）
+    const shareKind = cron === SHARE_REPORT_CRONS.pre ? 'pre' : cron === SHARE_REPORT_CRONS.post ? 'post' : cron === SHARE_REPORT_CRONS.weekly ? 'weekly' : '';
+    if (shareKind) {
+      ctx.waitUntil(runShareReport(env, shareKind, scheduledMs, { runClientDetection }).catch((error) => {
+        console.log('[share-report] error', JSON.stringify({ kind: shareKind, message: error instanceof Error ? error.message : String(error) }));
+      }));
+      return;
+    }
     // 分钟级 cron：A 股交易时段内扫描基金切换策略，同时保留行情 WS 推送。
     if (cron === '* 1-7 * * MON-FRI') {
       console.log('[notify] scheduled dispatch -> runSwitchStrategyTick', JSON.stringify({ cron }));
