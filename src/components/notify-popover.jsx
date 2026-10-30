@@ -88,7 +88,8 @@ export function NotifyPopover({ notifyHref = './home.html?tab=notify' } = {}) {
     };
   }, [open]);
 
-  const recent = getVisibleNotifyEvents(events, eventsTick).slice().reverse().slice(0, 10);
+  // 接口返回顺序不固定（cn-data 为新→旧），按时间倒序取最新 10 条。
+  const recent = getVisibleNotifyEvents(events, eventsTick).slice().sort((a, b) => (Date.parse(String(b?.createdAt || '')) || 0) - (Date.parse(String(a?.createdAt || '')) || 0)).slice(0, 10);
 
   function refresh() {
     const clientId = readNotifyClientConfig()?.notifyClientId;
