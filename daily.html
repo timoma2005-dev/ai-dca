@@ -44,6 +44,7 @@
   .empty { text-align:center; color:var(--mute); padding:40px 0; }
   @media (max-width:520px) { .cta p { display:none; } .cta .btn { flex:1; } th.hm, td.hm { display:none; } }
 </style>
+<script type="module" src="/src/entry-daily-auth.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -72,7 +73,16 @@
     return u.pathname + u.search;
   }
   document.getElementById("cta-mk").href = withUtm("/home.html?tab=markets", "daily_markets");
-  document.getElementById("cta-ntf").href = withUtm("/home.html?tab=notify&intent=alerts&auth=login", "daily_notify");
+  var ntfHref = withUtm("/home.html?tab=notify&intent=alerts", "daily_notify");
+  var ntf = document.getElementById("cta-ntf");
+  ntf.href = ntfHref;
+  // 未登录：就在本页弹登录 / 注册框，成功后再去通知设置页；已登录直接去。
+  ntf.addEventListener("click", function (ev) {
+    var A = window.__aiDcaDailyAuth;
+    if (!A || A.loggedIn()) return;
+    ev.preventDefault();
+    A.open({ next: ntfHref });
+  });
   // GoatCounter
   try {
     var p = new URLSearchParams({ p: "/daily.html", t: document.title, r: document.referrer ? new URL(document.referrer).origin : "", s: String(screen.width || ""), q: "?" + new URLSearchParams(utm).toString(), rnd: Math.random().toString(36).slice(2, 8) });

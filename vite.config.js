@@ -38,6 +38,7 @@ export default defineConfig({
       input: {
         index: path.resolve(HERE, './index.html'),
         home: path.resolve(HERE, './home.html'),
+        daily: path.resolve(HERE, './daily.html'),
       },
       output: {
         // Use content hashes so unchanged chunks keep stable URLs across deploys.

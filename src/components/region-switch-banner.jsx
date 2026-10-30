@@ -109,6 +109,17 @@ function selectRecommendedSite(region, cnSite, fastSite) {
   return null;
 }
 
+function hasCompetingPrompt() {
+  try {
+    if (document.querySelector('[role="dialog"]')) return true;
+    if (window.sessionStorage?.getItem('aiDcaUtm_v1')) return true;
+    if (window.sessionStorage?.getItem('aiDcaAccountAuthIntent_v1')) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export function RegionSwitchBanner() {
   const config = useMemo(() => readSiteRegionConfig(import.meta.env || {}), []);
   const [siteState, setSiteState] = useState(null);
@@ -165,7 +176,8 @@ export function RegionSwitchBanner() {
       }
 
       setSiteState({ region, sites: [cnSite, fastSite], recommended });
-      if (isChooserDismissed()) {
+      // 不和其它弹窗抢：已有对话框（登录框等）、或从日报/分享链接进来的访客，只显示角标不自动弹出。
+      if (isChooserDismissed() || hasCompetingPrompt()) {
         setOpen(false);
       } else {
         setOpen(true);

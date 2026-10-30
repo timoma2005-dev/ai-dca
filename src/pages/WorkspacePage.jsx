@@ -921,7 +921,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         </Suspense>
       ) : null}
       <ConversionPromptCard prompt={conversionPrompt} onClose={() => setConversionPrompt(null)} />
-      {!conversionPrompt && !cloudSession?.accessToken && !mobileBottomSheetHidden ? <ShareLandingBar /> : null}
+      {!conversionPrompt && !cloudSession?.accessToken && !mobileBottomSheetHidden && !accountMenuOpen && activeAccess.status === 'ok' && activeTab !== 'notify' ? <ShareLandingBar /> : null}
       <StepHintHost paused={mobileBottomSheetHidden} demoActive={demoActive} />
       {showQrModal ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/70 p-4" role="dialog" aria-modal="true" aria-label="Buy me coffee 二维码" onClick={() => setShowQrModal(false)}>
