@@ -159,6 +159,8 @@ export async function probeCnConnectivity({ timeoutMs = 5000 } = {}) {
   // 始终用相对路径，让请求走当前域名的 tunnel/nginx 代理，
   // fast 站走 CF tunnel 时也能通，不再硬编码 cn 域名。
   const probeUrl = `/api/market-collector/health?probe=${Date.now()}`;
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isCnHost = /^cn\./i.test(currentHost);
 
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   let timer = null;
