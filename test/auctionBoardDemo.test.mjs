@@ -294,3 +294,75 @@ test('simulated switch panel: estimate at bid/ask, history ranges, paper trackin
   assert.equal(JSON.parse(page.store.get('demo_nqSim')).paper.length, 0);
   assert.deepEqual(page.net, ['teaser']);
 });
+
+// v2 信息架构（2026-10-31）：主屏「下一步」主卡 + NQ + 持仓 + 行情；工具抽屉 / 设置 / 说明 三个弹层同一时间只开一个。
+const between = (html, from, to) => {
+  const a = html.indexOf(from);
+  assert.ok(a >= 0, from);
+  const b = to ? html.indexOf(to, a + from.length) : html.length;
+  assert.ok(b > a, to);
+  return html.slice(a, b);
+};
+
+test('v2 layout: main screen keeps strategy card, NQ, holding and one market card; tools/settings/info live in overlays', () => {
+  const html = BOARD_HTML.split('<script>')[0];
+  const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+  for (const id of ['act-h', 'act-flow', 'cyc', 'cyc-s1-rec', 'nq-pct', 'hold-name', 'hold-amt', 'mview', 'mseg', 'cols-btn', 'etf-body', 'm-items', 'bars']) assert.match(main, new RegExp(`id="${id}"`), `main has ${id}`);
+  for (const id of ['tl-buy', 'sim-from', 'sim-paper', 'cyc-log-b', 'thr', 'log', 'rule-txt', 'ntf-toggle']) assert.doesNotMatch(main, new RegExp(`id="${id}"`), `main no longer has ${id}`);
+  const tools = between(html, 'id="ov-tools"', 'id="ov-set"');
+  for (const id of ['tl-buy', 'tl-bpx', 'tl-sell', 'tl-spx', 'tl-amt', 'tl-fill', 'tl-rec', 'tl-clr', 'tl-out', 'sim-from', 'sim-to', 'sim-amt', 'sim-out', 'sim-rec', 'sim-paper', 'cyc-st', 'cyc-log-b']) assert.match(tools, new RegExp(`id="${id}"`), `tools has ${id}`);
+  const set = between(html, 'id="ov-set"', 'id="ov-info"');
+  const pane = (p) => between(set, `data-p="${p}"`, { a: 'data-p="b"', b: 'data-p="c"', c: 'id="cfg-reset"' }[p]);
+  for (const id of ['trig', 'thr', 'lo', 'sp-tol']) assert.match(pane('a'), new RegExp(`id="${id}"`), `盘中轮动 has ${id}`);
+  for (const id of ['cyc-thr', 'sp-tol2']) assert.match(pane('b'), new RegExp(`id="${id}"`), `隔夜轮动 has ${id}`);
+  for (const id of ['halt-thr', 'act-amt', 'ntf-hero', 'ntf-chk', 'ntf-tip', 'ntf-toggle', 'ntf-test']) assert.match(pane('c'), new RegExp(`id="${id}"`), `通用 has ${id}`);
+  const info = between(html, 'id="ov-info"');
+  for (const id of ['log', 'rule-txt', 'rule-halt', 'bt-cyc', 'rev-asof']) assert.match(info, new RegExp(`id="${id}"`), `info has ${id}`);
+  const pop = between(html, 'id="live-pop"', '<main');
+  for (const id of ['s-em', 's-sina', 's-qq', 'updated', 'segs']) assert.match(pop, new RegExp(`id="${id}"`), `time capsule has ${id}`);
+  assert.match(html, /<nav class="modes" id="vtabs"/);
+  assert.match(html, /data-v="cyc">隔夜轮动/);
+  // 红涨绿跌
+  assert.match(BOARD_HTML, /--up:#e5484d; --down:#16a34a;/);
+  assert.match(BOARD_HTML, /function cls\(x\) \{ return x > 0 \? "up" : x < 0 \? "dn" : ""; \}/);
+  assert.match(BOARD_HTML, /\.up \{ color:var\(--up\); \} \.dn \{ color:var\(--down\); \}/);
+  // 隔夜轮动仅超管
+  assert.match(BOARD_HTML, /if \(!IS_SUPER\) v = "dev";/);
+  assert.match(BOARD_HTML, /if \(!IS_SUPER\) \[\$\("set-tab-b"\), \$\("rule-cyc"\), \$\("bt-cyc"\), \$\("paper-cyc-b"\)\]/);
+});
+
+test('v2 overlays: only one of tools drawer / settings / info is open at a time; mask closes it', async () => {
+  const page = createPage({ demo: true });
+  await page.at('10:40');
+  const open = () => ['ov-tools', 'ov-set', 'ov-info'].filter((id) => !page.$(id).classList.contains('hide'));
+  for (const id of ['ov-tools', 'ov-set', 'ov-info', 'ov-mask']) page.$(id).classList.add('hide');
+  page.$('sim-open').listeners.click[0]();
+  assert.deepEqual(open(), ['ov-tools']);
+  assert.ok(!page.$('ov-mask').classList.contains('hide'));
+  assert.match(page.$('sim-out').innerHTML, /成交价偏离差/);
+  page.$('ntf').listeners.click[0](); // 🔔 → 设置 · 通用（通知）
+  assert.deepEqual(open(), ['ov-set']);
+  page.$('ov-mask').listeners.click[0]();
+  assert.deepEqual(open(), []);
+  assert.ok(page.$('ov-mask').classList.contains('hide'));
+});
+
+test('v2 market card: filter applies to the table, groups collapse, UI prefs saved under the key prefix', async () => {
+  const page = createPage({ demo: true });
+  await page.at('09:55');
+  assert.match(page.$('etf-body').innerHTML, /<tr class="spx">/);
+  page.$('mseg').listeners.click[0]({ target: { getAttribute: (k) => (k === 'data-f' ? 'zone' : null) } });
+  const body = page.$('etf-body').innerHTML;
+  assert.doesNotMatch(body, /<tr class="spx">/, 'S&P reference group hidden under the buy-zone filter');
+  assert.match(body, /华泰柏瑞/);
+  assert.doesNotMatch(body, /<tr class="held">/, 'held fund outside the buy zone is filtered out');
+  page.$('mseg').listeners.click[0]({ target: { getAttribute: (k) => (k === 'data-f' ? 'all' : null) } });
+  const grp = { getAttribute: () => 'nq' };
+  page.$('etf-body').listeners.click[0]({ target: { closest: (sel) => (sel === '[data-g]' ? grp : null) } });
+  assert.doesNotMatch(page.$('etf-body').innerHTML, /data-code="513100"/, 'Nasdaq group collapsed');
+  assert.deepEqual(JSON.parse(page.store.get('demo_nqUi')).closed, { nq: true });
+  page.$('cols-btn').listeners.click[0]();
+  assert.equal(JSON.parse(page.store.get('demo_nqUi')).cols, true);
+  assert.ok(page.ctx.document.body.classList.contains('wide'));
+  assert.ok(page.writes.every((k) => k.startsWith('demo_')));
+});
