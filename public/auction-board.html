@@ -1251,6 +1251,13 @@
 
           var list = rows();
           S.spR = spRef(list, b);
+          // 隔夜轮动：纳指组只列今天 09:30 开盘的（昨收溢价 < 停牌线）
+          var cycV = document.body.classList.contains("v-cyc"), hidN = 0;
+          if (cycV) {
+            var all0 = list;
+            list = list.filter(function (r) { var q = r.q, nv = S.nav[r.code]; if (!q || !(q.pre > 0) || !nv || !(nv.nav > 0)) return true; return (q.pre / nv.nav - 1) * 100 < S.haltThr; });
+            hidN = all0.length - list.length;
+          }
           var act = decide(list, b);
           trackSignals(list, b);
           // 盘中轮动：操作建议出现切换/买入时通知；同一建议 5 分钟内不重复
@@ -1317,7 +1324,7 @@
           });
           var sx = spxRows(b), R0 = S.spR || {}, ep0 = esPct();
           var spHead = '<tr class="grp"><td colspan="9"><b>标普 500</b> · 偏离按 ES00Y' + (ep0 == null ? "" : "（ES00Y 自昨日 15:00 " + pctStr(ep0) + "）") + (R0.sp != null ? " · 中位 " + f2(R0.sp) : "") + ' <small>参考，不参与轮动</small></td></tr>';
-          var nqHead = '<tr class="grp"><td colspan="9"><b>纳指 100</b> · 偏离按 NQ00Y' + (nqPct() == null ? "" : "（NQ00Y 自昨日 15:00 " + pctStr(nqPct()) + "）") + (R0.nq != null ? " · 中位 " + f2(R0.nq) : "") + "</td></tr>";
+          var nqHead = '<tr class="grp"><td colspan="9"><b>纳指 100</b> · 偏离按 NQ00Y' + (nqPct() == null ? "" : "（NQ00Y 自昨日 15:00 " + pctStr(nqPct()) + "）") + (R0.nq != null ? " · 中位 " + f2(R0.nq) : "") + (cycV ? " <small>只列今天 09:30 开盘的（昨收溢价 &lt; " + S.haltThr + "%）" + (hidN ? "，另 " + hidN + " 只停牌至 10:30 未列" : "") + "</small>" : "") + "</td></tr>";
           var spBody = sx.map(function (r) {
             var q = r.q, ba = q && !r.halt ? fmt3(q.b1) + " <small>" + (q.b1v || 0) + "</small> / " + fmt3(q.a1) + " <small>" + (q.a1v || 0) + "</small>" : "—";
             return '<tr class="spx"><td class="fn" title="' + esc(q ? q.full : r.name) + '"><b>' + esc(r.name) + "</b><small>" + r.code + "</small></td><td></td>" +
@@ -1362,7 +1369,7 @@
             return '<div class="item spx"><div class="it-n">' + esc(r.name) + " <small>" + r.code + "</small></div>" +
               '<div class="it-d ' + (v == null ? "" : cls(v)) + '">' + (v == null ? "—" : f2(v)) + "</div>" +
               '<div class="it-m"><span>现价 ' + fmt3(r.price) + "</span><span>涨跌 " + pctStr(r.pct) + "</span><span>溢价 " + (r.prem == null ? "—" : r.prem.toFixed(1) + "%") + '</span></div><div class="it-r">偏离</div></div>';
-          }).join("") + '<div class="mgrp"><b>纳指 100</b> · 偏离按 NQ00Y' + (R0.nq != null ? " · 中位 " + f2(R0.nq) : "") + "</div>";
+          }).join("") + '<div class="mgrp"><b>纳指 100</b> · 偏离按 NQ00Y' + (R0.nq != null ? " · 中位 " + f2(R0.nq) : "") + (cycV ? " <small>只列 09:30 开盘的" + (hidN ? "，另 " + hidN + " 只停牌未列" : "") + "</small>" : "") + "</div>";
           $("m-items").innerHTML = spM + (ml.length ? ml.map(function (r) {
             var v = r.dev, sg = r.sigObj, q = r.q;
             return '<div class="item' + (r.held ? " held" : r.cand ? " cand" : r.halt ? " halt" : "") + '">' +
@@ -1685,6 +1692,7 @@
           [].forEach.call(document.querySelectorAll("#vtabs button"), function (x) { x.classList.toggle("on", x.getAttribute("data-v") === v); });
           try { localStorage.setItem(KP + "nqView", v); } catch (e) {}
           if (v === "cyc") cycRender();
+          try { renderETF(); } catch (e) {}
         }
         if (!IS_SUPER) { var cbt = document.querySelector('#vtabs button[data-v="cyc"]'); if (cbt) cbt.remove(); var vt = $("vtabs"); if (vt && vt.querySelectorAll("button").length < 2) vt.style.display = "none"; }
         $("vtabs").addEventListener("click", function (ev) { var bt = ev.target && ev.target.closest && ev.target.closest("button[data-v]"); if (bt) setView(bt.getAttribute("data-v")); });
