@@ -157,6 +157,26 @@
       .it-bar .o { position:absolute; top:-3px; bottom:-3px; width:1px; background:var(--mute); }
       .it-bar i { position:absolute; top:0; bottom:0; border-radius:3px; min-width:2px; }
 
+      /* 做T 对比 */
+      .tl { grid-column:span 12; }
+      .tl .sec-h small { font-size:12px; color:var(--sub); font-weight:400; }
+      .tl-form { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:flex-end; margin-top:10px; }
+      .tl-form label { display:flex; flex-direction:column; gap:3px; font-size:11px; color:var(--sub); }
+      .tl-form select, .tl-form input { padding:6px 8px; border:1px solid var(--line); border-radius:8px; font:inherit; font-size:13px; background:#fff; }
+      .tl-form input { width:96px; text-align:right; }
+      .tl-form .btn { margin:0; }
+      .tl-kpi { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; margin-top:12px; }
+      .tl-kpi div { background:#f8fafc; border-radius:10px; padding:8px 10px; min-width:0; }
+      .tl-kpi span { display:block; font-size:11px; color:var(--sub); }
+      .tl-kpi b { font-size:16px; font-variant-numeric:tabular-nums; }
+      .tl-kpi small { display:block; font-size:11px; color:var(--mute); }
+      .tl table { margin-top:10px; }
+      .tl td, .tl th { padding:6px 8px; font-size:12px; }
+      .tl tr.best td { background:#f0fdf4; }
+      .tl tr.orig td:first-child { box-shadow:inset 3px 0 0 #f59e0b; }
+      .tl-note { margin-top:8px; font-size:11px; color:var(--mute); line-height:1.6; }
+      @media (max-width: 760px) { .tl-kpi { grid-template-columns:repeat(2, minmax(0,1fr)); } .tl .hm { display:none; } }
+
       /* settings */
       .mask { position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:20; display:flex; align-items:flex-start; justify-content:flex-end; padding:64px 24px; }
       .sheet { width:340px; background:#fff; border-radius:16px; padding:16px 18px; box-shadow:0 12px 40px rgba(15,23,42,.18); }
@@ -407,6 +427,20 @@
         <div class="cyc-note">回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</div>
       </section>
 
+      <section class="card tl" id="tl" aria-live="polite">
+        <div class="sec-h"><h3>做T 对比 · 记下成交价，剔除 NQ 波动看换仓赚没赚</h3><small id="tl-st"></small></div>
+        <div class="tl-form">
+          <label>买入的基金<select id="tl-buy"></select></label>
+          <label>买入价<input id="tl-bpx" type="number" step="0.001" min="0"/></label>
+          <label>卖出的基金（可选）<select id="tl-sell"></select></label>
+          <label>卖出价<input id="tl-spx" type="number" step="0.001" min="0"/></label>
+          <label>金额（元）<input id="tl-amt" type="number" step="1000" min="0"/></label>
+          <button class="btn" type="button" id="tl-fill">填当前价</button>
+          <button class="btn sim-btn" type="button" id="tl-rec">记录这笔</button>
+          <button class="btn" type="button" id="tl-clr">清除</button>
+        </div>
+        <div id="tl-out"></div>
+      </section>
       <div class="shared-h"><b>行情</b><span>偏离分布与 ETF 表两种策略共用，不随上方切换</span></div>
       <div class="main">
         <section class="card">
@@ -1699,7 +1733,119 @@
         try { if (localStorage.getItem(KP + "nqView") === "cyc") setView("cyc"); } catch (e) {}
 
         var renderETF0 = renderETF;
-        renderETF = function () { renderETF0.apply(this, arguments); if (SIM.open) simRender(); try { cycRender(); } catch (e) {} };
+
+        /* ---------- 做T 对比 ----------
+           记录：买入 A @ pA（必填）、卖出 B @ pB（可选，T 的另一腿），以及记录时刻所有基金的价格快照和 NQ。
+           换到 C 的收益（相对一直拿着 C 的份额）= (A 买一 / pA) ÷ (C 卖一 / C 基准价) − 1 − 双边佣金。
+           C 基准价：C 是卖出的那只 → 用你填的卖出价；其他 → 用记录时刻的快照价。两只都乘同一段 NQ，NQ 波动自动抵消。 */
+        var TL = { rec: null, buy: "", sell: "", amt: 0 };
+        try { var tlSv = JSON.parse(localStorage.getItem(KP + "nqT") || "null"); if (tlSv && tlSv.a) TL.rec = tlSv; } catch (e) {}
+        function tlSave() { try { if (TL.rec) localStorage.setItem(KP + "nqT", JSON.stringify(TL.rec)); else localStorage.removeItem(KP + "nqT"); } catch (e) {} }
+        function nqNow() { return S.nq && S.nq.pts && S.nq.pts.length ? S.nq.pts[S.nq.pts.length - 1].p : null; }
+        function tlBid(r) { var q = r.q || {}; return q.b1 > 0 ? q.b1 : lastPx(r); }
+        function tlAsk(r) { var q = r.q || {}; return q.a1 > 0 ? q.a1 : lastPx(r); }
+        function tlRows(list) { return list.filter(function (r) { return isEtf(r) || r.code === "161130"; }); }
+        function tlCalc(rec, list) {
+          var pick = function (c) { return list.filter(function (r) { return r.code === c; })[0]; };
+          var a = pick(rec.a);
+          if (!a) return null;
+          var aBid = tlBid(a), out = { a: a, aBid: aBid, rows: [] };
+          if (!(aBid > 0) || !(rec.pa > 0)) return out;
+          out.ret = aBid / rec.pa - 1;
+          var n1 = nqNow();
+          out.nqRet = n1 > 0 && rec.nq > 0 ? n1 / rec.nq - 1 : null;
+          out.alpha = out.nqRet == null ? null : (out.ret - out.nqRet) * 100;
+          var rel = [];
+          tlRows(list).forEach(function (c) {
+            if (c.code === rec.a) return;
+            var ref = c.code === rec.b && rec.pb > 0 ? rec.pb : (rec.snap || {})[c.code];
+            var ask = tlAsk(c);
+            if (!(ref > 0) || !(ask > 0)) return;
+            var g = ((aBid / rec.pa) / (ask / ref) - 1) * 100 - 2 * SIM.comm * 100;
+            rel.push(lastPx(c) / ref);
+            out.rows.push({ c: c, ref: ref, ask: ask, cRet: ask / ref - 1, gain: g, orig: c.code === rec.b, halt: c.halt, devGap: a.dev != null && c.dev != null ? a.dev - c.dev : null });
+          });
+          var mr = median(rel);
+          out.vsMed = mr > 0 ? ((aBid / rec.pa) / mr - 1) * 100 : null;
+          out.rows.sort(function (x, y) { if (x.orig !== y.orig) return x.orig ? -1 : 1; if (x.halt !== y.halt) return x.halt ? 1 : -1; return y.gain - x.gain; });
+          return out;
+        }
+        function tlOpts(list, sel, blank) {
+          return (blank ? '<option value="">不填</option>' : "") + tlRows(list).map(function (r) {
+            return '<option value="' + r.code + '"' + (r.code === sel ? " selected" : "") + ">" + esc(r.name + " " + r.code) + (r.dev != null ? " · 偏离 " + minus(f2(r.dev)) : "") + "</option>";
+          }).join("");
+        }
+        function tlRender() {
+          var list = rows(), rec = TL.rec;
+          if (!TL.buy) {
+            var cheap = tlRows(list).filter(function (r) { return !r.halt && r.dev != null; }).sort(function (x, y) { return x.dev - y.dev; })[0];
+            var held = list.filter(function (r) { return r.held; })[0];
+            TL.buy = rec ? rec.a : cheap ? cheap.code : "";
+            TL.sell = rec ? (rec.b || "") : held && cheap && held.code !== cheap.code ? held.code : "";
+          }
+          if (document.activeElement !== $("tl-buy")) $("tl-buy").innerHTML = tlOpts(list, TL.buy, false);
+          if (document.activeElement !== $("tl-sell")) $("tl-sell").innerHTML = tlOpts(list, TL.sell, true);
+          if (!TL.amt) TL.amt = (rec && rec.amt) || SIM.amt;
+          if (document.activeElement !== $("tl-amt")) $("tl-amt").value = TL.amt;
+          if (rec && document.activeElement !== $("tl-bpx") && !$("tl-bpx").value) $("tl-bpx").value = (+rec.pa).toFixed(3);
+          if (rec && rec.pb > 0 && document.activeElement !== $("tl-spx") && !$("tl-spx").value) $("tl-spx").value = (+rec.pb).toFixed(3);
+          $("tl-spx").disabled = !TL.sell;
+          if (!rec) {
+            $("tl-st").textContent = "";
+            $("tl-out").innerHTML = '<div class="tl-note">按下单时的实际成交价填好“买入”（换仓的话再填“卖出”那只和卖出价），点“记录这笔”。之后这里实时算：剔除 NQ 波动后你这笔赚了多少，以及现在卖出它、换成别的基金能锁定多少（已扣佣金万0.5×2，按买一卖、卖一买）。</div>';
+            return;
+          }
+          var o = tlCalc(rec, list), amt = rec.amt || SIM.amt;
+          $("tl-st").textContent = "记录于 " + rec.t;
+          if (!o || o.ret == null) { $("tl-out").innerHTML = '<div class="tl-note">暂无 ' + esc(rec.aName) + " 行情，开盘后自动计算。</div>"; return; }
+          var k = function (lab, v, c, sub) { return "<div><span>" + lab + '</span><b class="' + (c || "") + '">' + v + "</b>" + (sub ? "<small>" + sub + "</small>" : "") + "</div>"; };
+          var best = o.rows.filter(function (x) { return !x.halt; }).sort(function (x, y) { return y.gain - x.gain; })[0];
+          var h = '<div class="tl-kpi">' +
+            k("持有 " + esc(rec.aName) + " 涨跌", pctStr(o.ret), cls(o.ret), "买入 " + (+rec.pa).toFixed(3) + " → 买一 " + fmt3(o.aBid)) +
+            k("NQ00Y 同期", pctStr(o.nqRet), o.nqRet == null ? "" : cls(o.nqRet), rec.nq > 0 ? "记录时 " + (+rec.nq).toFixed(2) : "记录时无 NQ") +
+            k("剔除 NQ 后", o.alpha == null ? "—" : minus(f2(o.alpha)) + " pp", o.alpha == null ? "" : cls(o.alpha), o.alpha == null ? "" : yuan(o.alpha * amt / 100)) +
+            k("相对纳指组中位", o.vsMed == null ? "—" : minus(f2(o.vsMed)) + " pp", o.vsMed == null ? "" : cls(o.vsMed), best ? "现在最优：换 " + esc(best.c.name) + " " + minus(f2(best.gain)) + "%" : "") +
+            "</div>";
+          h += '<table><thead><tr><th>现在卖 ' + esc(rec.aName) + " 换成</th><th class=\"num hm\">基准价</th><th class=\"num\">卖一</th><th class=\"num hm\">它同期涨跌</th><th class=\"num hm\">偏离差</th><th class=\"num\">换仓收益</th><th class=\"num\">金额</th></tr></thead><tbody>" +
+            o.rows.map(function (x) {
+              return '<tr class="' + (x.orig ? "orig" : x === best && x.gain > 0 ? "best" : "") + '"><td><b>' + esc(x.c.name) + "</b> <small>" + x.c.code + (x.orig ? " · 你卖出的" : "") + (x.halt ? " · 停牌" : "") + "</small></td>" +
+                '<td class="num hm">' + x.ref.toFixed(3) + "</td>" +
+                '<td class="num">' + fmt3(x.ask) + "</td>" +
+                '<td class="num hm ' + cls(x.cRet) + '">' + pctStr(x.cRet) + "</td>" +
+                '<td class="num hm ' + (x.devGap == null ? "" : cls(x.devGap)) + '">' + (x.devGap == null ? "—" : minus(f2(x.devGap))) + "</td>" +
+                '<td class="num ' + cls(x.gain) + '"><b>' + minus(f2(x.gain)) + "%</b></td>" +
+                '<td class="num ' + cls(x.gain) + '">' + yuan(x.gain * amt / 100) + "</td></tr>";
+            }).join("") + "</tbody></table>" +
+            '<div class="tl-note">换仓收益 = 现在按买一卖出 ' + esc(rec.aName) + "、按卖一买入该基金，相对“一直拿着该基金”多出的份额（已扣佣金）。两边吃同一段 NQ，所以 NQ 涨跌不影响结果。" +
+            "基准价：你卖出的那只用你填的卖出价，其余用记录时刻的价格。偏离差 = 现在两只的偏离之差（参考）。</div>";
+          $("tl-out").innerHTML = h;
+        }
+        function tlPx(id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : 0; }
+        $("tl-buy").addEventListener("change", function () { TL.buy = this.value; $("tl-bpx").value = ""; });
+        $("tl-sell").addEventListener("change", function () { TL.sell = this.value; $("tl-spx").value = ""; tlRender(); });
+        $("tl-amt").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { TL.amt = v; if (TL.rec) { TL.rec.amt = v; tlSave(); } tlRender(); } });
+        $("tl-fill").addEventListener("click", function () {
+          var list = rows(), pick = function (c) { return list.filter(function (r) { return r.code === c; })[0]; };
+          var a = pick(TL.buy), bb = TL.sell && pick(TL.sell);
+          if (a && tlAsk(a) > 0) $("tl-bpx").value = tlAsk(a).toFixed(3);
+          if (bb && tlBid(bb) > 0) $("tl-spx").value = tlBid(bb).toFixed(3);
+        });
+        $("tl-rec").addEventListener("click", function () {
+          var list = rows(), pick = function (c) { return list.filter(function (r) { return r.code === c; })[0]; };
+          var a = pick(TL.buy);
+          if (!a) return;
+          var pa = tlPx("tl-bpx") || tlAsk(a), bb = TL.sell && TL.sell !== TL.buy ? pick(TL.sell) : null, pb = bb ? (tlPx("tl-spx") || tlBid(bb)) : 0;
+          if (!(pa > 0)) { alert("请先填买入价"); return; }
+          var snap = {};
+          tlRows(list).forEach(function (r) { var p = lastPx(r); if (p > 0) snap[r.code] = p; });
+          var b = bj();
+          TL.rec = { a: a.code, aName: a.name, pa: pa, b: bb ? bb.code : "", bName: bb ? bb.name : "", pb: pb, nq: nqNow(), snap: snap, amt: TL.amt || SIM.amt,
+            t: stamp(b).slice(5) };
+          $("tl-bpx").value = pa.toFixed(3); if (pb > 0) $("tl-spx").value = pb.toFixed(3);
+          tlSave(); tlRender();
+        });
+        $("tl-clr").addEventListener("click", function () { TL.rec = null; TL.buy = ""; TL.sell = ""; $("tl-bpx").value = ""; $("tl-spx").value = ""; tlSave(); tlRender(); });
+        renderETF = function () { renderETF0.apply(this, arguments); if (SIM.open) simRender(); try { cycRender(); } catch (e) {} try { tlRender(); } catch (e) {} };
 
         function applyHeld(m, label) {
           var pool = {}; ETFS.forEach(function (e) { pool[e[0].slice(2)] = true; });
