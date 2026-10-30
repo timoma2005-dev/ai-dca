@@ -1,6 +1,7 @@
 import { openDb, closeDb } from './db.js';
 import { registerUser, loginUser, sha256Hex, SESSION_TTL_SECONDS } from './auth.js';
 import { outboxStats } from './outbox.js';
+import { notifyRoleGranted } from './roleNotice.js';
 import {
   authenticateRequest,
   buildAuthPayload,
@@ -97,7 +98,11 @@ const ADMIN_PREFIX = '/api/sync/auth/admin';
 const ADMIN_ROUTES = [
   ['GET', /^\/users$/, (db, _a, _m, _b, url) => ({ users: searchUsers(db, { q: url.searchParams.get('q') || '', limit: url.searchParams.get('limit') }), ...userStats(db) })],
   ['GET', /^\/guests$/, (_db, _a, _m, _b, url) => listGuests({ limit: url.searchParams.get('limit') })],
-  ['POST', /^\/users\/([^/]+)\/roles$/, (db, a, m, b) => grantUserRole(db, a, { userId: m[1], role: b.role, expiresAt: b.expiresAt })],
+  ['POST', /^\/users\/([^/]+)\/roles$/, (db, a, m, b) => {
+    const granted = grantUserRole(db, a, { userId: m[1], role: b.role, expiresAt: b.expiresAt });
+    notifyRoleGranted(db, granted);
+    return granted;
+  }],
   ['DELETE', /^\/users\/([^/]+)\/roles\/([^/]+)$/, (db, a, m) => revokeUserRole(db, a, { userId: m[1], role: m[2] })],
   ['GET', /^\/roles$/, (db) => ({ roles: listRoles(db) })],
   ['POST', /^\/roles$/, (db, a, _m, b) => createRole(db, a, b)],

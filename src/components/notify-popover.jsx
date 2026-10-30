@@ -14,7 +14,8 @@ function formatTime(value = '') {
   return new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
 }
 
-function statusLabel(status = '') {
+function statusLabel(status = '', eventType = '') {
+  if (eventType === 'account-notice') return '站内消息';
   if (status === 'delivered') return '已送达';
   if (status === 'failed') return '未送达';
   if (status === 'queued') return '待投递';
@@ -135,9 +136,10 @@ export function NotifyPopover({ notifyHref = './home.html?tab=notify' } = {}) {
                   <li key={pickEventId(event) || index} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-2">
                       <span className="min-w-0 text-sm font-medium text-slate-900">{event.title || event.summary || '交易提醒'}</span>
-                      <span className="shrink-0 text-[10px] font-semibold text-slate-500">{statusLabel(event.status)}</span>
+                      <span className="shrink-0 text-[10px] font-semibold text-slate-500">{statusLabel(event.status, event.eventType)}</span>
                     </div>
-                    {event.body || event.message ? <p className="mt-1 text-xs leading-5 text-slate-600">{event.body || event.message}</p> : null}
+                    {event.body || event.message ? <p className="mt-1 whitespace-pre-line text-xs leading-5 text-slate-600">{event.eventType === 'account-notice' ? String(event.body || '').replace(/\n?https?:\/\/\S+\s*$/, '') : (event.body || event.message)}</p> : null}
+                    {event.eventType === 'account-notice' && event.detailUrl ? <a href={event.detailUrl} className="mt-1 inline-block text-xs font-semibold text-indigo-600 hover:text-indigo-800" onClick={() => setOpen(false)}>去看看 →</a> : null}
                     <div className="mt-1 text-[10px] text-slate-400">{formatTime(event.createdAt)}</div>
                   </li>
                 ))}

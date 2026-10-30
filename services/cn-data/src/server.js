@@ -5,6 +5,7 @@ import { outboxStats } from './outbox.js';
 import { handleAccountV1Route } from './account/routes.js';
 import { handleSyncRoute } from './sync/routes.js';
 import { handleNotifyRoute } from './notify/routes.js';
+import { ROLE_NOTICE_PATH, handleRoleNoticeRoute } from './notify/roleNotice.js';
 import { badRequest, handleDataRoute } from './routes/data.js';
 import { enforceRoutePermission } from './rbacGuard.js';
 import { handleDemoTeaserRoute } from './demo/teaser.js';
@@ -60,6 +61,10 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
       // 付费功能演示的公开数据预告：游客可读，只下发结论型数字（见 demo/teaser.js）。
       const teaser = await handleDemoTeaserRoute(req.method, url, req.headers);
       if (teaser) { sendJson(res, teaser.status ?? 200, teaser.body, teaser.headers); return; }
+      if (req.method === 'POST' && url.pathname === ROLE_NOTICE_PATH) {
+        const notice = await handleRoleNoticeRoute(db, req, await readJsonBody(req, maxBodyBytes));
+        sendJson(res, notice.status, notice.body); return;
+      }
       // RBAC：token 有效但缺少接口权限时 403（权限由共享 auth 库在服务端重新计算）。
       enforceRoutePermission(req.headers, url.pathname);
       const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};
