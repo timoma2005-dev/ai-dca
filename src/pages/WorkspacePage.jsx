@@ -287,6 +287,19 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   }, []);
 
   useEffect(() => {
+    // 外部入口（如 /daily.html「开启提醒」）带 ?auth=login|register：未登录直接弹登录 / 注册框，登录后留在目标 tab。
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const mode = url.searchParams.get('auth');
+    if (mode !== 'login' && mode !== 'register') return;
+    url.searchParams.delete('auth');
+    window.history.replaceState(window.history.state, '', url);
+    if (loadCloudSession()?.accessToken) return;
+    const tab = url.searchParams.get('tab') || '';
+    openAccountAuth({ mode, source: url.searchParams.get('utm_content') || 'url-auth', trigger: tab });
+  }, []);
+
+  useEffect(() => {
     function handleOpenUpgradeQr() {
       setQrPurpose('upgrade');
       setShowQrModal(true);
