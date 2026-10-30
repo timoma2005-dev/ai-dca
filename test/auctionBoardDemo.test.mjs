@@ -196,7 +196,8 @@ test('clock-driven states: auction halt, resume, regression switch, candidates i
   assert.match(page.log(), /富国 进入买入区/);
   await page.at('14:40');
   assert.match(page.log(), /博时 进入买入区/);
-  assert.match(page.$('act-h').innerHTML, /切换：卖出 <span class="hs">国泰<\/span> → 买入 <span class="hl">博时<\/span>/);
+  // 候选按回归概率优先：富国（近 3 月 70%）排在博时（33%）前
+  assert.match(page.$('act-h').innerHTML, /切换：卖出 <span class="hs">国泰<\/span> → 买入 <span class="hl">富国<\/span>/);
   await page.at('14:58');
   assert.equal(page.$('phase').textContent, '收盘集合竞价');
   await page.at('15:02');
