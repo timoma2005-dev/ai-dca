@@ -32,6 +32,7 @@ import { StepHintHost } from '../components/onboarding/StepHintHost.jsx';
 import { ONBOARDING_FLOW_COMPLETE_EVENT, ONBOARDING_OPEN_EVENT, ONBOARDING_START_DEMO_EVENT, ONBOARDING_START_EVENT, consumeOnboardingDemoCompleted, isOnboardingHintActive, markOnboardingDemoCompleted, writeOnboardingState } from '../app/onboarding/state.js';
 import { ONBOARDING_FLOWS } from '../app/onboarding/catalog.js';
 import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
+import { useAutoPromptBusy, useAutoPromptSlot } from '../app/promptQueue.js';
 
 // 各主 tab 使用 React.lazy 按需加载，在 Vite 中会被拆成独立 chunk。
 // 定投、卖出、VIX、回测工具已并入 TradePlansExperience 作为二级视图。
@@ -210,6 +211,9 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [conversionPrompt, setConversionPrompt] = useState(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const unreadCount = useNotifyUnreadCount();
+  // 自动弹窗排队：注册引导排在站点切换前面；有提示显示时新手步骤提示暂停。
+  const conversionGranted = useAutoPromptSlot('conversion', Boolean(conversionPrompt), { priority: 80 });
+  const autoPromptBusy = useAutoPromptBusy();
   // 仅用于在 hash 变化时触发本组件重渲染，使子面板读到新 hash；值本身无需读取。
   const [, setActiveHash] = useState(() => (typeof window === 'undefined' ? '' : window.location.hash || ''));
   const [currentScenarioKey, setCurrentScenarioKey] = useState(() => readWorkspacePrefs().scenario);
@@ -920,9 +924,9 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           />
         </Suspense>
       ) : null}
-      <ConversionPromptCard prompt={conversionPrompt} onClose={() => setConversionPrompt(null)} />
+      <ConversionPromptCard prompt={conversionGranted ? conversionPrompt : null} onClose={() => setConversionPrompt(null)} />
       {!conversionPrompt && !cloudSession?.accessToken && !mobileBottomSheetHidden && !accountMenuOpen && activeAccess.status === 'ok' && activeTab !== 'notify' ? <ShareLandingBar /> : null}
-      <StepHintHost paused={mobileBottomSheetHidden} demoActive={demoActive} />
+      <StepHintHost paused={mobileBottomSheetHidden || autoPromptBusy} demoActive={demoActive} />
       {showQrModal ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/70 p-4" role="dialog" aria-modal="true" aria-label="Buy me coffee 二维码" onClick={() => setShowQrModal(false)}>
           <div className="relative w-full max-w-sm" onClick={(e) => e.stopPropagation()}>

@@ -10,6 +10,7 @@ import {
   REGION_GLOBAL
 } from '../app/regionEnvironment.js';
 import { probeCnConnectivity } from '../app/networkTrace.js';
+import { useAutoPromptSlot } from '../app/promptQueue.js';
 import {
   Dialog,
   DialogContent,
@@ -109,17 +110,6 @@ function selectRecommendedSite(region, cnSite, fastSite) {
   return null;
 }
 
-function hasCompetingPrompt() {
-  try {
-    if (document.querySelector('[role="dialog"]')) return true;
-    if (window.sessionStorage?.getItem('aiDcaUtm_v1')) return true;
-    if (window.sessionStorage?.getItem('aiDcaAccountAuthIntent_v1')) return true;
-  } catch {
-    return false;
-  }
-  return false;
-}
-
 export function RegionSwitchBanner() {
   const config = useMemo(() => readSiteRegionConfig(import.meta.env || {}), []);
   const [siteState, setSiteState] = useState(null);
@@ -176,8 +166,7 @@ export function RegionSwitchBanner() {
       }
 
       setSiteState({ region, sites: [cnSite, fastSite], recommended });
-      // 不和其它弹窗抢：已有对话框（登录框等）、或从日报/分享链接进来的访客，只显示角标不自动弹出。
-      if (isChooserDismissed() || hasCompetingPrompt()) {
+      if (isChooserDismissed()) {
         setOpen(false);
       } else {
         setOpen(true);
@@ -202,12 +191,15 @@ export function RegionSwitchBanner() {
     window.location.assign(site.targetUrl);
   }, []);
 
+  // 自动弹窗排队：已有其它弹窗时延后，等它关闭再出现。
+  const granted = useAutoPromptSlot('region-switch', Boolean(siteState?.recommended) && open, { priority: 40 });
+
   if (!siteState?.recommended) return null;
 
   return (
     <>
       <Dialog
-        open={open}
+        open={open && granted}
         onOpenChange={(nextOpen) => {
           if (nextOpen) {
             setOpen(true);
@@ -217,6 +209,7 @@ export function RegionSwitchBanner() {
         }}
       >
         <DialogContent
+          data-auto-prompt="region-switch"
           className="z-[180] w-[calc(100%-2rem)] max-w-md gap-4 border-slate-200 bg-white p-4 text-slate-900 sm:p-6"
         >
           <DialogHeader className="pr-7 text-left">

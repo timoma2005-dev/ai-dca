@@ -3,16 +3,19 @@ import { BellRing, X } from 'lucide-react';
 import { acceptConversionPrompt, buildShareLandingPrompt, dismissShareLanding, shouldShowShareLanding } from '../app/conversionPrompts.js';
 import { openAccountAuth } from '../app/accountAuthEvents.js';
 import { trackFeatureEvent } from '../app/analytics.js';
+import { useAutoPromptSlot } from '../app/promptQueue.js';
 
 // 从溢价日报/分享链接（带 utm）进来的未登录访客：底部一条「开启提醒」入口。
 export function ShareLandingBar() {
   const [visible, setVisible] = useState(() => shouldShowShareLanding());
+  // 非模态提醒条：排在其它弹窗之后，有更高优先级的弹窗时先让位。
+  const granted = useAutoPromptSlot('share-landing', visible, { priority: 10, yieldable: true });
 
   useEffect(() => {
-    if (visible) trackFeatureEvent('conversion', 'prompt_view', { trigger: 'share_landing' });
-  }, [visible]);
+    if (visible && granted) trackFeatureEvent('conversion', 'prompt_view', { trigger: 'share_landing' });
+  }, [visible, granted]);
 
-  if (!visible) return null;
+  if (!visible || !granted) return null;
 
   function handleAccept() {
     acceptConversionPrompt(buildShareLandingPrompt());
