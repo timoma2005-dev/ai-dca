@@ -5,6 +5,7 @@
 import { readSettings, writeSettings } from './notifyStorage.js';
 import { fetchFundMetricsPayload } from './getNav.js';
 import { normalizeMarketPremiumMetric, resolveMarketDigestClient } from './marketPremiumDigest.js';
+import { getClientRecord } from './clientSettings.js';
 import { getShanghaiDateParts, isTradingDayShanghai } from './holdingsNavSupport.js';
 import { jsonResponse, readOrigin } from './notifyHttp.js';
 
@@ -13,6 +14,8 @@ const KV_LATEST = 'share-report:latest';
 const KV_DAY_PREFIX = 'share-report:day:';
 const DAY_TTL = 40 * 24 * 3600;
 const SITE = 'https://fast.freebacktrack.tech';
+// lovexl 账号的「账号通知」客户端（已验证 QQ 邮箱绑在这里）
+const DEFAULT_CLIENT_ID = 'account:usr_ad2be81697b5eec7ca3b2204efb7270c';
 
 // 纳指 100 标准 ETF + LOF 161130（隔夜轮动用）+ 标普 500
 export const SHARE_NASDAQ = Object.freeze([
@@ -147,13 +150,16 @@ function toNotification(report) {
   };
 }
 
-async function deliver(env, report, runClientDetection, { channel = 'email', accountUsername = '' } = {}) {
+async function deliver(env, report, runClientDetection, { channel = 'email', accountUsername = '', clientId = '' } = {}) {
   let settings = await readSettings(env);
+  const wanted = String(clientId || env?.SHARE_REPORT_CLIENT_ID || DEFAULT_CLIENT_ID).trim();
+  const direct = wanted ? getClientRecord(settings, wanted) : null;
   const username = String(accountUsername || env?.SHARE_REPORT_USERNAME || 'lovexl').trim().toLowerCase();
   // 优先该账号的「账号通知」客户端（邮箱绑在这里），不走 ADMIN_NOTIFY_CLIENT_ID。
   const clients = Object.values(settings?.clients || {}).filter((c) => String(c?.accountUsername || '').trim().toLowerCase() === username);
   const explicitId = String(env?.SHARE_REPORT_CLIENT_ID || '').trim();
-  const client = (explicitId && clients.find((c) => c.clientId === explicitId))
+  const client = (direct?.clientId ? direct : null)
+    || (explicitId && clients.find((c) => c.clientId === explicitId))
     || clients.find((c) => String(c.clientId || '').startsWith('account:'))
     || resolveMarketDigestClient(settings, env, { accountUsername: username, clientId: explicitId });
   if (!client?.clientId) return { ok: false, error: 'client-not-found' };
@@ -174,7 +180,7 @@ async function fetchRows(env) {
   return buildShareRows(Array.isArray(payload?.items) ? payload.items : []);
 }
 
-export async function runShareReport(env, kind, scheduledMs, { runClientDetection, send = true, force = false } = {}) {
+export async function runShareReport(env, kind, scheduledMs, { runClientDetection, send = true, force = false, clientId = '' } = {}) {
   const { date } = getShanghaiDateParts(new Date(scheduledMs || Date.now()));
   if (kind !== 'weekly' && !force && !isTradingDayShanghai(date)) return { ok: true, skipped: 'non-trading-day', date };
   let report;
@@ -193,7 +199,7 @@ export async function runShareReport(env, kind, scheduledMs, { runClientDetectio
   }
   report.generatedAt = new Date().toISOString();
   await env.NOTIFY_STATE.put(KV_LATEST, JSON.stringify(report));
-  const delivery = send && typeof runClientDetection === 'function' ? await deliver(env, report, runClientDetection) : null;
+  const delivery = send && typeof runClientDetection === 'function' ? await deliver(env, report, runClientDetection, { clientId }) : null;
   console.log('[share-report]', JSON.stringify({ kind, date, delivered: delivery?.ok ?? null, summary: delivery?.summary || null }));
   return { ok: true, report, delivery };
 }
@@ -219,6 +225,6 @@ export async function handleAdminShareReport(request, env, { runClientDetection,
   if (!ok) return jsonResponse({ error: 'forbidden' }, { status: 403, origin });
   const body = await request.json().catch(() => ({}));
   const kind = ['pre', 'post', 'weekly'].includes(body?.kind) ? body.kind : 'post';
-  const out = await runShareReport(env, kind, Date.now(), { runClientDetection, send: body?.send !== false, force: body?.force === true });
+  const out = await runShareReport(env, kind, Date.now(), { runClientDetection, send: body?.send !== false, force: body?.force === true, clientId: String(body?.clientId || '') });
   return jsonResponse({ ok: out.ok, skipped: out.skipped || null, report: out.report ? { title: out.report.title, text: out.report.text, url: out.report.url } : null, delivery: out.delivery }, { origin });
 }
