@@ -149,7 +149,13 @@ function toNotification(report) {
 
 async function deliver(env, report, runClientDetection, { channel = 'email', accountUsername = '' } = {}) {
   let settings = await readSettings(env);
-  const client = resolveMarketDigestClient(settings, env, { accountUsername: accountUsername || env?.SHARE_REPORT_USERNAME || 'lovexl' });
+  const username = String(accountUsername || env?.SHARE_REPORT_USERNAME || 'lovexl').trim().toLowerCase();
+  // 优先该账号的「账号通知」客户端（邮箱绑在这里），不走 ADMIN_NOTIFY_CLIENT_ID。
+  const clients = Object.values(settings?.clients || {}).filter((c) => String(c?.accountUsername || '').trim().toLowerCase() === username);
+  const explicitId = String(env?.SHARE_REPORT_CLIENT_ID || '').trim();
+  const client = (explicitId && clients.find((c) => c.clientId === explicitId))
+    || clients.find((c) => String(c.clientId || '').startsWith('account:'))
+    || resolveMarketDigestClient(settings, env, { accountUsername: username, clientId: explicitId });
   if (!client?.clientId) return { ok: false, error: 'client-not-found' };
   const result = await runClientDetection(env, settings, client, {
     reason: `share-report-${report.kind}`,
