@@ -596,7 +596,7 @@
         <div class="pane" data-p="halt"><p class="note">集合竞价/竞价结束时溢价 &gt; <span id="rule-halt">10</span>% → 预计停牌至10:30；连续竞价只认行情真实停牌（停牌标志或无买卖盘）。停牌不参与比较。溢价=现价对东财最新净值（东财参考净值优先，LOF 按最新公布净值约 T−2）；偏离未计汇率与跟踪误差，期指为东财NQ00Y连续合约，换月注意基差。标普 500 ETF 偏离按 ES00Y，只作参照，不参与轮动。</p></div>
         <div class="pane" data-p="bt">
           <p class="note"><b>盘中轮动（纯轮动）</b>：2026-08-25～10-28 的 5 分钟回测（13 只各自作起始持仓，滑点 0.5 tick、佣金万 0.5/边）：买入区 −0.50～−0.15、持有偏离 ≥ +0.10 才切，相对一直持有起始基金均值 +2.68%，13 只全正，约 24 次切换。去掉「卖出等回 0」空仓腿：空仓多在 NQ 亚盘下跌时，跨夜反而错过反弹。</p>
-          <p class="note"><b>回归概率</b>：偏离首次 ≤ −0.15 后到当日收盘跑赢 12 只中位的比例（腾讯 5 分钟线，近 3 月，括号里近半年），候选按它优先排序；≥60% 标橙，&lt;50% 灰色删除线。回测截至 <span id="rev-asof">—</span>。</p>
+          <p class="note"><b>回归概率</b>：偏离首次 ≤ −0.15 后到当日收盘跑赢 12 只中位的比例（腾讯 5 分钟线，最近 5 个月，每月 1 日滚动重算），候选按它优先排序。标签分三档：强 ≥70%（橙）、中 50–69%、弱 &lt;50%（灰色删除线），具体百分比见悬停提示。样本外检验显示它只能作排序参考，绝对数值会随大盘漂移，不要当胜率。回测区间 <span id="rev-asof">—</span>。</p>
           <p class="note"><b>模拟切换预估</b>：同时段历史切换的中位数与四分位区间（2026-08-25～10-28，5 分钟回测）− 佣金。单次切换当天几乎不回归，收益靠反复轮动累积。</p>
           <p class="note" id="bt-cyc"><b>隔夜轮动</b>：回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</p>
         </div>
@@ -910,12 +910,13 @@
           }).catch(function () { return false; });
         }
         function qBlocks(r) { var q = S.quota[r.code]; return !!(q && q.k === "relax" && q.strong); }
-        // 偏离回归概率：偏离首次 ≤ −0.15 后到当日收盘跑赢 12 只中位的比例（腾讯 5 分钟线回测，近 3 月 2026-07-30～10-30 / 近半年 05-06～10-30；backtest/revert_5m_qq.py）
-        var REV = { "159659": [77, 78, 22], "159696": [73, 64, 30], "513870": [70, 75, 23], "513100": [66, 60, 29], "513300": [65, 64, 20], "159660": [59, 68, 17],
-          "159632": [58, 61, 19], "513110": [57, 70, 21], "159513": [56, 65, 27], "159941": [52, 58, 27], "159501": [36, 48, 25], "513390": [33, 59, 15] };
-        var REV_ASOF = "2026-10-30";
+        // 偏离回归概率：偏离首次 ≤ −0.15 后到当日收盘跑赢 12 只中位的比例。腾讯 5 分钟线，主=最近 5 个月，参考=近 3 月；每月 1 日由 backtest/revert_update_rev.py 重算（样本外验证见 notes：只作排序参考，不是胜率）
+        // REV: code → [近5月%, 近3月%, 近5月样本数]；档位 强 ≥70 / 中 50–69 / 弱 <50
+        var REV = {"513100": [63, 66, 49], "159501": [45, 36, 53], "159941": [55, 52, 56], "159696": [67, 73, 54], "159659": [82, 77, 39], "159632": [60, 55, 35], "513300": [65, 67, 34], "513870": [76, 71, 49], "513110": [67, 55, 42], "159660": [68, 59, 37], "513390": [57, 27, 37], "159513": [65, 54, 54]};
+        var REV_ASOF = "2026-10-30", REV_FROM = "2026-05-30";
         function revP(r) { var v = REV[r.code]; return v ? v[0] : null; }
-        function revChip(r) { var v = REV[r.code]; return v ? '<span class="rv ' + (v[0] >= 60 ? "hi" : v[0] < 50 ? "lo" : "") + '" title="偏离 ≤ −0.15 后当日回归（跑赢同组中位）概率：近 3 月 ' + v[0] + "%（" + v[2] + " 次），近半年 " + v[1] + "%。回测截至 " + REV_ASOF + '">回归' + v[0] + "%</span>" : ""; }
+        function revTier(p) { return p >= 70 ? "强" : p < 50 ? "弱" : "中"; }
+        function revChip(r) { var v = REV[r.code]; return v ? '<span class="rv ' + (v[0] >= 70 ? "hi" : v[0] < 50 ? "lo" : "") + '" title="偏离 ≤ −0.15 后当日回归（跑赢同组中位）：近 5 月 ' + v[0] + "%（" + v[2] + " 次），近 3 月 " + v[1] + "%。" + REV_FROM + "～" + REV_ASOF + "，每月重算；只作排序参考，不是胜率" + '">回归' + revTier(v[0]) + "</span>" : ""; }
         function byRev(x, y) { var a = revP(x), b = revP(y); a = a == null ? 50 : a; b = b == null ? 50 : b; return b - a || x.dev - y.dev; }
         function qChip(r) { var q = S.quota[r.code]; return q ? '<span class="qa ' + q.c + '" title="' + esc((S.quotaDate ? S.quotaDate + " 申购上限 " : "") + (q.txt || q.t)) + '">' + q.t + "</span>" : ""; }
 
@@ -1649,7 +1650,7 @@
         uiApply();
         function cfgInputs() { $("thr").value = S.thr; $("trig").value = S.trig; $("lo").value = S.lo; $("halt-thr").value = S.haltThr; $("sp-tol").value = S.spTol; $("sp-tol2").value = S.spTol; $("cyc-thr").value = S.cycThr; }
         $("cfg-reset").addEventListener("click", function () { S.thr = 0.15; S.trig = 0.1; S.lo = 0.5; S.spTol = 0.1; S.haltThr = 10; S.cycThr = 10; saveCfg(); cfgInputs(); renderETF(); });
-        $("rev-asof").textContent = REV_ASOF;
+        $("rev-asof").textContent = REV_FROM + "～" + REV_ASOF;
         if (!IS_SUPER) [$("set-tab-b"), $("rule-cyc"), $("bt-cyc"), $("paper-cyc-b")].forEach(function (x) { if (x) x.classList.add("hide"); });
         $("thr").value = S.thr; $("trig").value = S.trig; $("lo").value = S.lo; $("halt-thr").value = S.haltThr;
         $("thr").addEventListener("input", function () {
