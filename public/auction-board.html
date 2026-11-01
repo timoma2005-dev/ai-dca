@@ -328,6 +328,8 @@
       .subseg { margin:12px 0 2px; }
 
       body:not(.v-cyc) #cyc, body.v-cyc .act { display:none; }
+      body:not(.v-hlt) #hlt, body.v-hlt .act { display:none; }
+      #hlt .hlt-rule { font-size:12px; color:var(--sub); margin-top:10px; line-height:1.6; }
       @media (max-width:1100px) {
         .deck { grid-template-columns:minmax(0,1fr); }
         .side { grid-template-columns:1fr 1fr; }
@@ -372,6 +374,7 @@
         <nav class="modes" id="vtabs" aria-label="策略（只切换上方主卡）">
           <button type="button" class="on" data-v="dev">盘中轮动<small>按 NQ 偏离 · T+0 随时切</small></button>
           <button type="button" data-v="cyc">隔夜轮动<span class="lock">超管</span><small>尾盘低溢价过夜 · 10:30 复牌换仓</small></button>
+          <button type="button" data-v="hlt">停牌轮动<span class="lock">超管</span><small>按次日开盘数定隔夜仓 · 不主动追偏离</small></button>
         </nav>
         <div class="sp"></div>
         <button class="phase" id="phase-pill" type="button" aria-haspopup="dialog" aria-controls="live-pop" title="数据源与交易时段"><span class="dot"></span><span class="ph-t" id="phase">—</span><span id="clock">--:--:--</span><span class="err" title="有数据源失败"></span></button>
@@ -448,6 +451,34 @@
             <button class="btn" type="button" data-ov="tools" data-tab="p" data-sub="cyc">纸面记录 <span id="cyc-n"></span></button>
             <button class="more" type="button" data-ov="info" data-tab="bt">回测依据</button>
           </div>
+        </section>
+
+        <section class="card cyc" id="hlt" aria-live="polite">
+          <div class="hd0"><span class="lbl">停牌轮动 · 次日全停牌才隔夜拿 LOF，其余时间不主动换</span><span class="cyc-ph" id="hlt-ph">—</span></div>
+          <div class="cyc-now"><div class="l"><small id="hlt-now-l">现在</small><h2 id="hlt-now-h">—</h2><p id="hlt-now-p"></p></div><div class="cd"><small id="hlt-cd-l">下一步</small><b id="hlt-cd">—</b></div></div>
+          <div class="cyc-g">
+            <div class="cyc-s" id="hlt-s1">
+              <div class="hd"><b>① 当前持仓</b><span class="stt" id="hlt-s1-st">—</span></div>
+              <small>持 LOF：09:35 卖、10:30 买偏离最负；持 ETF：不动</small>
+              <div class="pick" id="hlt-s1-h">—</div>
+              <p id="hlt-s1-p"></p>
+            </div>
+            <div class="cyc-s" id="hlt-s2">
+              <div class="hd"><b>② 新钱买入</b><span class="stt" id="hlt-s2-st">—</span></div>
+              <small>可交易（未停牌）ETF 中偏离最负，09:35 后挂限价</small>
+              <div class="pick" id="hlt-s2-h">—</div>
+              <p id="hlt-s2-p"></p>
+            </div>
+            <div class="cyc-s" id="hlt-s3">
+              <div class="hd"><b>③ 14:55 隔夜</b><span class="stt" id="hlt-s3-st">—</span></div>
+              <small>按实时溢价预判明天几只 ETF 09:30 开盘（溢价 &lt; <span id="hlt-thr-t">10</span>%）</small>
+              <div class="pick" id="hlt-s3-h">—</div>
+              <p id="hlt-s3-p"></p>
+            </div>
+          </div>
+          <div class="hlt-rule">规则：明天 0 只开盘 → 14:55 买 LOF 161130 过夜（NQ00Y 较昨日 15:00 跌超 1% 则不买，改拿偏离最低 ETF）；1–3 只开盘 → 拿其中偏离最低；≥4 只开盘 → 继续拿当前 ETF，只有它明天会停牌才换到会开盘的偏离最低者。持仓按下方行情表「持有」勾选识别。</div>
+          <div class="chips"><button class="chip" type="button" data-ov="set" data-tab="c">停牌溢价 <b id="hlt-c-halt">10%</b></button></div>
+          <div class="acts"><button class="more" type="button" data-ov="info" data-tab="bt">回测依据</button></div>
         </section>
 
         <div class="side">
@@ -599,6 +630,7 @@
           <p class="note"><b>回归概率</b>：偏离首次 ≤ −0.15 后到当日收盘跑赢 12 只中位的比例（腾讯 5 分钟线，最近 5 个月，每月 1 日滚动重算），候选按它优先排序。标签分三档：强 ≥70%（橙）、中 50–69%、弱 &lt;50%（灰色删除线），具体百分比见悬停提示。样本外检验显示它只能作排序参考，绝对数值会随大盘漂移，不要当胜率。回测区间 <span id="rev-asof">—</span>。</p>
           <p class="note"><b>模拟切换预估</b>：同时段历史切换的中位数与四分位区间（2026-08-25～10-28，5 分钟回测）− 佣金。单次切换当天几乎不回归，收益靠反复轮动累积。</p>
           <p class="note" id="bt-cyc"><b>隔夜轮动</b>：回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</p>
+          <p class="note" id="bt-hlt"><b>停牌轮动</b>：回测 2026-05-07～10-30（5 分钟，每次切换成本 0.06%）：收益 15.43%、切换 28 次，一直持有国泰 9.23%；每天追最低偏离 10.78%、210 次。8-21 起 3.48%（国泰 2.05%），10 月 −3.38%（国泰 −6.75%）。全停牌日仅约 20 天且集中在 10 月，回测用事后实际停牌，实盘靠溢价预判会有误差，仅供参考。</p>
         </div>
       </div>
     </aside>
@@ -1895,18 +1927,96 @@
         });
         $("cyc-thr").value = S.cycThr;
         $("cyc-thr").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { S.cycThr = v; saveCfg(); cycRender(); } });
+
+        /* ---------- 停牌轮动（2026-11-01）：明天 0 只 ETF 开盘才 14:55 拿 LOF（NQ 跌超 1% 除外）；1–3 只拿其中偏离最低；≥4 只不动，持仓明天停牌才换。
+           持 LOF 的次日 09:35 卖、10:30 复牌后买偏离最负。回测 backtest/cycle_gap_bt.py（G=∞）。---------- */
+        function hltPlan(list) {
+          var etfs = list.filter(isEtf), lof = byCode(list, LOF_CODE), np = nqPct();
+          var held = list.filter(function (r) { return r.held; })[0] || null;
+          var byDev = function (a) { return a.filter(function (r) { return r.dev != null; }).sort(function (x, y) { return x.dev - y.dev; }); };
+          var trad = byDev(etfs.filter(function (r) { return !r.halt; }));
+          var openT = etfs.filter(function (r) { return r.prem != null && r.prem < S.haltThr; }), k = openT.length;
+          var openTd = byDev(openT); if (!openTd.length) openTd = openT.slice().sort(function (x, y) { return x.prem - y.prem; }); var drop = np != null && np < -0.01, pick = null, why = "";
+          var heldIn = held && openT.some(function (r) { return r.code === held.code; });
+          if (!etfs.some(function (r) { return r.prem != null; })) why = "等待溢价数据";
+          else if (k === 0) {
+            if (drop) { pick = trad[0] || byDev(etfs)[0] || null; why = "明天预计全部停牌，但 NQ00Y 自昨日 15:00 " + pctStr(np) + "（跌超 1%），不买 LOF，拿偏离最低 ETF。"; }
+            else { pick = lof || null; why = "明天预计 0 只 ETF 09:30 开盘，14:55 买 LOF 过夜，次日 09:35 卖。"; }
+          } else if (k <= 3) {
+            pick = heldIn ? held : openTd[0]; why = "明天预计只有 " + k + " 只开盘（" + openT.map(function (r) { return esc(r.name); }).join("、") + "），" + (heldIn ? "当前持仓在其中，继续拿。" : "拿其中偏离最低。");
+          } else {
+            if (held && held.code !== LOF_CODE && heldIn) { pick = held; why = "明天预计 " + k + " 只开盘，持仓也会开盘，继续拿，不主动换。"; }
+            else { pick = openTd[0]; why = "明天预计 " + k + " 只开盘，" + (held ? esc(held.name) + (held.code === LOF_CODE ? " 是 LOF" : " 明天会停牌") + "，换到会开盘的偏离最低者。" : "当前无持仓，拿会开盘的偏离最低者。"); }
+          }
+          return { held: held, trad: trad, openT: openT, k: k, pick: pick, why: why, np: np, drop: drop, lof: lof };
+        }
+        function hltRender(list) {
+          if (!$("hlt") || !IS_SUPER) return;
+          list = list || rows();
+          var b = bj(), t = secs(b), wk = weekday(b), P = hltPlan(list), held = P.held;
+          var lofH = held && held.code === LOF_CODE;
+          var on1 = wk && t >= 34200 && t < 37800, on2 = wk && t >= 37800 && t < 52800, on3 = wk && t >= 52800 && t < 54000;
+          $("hlt-thr-t").textContent = S.haltThr; $("hlt-c-halt").textContent = S.haltThr + "%";
+          var stt = function (id, k, tx) { var el = $(id); el.className = "stt " + k; el.textContent = tx; };
+          // ① 持仓
+          if (!held) { $("hlt-s1-h").textContent = "无持仓"; $("hlt-s1-p").innerHTML = '<span class="why">在下方行情表勾选「持有」。</span>'; stt("hlt-s1-st", "", "—"); }
+          else {
+            var dv = held.dev != null ? " · 偏离 " + minus(f2(held.dev)) : "", pm = held.prem != null ? " · 溢价 " + held.prem.toFixed(2) + "%" : "";
+            if (lofH && wk && t >= 33300 && t < 37800) { $("hlt-s1-h").innerHTML = '09:35 卖出 <span class="hs">' + esc(held.name) + "</span>"; stt("hlt-s1-st", on1 ? "now" : "", on1 ? "进行中" : "09:35"); }
+            else if (lofH && wk && t >= 37800 && t < 54000) { $("hlt-s1-h").innerHTML = '卖 <span class="hs">LOF</span> → 买 <span class="hl">' + (P.trad[0] ? esc(P.trad[0].name) : "—") + "</span>"; stt("hlt-s1-st", "now", "该换了"); }
+            else { $("hlt-s1-h").innerHTML = "持有 " + esc(held.name) + (held.halt ? " <small>(停牌)</small>" : ""); stt("hlt-s1-st", "done", "不动"); }
+            $("hlt-s1-p").innerHTML = "涨跌 " + pctStr(held.pct) + dv + pm + (lofH && P.trad[0] ? "<br/>可交易偏离最负：" + esc(P.trad[0].name) + " " + minus(f2(P.trad[0].dev)) + "，卖一 " + fmt3(askOf(P.trad[0])) : "") +
+              '<br/><span class="why">' + (lofH ? "LOF 只做全停牌日的隔夜过渡，开盘尽早卖；ETF 复牌后换偏离最负。" : "不因小偏离差主动换，14:55 只看它明天会不会停牌。") + "</span>";
+          }
+          // ② 新钱
+          var nb = P.trad[0];
+          if (!nb) { $("hlt-s2-h").textContent = inWin(b) ? "等待偏离数据" : "交易时段再看"; $("hlt-s2-p").innerHTML = '<span class="why">偏离只在交易日 09:15–15:00 计算；停牌的不买。</span>'; stt("hlt-s2-st", "", "—"); }
+          else {
+            var nx = P.trad[1], dp = depthPx(nb, "b");
+            $("hlt-s2-h").innerHTML = '买 <span class="hl">' + esc(nb.name) + "</span>";
+            $("hlt-s2-p").innerHTML = "偏离 " + minus(f2(nb.dev)) + (nb.prem != null ? " · 溢价 " + nb.prem.toFixed(2) + "%" : "") + (nx ? "（次低 " + esc(nx.name) + " " + minus(f2(nx.dev)) + "）" : "") + "<br/>卖一 " + fmt3(askOf(nb)) + (dp ? " · 按持仓金额建议限价 " + dp.toFixed(3) : "") +
+              '<br/><span class="why">' + (wk && t < 34500 ? "09:35 后盘口稳定再下单，" : "") + "金额大就分 2–3 笔；买完按①不主动换。</span>";
+            stt("hlt-s2-st", wk && t >= 34500 && t < 54000 ? "now" : "", wk && t >= 34500 && t < 54000 ? "可买" : "09:35 后");
+          }
+          // ③ 隔夜
+          var p3 = P.pick, same = p3 && held && p3.code === held.code;
+          $("hlt-s3-h").innerHTML = !p3 ? esc(P.why || "—") : (same ? "继续持有 " : (held ? '卖 <span class="hs">' + esc(held.name) + '</span> → 拿 <span class="hl">' : '拿 <span class="hl">')) + (p3 ? esc(p3.name) + (same ? "" : "</span>") : "") + (p3 && p3.code === LOF_CODE ? " <small>(LOF)</small>" : "");
+          $("hlt-s3-p").innerHTML = (p3 ? P.why : "") + (P.k > 0 && P.k < 13 ? "<br/>明天预计开盘：" + P.k + " 只" : "") + '<br/><span class="why">' + (on3 ? "按收盘前实时溢价判断，14:55 完成。" : "现在是参考，以 14:55 为准。") + "</span>";
+          stt("hlt-s3-st", on3 ? "now" : wk && t >= 54000 ? "miss" : "", on3 ? "进行中" : wk && t >= 54000 ? "已收盘" : "14:55");
+          // 现在要做
+          var nl, nh, np2 = "";
+          if (!wk || t < 33300 || t >= 54000) { nl = "非交易时段"; nh = held ? "持有 " + esc(held.name) : "空仓"; np2 = lofH ? "下个交易日 09:35 卖 LOF，10:30 复牌后买偏离最负 ETF。" : "下个交易日：新钱 09:35 后买可交易里偏离最负；14:55 按③定隔夜。"; }
+          else if (lofH && t < 37800) { nl = on1 ? "开盘 · 进行中" : "集合竞价"; nh = '09:35 卖出 <span class="hs">LOF</span>'; np2 = "卖完空仓等 10:30 ETF 复牌。"; }
+          else if (lofH) { nl = "复牌换仓"; nh = $("hlt-s1-h").innerHTML; np2 = P.trad[0] ? "可交易 ETF 里偏离最负：" + esc(P.trad[0].name) + " " + minus(f2(P.trad[0].dev)) + "。" : ""; }
+          else if (on3) { nl = "14:55 定隔夜 · 进行中"; nh = $("hlt-s3-h").innerHTML; np2 = P.why; }
+          else { nl = t < 52800 ? "盘中持有" : "收盘"; nh = held ? "持有 " + esc(held.name) + "，不主动换" : "空仓"; np2 = (nb ? "新钱买 " + esc(nb.name) + "（偏离 " + minus(f2(nb.dev)) + "）。" : "") + "14:50 起看③。"; }
+          $("hlt-now-l").textContent = nl; $("hlt-now-h").innerHTML = nh; $("hlt-now-p").innerHTML = np2;
+          $("hlt-ph").textContent = !wk || t < 33300 || t >= 54000 ? "非交易时段" : on3 ? "现在：定隔夜" : lofH ? "持有 LOF" : "盘中";
+          $("hlt-ph").classList.toggle("on", !!(on3 || (lofH && wk && t >= 33300 && t < 54000)));
+          $("hlt-s1").classList.toggle("on", !!(lofH && wk && t >= 33300 && t < 54000)); $("hlt-s3").classList.toggle("on", on3);
+          var nextT = [34500, 37800, 52800, 53700].filter(function (x) { return x > t; })[0], nm = { 34500: "09:35", 37800: "10:30 复牌", 52800: "14:50 定隔夜", 53700: "14:55 下单" };
+          if (wk && nextT) { var lf = nextT - t; $("hlt-cd-l").textContent = "距 " + nm[nextT]; $("hlt-cd").textContent = (lf >= 3600 ? Math.floor(lf / 3600) + " 时 " : "") + Math.floor(lf % 3600 / 60) + " 分"; }
+          else { $("hlt-cd-l").textContent = "下一步"; $("hlt-cd").textContent = "下个交易日 09:30"; }
+          if (document.body.classList.contains("v-hlt")) {
+            if (lofH && wk && t >= 34500 && t < 37800) ntfOnce(todayStr() + "-hlt1", "停牌轮动 · 卖出 LOF", "09:35 卖出 LOF，10:30 复牌后买偏离最负 ETF。");
+            if (lofH && wk && t >= 37800 && t < 41400 && P.trad[0]) ntfOnce(todayStr() + "-hlt2", "停牌轮动 · 复牌换仓", "卖 LOF → 买 " + P.trad[0].name + "（偏离 " + f2(P.trad[0].dev) + "）");
+            if (on3 && p3 && !same) ntfOnce(todayStr() + "-hlt3", "停牌轮动 · 14:55 定隔夜", plain($("hlt-s3-h").innerHTML) + "。" + plain(P.why));
+          }
+        }
         // 视图切换：偏离轮动 / 日循环（不放同一屏）
         function setView(v) {
           if (!IS_SUPER) v = "dev";
           document.body.classList.toggle("v-cyc", v === "cyc");
+          document.body.classList.toggle("v-hlt", v === "hlt");
           [].forEach.call(document.querySelectorAll("#vtabs button"), function (x) { x.classList.toggle("on", x.getAttribute("data-v") === v); });
           try { localStorage.setItem(KP + "nqView", v); } catch (e) {}
           if (v === "cyc") cycRender();
+          if (v === "hlt") hltRender();
           try { renderETF(); } catch (e) {}
         }
-        if (!IS_SUPER) { var cbt = document.querySelector('#vtabs button[data-v="cyc"]'); if (cbt) cbt.remove(); var vt = $("vtabs"); if (vt && vt.querySelectorAll("button").length < 2) vt.style.display = "none"; }
+        if (!IS_SUPER) { ["cyc", "hlt"].forEach(function (v) { var cbt = document.querySelector('#vtabs button[data-v="' + v + '"]'); if (cbt) cbt.remove(); }); var vt = $("vtabs"); if (vt && vt.querySelectorAll("button").length < 2) vt.style.display = "none"; }
         $("vtabs").addEventListener("click", function (ev) { var bt = ev.target && ev.target.closest && ev.target.closest("button[data-v]"); if (bt) setView(bt.getAttribute("data-v")); });
-        try { if (localStorage.getItem(KP + "nqView") === "cyc") setView("cyc"); } catch (e) {}
+        try { var sv0 = localStorage.getItem(KP + "nqView"); if (sv0 === "cyc" || sv0 === "hlt") setView(sv0); } catch (e) {}
 
         var renderETF0 = renderETF;
 
@@ -2022,7 +2132,7 @@
         });
         $("tl-clr").addEventListener("click", function () { TL.rec = null; TL.buy = ""; TL.sell = ""; $("tl-bpx").value = ""; $("tl-spx").value = ""; tlSave(); tlRender(); });
         function fabBadge() { var n = (TL.rec ? 1 : 0) + (IS_SUPER && openPos() ? 1 : 0); $("fab-n").textContent = n ? String(n) : ""; $("fab").setAttribute("title", n ? n + " 项进行中（做T 记录 / 隔夜持仓）" : "工具"); }
-        renderETF = function () { renderETF0.apply(this, arguments); if (SIM.open || (OV.cur === "tools" && OV.tab.tools === "p")) simRender(); try { cycRender(); } catch (e) {} try { tlRender(); } catch (e) {} fabBadge(); };
+        renderETF = function () { renderETF0.apply(this, arguments); if (SIM.open || (OV.cur === "tools" && OV.tab.tools === "p")) simRender(); try { cycRender(); } catch (e) {} try { hltRender(); } catch (e) {} try { tlRender(); } catch (e) {} fabBadge(); };
 
         function applyHeld(m, label) {
           var pool = {}; ETFS.forEach(function (e) { pool[e[0].slice(2)] = true; });
