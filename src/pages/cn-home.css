@@ -404,3 +404,25 @@
 /* 场内走势区间切换：长周期 SVIP 锁 */
 .cn-home-range button{display:inline-flex;align-items:center;gap:3px}.cn-home-range button svg{width:11px;height:11px}.cn-home-range button.is-locked{color:#a0a8b5}
 @media(max-width:640px){.cn-home-market>.cn-home-title{flex-wrap:wrap;row-gap:8px;padding-top:10px;padding-bottom:10px}.cn-home-market>.cn-home-title>span{white-space:nowrap}.cn-home-market-toolbar{width:100%;justify-content:space-between}.cn-home-market-toolbar>.cn-home-series-meta{width:100%}}
+
+/* 顶部总览两行小条（2026-11-01）：替代三张大卡，首屏直接看到溢价走势 */
+.cn-home-ovbar{grid-column:1/-1;padding:8px 14px;display:flex;flex-direction:column;gap:6px}
+.cn-home-ovbar-row{display:flex;align-items:center;gap:6px 14px;flex-wrap:nowrap;min-width:0;font-size:12px;color:var(--text-muted,#64748b);white-space:nowrap;overflow:hidden}
+.cn-home-ovbar-row.is-muted{gap:6px}.cn-home-ovbar-row.is-muted svg{width:14px}
+.cn-home-ovbar-item{display:inline-flex;align-items:center;gap:4px;min-width:0}
+.cn-home-ovbar-label{color:#8a93a3;font-size:11px;margin-right:2px}
+.cn-home-ovbar-row b{font-size:14px;font-weight:800;color:var(--text-main,#1f2937);font-variant-numeric:tabular-nums}
+.cn-home-ovbar-row i{font-style:normal;color:#b6bdc8;font-size:11px}
+.cn-home-ovbar .cn-home-metric-value{font-size:15px;line-height:1}
+.cn-home-ovbar .cn-home-breadth-progress{display:inline-flex;width:46px;height:5px;margin-left:4px;border-radius:99px;overflow:hidden;background:#eef0f3}
+.cn-home-ovbar .cn-home-breadth-progress>span{display:block;height:100%}
+.cn-home-ovbar .cn-home-badge{font-size:10px;padding:1px 6px}
+.cn-home-ovbar-delta{color:#8a93a3;font-size:10px}
+.cn-home-ovbar-warn{width:14px;height:14px;color:#b86900;flex-shrink:0}
+.cn-home-ovbar-quota{min-height:0 !important;display:inline-flex;align-items:center;gap:4px;border:0;background:#f4f6f9;border-radius:999px;padding:3px 6px 3px 9px;cursor:pointer;color:inherit}
+.cn-home-ovbar-quota b{font-size:13px}.cn-home-ovbar-quota small{color:#8a93a3;font-size:10px}.cn-home-ovbar-quota svg{width:12px;height:12px;color:#a0a8b5}
+.cn-home-ovbar-time{margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:#a0a8b5;font-size:10px}
+.cn-home-ovbar-time .cn-home-dot{width:6px;height:6px}
+.cn-home-ovbar-retry{display:flex;align-items:center;gap:6px;border:0;background:transparent;color:#c7373c;font-size:12px}.cn-home-ovbar-retry svg{width:14px}
+[data-theme="dark"] .cn-home-ovbar-quota{background:#ffffff10}
+@media(max-width:640px){.cn-home-ovbar{padding:8px 12px;margin-bottom:10px}.cn-home-ovbar-row{gap:6px 10px}.cn-home-ovbar .cn-home-breadth-progress{width:34px}}

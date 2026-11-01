@@ -71,8 +71,8 @@ function Section({ title, side, loading, error, onRetry, children, className = '
   return <section className={`cn-home-card ${className}`} data-scroll-card="true"><header className="cn-home-title"><span>{title}</span>{side}</header>{loading && !children ? <div className="cn-home-empty"><RefreshCw className="cn-home-spin" />正在读取本地数据…</div> : error && !children ? <button className="cn-home-retry" onClick={onRetry}><AlertCircle />加载失败，点击重试</button> : children}</section>;
 }
 
-// Phase 2: three equal-height metric cards. Footnotes baseline-align via margin-top:auto.
-function OverviewCards({ data, limits, onOpenDetail }) {
+// 首页顶部总览：压成两行小条（涨跌比 + 中位溢价 / 场外额度），把屏幕留给溢价走势。
+function OverviewBar({ data, limits, onOpenDetail, loading, error, onRetry }) {
   const b = data?.breadth || {};
   const totals = limits?.currencyTotals || [];
   const cny = totals.find((x) => String(x.currency).toUpperCase() === 'CNY');
@@ -89,73 +89,41 @@ function OverviewCards({ data, limits, onOpenDetail }) {
   const medianDelta = number(median) != null && number(prevMedian) != null ? number(median) - number(prevMedian) : null;
   const highPremium = number(median) != null && number(median) >= 8;
   const market = marketMeta(data);
-  const limitedCount = (cny?.limitedCount ?? 0) + (usd?.limitedCount ?? 0);
-  const quotaBox = (row, currency, label) => (
-    <button type="button" className="cn-home-quota-box" onClick={() => onOpenDetail?.(currency)} aria-label={`${label}额度详情`}>
-      <span className="cn-home-quota-title"><span>{label}</span><ChevronRight /></span>
-      <strong className="cn-home-quota-num">{compact(row?.amount, currency)}</strong>
-      <span className="cn-home-quota-desc">{row ? `${row.fundCount ?? '—'} 只跟踪 / ${row.limitedCount ?? '—'} 只限额` : '暂无额度数据'}</span>
+  const anomaly = (data?.anomalies || [])[0];
+  const quota = (row, currency) => (
+    <button type="button" className="cn-home-ovbar-quota" onClick={() => onOpenDetail?.(currency)} aria-label={`${currency === 'USD' ? '美元' : '人民币'}额度详情`} title={row ? `${row.fundCount ?? '—'} 只跟踪 / ${row.limitedCount ?? '—'} 只限额` : '暂无额度数据'}>
+      <b>{compact(row?.amount, currency)}</b>{row ? <small>{row.limitedCount ?? '—'}/{row.fundCount ?? '—'} 限</small> : null}<ChevronRight aria-hidden="true" />
     </button>
   );
-  return <>
-    <div className="cn-home-session"><span className={`cn-home-dot is-${market.tone}`} />{market.label}<span>{timeText(data?.priceAsOf || data?.generatedAt)}</span></div>
-    <div className="cn-home-ov-grid">
-      <div className="cn-home-ov-card">
-        <div className="cn-home-ov-head">
-          <span className="cn-home-ov-title">场内全池涨跌比</span>
-          <span className="cn-home-badge is-up">{rise} 涨 / {fall} 跌</span>
-        </div>
-        <div className="cn-home-ov-metric">
-          <span className="cn-home-metric-value is-up">{rise}</span>
-          <span className="cn-home-metric-sub">涨 / {fall} 跌 / {flat} 平 (全池 {total} 只)</span>
-        </div>
-        <div className="cn-home-ov-middle">
-          <div className="cn-home-breadth-progress" role="img" aria-label={`上涨 ${upPct.toFixed(1)}%，持平 ${flatPct.toFixed(1)}%，下跌 ${downPct.toFixed(1)}%`}>
-            <div className="cn-home-progress-up" style={{ width: `${upPct.toFixed(1)}%` }} />
-            <div className="cn-home-progress-flat" style={{ width: `${flatPct.toFixed(1)}%` }} />
-            <div className="cn-home-progress-down" style={{ width: `${downPct.toFixed(1)}%` }} />
-          </div>
-          <div className="cn-home-breadth-labels">
-            <span>上涨占比 {upPct.toFixed(1)}%</span>
-            <span>下跌 {downPct.toFixed(1)}%</span>
-          </div>
-        </div>
-        <div className="cn-home-ov-foot"><span>场内全池</span><span>{timeText(data?.priceAsOf || data?.generatedAt)} 口径</span></div>
-      </div>
-      <div className="cn-home-ov-card">
-        <div className="cn-home-ov-head">
-          <span className="cn-home-ov-title">场内溢价中位数</span>
-          {highPremium ? <span className="cn-home-badge is-up">高溢价预警</span> : <span className="cn-home-badge is-info">溢价平稳</span>}
-        </div>
-        <div className="cn-home-ov-metric">
-          <span className={`cn-home-metric-value ${number(median) >= 0 ? 'is-up' : 'is-down'}`}>{pct(median)}</span>
-          <span className="cn-home-metric-sub">中位溢价</span>
-        </div>
-        <div className="cn-home-ov-middle">
-          <div className="cn-home-breadth-labels">
-            <span>{prevMedian == null ? '实时口径' : <>昨日基准：<b>{pct(prevMedian)}</b></>}</span>
-            {medianDelta != null ? <span>溢价扩幅：<b>{pct(medianDelta)}</b></span> : null}
-          </div>
-        </div>
-        <div className="cn-home-ov-foot"><span>计算公式：(现价 - 估值NAV) / NAV</span><span>防追高提示</span></div>
-      </div>
-      <div className="cn-home-ov-card">
-        <div className="cn-home-ov-head">
-          <span className="cn-home-ov-title">场外可用申购额度</span>
-          <button type="button" className="cn-home-link" onClick={() => onOpenDetail?.('CNY')}>查看完整额度详情 ›</button>
-        </div>
-        <div className="cn-home-quota-dual">
-          {quotaBox(cny, 'CNY', '人民币份额 (CNY)')}
-          {quotaBox(usd, 'USD', '美元份额 (USD)')}
-        </div>
-        <div className="cn-home-ov-foot">
-          <span>{limitedCount} 只限购</span>
-          <span>{limits?.limitAsOf ? `更新于 ${timeText(limits.limitAsOf)}` : '每日自动汇总'}</span>
-        </div>
-      </div>
+  if (!data && !limits) {
+    return <section className="cn-home-card cn-home-ovbar" data-scroll-card="true">{error ? <button type="button" className="cn-home-ovbar-retry" onClick={onRetry}><AlertCircle />总览加载失败，点击重试</button> : <div className="cn-home-ovbar-row is-muted"><RefreshCw className="cn-home-spin" />{loading ? '正在读取总览…' : '暂无总览'}</div>}</section>;
+  }
+  return <section className="cn-home-card cn-home-ovbar" data-scroll-card="true" aria-label="全局市场总览">
+    <div className="cn-home-ovbar-row">
+      <span className="cn-home-ovbar-item" title={`场内全池 ${total} 只：${rise} 涨 / ${fall} 跌 / ${flat} 平`}>
+        <span className="cn-home-ovbar-label">涨跌</span>
+        <b className="cn-home-metric-value is-up">{rise}</b><i>/</i><b className="cn-home-metric-value is-down">{fall}</b>{flat ? <><i>/</i><b>{flat}</b></> : null}
+        <span className="cn-home-breadth-progress" role="img" aria-label={`上涨 ${upPct.toFixed(1)}%，持平 ${flatPct.toFixed(1)}%，下跌 ${downPct.toFixed(1)}%`}>
+          <span className="cn-home-progress-up" style={{ width: `${upPct.toFixed(1)}%` }} />
+          <span className="cn-home-progress-flat" style={{ width: `${flatPct.toFixed(1)}%` }} />
+          <span className="cn-home-progress-down" style={{ width: `${downPct.toFixed(1)}%` }} />
+        </span>
+      </span>
+      <span className="cn-home-ovbar-item" title={`场内溢价中位数，计算公式：(现价 - 估值NAV) / NAV${prevMedian == null ? '，实时口径' : `；昨日 ${pct(prevMedian)}`}`}>
+        <span className="cn-home-ovbar-label">中位溢价</span>
+        <b className={`cn-home-metric-value ${number(median) >= 0 ? 'is-up' : 'is-down'}`}>{pct(median)}</b>
+        {medianDelta != null ? <small className="cn-home-ovbar-delta">{medianDelta >= 0 ? '↑' : '↓'}{Math.abs(medianDelta).toFixed(2)}</small> : null}
+        {highPremium ? <span className="cn-home-badge is-up">高溢价</span> : null}
+      </span>
+      {anomaly ? <AlertCircle className="cn-home-ovbar-warn" aria-label={anomaly?.message || String(anomaly)}><title>{anomaly?.message || String(anomaly)}</title></AlertCircle> : null}
     </div>
-    {(data?.anomalies || []).length ? <div className="cn-home-warning">{data.anomalies[0]?.message || data.anomalies[0]}</div> : null}
-  </>;
+    <div className="cn-home-ovbar-row">
+      <span className="cn-home-ovbar-label">场外额度</span>
+      {quota(cny, 'CNY')}
+      {quota(usd, 'USD')}
+      <span className="cn-home-ovbar-time"><span className={`cn-home-dot is-${market.tone}`} title={market.label} />{timeText(data?.priceAsOf || data?.generatedAt)}</span>
+    </div>
+  </section>;
 }
 
 function pickSeries(payload, mode, group) {
@@ -277,5 +245,5 @@ export function CnHomeExperience({ topSlot = null, takeover = false } = {}) {
   // 新手入门未关闭时，首页只显示任务卡；点叉号（或跳过）后才出现原有首页内容。
   if (takeover && topSlot) return <main className="cn-home cn-home-takeover" data-theme={theme} data-color={colorMode}><div className="mx-auto flex w-full max-w-[880px] flex-col justify-center gap-3 py-2 sm:min-h-[calc(100vh-200px)]">{topSlot}</div></main>;
   if (limitCurrency) return <CnFundLimitDetail data={state.limits.data} currency={limitCurrency} loading={state.limits.loading} error={state.limits.error} onRetry={() => refresh(true)} onBack={closeLimitDetail} onSwitchCurrency={switchLimitCurrency} theme={theme} colorMode={colorMode} />;
-  return <main className="cn-home" data-theme={theme} data-color={colorMode}><div className="cn-home-head"><div><h1>市场首页</h1><p>全球指数基金实时概览</p></div><div className="cn-home-head-actions"><button type="button" onClick={toggleColorMode} title={colorMode === 'cn' ? '切换为 US 绿涨红跌' : '切换为 CN 红涨绿跌'} aria-label="切换涨跌配色"><Palette /><span className="btn-label">{colorMode === 'cn' ? 'CN 红涨绿跌' : 'US 绿涨红跌'}</span></button><button type="button" onClick={toggleTheme} title={theme === 'light' ? '切换深色模式' : '切换浅色模式'} aria-label="切换深浅色主题">{theme === 'light' ? <Moon /> : <Sun />}<span className="btn-label">{theme === 'light' ? '深色' : '浅色'}</span></button><button type="button" className="refresh" onClick={() => refresh(true)} disabled={Object.values(state).some((x) => x.loading)}><RefreshCw />刷新</button></div></div>{topSlot}<Section className="cn-home-overview" title="全局市场总览" loading={state.overview.loading} error={state.overview.error} onRetry={() => refresh(true)}><OverviewCards data={state.overview.data} limits={state.limits.data} onOpenDetail={openLimitDetail} /></Section><Section className="cn-home-market" title="场内走势" loading={state.series.loading} error={state.series.error} onRetry={() => refresh(true)} side={<div className="cn-home-market-toolbar"><span className="cn-home-series-meta">{seriesMeta}</span><div className="cn-home-segment cn-home-range" role="group" aria-label="走势区间">{HOME_RANGES.map((r) => { const locked = r.key !== 'today' && !canLong; return <button type="button" key={r.key} aria-pressed={range === r.key} className={`${range === r.key ? 'active' : ''}${locked ? ' is-locked' : ''}`} title={locked ? 'SVIP 专享，点击升级' : `看${r.label}`} onClick={() => chooseRange(r.key)}>{locked ? <Lock aria-hidden="true" /> : null}{r.label}</button>; })}</div><div className="cn-home-segment" role="group" aria-label="走势指标"><button type="button" aria-pressed={mode === 'premium'} className={mode === 'premium' ? 'active' : ''} onClick={() => setMode('premium')}>溢价</button><button type="button" aria-pressed={mode === 'price'} className={mode === 'price' ? 'active' : ''} onClick={() => setMode('price')}>价格</button></div></div>}><div className="cn-home-chips">{groups.map((item) => <button type="button" key={item.key} aria-pressed={group === item.key} className={group === item.key ? 'active' : ''} onClick={() => setGroup(item.key)}>{item.label}</button>)}</div>{isDaily && daily.state === 'loading' && !daily.data ? <div className="cn-home-empty">加载中…</div> : isDaily && daily.state === 'error' && !daily.data ? <button type="button" className="cn-home-retry" onClick={() => { setDaily({ state: 'idle', data: null }); setRange('today'); }}>加载失败，返回今日</button> : <PremiumChart series={lines} mode={mode} daily={isDaily} />}</Section><Section className="cn-home-limits" title="场外额度" loading={state.limits.loading} error={state.limits.error} onRetry={() => refresh(true)} side={<span className="cn-home-limit-asof">更新于 {timeText(state.limits.data?.limitAsOf || state.limits.data?.generatedAt)}</span>}><Limits data={state.limits.data} onFund={openFund} onOpenDetail={openLimitDetail} /></Section></main>;
+  return <main className="cn-home" data-theme={theme} data-color={colorMode}><div className="cn-home-head"><div><h1>市场首页</h1><p>全球指数基金实时概览</p></div><div className="cn-home-head-actions"><button type="button" onClick={toggleColorMode} title={colorMode === 'cn' ? '切换为 US 绿涨红跌' : '切换为 CN 红涨绿跌'} aria-label="切换涨跌配色"><Palette /><span className="btn-label">{colorMode === 'cn' ? 'CN 红涨绿跌' : 'US 绿涨红跌'}</span></button><button type="button" onClick={toggleTheme} title={theme === 'light' ? '切换深色模式' : '切换浅色模式'} aria-label="切换深浅色主题">{theme === 'light' ? <Moon /> : <Sun />}<span className="btn-label">{theme === 'light' ? '深色' : '浅色'}</span></button><button type="button" className="refresh" onClick={() => refresh(true)} disabled={Object.values(state).some((x) => x.loading)}><RefreshCw />刷新</button></div></div>{topSlot}<OverviewBar data={state.overview.data} limits={state.limits.data} onOpenDetail={openLimitDetail} loading={state.overview.loading} error={state.overview.error} onRetry={() => refresh(true)} /><Section className="cn-home-market" title="场内走势" loading={state.series.loading} error={state.series.error} onRetry={() => refresh(true)} side={<div className="cn-home-market-toolbar"><span className="cn-home-series-meta">{seriesMeta}</span><div className="cn-home-segment cn-home-range" role="group" aria-label="走势区间">{HOME_RANGES.map((r) => { const locked = r.key !== 'today' && !canLong; return <button type="button" key={r.key} aria-pressed={range === r.key} className={`${range === r.key ? 'active' : ''}${locked ? ' is-locked' : ''}`} title={locked ? 'SVIP 专享，点击升级' : `看${r.label}`} onClick={() => chooseRange(r.key)}>{locked ? <Lock aria-hidden="true" /> : null}{r.label}</button>; })}</div><div className="cn-home-segment" role="group" aria-label="走势指标"><button type="button" aria-pressed={mode === 'premium'} className={mode === 'premium' ? 'active' : ''} onClick={() => setMode('premium')}>溢价</button><button type="button" aria-pressed={mode === 'price'} className={mode === 'price' ? 'active' : ''} onClick={() => setMode('price')}>价格</button></div></div>}><div className="cn-home-chips">{groups.map((item) => <button type="button" key={item.key} aria-pressed={group === item.key} className={group === item.key ? 'active' : ''} onClick={() => setGroup(item.key)}>{item.label}</button>)}</div>{isDaily && daily.state === 'loading' && !daily.data ? <div className="cn-home-empty">加载中…</div> : isDaily && daily.state === 'error' && !daily.data ? <button type="button" className="cn-home-retry" onClick={() => { setDaily({ state: 'idle', data: null }); setRange('today'); }}>加载失败，返回今日</button> : <PremiumChart series={lines} mode={mode} daily={isDaily} />}</Section><Section className="cn-home-limits" title="场外额度" loading={state.limits.loading} error={state.limits.error} onRetry={() => refresh(true)} side={<span className="cn-home-limit-asof">更新于 {timeText(state.limits.data?.limitAsOf || state.limits.data?.generatedAt)}</span>}><Limits data={state.limits.data} onFund={openFund} onOpenDetail={openLimitDetail} /></Section></main>;
 }

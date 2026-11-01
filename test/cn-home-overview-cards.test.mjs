@@ -17,9 +17,15 @@ function declarations(selector, property) {
   return values;
 }
 
+test('overview is a compact two-row bar (breadth + median / OTC quotas)', () => {
+  assert.match(source, /function OverviewBar\(/);
+  assert.equal(source.match(/className="cn-home-ovbar-row"/g)?.length, 2);
+  assert.doesNotMatch(source, /function OverviewCards\(/);
+});
+
 test('breadth counts include flatCount with a 0 fallback', () => {
   assert.match(source, /count\(b,\s*'flatCount',\s*'flat'\)/);
-  assert.match(source, /涨 \/ \{fall\} 跌 \/ \{flat\} 平 \(全池 \{total\} 只\)/);
+  assert.match(source, /场内全池 \$\{total\} 只：\$\{rise\} 涨 \/ \$\{fall\} 跌 \/ \$\{flat\} 平/);
 });
 
 test('breadth progress bar renders up/flat/down segments with proportional widths', () => {
@@ -29,29 +35,23 @@ test('breadth progress bar renders up/flat/down segments with proportional width
   assert.match(source, /className="cn-home-progress-down" style=\{\{ width: `\$\{downPct\.toFixed\(1\)\}%` \}\}/);
 });
 
-test('median card shows 实时口径 when the previous-day median is missing', () => {
-  assert.match(source, /\{prevMedian == null \? '实时口径' : /);
+test('median keeps 实时口径 hint when the previous-day median is missing', () => {
+  assert.match(source, /prevMedian == null \? '，实时口径'/);
 });
 
-test('three cards exist: breadth / median premium / OTC quotas', () => {
-  assert.match(source, /场内全池涨跌比/);
-  assert.match(source, /场内溢价中位数/);
-  assert.match(source, /场外可用申购额度/);
+test('quota chips open the full-detail page per currency', () => {
+  assert.match(source, /场外额度/);
+  assert.match(source, /quota\(cny, 'CNY'\)/);
+  assert.match(source, /quota\(usd, 'USD'\)/);
+  assert.match(source, /onClick=\{\(\) => onOpenDetail\?\.\(currency\)\}/);
 });
 
-test('quota card has the full-detail entry and the limited-count footnote', () => {
-  assert.match(source, /查看完整额度详情/);
-  assert.match(source, /onClick=\{\(\) => onOpenDetail\?\.\('CNY'\)\}/);
-  assert.match(source, /\{limitedCount\} 只限购/);
+test('rows stay on one line each', () => {
+  assert.deepEqual(declarations('.cn-home-ovbar-row', 'flex-wrap'), ['nowrap']);
+  assert.deepEqual(declarations('.cn-home-ovbar-row', 'white-space'), ['nowrap']);
 });
 
-test('cards are equal height with baseline-aligned footnotes', () => {
-  assert.deepEqual(declarations('.cn-home-ov-card', 'display'), ['flex']);
-  assert.deepEqual(declarations('.cn-home-ov-card', 'flex-direction'), ['column']);
-  assert.deepEqual(declarations('.cn-home-ov-foot', 'margin-top'), ['auto']);
-});
-
-test('new cards use the tone variables (no hardcoded up/down colors)', () => {
+test('metric colors use the tone variables (no hardcoded up/down colors)', () => {
   assert.deepEqual(declarations('.cn-home-metric-value.is-up', 'color'), ['var(--tone-up)']);
   assert.deepEqual(declarations('.cn-home-metric-value.is-down', 'color'), ['var(--tone-down)']);
   assert.deepEqual(declarations('.cn-home-progress-up', 'background'), ['var(--tone-up)']);
