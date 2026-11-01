@@ -393,6 +393,8 @@ export function runPremiumSpreadBacktest(strategyInput = {}, options = {}) {
       toClass: premiumClass[to.code] || '',
       highPremiumPct: currentClass === 'H' ? from.premiumPct : to.premiumPct,
       lowPremiumPct: currentClass === 'H' ? to.premiumPct : from.premiumPct,
+      highCode: currentClass === 'H' ? from.code : to.code,
+      lowCode: currentClass === 'H' ? to.code : from.code,
       gapPct,
       rule,
       threshold,

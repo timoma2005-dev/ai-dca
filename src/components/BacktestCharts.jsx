@@ -12,6 +12,7 @@ import {
   Area,
   LabelList
 } from 'recharts';
+import { getKnownQdiiFundName } from '../app/qdiiFundCodes.js';
 
 /**
  * 智能格式化时间轴标签
@@ -260,7 +261,29 @@ export function KlineChart({ candles, signals }) {
 /**
  * PremiumChart - 溢价差图表
  */
-export function PremiumChart({ data, signals = [], trades = [] }) {
+// 基金简称：「华夏纳斯达克100ETF(QDII)」→「华夏」；查不到名称时只显示代码
+function shortFundName(code) {
+  const full = getKnownQdiiFundName(code);
+  if (!full) return '';
+  const m = full.match(/^(.+?)(纳斯达克|纳指|标普|美国|中概|恒生|日经|德国|法国|道琼斯)/);
+  return (m ? m[1] : full.replace(/ETF.*$/, '')).trim();
+}
+function fundLabel(code) {
+  if (!code) return '';
+  const nm = shortFundName(code);
+  return nm ? `${code} ${nm}` : String(code);
+}
+// 图例：区间内出现过的代码（按出现次数排序），最多列 2 只，其余写「等 N 只」
+function legendCodes(rows, key) {
+  const cnt = new Map();
+  for (const r of rows) { const c = r?.[key]; if (c) cnt.set(c, (cnt.get(c) || 0) + 1); }
+  const codes = Array.from(cnt.keys()).sort((a, b) => cnt.get(b) - cnt.get(a));
+  if (!codes.length) return '';
+  const head = codes.slice(0, 2).map(fundLabel).join(' / ');
+  return codes.length > 2 ? `${head} 等 ${codes.length} 只` : head;
+}
+
+export function PremiumChart({ data, signals = [], trades = [], height = 400 }) {
   if (!data || data.length === 0) {
     return <EmptyChart message="暂无溢价差数据" />;
   }
@@ -288,6 +311,8 @@ export function PremiumChart({ data, signals = [], trades = [] }) {
     highPremium: row.highPremiumPct,
     lowPremium: row.lowPremiumPct,
     gap: row.gapPct,
+    highCode: row.highCode || '',
+    lowCode: row.lowCode || '',
     switchGap: signalByTs.has(Number(row.ts)) ? row.gapPct : null
   })).filter(d => d.highPremium !== undefined).map((item) => {
     const itemTrades = tradesByTs.get(item.ts) || [];
@@ -305,8 +330,13 @@ export function PremiumChart({ data, signals = [], trades = [] }) {
     };
   });
 
+  const highLegend = legendCodes(chartData, 'highCode');
+  const lowLegend = legendCodes(chartData, 'lowCode');
+  const highName = highLegend ? `高溢价 ${highLegend} (%)` : '高溢价 (%)';
+  const lowName = lowLegend ? `低溢价 ${lowLegend} (%)` : '低溢价 (%)';
+
   return (
-    <ResponsiveContainer width="100%" height={400}>
+    <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
         <XAxis
@@ -328,9 +358,13 @@ export function PremiumChart({ data, signals = [], trades = [] }) {
             borderRadius: '8px',
             fontSize: '12px'
           }}
-          formatter={(value, name) => {
+          formatter={(value, name, item) => {
             if (name === '买入点' || name === '卖出点') return '';
-            return `${Number(value).toFixed(2)}%`;
+            const v = `${Number(value).toFixed(2)}%`;
+            const p = item?.payload || {};
+            if (name === highName && p.highCode) return [v, `高溢价 ${fundLabel(p.highCode)}`];
+            if (name === lowName && p.lowCode) return [v, `低溢价 ${fundLabel(p.lowCode)}`];
+            return v;
           }}
           labelFormatter={(label) => `时间: ${label}`}
         />
@@ -341,7 +375,7 @@ export function PremiumChart({ data, signals = [], trades = [] }) {
           stroke="#ef4444"
           strokeWidth={2}
           dot={false}
-          name="高溢价 (%)"
+          name={highName}
         />
         <Line
           type="monotone"
@@ -349,7 +383,7 @@ export function PremiumChart({ data, signals = [], trades = [] }) {
           stroke="#10b981"
           strokeWidth={2}
           dot={false}
-          name="低溢价 (%)"
+          name={lowName}
         />
         <Line
           type="monotone"

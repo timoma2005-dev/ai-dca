@@ -1326,6 +1326,7 @@ export function BacktestSidePanel({
               onViewChange={setChartView}
               className="w-full"
             >
+              {({ fullscreen }) => (<>
               {chartView === 'equity' && <EquityChart data={rotation.rows || []} />}
               {chartView === 'kline' && (
                 <KlineChart
@@ -1338,8 +1339,10 @@ export function BacktestSidePanel({
                   data={rotation.rows || []}
                   signals={rotation.signals || []}
                   trades={rotation.trades || []}
+                  height={fullscreen ? Math.max(400, (typeof window !== 'undefined' ? window.innerHeight : 800) - 170) : 400}
                 />
               )}
+              </>)}
             </InteractiveChartContainer>
           </div>
         ) : null}
@@ -1900,6 +1903,7 @@ export function BacktestSidePanel({
                     onViewChange={setChartView}
                     className="shadow-sm"
                   >
+                    {({ fullscreen }) => (<>
                     {chartView === 'equity' && <EquityChart data={rotation.rows || []} />}
                     {chartView === 'kline' && (
                       <KlineChart
@@ -1912,8 +1916,10 @@ export function BacktestSidePanel({
                         data={rotation.rows || []}
                         signals={rotation.signals || []}
                         trades={rotation.trades || []}
+                        height={fullscreen ? Math.max(400, (typeof window !== 'undefined' ? window.innerHeight : 800) - 170) : 400}
                       />
                     )}
+                    </>)}
                   </InteractiveChartContainer>
                 )}
 
