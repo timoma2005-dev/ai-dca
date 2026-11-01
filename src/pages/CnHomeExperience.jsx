@@ -100,7 +100,7 @@ function OverviewBar({ data, limits, onOpenDetail, loading, error, onRetry }) {
   }
   return <section className="cn-home-card cn-home-ovbar" data-scroll-card="true" aria-label="全局市场总览">
     <div className="cn-home-ovbar-row">
-      <span className="cn-home-ovbar-cell" title={`场内全池 ${total} 只：${rise} 涨 / ${fall} 跌 / ${flat} 平`}>
+      <span className="cn-home-ovbar-cell" title={`${market.label} · ${timeText(data?.priceAsOf || data?.generatedAt)}｜场内全池 ${total} 只：${rise} 涨 / ${fall} 跌 / ${flat} 平`}>
         <span className="cn-home-ovbar-label">涨跌</span>
         <b className="cn-home-metric-value is-up">{rise}</b><i>/</i><b className="cn-home-metric-value is-down">{fall}</b>{flat ? <><i>/</i><b>{flat}</b></> : null}
         <span className="cn-home-breadth-progress" role="img" aria-label={`上涨 ${upPct.toFixed(1)}%，持平 ${flatPct.toFixed(1)}%，下跌 ${downPct.toFixed(1)}%`}>
@@ -119,7 +119,7 @@ function OverviewBar({ data, limits, onOpenDetail, loading, error, onRetry }) {
     <div className="cn-home-ovbar-row">
       {quota(cny, 'CNY')}
       {quota(usd, 'USD')}
-      <span className="cn-home-ovbar-end cn-home-ovbar-time"><span className={`cn-home-dot is-${market.tone}`} title={market.label} />{timeText(data?.priceAsOf || data?.generatedAt)}</span>
+      <span className="cn-home-ovbar-end" />
     </div>
   </section>;
 }
