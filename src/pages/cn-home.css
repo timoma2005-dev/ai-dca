@@ -426,3 +426,20 @@
 .cn-home-ovbar-retry{display:flex;align-items:center;gap:6px;border:0;background:transparent;color:#c7373c;font-size:12px}.cn-home-ovbar-retry svg{width:14px}
 [data-theme="dark"] .cn-home-ovbar-quota{background:#ffffff10}
 @media(max-width:640px){.cn-home-ovbar{padding:8px 12px;margin-bottom:10px}.cn-home-ovbar-row{gap:6px 10px}.cn-home-ovbar .cn-home-breadth-progress{width:34px}}
+
+/* 2026-11-01 移动端收紧：去掉总览上方空白；高/中/低分区卡不溢出；分组条不显示滚动条 */
+.cn-home-onboarding:empty{display:none}
+.cn-home-chips{scrollbar-width:none}.cn-home-chips::-webkit-scrollbar{display:none}
+@media(max-width:640px){
+  .cn-home{padding-top:0;margin-top:-10px}
+  .cn-home .cn-home-zone-panel{margin:8px 4px 4px;padding:10px}
+  .cn-home .cn-home-zone-cards{gap:6px;margin-bottom:8px}
+  .cn-home .cn-home-zone-card{padding:7px 6px 7px 8px;border-left-width:3px}
+  .cn-home .cn-home-zone-title{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cn-home .cn-home-zone-val{font-size:16px;letter-spacing:-.2px;white-space:nowrap}
+  .cn-home .cn-home-gap-pills{gap:5px;font-size:11px}
+  .cn-home .cn-home-gap-label{width:100%}
+  .cn-home .cn-home-gap-pill{padding:3px 7px;gap:4px;min-height:0}
+  .cn-home .cn-home-strategy{font-size:11px;padding:7px 9px;line-height:1.5}
+  .cn-home .cn-home-zone-note{font-size:10px;padding-top:6px}
+}

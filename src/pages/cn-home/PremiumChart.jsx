@@ -53,7 +53,7 @@ export function ZonePanel({ zones, gaps, mode }) {
       <div className="cn-home-zone-cards">
         {zones.map((zone) => (
           <div key={zone.key} className={`cn-home-zone-card is-${zone.key}`}>
-            <span className="cn-home-zone-title">{zone.label}（{zone.count}只）</span>
+            <span className="cn-home-zone-title">{zone.label} · {zone.count}只</span>
             <span className="cn-home-zone-val">{fmtPct(zone.value)}</span>
           </div>
         ))}
@@ -172,7 +172,7 @@ export function PremiumChart({ series, mode, daily = false }) {
         {mode === 'premium' && model.min < 0 && model.max > 0 ? (
           <g>
             <line x1={PAD_L} y1={yFor(0)} x2={PAD_L + PLOT_W} y2={yFor(0)} className="grid zero" strokeDasharray="3 3" />
-            <text x={PAD_L - 8} y={yFor(0) + 4} textAnchor="end" className="axis">0.00%</text>
+            {[0, 1, 2, 3, 4].every((i) => Math.abs(PAD_T + (i / 4) * PLOT_H - yFor(0)) > 14) ? <text x={PAD_L - 8} y={yFor(0) + 4} textAnchor="end" className="axis">0.00%</text> : null}
           </g>
         ) : null}
         {timeIndices.map((idx) => (

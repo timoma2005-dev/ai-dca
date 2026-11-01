@@ -28,7 +28,10 @@ export function valueOfPoint(point, mode) {
 // Defensive: tooltip time fields vary across server shapes.
 export function pointTime(point) {
   if (!point) return '';
-  return String(point.t ?? point.time ?? point.label ?? point.timestamp ?? '');
+  const raw = String(point.t ?? point.time ?? point.label ?? point.timestamp ?? '');
+  // ISO 时间（2026-10-30T09:30:00+08:00）只显示 HH:MM；日期（日收盘）原样
+  const iso = raw.match(/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/);
+  return iso ? iso[1] : raw;
 }
 
 // Build the render model: normalized rows (hidden lines removed), value range,
