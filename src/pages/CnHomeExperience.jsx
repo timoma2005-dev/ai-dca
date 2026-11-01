@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ChevronRight, Moon, Palette, RefreshCw, Sun } from 'lucide-react';
+import { AlertCircle, ChevronRight, Lock, Moon, Palette, RefreshCw, Sun } from 'lucide-react';
 import './cn-home.css';
 import { CnFundLimitDetail } from './CnFundLimitDetail.jsx';
 import { PremiumChart } from './cn-home/PremiumChart.jsx';
+import { HOME_RANGES, buildDailySeries, rangeLabel } from './cn-home/dailyPremium.mjs';
+import { loadHomePremium } from './cn-home/homePremiumClient.js';
+import { useRbac } from '../app/rbac/useRbac.js';
+import { canViewEtfHistory } from '../app/etfHistoryClient.js';
+import { openAccountAuth, openUpgradeQr } from '../app/accountAuthEvents.js';
 
 const BASE = String(import.meta.env?.VITE_MARKETS_API_BASE || '/api/market-collector').replace(/\/$/, '');
 const ROUTES = {
@@ -216,6 +221,29 @@ export function CnHomeExperience({ topSlot = null, takeover = false } = {}) {
   const [limitCurrency, setLimitCurrency] = useState(readLimitCurrency);
   const [state, setState] = useState(() => Object.fromEntries(['overview','series','limits'].map((key) => [key, { data: readCache(key), loading: true, error: null }])));
   const [mode, setMode] = useState('premium'); const [group, setGroup] = useState('all');
+  // 长周期（3月/半年/1年）：所有人可见按钮，SVIP（api:etf-history）才可切换；其他人点了弹登录/升级。
+  const rbac = useRbac();
+  const canLong = canViewEtfHistory(rbac);
+  const [range, setRange] = useState('today');
+  const [daily, setDaily] = useState({ state: 'idle', data: null });
+  function chooseRange(key) {
+    if (key === 'today') { setRange('today'); return; }
+    if (!canLong) {
+      if (!rbac?.loggedIn) openAccountAuth({ mode: 'login', source: 'home-premium-range', trigger: 'home' });
+      else openUpgradeQr({ source: 'home-premium-range' });
+      return;
+    }
+    setRange(key);
+  }
+  useEffect(() => {
+    if (range === 'today' || !canLong || daily.state === 'ready' || daily.state === 'loading') return undefined;
+    let alive = true;
+    setDaily((d) => ({ ...d, state: 'loading' }));
+    loadHomePremium().then((v) => { if (!alive) return; setDaily({ state: v.state, data: v.data || null }); if (v.state === 'locked' || v.state === 'login') setRange('today'); });
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, canLong]);
+  useEffect(() => { if (!canLong && range !== 'today') setRange('today'); }, [canLong, range]);
   // Phase 1: theme + color mode, scoped to the .cn-home root (D3).
   const [theme, setTheme] = useState(readStoredTheme);
   const [colorMode, setColorMode] = useState(readStoredColorMode);
@@ -236,7 +264,12 @@ export function CnHomeExperience({ topSlot = null, takeover = false } = {}) {
   }, [groups, groupAutoApplied]);
   function toggleTheme() { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); try { localStorage.setItem(THEME_KEY, next); } catch { /* storage may be unavailable */ } }
   function toggleColorMode() { const next = colorMode === 'us' ? 'cn' : 'us'; setColorMode(next); try { localStorage.setItem(COLOR_MODE_KEY, next); } catch { /* storage may be unavailable */ } }
-  const lines = pickSeries(state.series.data, mode, group);
+  const isDaily = range !== 'today';
+  const dailyLines = useMemo(() => (isDaily && daily.data ? buildDailySeries(daily.data, { mode, group, range }) : []), [isDaily, daily.data, mode, group, range]);
+  const lines = isDaily ? dailyLines : pickSeries(state.series.data, mode, group);
+  const seriesMeta = isDaily
+    ? (daily.state === 'loading' ? `${rangeLabel(range)} · 加载中` : daily.state === 'ready' ? `${rangeLabel(range)} · 截至 ${daily.data?.end || '—'}` : `${rangeLabel(range)} · 加载失败`)
+    : `${state.series.data?.windowLabel || '今日 · 5 分钟'} · ${timeText(state.series.data?.generatedAt)}`;
   function openFund(code) { if (!code) return; window.dispatchEvent(new CustomEvent('workspace:navigate', { detail: { tab: 'markets', search: `symbol=${encodeURIComponent(code)}` } })); }
   function openLimitDetail(currency) { const value = String(currency || 'CNY').toUpperCase() === 'USD' ? 'USD' : 'CNY'; const url = new URL(window.location.href); url.searchParams.set('view', 'fund-limits'); url.searchParams.set('currency', value); window.history.pushState({ ...(window.history.state || {}), cnLimitDetail: true }, '', url); setLimitCurrency(value); window.scrollTo({ top: 0, behavior: 'auto' }); }
   function switchLimitCurrency(currency) { const value = currency === 'USD' ? 'USD' : 'CNY'; const url = new URL(window.location.href); url.searchParams.set('view', 'fund-limits'); url.searchParams.set('currency', value); window.history.replaceState({ ...(window.history.state || {}), cnLimitDetail: true }, '', url); setLimitCurrency(value); }
@@ -244,5 +277,5 @@ export function CnHomeExperience({ topSlot = null, takeover = false } = {}) {
   // 新手入门未关闭时，首页只显示任务卡；点叉号（或跳过）后才出现原有首页内容。
   if (takeover && topSlot) return <main className="cn-home cn-home-takeover" data-theme={theme} data-color={colorMode}><div className="mx-auto flex w-full max-w-[880px] flex-col justify-center gap-3 py-2 sm:min-h-[calc(100vh-200px)]">{topSlot}</div></main>;
   if (limitCurrency) return <CnFundLimitDetail data={state.limits.data} currency={limitCurrency} loading={state.limits.loading} error={state.limits.error} onRetry={() => refresh(true)} onBack={closeLimitDetail} onSwitchCurrency={switchLimitCurrency} theme={theme} colorMode={colorMode} />;
-  return <main className="cn-home" data-theme={theme} data-color={colorMode}><div className="cn-home-head"><div><h1>市场首页</h1><p>全球指数基金实时概览</p></div><div className="cn-home-head-actions"><button type="button" onClick={toggleColorMode} title={colorMode === 'cn' ? '切换为 US 绿涨红跌' : '切换为 CN 红涨绿跌'} aria-label="切换涨跌配色"><Palette /><span className="btn-label">{colorMode === 'cn' ? 'CN 红涨绿跌' : 'US 绿涨红跌'}</span></button><button type="button" onClick={toggleTheme} title={theme === 'light' ? '切换深色模式' : '切换浅色模式'} aria-label="切换深浅色主题">{theme === 'light' ? <Moon /> : <Sun />}<span className="btn-label">{theme === 'light' ? '深色' : '浅色'}</span></button><button type="button" className="refresh" onClick={() => refresh(true)} disabled={Object.values(state).some((x) => x.loading)}><RefreshCw />刷新</button></div></div>{topSlot}<Section className="cn-home-overview" title="全局市场总览" loading={state.overview.loading} error={state.overview.error} onRetry={() => refresh(true)}><OverviewCards data={state.overview.data} limits={state.limits.data} onOpenDetail={openLimitDetail} /></Section><Section className="cn-home-market" title="场内走势" loading={state.series.loading} error={state.series.error} onRetry={() => refresh(true)} side={<div className="cn-home-market-toolbar"><span className="cn-home-series-meta">{state.series.data?.windowLabel || '今日 · 5 分钟'} · {timeText(state.series.data?.generatedAt)}</span><div className="cn-home-segment" role="group" aria-label="走势指标"><button type="button" aria-pressed={mode === 'premium'} className={mode === 'premium' ? 'active' : ''} onClick={() => setMode('premium')}>溢价</button><button type="button" aria-pressed={mode === 'price'} className={mode === 'price' ? 'active' : ''} onClick={() => setMode('price')}>价格</button></div></div>}><div className="cn-home-chips">{groups.map((item) => <button type="button" key={item.key} aria-pressed={group === item.key} className={group === item.key ? 'active' : ''} onClick={() => setGroup(item.key)}>{item.label}</button>)}</div><PremiumChart series={lines} mode={mode} /></Section><Section className="cn-home-limits" title="场外额度" loading={state.limits.loading} error={state.limits.error} onRetry={() => refresh(true)} side={<span className="cn-home-limit-asof">更新于 {timeText(state.limits.data?.limitAsOf || state.limits.data?.generatedAt)}</span>}><Limits data={state.limits.data} onFund={openFund} onOpenDetail={openLimitDetail} /></Section></main>;
+  return <main className="cn-home" data-theme={theme} data-color={colorMode}><div className="cn-home-head"><div><h1>市场首页</h1><p>全球指数基金实时概览</p></div><div className="cn-home-head-actions"><button type="button" onClick={toggleColorMode} title={colorMode === 'cn' ? '切换为 US 绿涨红跌' : '切换为 CN 红涨绿跌'} aria-label="切换涨跌配色"><Palette /><span className="btn-label">{colorMode === 'cn' ? 'CN 红涨绿跌' : 'US 绿涨红跌'}</span></button><button type="button" onClick={toggleTheme} title={theme === 'light' ? '切换深色模式' : '切换浅色模式'} aria-label="切换深浅色主题">{theme === 'light' ? <Moon /> : <Sun />}<span className="btn-label">{theme === 'light' ? '深色' : '浅色'}</span></button><button type="button" className="refresh" onClick={() => refresh(true)} disabled={Object.values(state).some((x) => x.loading)}><RefreshCw />刷新</button></div></div>{topSlot}<Section className="cn-home-overview" title="全局市场总览" loading={state.overview.loading} error={state.overview.error} onRetry={() => refresh(true)}><OverviewCards data={state.overview.data} limits={state.limits.data} onOpenDetail={openLimitDetail} /></Section><Section className="cn-home-market" title="场内走势" loading={state.series.loading} error={state.series.error} onRetry={() => refresh(true)} side={<div className="cn-home-market-toolbar"><span className="cn-home-series-meta">{seriesMeta}</span><div className="cn-home-segment cn-home-range" role="group" aria-label="走势区间">{HOME_RANGES.map((r) => { const locked = r.key !== 'today' && !canLong; return <button type="button" key={r.key} aria-pressed={range === r.key} className={`${range === r.key ? 'active' : ''}${locked ? ' is-locked' : ''}`} title={locked ? 'SVIP 专享，点击升级' : `看${r.label}`} onClick={() => chooseRange(r.key)}>{locked ? <Lock aria-hidden="true" /> : null}{r.label}</button>; })}</div><div className="cn-home-segment" role="group" aria-label="走势指标"><button type="button" aria-pressed={mode === 'premium'} className={mode === 'premium' ? 'active' : ''} onClick={() => setMode('premium')}>溢价</button><button type="button" aria-pressed={mode === 'price'} className={mode === 'price' ? 'active' : ''} onClick={() => setMode('price')}>价格</button></div></div>}><div className="cn-home-chips">{groups.map((item) => <button type="button" key={item.key} aria-pressed={group === item.key} className={group === item.key ? 'active' : ''} onClick={() => setGroup(item.key)}>{item.label}</button>)}</div>{isDaily && daily.state === 'loading' && !daily.data ? <div className="cn-home-empty">加载中…</div> : isDaily && daily.state === 'error' && !daily.data ? <button type="button" className="cn-home-retry" onClick={() => { setDaily({ state: 'idle', data: null }); setRange('today'); }}>加载失败，返回今日</button> : <PremiumChart series={lines} mode={mode} daily={isDaily} />}</Section><Section className="cn-home-limits" title="场外额度" loading={state.limits.loading} error={state.limits.error} onRetry={() => refresh(true)} side={<span className="cn-home-limit-asof">更新于 {timeText(state.limits.data?.limitAsOf || state.limits.data?.generatedAt)}</span>}><Limits data={state.limits.data} onFund={openFund} onOpenDetail={openLimitDetail} /></Section></main>;
 }

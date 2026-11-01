@@ -73,7 +73,7 @@ export function ZonePanel({ zones, gaps, mode }) {
   );
 }
 
-export function PremiumChart({ series, mode }) {
+export function PremiumChart({ series, mode, daily = false }) {
   const [cursor, setCursor] = useState(null);
   const [hiddenKeys, setHiddenKeys] = useState([]);
   const ref = useRef(null);
@@ -82,7 +82,7 @@ export function PremiumChart({ series, mode }) {
   const model = useMemo(() => buildChartModel(lines, mode, hiddenKeys), [lines, mode, hiddenKeys]);
 
   const a11ySummary = useMemo(() => summarizeMultiSeries({
-    title: mode === 'premium' ? '场内分时溢价率走势' : '场内分时走势',
+    title: daily ? (mode === 'premium' ? '场内日收盘溢价率走势' : '场内日收盘价走势') : (mode === 'premium' ? '场内分时溢价率走势' : '场内分时走势'),
     lines: model.rows,
     getLabel: (line) => lineLabel(line),
     getPoints: (line) => line.points,
@@ -147,7 +147,7 @@ export function PremiumChart({ series, mode }) {
     setCursor(null);
   }
 
-  if (!model.rows.length) return <div className="cn-home-empty">暂无今日走势</div>;
+  if (!model.rows.length) return <div className="cn-home-empty">{daily ? '暂无历史走势' : '暂无今日走势'}</div>;
 
   const tipRows = cursor != null ? tooltipRows(model.rows, cursor, mode) : [];
   const tipTime = tipRows.map((r) => r.p?.t).find(Boolean) || '';
@@ -205,7 +205,7 @@ export function PremiumChart({ series, mode }) {
             ? { left: `${cursorXPct}%`, transform: 'translateX(calc(-100% - 16px))' }
             : { left: `${cursorXPct}%`, transform: 'translateX(16px)' }}
         >
-          <div className="cn-home-tooltip-head"><span>{tipTime}</span><span>{mode === 'premium' ? '实时溢价率' : '分时价格'}</span></div>
+          <div className="cn-home-tooltip-head"><span>{tipTime}</span><span>{daily ? (mode === 'premium' ? '收盘溢价率' : '收盘价') : (mode === 'premium' ? '实时溢价率' : '分时价格')}</span></div>
           <div className="cn-home-tooltip-list">
             {tipRows.map(({ line, p }) => (
               <div key={line.rowKey} className="cn-home-tooltip-row">

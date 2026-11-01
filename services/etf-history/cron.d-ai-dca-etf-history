@@ -5,3 +5,6 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 45 9 * * 1-5 root cd /root/ai-dca/services/etf-history && flock -n /tmp/etf-history.lock python3 build_history.py >> /var/log/ai-dca-etf-history.log 2>&1
 30 12 * * 1-5 root cd /root/ai-dca/services/etf-history && flock -n /tmp/etf-history.lock python3 build_history.py >> /var/log/ai-dca-etf-history.log 2>&1
 30 22 * * 1-5 root cd /root/ai-dca/services/etf-history && flock -n /tmp/etf-history.lock python3 build_history.py >> /var/log/ai-dca-etf-history.log 2>&1
+# 首页「场内走势」3月/半年/1年 日收盘溢价（23 只，home-premium.json）：12:45 补 QDII 净值，22:45 补收盘
+45 12 * * 1-5 root cd /root/ai-dca/services/etf-history && flock -n /tmp/home-premium.lock python3 build_home_premium.py >> /var/log/ai-dca-home-premium.log 2>&1
+45 22 * * 1-5 root cd /root/ai-dca/services/etf-history && flock -n /tmp/home-premium.lock python3 build_home_premium.py >> /var/log/ai-dca-home-premium.log 2>&1

@@ -25,7 +25,7 @@ test('chart uses the 800x380 viewBox geometry', () => {
 });
 
 test('empty series renders the 暂无今日走势 state', () => {
-  assert.match(chartSource, /if \(!model\.rows\.length\) return <div className="cn-home-empty">暂无今日走势<\/div>/);
+  assert.match(chartSource, /if \(!model\.rows\.length\) return <div className="cn-home-empty">\{daily \? '暂无历史走势' : '暂无今日走势'\}<\/div>/);
 });
 
 test('interactive legend toggles curves via hiddenKeys', () => {
@@ -42,7 +42,7 @@ test('interactive legend toggles curves via hiddenKeys', () => {
 
 test('tooltip has a header with time and metric label plus a ranked list', () => {
   assert.match(chartSource, /className="cn-home-chart-tooltip"/);
-  assert.match(chartSource, /<div className="cn-home-tooltip-head"><span>\{tipTime\}<\/span><span>\{mode === 'premium' \? '实时溢价率' : '分时价格'\}<\/span><\/div>/);
+  assert.match(chartSource, /<div className="cn-home-tooltip-head"><span>\{tipTime\}<\/span><span>\{daily \? \(mode === 'premium' \? '收盘溢价率' : '收盘价'\) : \(mode === 'premium' \? '实时溢价率' : '分时价格'\)\}<\/span><\/div>/);
   assert.match(chartSource, /className="cn-home-tooltip-list"/);
   assert.match(chartSource, /tooltipRows\(model\.rows, cursor, mode\)/);
 });
@@ -79,7 +79,7 @@ test('theme state is scoped to the .cn-home root with cn-home: storage keys (D3)
 });
 
 test('theme and color-mode toggles sit in the head with lucide icons', () => {
-  assert.match(homeSource, /import \{ AlertCircle, ChevronRight, Moon, Palette, RefreshCw, Sun \} from 'lucide-react';/);
+  assert.match(homeSource, /import \{ AlertCircle, ChevronRight, Lock, Moon, Palette, RefreshCw, Sun \} from 'lucide-react';/);
   assert.match(homeSource, /className="cn-home-head-actions"/);
   assert.match(homeSource, /onClick=\{toggleTheme\}/);
   assert.match(homeSource, /onClick=\{toggleColorMode\}/);

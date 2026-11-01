@@ -10,3 +10,9 @@
 - 数据源：腾讯日 K（不复权收盘，东方财富兜底）、东方财富 lsjz 单位净值、上交所 ETF 规模（STAT_DATE）、深交所基金规模 xlsx、
   申购额度先读种子 `/var/lib/ai-dca-etf-history-seed/limits-seed.json`（一次性从 CF KV `etf-pcf:{code}:{yyyymmdd}` 导出），缺的日期走本机 etf-mirror `/etf-pcf-limit`。
 - 溢价率 = 收盘价 / 同日单位净值 − 1（QDII 净值 T+1 公布，当日溢价次日补齐）。
+
+## 首页长周期溢价（home-premium.json）
+
+`build_home_premium.py` 生成 `/var/lib/ai-dca-etf-history/home-premium.json`：首页「场内走势」3月/半年/1年 用的 23 只基金日收盘溢价（与 dates 对齐，缺值 null），约 400 自然日。
+同一 nginx location（`home-premium` 已加入正则）+ `api:etf-history` 鉴权：按钮全员可见，SVIP 才能看，其他人点了弹登录/升级。
+原始收盘/净值缓存在 `home-premium-cache/`，每次重抓最近 12 天；定时见 cron 文件（12:45 / 22:45），日志 `/var/log/ai-dca-home-premium.log`。

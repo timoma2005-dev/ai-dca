@@ -17,14 +17,16 @@ function declaration(selector, property) {
 }
 
 test('series metadata appears once in the header next to the mode controls', () => {
-  assert.match(source, /side=\{<div className="cn-home-market-toolbar"><span className="cn-home-series-meta">[\s\S]*?<\/span><div className="cn-home-segment"/);
+  assert.match(source, /side=\{<div className="cn-home-market-toolbar"><span className="cn-home-series-meta">[\s\S]*?<\/span><div className="cn-home-segment[ "]/);
   assert.equal(source.match(/className="cn-home-series-meta"/g)?.length, 1);
   assert.doesNotMatch(source, /<footer\b|cn-home-foot/);
 });
 
 test('header preserves the server window label and generated timestamp', () => {
-  const metadata = source.match(/className="cn-home-series-meta">([\s\S]*?)<\/span>/)?.[1];
+  let metadata = source.match(/className="cn-home-series-meta">([\s\S]*?)<\/span>/)?.[1];
   assert.ok(metadata);
+  // 今日分时与长周期（3月/半年/1年）共用一个 meta：今日分支仍用服务端窗口标签与生成时间
+  if (metadata.trim() === '{seriesMeta}') metadata = source.match(/const seriesMeta = [\s\S]*?;\n/)?.[0] || '';
   assert.match(metadata, /state\.series\.data\?\.windowLabel/);
   assert.match(metadata, /timeText\(state\.series\.data\?\.generatedAt\)/);
 });

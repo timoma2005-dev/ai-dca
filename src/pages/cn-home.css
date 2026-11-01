@@ -400,3 +400,7 @@
 
 /* 新手入门接管首页：不参与两栏网格，整块居中 */
 .cn-home.cn-home-takeover{display:block;max-width:none}
+
+/* 场内走势区间切换：长周期 SVIP 锁 */
+.cn-home-range button{display:inline-flex;align-items:center;gap:3px}.cn-home-range button svg{width:11px;height:11px}.cn-home-range button.is-locked{color:#a0a8b5}
+@media(max-width:640px){.cn-home-market>.cn-home-title{flex-wrap:wrap;row-gap:8px;padding-top:10px;padding-bottom:10px}.cn-home-market>.cn-home-title>span{white-space:nowrap}.cn-home-market-toolbar{width:100%;justify-content:space-between}.cn-home-market-toolbar>.cn-home-series-meta{width:100%}}
