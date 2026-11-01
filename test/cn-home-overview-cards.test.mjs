@@ -40,7 +40,6 @@ test('median keeps 实时口径 hint when the previous-day median is missing', (
 });
 
 test('quota chips open the full-detail page per currency', () => {
-  assert.match(source, /场外额度/);
   assert.match(source, /quota\(cny, 'CNY'\)/);
   assert.match(source, /quota\(usd, 'USD'\)/);
   assert.match(source, /onClick=\{\(\) => onOpenDetail\?\.\(currency\)\}/);

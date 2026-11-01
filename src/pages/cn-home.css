@@ -443,3 +443,25 @@
   .cn-home .cn-home-strategy{font-size:11px;padding:7px 9px;line-height:1.5}
   .cn-home .cn-home-zone-note{font-size:10px;padding-top:6px}
 }
+
+/* 2026-11-01 总览两行对齐：三列网格（左块/中块/右端），两行同列对齐，标签等宽 */
+.cn-home .cn-home-ovbar{padding:8px 12px;gap:4px}
+.cn-home .cn-home-ovbar-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:center;gap:0 10px;height:28px;overflow:visible}
+.cn-home .cn-home-ovbar-cell{display:flex;align-items:center;gap:4px;min-width:0;height:28px;padding:0;margin:0;border:0;background:transparent;font:inherit;color:inherit;text-align:left;white-space:nowrap;overflow:hidden;min-height:0}
+.cn-home .cn-home-ovbar-cell.is-link{cursor:pointer;border-radius:6px}
+.cn-home .cn-home-ovbar-cell.is-link:hover{background:#f4f6f9}
+.cn-home .cn-home-ovbar-cell>svg{width:12px;height:12px;color:#a0a8b5;flex-shrink:0}
+.cn-home .cn-home-ovbar-cell small{color:#8a93a3;font-size:10px}
+.cn-home .cn-home-ovbar-label{flex:0 0 3.6em;width:3.6em;margin:0;color:#8a93a3;font-size:11px}
+.cn-home .cn-home-ovbar-row b{font-size:14px;line-height:1}
+.cn-home .cn-home-ovbar .cn-home-metric-value{font-size:15px}
+.cn-home .cn-home-ovbar-end{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:4.6em;margin:0}
+.cn-home .cn-home-ovbar-time{color:#a0a8b5;font-size:10px}
+@media(max-width:640px){.cn-home .cn-home-ovbar-row{gap:0 8px}.cn-home .cn-home-ovbar .cn-home-breadth-progress{width:28px}}
+
+.cn-home .cn-home-ovbar-cell,.cn-home button.cn-home-ovbar-cell{min-height:0 !important;height:26px}
+.cn-home .cn-home-ovbar-row{height:26px}
+.cn-home .cn-home-ovbar-row>.cn-home-ovbar-cell:nth-child(1) .cn-home-ovbar-label{flex-basis:3em;width:3em}
+.cn-home .cn-home-ovbar-row>.cn-home-ovbar-cell:nth-child(2) .cn-home-ovbar-label{flex-basis:4.4em;width:4.4em}
+@media(min-width:641px){.cn-home .cn-home-ovbar-row{grid-template-columns:230px 260px 1fr}}
+@media(max-width:640px){.cn-home .cn-home-ovbar-row{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) auto}.cn-home .cn-home-ovbar-cell small,.cn-home .cn-home-ovbar-cell>svg{display:none}.cn-home .cn-home-ovbar-delta{display:none}}

@@ -91,8 +91,8 @@ function OverviewBar({ data, limits, onOpenDetail, loading, error, onRetry }) {
   const market = marketMeta(data);
   const anomaly = (data?.anomalies || [])[0];
   const quota = (row, currency) => (
-    <button type="button" className="cn-home-ovbar-quota" onClick={() => onOpenDetail?.(currency)} aria-label={`${currency === 'USD' ? '美元' : '人民币'}额度详情`} title={row ? `${row.fundCount ?? '—'} 只跟踪 / ${row.limitedCount ?? '—'} 只限额` : '暂无额度数据'}>
-      <b>{compact(row?.amount, currency)}</b>{row ? <small>{row.limitedCount ?? '—'}/{row.fundCount ?? '—'} 限</small> : null}<ChevronRight aria-hidden="true" />
+    <button type="button" className="cn-home-ovbar-cell is-link" onClick={() => onOpenDetail?.(currency)} aria-label={`${currency === 'USD' ? '美元' : '人民币'}额度详情`} title={row ? `${row.fundCount ?? '—'} 只跟踪 / ${row.limitedCount ?? '—'} 只限额` : '暂无额度数据'}>
+      <span className="cn-home-ovbar-label">{currency === 'USD' ? '美元' : '人民币'}</span><b>{compact(row?.amount, currency)}</b>{row ? <small>{row.limitedCount ?? '—'}/{row.fundCount ?? '—'}限</small> : null}<ChevronRight aria-hidden="true" />
     </button>
   );
   if (!data && !limits) {
@@ -100,7 +100,7 @@ function OverviewBar({ data, limits, onOpenDetail, loading, error, onRetry }) {
   }
   return <section className="cn-home-card cn-home-ovbar" data-scroll-card="true" aria-label="全局市场总览">
     <div className="cn-home-ovbar-row">
-      <span className="cn-home-ovbar-item" title={`场内全池 ${total} 只：${rise} 涨 / ${fall} 跌 / ${flat} 平`}>
+      <span className="cn-home-ovbar-cell" title={`场内全池 ${total} 只：${rise} 涨 / ${fall} 跌 / ${flat} 平`}>
         <span className="cn-home-ovbar-label">涨跌</span>
         <b className="cn-home-metric-value is-up">{rise}</b><i>/</i><b className="cn-home-metric-value is-down">{fall}</b>{flat ? <><i>/</i><b>{flat}</b></> : null}
         <span className="cn-home-breadth-progress" role="img" aria-label={`上涨 ${upPct.toFixed(1)}%，持平 ${flatPct.toFixed(1)}%，下跌 ${downPct.toFixed(1)}%`}>
@@ -109,19 +109,17 @@ function OverviewBar({ data, limits, onOpenDetail, loading, error, onRetry }) {
           <span className="cn-home-progress-down" style={{ width: `${downPct.toFixed(1)}%` }} />
         </span>
       </span>
-      <span className="cn-home-ovbar-item" title={`场内溢价中位数，计算公式：(现价 - 估值NAV) / NAV${prevMedian == null ? '，实时口径' : `；昨日 ${pct(prevMedian)}`}`}>
+      <span className="cn-home-ovbar-cell" title={`场内溢价中位数，计算公式：(现价 - 估值NAV) / NAV${prevMedian == null ? '，实时口径' : `；昨日 ${pct(prevMedian)}`}`}>
         <span className="cn-home-ovbar-label">中位溢价</span>
         <b className={`cn-home-metric-value ${number(median) >= 0 ? 'is-up' : 'is-down'}`}>{pct(median)}</b>
         {medianDelta != null ? <small className="cn-home-ovbar-delta">{medianDelta >= 0 ? '↑' : '↓'}{Math.abs(medianDelta).toFixed(2)}</small> : null}
-        {highPremium ? <span className="cn-home-badge is-up">高溢价</span> : null}
       </span>
-      {anomaly ? <AlertCircle className="cn-home-ovbar-warn" aria-label={anomaly?.message || String(anomaly)}><title>{anomaly?.message || String(anomaly)}</title></AlertCircle> : null}
+      <span className="cn-home-ovbar-end">{highPremium ? <span className="cn-home-badge is-up">高溢价</span> : null}{anomaly ? <AlertCircle className="cn-home-ovbar-warn" aria-label={anomaly?.message || String(anomaly)}><title>{anomaly?.message || String(anomaly)}</title></AlertCircle> : null}</span>
     </div>
     <div className="cn-home-ovbar-row">
-      <span className="cn-home-ovbar-label">场外额度</span>
       {quota(cny, 'CNY')}
       {quota(usd, 'USD')}
-      <span className="cn-home-ovbar-time"><span className={`cn-home-dot is-${market.tone}`} title={market.label} />{timeText(data?.priceAsOf || data?.generatedAt)}</span>
+      <span className="cn-home-ovbar-end cn-home-ovbar-time"><span className={`cn-home-dot is-${market.tone}`} title={market.label} />{timeText(data?.priceAsOf || data?.generatedAt)}</span>
     </div>
   </section>;
 }
