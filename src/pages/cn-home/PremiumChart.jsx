@@ -293,6 +293,14 @@ export function PremiumChart({ series, mode, daily = false }) {
     for (const row of model.rows) readValues.set(row.rowKey, row.points[Math.min(readIdx, row.points.length - 1)]);
   }
   const readTime = readIdx != null ? (model.rows.map((r) => r.points[Math.min(readIdx, r.points.length - 1)]?.t).find(Boolean) || '') : '';
+  // 手机读数按当前读数从高到低排（溢价模式）；隐藏的曲线排最后。
+  const orderedLegend = narrow && mode === 'premium'
+    ? [...legendItems].sort((x, y) => {
+      const vx = hiddenKeys.includes(x.key) ? -Infinity : (readValues.get(x.key)?.value ?? -Infinity);
+      const vy = hiddenKeys.includes(y.key) ? -Infinity : (readValues.get(y.key)?.value ?? -Infinity);
+      return vy - vx;
+    })
+    : legendItems;
   const firstT = samplePts[0]?.t || '';
   const lastT = samplePts[samplePts.length - 1]?.t || '';
 
@@ -398,7 +406,7 @@ export function PremiumChart({ series, mode, daily = false }) {
         <>
           {narrow && readTime ? <div className="cn-home-read-head"><span>{readTime}</span><span>{metricLabel}{cursor == null && !view ? ' · 最新' : ''}</span></div> : null}
           <div className={`cn-home-chart-legend${narrow ? ' is-readout' : ''}`} role="group" aria-label="曲线图例，点击切换显示">
-            {legendItems.map((item) => {
+            {orderedLegend.map((item) => {
               const hidden = hiddenKeys.includes(item.key);
               const point = readValues.get(item.key);
               return (

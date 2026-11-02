@@ -37,7 +37,7 @@ test('interactive legend toggles curves via hiddenKeys', () => {
   assert.match(chartSource, /buildChartModel\(lines, mode, hiddenKeys\)/);
   assert.match(chartSource, /\{model\.rows\.map\(\(line\) => \(\s*<path key=\{line\.rowKey\}/);
   // the legend still lists every series so a hidden curve can be re-enabled
-  assert.match(chartSource, /legendItems\.map\(\(item\) =>/);
+  assert.match(chartSource, /(legendItems|orderedLegend)\.map\(\(item\) =>/);
 });
 
 test('tooltip has a header with time and metric label plus a ranked list', () => {
