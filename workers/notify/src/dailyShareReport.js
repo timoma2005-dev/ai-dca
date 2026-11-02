@@ -65,7 +65,7 @@ export function composeDailyReport(kind, rows, date) {
   const pre = kind === 'pre';
   const title = `纳指QDII溢价日报 · ${mmdd(date)} ${pre ? '开盘前' : '收盘'}`;
   const lines = [`【${title}】`];
-  lines.push(`${pre ? '按昨收价' : '按收盘价'}，净值基准 ${navBase ? mmdd(navBase) : '—'}（东财口径）`, '');
+  lines.push(pre ? `按昨收价 / 最新公布净值（${navBase ? mmdd(navBase) : '—'}）` : `按收盘价，净值基准 ${navBase ? mmdd(navBase) : '—'}（东财口径）`, '');
   lines.push(pre
     ? `纳指100 ETF 溢价中位 ${f2(med)}%`
     : `纳指100 ETF 溢价中位 ${f2(med)}%，涨跌中位 ${sp(median(nq.map((r) => r.changePercent)))}`);
@@ -161,23 +161,33 @@ const EM_URL = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo?pageInd
 
 // 溢价统一用东方财富 FundMNFInfo 的 ZJL（与竞价看板同口径：净值未公布的按同类估算到同一基准日），
 // 不再用 fund-metrics（那里 IOPV / 最新净值混用，基准日不一致）。LOF 161130 东财无场内价，用腾讯价 / 最新净值。
-async function fetchRows() {
+// 开盘前（9:30 前）东财 ZJL 为 "--"、NEWPRICE 为 0，必须改用「昨收价 / 最新公布净值」（与竞价看板 9:30 前同口径）。
+async function fetchTencent(codes) {
+  const sym = (c) => `${/^[5]/.test(c) ? 'sh' : 'sz'}${c}`;
+  const out = {};
+  try {
+    const t = await (await fetch(`https://qt.gtimg.cn/q=${codes.map(sym).join(',')}`)).text();
+    t.split(';').forEach((line) => {
+      const f = line.split('~');
+      if (f.length < 5 || !f[2]) return;
+      out[f[2]] = { cur: Number(f[3]) || null, pre: Number(f[4]) || null };
+    });
+  } catch { /* 腾讯不可用时只用东财 */ }
+  return out;
+}
+
+async function fetchRows(kind = 'post') {
   const codes = [...SHARE_NASDAQ, ...SHARE_LOF, ...SHARE_SP500].map(([c]) => c);
   const resp = await fetch(EM_URL + codes.join(','), { headers: { 'user-agent': 'okhttp/3.12.0' } });
   if (!resp.ok) throw new Error(`eastmoney HTTP ${resp.status}`);
   const data = await resp.json();
   const raw = {};
   (Array.isArray(data?.Datas) ? data.Datas : []).forEach((it) => { raw[String(it.FCODE)] = it; });
-  let lofPx = null;
-  try {
-    const t = await (await fetch('https://qt.gtimg.cn/q=sz161130')).text();
-    const f = t.split('~');
-    lofPx = { cur: Number(f[3]) || null, pre: Number(f[4]) || null };
-  } catch { lofPx = null; }
-  return buildShareRowsFromEastmoney(raw, { lofPx, navBaseDate: String(data?.Expansion?.FSRQ || '') });
+  const qq = await fetchTencent(codes);
+  return buildShareRowsFromEastmoney(raw, { qq, lofPx: qq['161130'] || null, preOpen: kind === 'pre', navBaseDate: String(data?.Expansion?.FSRQ || '') });
 }
 
-export function buildShareRowsFromEastmoney(raw = {}, { lofPx = null, navBaseDate = '' } = {}) {
+export function buildShareRowsFromEastmoney(raw = {}, { lofPx = null, qq = {}, preOpen = false, navBaseDate = '' } = {}) {
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
   const pick = (list, group) => list.map(([code, short]) => {
     const it = raw[code] || {};
@@ -186,10 +196,21 @@ export function buildShareRowsFromEastmoney(raw = {}, { lofPx = null, navBaseDat
     let changePercent = num(it.CHANGERATIO);
     let premiumPct = zjl == null ? null : -zjl;
     const nav = num(it.NAV);
-    if (group === 'lof' && lofPx?.cur && nav) {
+    const q = qq?.[code] || (group === 'lof' ? lofPx : null);
+    if (preOpen && q?.pre && nav) {
+      // 开盘前：昨收 / 最新公布净值（交易所停牌判断同口径）
+      price = q.pre;
+      changePercent = null;
+      premiumPct = (q.pre / nav - 1) * 100;
+    } else if (group === 'lof' && lofPx?.cur && nav) {
       price = lofPx.cur;
       changePercent = lofPx.pre ? (lofPx.cur / lofPx.pre - 1) * 100 : null;
       premiumPct = (lofPx.cur / nav - 1) * 100;
+    } else if (premiumPct == null && q?.cur && nav) {
+      // 东财暂缺 ZJL 时兜底：现价 / 最新公布净值
+      price = q.cur;
+      changePercent = q.pre ? (q.cur / q.pre - 1) * 100 : null;
+      premiumPct = (q.cur / nav - 1) * 100;
     }
     const navDate = String(it.PDATE || '').slice(0, 10);
     return {
@@ -216,7 +237,7 @@ export async function runShareReport(env, kind, scheduledMs, { runClientDetectio
     }
     report = composeWeeklyReport(days, date);
   } else {
-    const rows = await fetchRows();
+    const rows = await fetchRows(kind);
     report = { ...composeDailyReport(kind, rows, date), rows };
     await env.NOTIFY_STATE.put(`${KV_DAY_PREFIX}${date}:${kind}`, JSON.stringify(report), { expirationTtl: DAY_TTL });
   }
