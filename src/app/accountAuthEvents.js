@@ -12,7 +12,7 @@ function normalizeMode(mode = '') {
   return mode === 'login' ? 'login' : 'register';
 }
 
-export function openAccountAuth({ mode = 'register', source = '', trigger = '' } = {}) {
+export function openAccountAuth({ mode = 'register', source = '', trigger = '', notice = '' } = {}) {
   if (typeof window === 'undefined') return;
   // 付费功能演示期间不弹注册 / 登录（演示条上的「注册」按钮除外）。
   if (window.__AI_DCA_FEATURE_DEMO__ && source !== 'feature-demo') return;
@@ -20,6 +20,8 @@ export function openAccountAuth({ mode = 'register', source = '', trigger = '' }
     mode: normalizeMode(mode),
     source: String(source || '').slice(0, 80),
     trigger: String(trigger || '').slice(0, 120),
+    // 可选：登录框顶部的说明（如「SVIP 专享，登录后还需开通」）。
+    notice: String(notice || '').slice(0, 200),
     createdAt: Date.now()
   };
   try {
@@ -42,7 +44,8 @@ export function consumeAccountAuthIntent({ maxAgeMs = 30_000 } = {}) {
     return {
       mode: normalizeMode(parsed?.mode),
       source: String(parsed?.source || ''),
-      trigger: String(parsed?.trigger || '')
+      trigger: String(parsed?.trigger || ''),
+      notice: String(parsed?.notice || '')
     };
   } catch {
     return null;

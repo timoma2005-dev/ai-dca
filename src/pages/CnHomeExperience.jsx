@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ChevronRight, Lock, Moon, Palette, RefreshCw, Sun } from 'lucide-react';
 import './cn-home.css';
 import { CnFundLimitDetail } from './CnFundLimitDetail.jsx';
@@ -192,10 +192,21 @@ export function CnHomeExperience({ topSlot = null, takeover = false } = {}) {
   const canLong = canViewEtfHistory(rbac);
   const [range, setRange] = useState('today');
   const [daily, setDaily] = useState({ state: 'idle', data: null });
+  // 未登录点了长周期：登录后若是 SVIP 直接切过去，否则接着弹开通二维码。
+  const pendingRange = useRef('');
+  useEffect(() => {
+    const want = pendingRange.current;
+    if (!want || !rbac?.loggedIn) return;
+    if (!rbac?.permVersion && !rbac?.isAdmin && !canLong) return; // 等服务端权限回来
+    pendingRange.current = '';
+    if (canLong) setRange(want);
+    else openUpgradeQr({ source: 'home-premium-range' });
+  }, [rbac, canLong]);
   function chooseRange(key) {
     if (key === 'today') { setRange('today'); return; }
     if (!canLong) {
-      if (!rbac?.loggedIn) openAccountAuth({ mode: 'login', source: 'home-premium-range', trigger: 'home' });
+      pendingRange.current = key;
+      if (!rbac?.loggedIn) openAccountAuth({ mode: 'login', source: 'home-premium-range', trigger: 'home', notice: '3月 / 半年 / 1年 溢价走势是 SVIP 专享：登录后还需开通 SVIP 才能查看，已是 SVIP 登录即可。' });
       else openUpgradeQr({ source: 'home-premium-range' });
       return;
     }

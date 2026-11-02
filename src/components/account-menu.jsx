@@ -82,8 +82,10 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
     }
   }, [isControlled]);
   const [authMode, setAuthMode] = useState(initialAuthIntent ? (initialAuthIntent.mode === 'login' ? 'login' : 'register') : 'login');
+  const [authNotice, setAuthNotice] = useState(() => initialAuthIntent?.notice || '');
   const dropdownRef = useRef(null);
   const loggedIn = Boolean(session?.accessToken);
+  useEffect(() => { if (!effectiveOpen) setAuthNotice(''); }, [effectiveOpen]);
 
   useEffect(() => {
     function refreshSession(event) {
@@ -102,7 +104,9 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
 
   useEffect(() => {
     function handleOpenAuth(event) {
+      setAuthNotice(String(event?.detail?.notice || ''));
       if (isControlled) {
+        if (event?.detail?.mode) setAuthMode(event.detail.mode === 'login' ? 'login' : 'register');
         // 受控模式：已登录且菜单已打开时，再点一次头像即关闭（父组件的 setOpen(true) 先执行）。
         if (openRef.current && loadCloudSession()?.accessToken && !event?.detail?.mode) {
           window.setTimeout(() => onCloseRef.current?.(), 0);
@@ -335,6 +339,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
                       )}
                     >注册</button>
                   </div>
+                  {authNotice ? <div role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-medium leading-5 text-amber-900">{authNotice}</div> : null}
                   <div className="space-y-1.5 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2.5 text-[11px] leading-5 text-indigo-900">
                     <p><span className="font-semibold">用户名 / 登录密码</span>用于账号保护及多设备云端自动同步。</p>
                   </div>
