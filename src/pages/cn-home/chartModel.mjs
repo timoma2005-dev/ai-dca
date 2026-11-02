@@ -125,3 +125,48 @@ export function tooltipRows(rows, cursor, mode) {
     .map((line) => ({ line, p: line.points[Math.min(cursor ?? 0, line.points.length - 1)] }))
     .sort((a, b) => (mode === 'premium' ? (b.p?.value ?? -Infinity) - (a.p?.value ?? -Infinity) : 0));
 }
+
+// 缩放：取 [start, end] 索引窗口（含两端），纵轴按窗口内数据重算；分区/利差沿用全量（最新）口径。
+export function sliceChartModel(model, start, end) {
+  if (start == null || end == null || !model?.length) return model;
+  const s = Math.max(0, Math.min(start, model.length - 1));
+  const e = Math.max(s, Math.min(end, model.length - 1));
+  if (s === 0 && e === model.length - 1) return model;
+  const rows = model.rows
+    .map((row) => ({ ...row, points: row.points.slice(s, e + 1) }))
+    .filter((row) => row.points.length);
+  const values = rows.flatMap((x) => x.points.map((p) => p.value));
+  if (!values.length) return model;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const pad = Math.max((max - min) * 0.12, 0.1);
+  return { ...model, rows, min: min - pad, max: max + pad, length: e - s + 1, offset: s };
+}
+
+// 缩放窗口计算：factor<1 放大，>1 缩小；anchor 为锚点在窗口内的相对位置 0~1（锚点处的数据保持不动）。
+export function zoomWindow(total, view, factor, anchor = 0.5, minSize = 8) {
+  if (!total) return null;
+  const s0 = view ? view[0] : 0;
+  const e0 = view ? view[1] : total - 1;
+  const w0 = e0 - s0 + 1;
+  const floor = Math.min(minSize, total);
+  const w = Math.max(floor, Math.min(total, Math.round(w0 * factor)));
+  if (w >= total) return null;
+  const a = Math.max(0, Math.min(1, anchor));
+  const center = s0 + a * (w0 - 1);
+  let s = Math.round(center - a * (w - 1));
+  s = Math.max(0, Math.min(total - w, s));
+  return [s, s + w - 1];
+}
+
+export function panWindow(total, view, delta) {
+  if (!view || !total) return view;
+  const w = view[1] - view[0] + 1;
+  const s = Math.max(0, Math.min(total - w, Math.round(view[0] + delta)));
+  return [s, s + w - 1];
+}
+
+// 图例/读数用的短名：去 ETF，纳斯达克100/纳指100 → 纳指。
+export function shortLineLabel(label) {
+  return String(label || '').replace(/纳斯达克100|纳斯达克|纳指100/g, '纳指').replace(/ETF/g, '').trim();
+}

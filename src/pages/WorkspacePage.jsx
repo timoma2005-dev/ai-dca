@@ -886,7 +886,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           {tabHistory.length > 0 ? (
             <button
               type="button"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-lg shadow-slate-900/10 backdrop-blur active:bg-slate-100"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-700 shadow-md shadow-slate-900/10 backdrop-blur active:bg-slate-100 sm:h-11 sm:w-11 sm:bg-white/95 sm:shadow-lg"
               aria-label="返回上一页"
               title="返回上一页"
               onClick={handleWorkspaceBack}
@@ -897,7 +897,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           {showScrollTop ? (
             <button
               type="button"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-lg shadow-slate-900/10 backdrop-blur active:bg-slate-100"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-700 shadow-md shadow-slate-900/10 backdrop-blur active:bg-slate-100 sm:h-11 sm:w-11 sm:bg-white/95 sm:shadow-lg"
               aria-label="回到顶部"
               title="回到顶部"
               onClick={handleScrollTop}

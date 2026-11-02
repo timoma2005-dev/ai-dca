@@ -465,3 +465,23 @@
 .cn-home .cn-home-ovbar-row>.cn-home-ovbar-cell:nth-child(2) .cn-home-ovbar-label{flex-basis:4.4em;width:4.4em}
 @media(min-width:641px){.cn-home .cn-home-ovbar-row{grid-template-columns:230px 260px 1fr}}
 @media(max-width:640px){.cn-home .cn-home-ovbar-row{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) auto}.cn-home .cn-home-ovbar-cell small,.cn-home .cn-home-ovbar-cell>svg{display:none}.cn-home .cn-home-ovbar-delta{display:none}}
+
+/* 缩放：工具条 + 底部平移滑块；手机端图例兼读数（不再浮层遮挡） */
+.cn-home-premium-chart{touch-action:pan-y}
+.cn-home-zoom-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 4px;min-height:26px}
+.cn-home-zoom-range{color:var(--text-faint);font-size:10px;font-family:var(--font-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cn-home-zoom-btns{display:flex;gap:4px;flex-shrink:0}
+.cn-home .cn-home-zoom-btns button{min-width:30px;min-height:0;height:28px;padding:0 8px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-card-subtle);color:var(--text-main);font-size:14px;line-height:1;cursor:pointer}
+.cn-home-zoom-btns button.is-reset{font-size:11px}
+.cn-home-zoom-btns button:disabled{opacity:.35;cursor:default}
+.cn-home-zoom-track{position:relative;height:14px;margin:2px 0 0;border-radius:7px;background:var(--bg-card-subtle);touch-action:none}
+.cn-home-zoom-thumb{position:absolute;top:2px;bottom:2px;min-width:18px;border-radius:5px;background:#1468f355;border:1px solid #1468f3;cursor:grab;touch-action:none}
+.cn-home-read-head{display:flex;justify-content:space-between;gap:8px;margin-top:10px;padding:8px 2px 0;border-top:1px solid var(--border-subtle);color:var(--text-muted);font-size:11px;font-weight:600}
+.cn-home-legend-val{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--text-main);font-weight:700}
+.cn-home-legend-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+@media(max-width:640px){
+  .cn-home-premium-wrap{padding:0 8px 4px}
+  .cn-home-premium-chart{height:260px}
+  .cn-home-chart-legend.is-readout{display:grid;grid-template-columns:1fr 1fr;gap:4px 6px;margin-top:6px;padding-top:4px;border-top:0;max-height:none;overflow:visible}
+  .cn-home-chart-legend.is-readout .cn-home-legend-chip{width:100%;min-width:0;padding:4px 6px;font-size:11px}
+}
