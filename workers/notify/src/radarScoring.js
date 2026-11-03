@@ -248,7 +248,7 @@ export function scoreRadar({ etfs = {}, featureHistory = [], limitHistory = {}, 
     let sellTag = '';
     if (quota.state === 'relax' && quota.strong) {
       sell = Math.max(sell, 90);
-      sellTag = '果断卖出';
+      sellTag = '额度大幅放开';
     }
     let buy = W.peer * (1 - relPeer) + W.own * (1 - ownPct) + W.quota * (1 - qs) + W.liquidity * liq;
     let buyBlocked = '';
@@ -295,7 +295,7 @@ export function scoreRadar({ etfs = {}, featureHistory = [], limitHistory = {}, 
       const blocked = Boolean(B.buyBlocked);
       const score = blocked ? 0 : 0.45 * spreadScore + 0.30 * S.sellScore + 0.25 * B.buyScore;
       const reasons = [];
-      if (S.sellTag) reasons.push(`${S.name} ${S.quota.label}，溢价大概率回落`);
+      if (S.sellTag) reasons.push(`${S.name} ${S.quota.label}`);
       else if (S.quota.state === 'relaxing') reasons.push(`${S.name} 额度放开中`);
       if (B.quota.state === 'tight') reasons.push(`${B.name} 额度刚收紧，溢价易升`);
       if (S.premiumPercentile60 != null && S.premiumPercentile60 >= 80) reasons.push(`${S.name} 溢价处于自身高位`);

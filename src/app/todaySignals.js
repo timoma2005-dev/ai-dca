@@ -68,7 +68,7 @@ export function summarizeSwitchSignals(snapshot) {
         fromName: otc.benchName || '',
         to,
         toName: otc.lowestName || '',
-        description: `${otc.level || '场外信号'}：卖 ${otc.benchCode || '持仓'}，观察场外 QDII 申购机会`,
+        description: `${otc.benchCode || '持仓'} 溢价达到你设置的场外价差阈值`,
       });
     }
   });

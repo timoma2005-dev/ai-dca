@@ -19,7 +19,7 @@ export const TAB_SEARCH_META = {
   fundSwitch: { desc: '切换链路与执行', keywords: 'fundswitch switch qiehuan' },
   notify: { desc: '推送配置与状态', keywords: 'notify push tongzhi' },
   adminAuction: { desc: '纳指期指与 ETF 竞价行情', keywords: 'adminauction auction jingjia' },
-  adminRadar: { desc: '套利雷达与溢价监控', keywords: 'radar leida' },
+  adminRadar: { desc: '溢价雷达与溢价监控', keywords: 'radar leida' },
   adminRbac: { desc: '用户角色、菜单权限与审计日志', keywords: 'rbac quanxian role' },
 };
 

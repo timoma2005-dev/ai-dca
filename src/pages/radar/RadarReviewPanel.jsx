@@ -119,7 +119,7 @@ function RoundCard({ round, expanded, onToggle }) {
               买入 {round.buy.code} @ {round.buy.price.toFixed(3)} → {round.open ? '最新收盘' : '切出价'} {round.bEnd?.toFixed(3)}
             </p>
             <p>
-              当时换基分 <b className="tabular-nums">{round.signalScore ?? '—'}</b> · 信号兑现率 <b className="tabular-nums">{round.realization != null ? `${Math.round(round.realization * 100)}%` : '—'}</b>
+              当时评分 <b className="tabular-nums">{round.signalScore ?? '—'}</b> · 信号兑现率 <b className="tabular-nums">{round.realization != null ? `${Math.round(round.realization * 100)}%` : '—'}</b>
             </p>
             {round.events.length ? (
               <p className="text-amber-700">
@@ -168,7 +168,7 @@ export function RadarReviewPanel({ data }) {
     <div data-testid="radar-review" className="min-w-0 space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-slate-900">实盘切换复盘</h3>
+          <h3 className="text-sm font-bold text-slate-900">交易复盘</h3>
           <span className="text-[11px] text-slate-400">{syncing ? '同步流水中…' : `收盘口径 · 截至 ${data?.series?.dates?.at(-1) || data?.date || '—'}`}</span>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -198,12 +198,12 @@ export function RadarReviewPanel({ data }) {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-slate-900">换基分 vs 实际胜率</h3>
+          <h3 className="text-sm font-bold text-slate-900">评分 vs 实际结果</h3>
           <span className="text-[11px] text-slate-400">攒够 20 次后用于校准评分权重</span>
         </div>
         <table className="w-full text-left text-xs">
           <thead>
-            <tr className="text-[11px] text-slate-400"><th className="py-1.5 font-medium">当时换基分</th><th className="py-1.5 font-medium">次数</th><th className="py-1.5 font-medium">胜率</th><th className="py-1.5 font-medium">平均相对收益</th></tr>
+            <tr className="text-[11px] text-slate-400"><th className="py-1.5 font-medium">当时评分</th><th className="py-1.5 font-medium">次数</th><th className="py-1.5 font-medium">胜率</th><th className="py-1.5 font-medium">平均相对收益</th></tr>
           </thead>
           <tbody>
             {summary.buckets.map((b) => (

@@ -60,7 +60,7 @@ export function SwitchDemoTeaserCard({ onUpgrade }) {
         <Sparkles className="h-4 w-4" aria-hidden="true" />
         用今天的真实溢价试一组
       </div>
-      <p className="mt-1 text-xs leading-5 text-slate-500">选你手里的（卖出）和想换的（买入），看今天换一次能多换回多少。演示每天可查 3 组。</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">任选两只，看今天的溢价差。演示每天可查 3 组。</p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
         <select aria-label="卖出" className={select} value={sell} onChange={(e) => setSell(e.target.value)}>
           {options.map((o) => <option key={o.code} value={o.code}>卖 {o.code} {o.name}</option>)}
@@ -80,7 +80,7 @@ export function SwitchDemoTeaserCard({ onUpgrade }) {
             {result.date} 收盘口径，价差 <b className={result.spread > 0 ? 'text-rose-600' : 'text-slate-800'}>{result.spread.toFixed(2)}%</b>
             {result.triggered ? '，已达到换基阈值' : `，未达到 ${result.threshold}% 阈值`}。
           </div>
-          {result.spread > 0 ? <div>10 万元本金换一次约多换回 <b className="text-rose-600">{formatYuan(result.per100k)}</b> 的溢价差。</div> : null}
+          {result.spread > 0 ? <div>按溢价差折算，每 10 万元约 <b className="text-rose-600">{formatYuan(result.per100k)}</b>。</div> : null}
           {result.backtest ? (
             <div className="mt-1">
               回测 {result.backtest.from} 至 {result.backtest.to}（{result.backtest.days} 个交易日）：按 {result.threshold}% 阈值来回切换 {result.backtest.switches} 次，

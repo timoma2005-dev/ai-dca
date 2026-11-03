@@ -34,11 +34,7 @@ export function resolveVixSignal(value) {
       levelLabel: '极端恐慌',
       tone: 'red',
       headline: `VIX ≥ ${VIX_THRESHOLDS.heavyBuy}：极端恐慌区`,
-      actions: [
-        '重仓买入宽基（QQQ/VOO/SPY）',
-        '个股制订定投，跳过低位档',
-        '保留 10% 现金应对进一步下跳'
-      ]
+      actions: ['VIX 区间仅反映市场波动水平，不构成投资建议']
     };
   }
   if (v >= VIX_THRESHOLDS.buyAll) {
@@ -47,11 +43,7 @@ export function resolveVixSignal(value) {
       levelLabel: '高恐慌',
       tone: 'orange',
       headline: `VIX ≥ ${VIX_THRESHOLDS.buyAll}：高恐慌区`,
-      actions: [
-        '加仓宽基 + 个股全开',
-        '定投频率可从双周 → 周度',
-        '检查单只仓位是否接近 50% 上限'
-      ]
+      actions: ['VIX 区间仅反映市场波动水平，不构成投资建议']
     };
   }
   if (v >= VIX_THRESHOLDS.buyIndex) {
@@ -60,10 +52,7 @@ export function resolveVixSignal(value) {
       levelLabel: '中高恐慌',
       tone: 'amber',
       headline: `VIX ≥ ${VIX_THRESHOLDS.buyIndex}：中高恐慌区`,
-      actions: [
-        '加仓宽基为主，个股按阶梯下跳执行',
-        '保留现金处理 PR 1 中的减仓计划开始反向入场'
-      ]
+      actions: ['VIX 区间仅反映市场波动水平，不构成投资建议']
     };
   }
   if (v >= VIX_THRESHOLDS.watch) {
@@ -72,10 +61,7 @@ export function resolveVixSignal(value) {
       levelLabel: '警戒',
       tone: 'yellow',
       headline: `VIX ≥ ${VIX_THRESHOLDS.watch}：警戒区`,
-      actions: [
-        '保持常规定投，个股按计划执行',
-        '准备备用资金，等 VIX 跳到 30 以上交主动仁'
-      ]
+      actions: ['VIX 区间仅反映市场波动水平，不构成投资建议']
     };
   }
   return {
@@ -83,10 +69,7 @@ export function resolveVixSignal(value) {
     levelLabel: '平静',
     tone: 'emerald',
     headline: `VIX < ${VIX_THRESHOLDS.watch}：市场平静`,
-    actions: [
-      '常规定投，不追高',
-      '对已获利 ≥ 15% 的个股可检查 PR 1 卖出计划是否触发'
-    ]
+    actions: ['VIX 区间仅反映市场波动水平，不构成投资建议']
   };
 }
 
@@ -95,11 +78,11 @@ export function resolveVixSignal(value) {
  */
 export function listVixLevels() {
   return [
-    { level: 'calm', label: '平静', range: `< ${VIX_THRESHOLDS.watch}`, tone: 'emerald', summary: '常规定投，不追高' },
-    { level: 'watch', label: '警戒', range: `${VIX_THRESHOLDS.watch} – ${VIX_THRESHOLDS.buyIndex - 0.01}`, tone: 'yellow', summary: '保持计划 + 准备备用' },
-    { level: 'buyIndex', label: '中高恐慌', range: `${VIX_THRESHOLDS.buyIndex} – ${VIX_THRESHOLDS.buyAll - 0.01}`, tone: 'amber', summary: '加仓宽基、个股分梯入场' },
-    { level: 'buyAll', label: '高恐慌', range: `${VIX_THRESHOLDS.buyAll} – ${VIX_THRESHOLDS.heavyBuy - 0.01}`, tone: 'orange', summary: '宽基 + 个股全开' },
-    { level: 'heavyBuy', label: '极端恐慌', range: `≥ ${VIX_THRESHOLDS.heavyBuy}`, tone: 'red', summary: '重仓宽基 + 保留应急现金' }
+    { level: 'calm', label: '平静', range: `< ${VIX_THRESHOLDS.watch}`, tone: 'emerald', summary: '波动低' },
+    { level: 'watch', label: '警戒', range: `${VIX_THRESHOLDS.watch} – ${VIX_THRESHOLDS.buyIndex - 0.01}`, tone: 'yellow', summary: '波动上升' },
+    { level: 'buyIndex', label: '中高恐慌', range: `${VIX_THRESHOLDS.buyIndex} – ${VIX_THRESHOLDS.buyAll - 0.01}`, tone: 'amber', summary: '波动较高' },
+    { level: 'buyAll', label: '高恐慌', range: `${VIX_THRESHOLDS.buyAll} – ${VIX_THRESHOLDS.heavyBuy - 0.01}`, tone: 'orange', summary: '波动高' },
+    { level: 'heavyBuy', label: '极端恐慌', range: `≥ ${VIX_THRESHOLDS.heavyBuy}`, tone: 'red', summary: '波动极高' }
   ];
 }
 

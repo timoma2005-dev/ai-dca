@@ -184,7 +184,7 @@ export function RadarSidebar({
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-slate-900">近期套利机会</h3>
+          <h3 className="text-sm font-bold text-slate-900">近期价差记录</h3>
           <span className="text-[11px] text-slate-400">近 5 个记录</span>
         </div>
         {recent.length ? (
@@ -207,7 +207,7 @@ export function RadarSidebar({
             ))}
           </ul>
         ) : (
-          <p className="text-xs leading-5 text-slate-400">暂无近期机会记录。</p>
+          <p className="text-xs leading-5 text-slate-400">暂无近期记录。</p>
         )}
       </section>
     </div>

@@ -160,7 +160,7 @@ export function BacktestExperience({ embedded = false } = {}) {
               />
               {/* 快捷热门对子点选 */}
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-slate-400 font-medium">热门推荐:</span>
+                <span className="text-slate-400 font-medium">常用:</span>
                 {POPULAR_HOT_PAIRS.map((item) => (
                   <button
                     key={item.code}

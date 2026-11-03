@@ -108,5 +108,5 @@ test('radarScoreModel: 排序、份额徽标、份额动态、提示条', () => 
   assert.equal(events[0].state, 'relax');
   assert.equal(steadyCount, 1);
   const notes = heroNotes(data);
-  assert.deepEqual(notes.map((n) => n.tag), ['果断卖出', '买入加分', '已跳过']);
+  assert.deepEqual(notes.map((n) => n.tag), ['果断卖出', '额度收紧', '已跳过']);
 });

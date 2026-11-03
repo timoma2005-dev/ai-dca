@@ -389,7 +389,7 @@ export function rotationAdvice(data, selectedCode) {
       selected,
       lowest,
       spreadPoints: 0,
-      note: `已是当前有效标的中最低溢价（${selected.premium.toFixed(2)}%），无需切换`
+      note: `已是当前有效标的中最低溢价（${selected.premium.toFixed(2)}%）`
     };
   }
   return {

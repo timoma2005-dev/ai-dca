@@ -372,7 +372,7 @@
       <div class="top-in">
         <div class="logo"><i></i>纳指轮动</div>
         <nav class="modes" id="vtabs" aria-label="策略（只切换上方主卡）">
-          <button type="button" class="on" data-v="dev">盘中轮动<small>按 NQ 偏离 · T+0 随时切</small></button>
+          <button type="button" class="on" data-v="dev">盘中偏离<small>按 NQ 偏离 · 实时</small></button>
           <button type="button" data-v="cyc">隔夜轮动<span class="lock">超管</span><small>尾盘低溢价过夜 · 10:30 复牌换仓</small></button>
           <button type="button" data-v="hlt">停牌轮动<span class="lock">超管</span><small>按次日开盘数定隔夜仓 · 不主动追偏离</small></button>
         </nav>
@@ -408,8 +408,8 @@
           <div class="flow" id="act-flow"></div>
           <div class="spref" id="act-sp"></div>
           <div class="chips">
-            <button class="chip" type="button" data-ov="set" data-tab="a">切换线 <b id="c-thr">+0.1</b></button>
-            <button class="chip" type="button" data-ov="set" data-tab="a">买入区 <b id="c-zone">−0.50 ~ −0.15</b></button>
+            <button class="chip" type="button" data-ov="set" data-tab="a">高偏离线 <b id="c-thr">+0.1</b></button>
+            <button class="chip" type="button" data-ov="set" data-tab="a">低偏离区 <b id="c-zone">−0.50 ~ −0.15</b></button>
             <button class="chip" type="button" data-ov="set" data-tab="c">停牌溢价 <b id="c-halt">10%</b></button>
           </div>
           <div class="acts">
@@ -433,7 +433,7 @@
             </div>
             <div class="cyc-s" id="cyc-s2">
               <div class="hd"><b>② 复牌换仓</b><span class="stt" id="cyc-s2-st">—</span></div>
-              <small>10:30 · 买入区内回归概率最高的 ETF（没有则偏离最负），持有到尾盘</small>
+              <small>10:30 · 低偏离区内回归概率最高的 ETF（没有则偏离最负），持有到尾盘</small>
               <div class="pick" id="cyc-s2-h">—</div>
               <p id="cyc-s2-p"></p>
               <div class="rec"><label>成交价 <input class="px" id="cyc-s2-px" type="number" step="0.001" min="0"/></label><button class="btn sm" type="button" id="cyc-s2-rec">记买入</button></div>
@@ -503,7 +503,7 @@
         <div class="mh">
           <h3>行情</h3>
           <div class="seg" id="mview"><button type="button" class="on" data-mv="tbl">列表</button><button type="button" data-mv="dist">偏离分布</button></div>
-          <div class="fil" id="mseg"><button type="button" class="on" data-f="all">全部</button><button type="button" data-f="zone">买入区</button><button type="button" data-f="halt">停牌</button></div>
+          <div class="fil" id="mseg"><button type="button" class="on" data-f="all">全部</button><button type="button" data-f="zone">低偏离区</button><button type="button" data-f="halt">停牌</button></div>
           <div class="sp"></div>
           <span class="cap"><span id="etf-cap">行情时间 —</span><span class="tag stale hide" id="etf-stale">数据过期</span></span>
           <button class="btn sm" type="button" id="cols-btn" aria-pressed="false">更多列</button>
@@ -527,7 +527,7 @@
           <div class="items" id="m-items"></div>
         </div>
         <div class="dist">
-          <div class="legend"><span><i style="background:var(--zone)"></i>买入区</span><span><i style="background:var(--zoneS)"></i>切换线以上</span><span>纳指 100 · 偏离按 NQ00Y</span></div>
+          <div class="legend"><span><i style="background:var(--zone)"></i>低偏离区</span><span><i style="background:var(--zoneS)"></i>高偏离线以上</span><span>纳指 100 · 偏离按 NQ00Y</span></div>
           <div class="bars" id="bars"></div>
           <div class="axis"><div></div><div id="axis"></div><div></div></div>
         </div>
@@ -591,8 +591,8 @@
       <div class="tabs" data-for="set"><button type="button" class="on" data-t="a">盘中轮动</button><button type="button" data-t="b" id="set-tab-b">隔夜轮动</button><button type="button" data-t="c">通用</button></div>
       <div class="sb">
         <div class="pane on" data-p="a">
-          <label class="srow"><span>切换线<small>持有偏离 ≥ 此值且有候选才切换（百分点）</small></span><input id="trig" type="number" step="0.05" min="0" value="0.1"/></label>
-          <label class="srow"><span>买入上限<small>偏离 ≤ −此值才算候选（百分点）</small></span><input id="thr" type="number" step="0.05" min="0" value="0.15"/></label>
+          <label class="srow"><span>高偏离线<small>持有偏离 ≥ 此值时标记（百分点）</small></span><input id="trig" type="number" step="0.05" min="0" value="0.1"/></label>
+          <label class="srow"><span>低偏离阈值<small>偏离 ≤ −此值时标记（百分点）</small></span><input id="thr" type="number" step="0.05" min="0" value="0.15"/></label>
           <label class="srow"><span>买入下限<small>偏离低于 −此值不买（百分点）</small></span><input id="lo" type="number" step="0.05" min="0" value="0.5"/></label>
           <label class="srow"><span>标普参照容差<small>标普 ETF 相对 ES00Y 偏离为正且与纳指 ETF 偏离相差在此值内 → 09:30–10:30 隔夜轮动①暂不卖出，10:30 后盘中轮动暂不切换（百分点）</small></span><input id="sp-tol" type="number" step="0.05" min="0" value="0.1"/></label>
         </div>
@@ -603,12 +603,12 @@
         </div>
         <div class="pane" data-p="c">
           <label class="srow"><span>停牌溢价<small>集合竞价时超过即推算停牌至 10:30（%）</small></span><input id="halt-thr" type="number" step="0.5" min="0" value="10"/></label>
-          <label class="srow"><span>持仓金额<small>建议限价、五档深度、模拟切换、做T 金额都用它（元）</small></span><input class="amt" id="act-amt" type="number" min="0" step="1000" inputmode="numeric"/></label>
+          <label class="srow"><span>持仓金额<small>限价参考、五档深度、模拟切换、做T 金额都用它（元）</small></span><input class="amt" id="act-amt" type="number" min="0" step="1000" inputmode="numeric"/></label>
           <div class="grp-h" id="ntf-sec">通知 · 备用提醒，页面开着时有效</div>
           <div class="ntf-hero" id="ntf-hero" data-s="no"><i id="ntf-ico"></i><div><b id="ntf-state"></b><small id="ntf-env"></small></div></div>
           <div class="grp-h">环境检测</div>
           <ul class="ntf-chk" id="ntf-chk"></ul>
-          <div class="grp-h">建议</div>
+          <div class="grp-h">参数</div>
           <div class="ntf-tip" id="ntf-tip"></div>
           <div class="ntf-act"><button class="ntf-pri" type="button" id="ntf-toggle">开启通知</button><button class="ntf-sec2" type="button" id="ntf-test">测试</button></div>
           <p class="ntf-msg" id="ntf-msg"></p>
@@ -623,10 +623,10 @@
       <div class="tabs" data-for="info"><button type="button" class="on" data-t="sig">今日信号</button><button type="button" data-t="rule">规则</button><button type="button" data-t="halt">停牌与口径</button><button type="button" data-t="bt">回测</button></div>
       <div class="sb">
         <div class="pane on" data-p="sig"><ul class="log" id="log"><li><span></span>暂无</li></ul></div>
-        <div class="pane" data-p="rule"><p class="note" id="rule-txt"></p><p class="note" id="rule-cyc"><b>隔夜轮动</b>：① 09:30–10:30 择机卖掉隔夜仓（标普 ETF 相对 ES00Y 偏离为正且与纳指组中位差在容差内 → 暂不卖出）；② 10:30 复牌后买入区内回归概率最高的 ETF（没有则偏离最负），持有到尾盘；③ 14:50 起 ETF 实时溢价全部高于 LOF 线才隔夜拿 LOF 161130，否则拿溢价最低的 ETF。</p></div>
+        <div class="pane" data-p="rule"><p class="note" id="rule-txt"></p><p class="note" id="rule-cyc"><b>隔夜轮动</b>：① 09:30–10:30 择机卖掉隔夜仓（标普 ETF 相对 ES00Y 偏离为正且与纳指组中位差在容差内 → 暂不卖出）；② 10:30 复牌后低偏离区内回归概率最高的 ETF（没有则偏离最负），持有到尾盘；③ 14:50 起 ETF 实时溢价全部高于 LOF 线才隔夜拿 LOF 161130，否则拿溢价最低的 ETF。</p></div>
         <div class="pane" data-p="halt"><p class="note">集合竞价/竞价结束时溢价 &gt; <span id="rule-halt">10</span>% → 预计停牌至10:30；连续竞价只认行情真实停牌（停牌标志或无买卖盘）。停牌不参与比较。溢价=现价对东财最新净值（东财参考净值优先，LOF 按最新公布净值约 T−2）；偏离未计汇率与跟踪误差，期指为东财NQ00Y连续合约，换月注意基差。标普 500 ETF 偏离按 ES00Y，只作参照，不参与轮动。</p></div>
         <div class="pane" data-p="bt">
-          <p class="note"><b>盘中轮动（纯轮动）</b>：2026-08-25～10-28 的 5 分钟回测（13 只各自作起始持仓，滑点 0.5 tick、佣金万 0.5/边）：买入区 −0.50～−0.15、持有偏离 ≥ +0.10 才切，相对一直持有起始基金均值 +2.68%，13 只全正，约 24 次切换。去掉「卖出等回 0」空仓腿：空仓多在 NQ 亚盘下跌时，跨夜反而错过反弹。</p>
+          <p class="note"><b>盘中轮动（纯轮动）</b>：2026-08-25～10-28 的 5 分钟回测（13 只各自作起始持仓，滑点 0.5 tick、佣金万 0.5/边）：低偏离区 −0.50～−0.15、持有偏离 ≥ +0.10 才切，相对一直持有起始基金均值 +2.68%，13 只全正，约 24 次切换。去掉「卖出等回 0」空仓腿：空仓多在 NQ 亚盘下跌时，跨夜反而错过反弹。</p>
           <p class="note"><b>回归概率</b>：偏离首次 ≤ −0.15 后到当日收盘跑赢 12 只中位的比例（腾讯 5 分钟线，最近 5 个月，每月 1 日滚动重算），候选按它优先排序。标签分三档：强 ≥70%（橙）、中 50–69%、弱 &lt;50%（灰色删除线），具体百分比见悬停提示。样本外检验显示它只能作排序参考，绝对数值会随大盘漂移，不要当胜率。回测区间 <span id="rev-asof">—</span>。</p>
           <p class="note"><b>模拟切换预估</b>：同时段历史切换的中位数与四分位区间（2026-08-25～10-28，5 分钟回测）− 佣金。单次切换当天几乎不回归，收益靠反复轮动累积。</p>
           <p class="note" id="bt-cyc"><b>隔夜轮动</b>：回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</p>
@@ -889,8 +889,8 @@
         function depthHtml(r, kind) {
           var d = depthFill(r.q, kind, SIM.amt), nm = kind === "s" ? "买" : "卖";
           if (!d) return "";
-          if (d.short) return '<span class="dp warn">' + d.lots + " 手，五档" + nm + "盘只有 " + d.got + " 手，建议分批；先挂 " + d.px.toFixed(3) + "</span>";
-          return '<span class="dp">建议' + (kind === "s" ? "卖" : "买") + "价 " + d.px.toFixed(3) + " · " + d.lots + " 手" + (d.lvl <= 1 ? "，" + nm + "一够成交" : "，吃到" + nm + "盘第 " + d.lvl + " 档，均价 " + d.avg.toFixed(4) + "（冲击 " + d.bp.toFixed(1) + "bp）") + "</span>";
+          if (d.short) return '<span class="dp warn">' + d.lots + " 手，五档" + nm + "盘只有 " + d.got + " 手，五档参考价 " + d.px.toFixed(3) + "</span>";
+          return '<span class="dp">' + (kind === "s" ? "买盘" : "卖盘") + "成交价 " + d.px.toFixed(3) + " · " + d.lots + " 手" + (d.lvl <= 1 ? "，" + nm + "一够成交" : "，吃到" + nm + "盘第 " + d.lvl + " 档，均价 " + d.avg.toFixed(4) + "（冲击 " + d.bp.toFixed(1) + "bp）") + "</span>";
         }
         function depthPx(r, kind) { var d = r && depthFill(r.q, kind, SIM.amt); return d && !d.short ? d.px : 0; }
         function nqPct() {
@@ -1110,18 +1110,18 @@
           var T = S.trig, act = { h: "", p: "", flow: "" };
           var cands = list.filter(function (r) { return !r.held && inZone(r) && !qBlocks(r); }).sort(byRev);
           var qSkip = list.filter(function (r) { return !r.held && inZone(r) && qBlocks(r); });
-          var qNote = qSkip.map(function (r) { return '<span class="qn">' + esc(r.name) + " 偏离 " + f2(r.dev) + " 在买入区，但今日" + esc((S.quota[r.code] || {}).txt || "份额放开") + "，溢价可能继续下行，已跳过。</span>"; }).join("");
-          list.forEach(function (r) { var q = S.quota[r.code]; if (r.held && q && q.k === "relax") qNote = '<span class="qn">雷达：' + esc(r.name) + " 今日份额放开（" + esc(q.txt || "") + "），套利盘会压低溢价，优先考虑切出。</span>" + qNote; });
+          var qNote = qSkip.map(function (r) { return '<span class="qn">' + esc(r.name) + " 偏离 " + f2(r.dev) + " 在低偏离区，但今日" + esc((S.quota[r.code] || {}).txt || "份额放开") + "。</span>"; }).join("");
+          list.forEach(function (r) { var q = S.quota[r.code]; if (r.held && q && q.k === "relax") qNote = '<span class="qn">雷达：' + esc(r.name) + " 今日份额放开（" + esc(q.txt || "") + "）。</span>" + qNote; });
           cands.forEach(function (r, i) { r.cand = i + 1; });
           var dip = cands[0], hl = list.filter(function (r) { return r.held; });
           if (!inWin(b)) {
             act.h = "非交易时段";
-            act.p = "偏离只在交易日 09:15–15:00 计算。规则（纯轮动）：持有偏离 ≥ +" + T + " 且有买入区候选 → 切换；无候选继续持有，不空仓。";
+            act.p = "偏离只在交易日 09:15–15:00 计算。高偏离线 +" + T + "，低偏离区 " + zoneTxt() + "（均为你的设置）。";
             return act;
           }
           if (!hl.length) {
-            if (dip) { act.h = '空仓：买入 <span class="hl">' + esc(dip.name) + "</span>"; act.p = esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在买入区，买入后持有，偏离 ≥ +" + T + " 且有候选时切换。" + qNote; act.flow = legHtml("b", dip, "买入 · 候选①"); }
-            else { act.h = "空仓：等待"; act.p = "暂无偏离在 " + zoneTxt() + " 的标的。" + qNote; }
+            if (dip) { act.h = '低偏离最低：<span class="hl">' + esc(dip.name) + "</span>"; act.p = esc(dip.name) + " 偏离 " + f2(dip.dev) + "，在低偏离区 " + zoneTxt() + "。" + qNote; act.flow = legHtml("b", dip, "低偏离①"); }
+            else { act.h = "未设置持仓"; act.p = "暂无偏离在 " + zoneTxt() + " 的标的。" + qNote; }
             return act;
           }
           var hh = [], pp = [], ff = [], R = S.spR || {};
@@ -1129,17 +1129,17 @@
             if (h.halt) { hh.push(esc(h.name) + " 停牌中"); pp.push(esc(h.name) + " 停牌，复牌后按当时 NQ 和价格重算。"); return; }
             if (h.dev == null) { hh.push(esc(h.name) + " 暂无偏离"); pp.push("等待行情。"); return; }
             if (h.dev >= T && dip && R.devBlock) {
-              hh.push("暂不切换：继续持有 " + esc(h.name));
-              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " 已达切换线，但标普 ETF 相对 ES00Y 偏离 " + f2(R.sp) + " 也为正、与纳指 ETF 偏离 " + f2(R.nq) + " 接近，是整体性偏离（10:30 后标普参照过滤）。");
-              ff.push('<div class="leg"><small>持有中 · 标普参照过滤</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + '</span><span class="lp">候选 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" + depthHtml(h, "s") + "</em></div>");
+              hh.push(esc(h.name) + " 达高偏离线（整体性偏离）");
+              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " 已达高偏离线，标普 ETF 相对 ES00Y 偏离 " + f2(R.sp) + " 也为正、与纳指 ETF 偏离 " + f2(R.nq) + " 接近，是整体性偏离（10:30 后标普参照过滤）。");
+              ff.push('<div class="leg"><small>持有中 · 整体性偏离</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + '</span><span class="lp">候选 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" + depthHtml(h, "s") + "</em></div>");
             } else if (h.dev >= T && dip) {
-              hh.push('切换：卖出 <span class="hs">' + esc(h.name) + '</span> → 买入 <span class="hl">' + esc(dip.name) + "</span>");
-              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " ≥ +" + T + "，" + esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在买入区，差 " + (h.dev - dip.dev).toFixed(2) + " 个百分点。");
-              ff.push(legHtml("s", h, "卖出 · 持有中") + '<div class="arrow">→</div>' + legHtml("b", dip, "买入 · 候选①"));
+              hh.push('条件满足：<span class="hs">' + esc(h.name) + '</span> 高偏离 / <span class="hl">' + esc(dip.name) + "</span> 低偏离");
+              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " ≥ +" + T + "，" + esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在低偏离区，差 " + (h.dev - dip.dev).toFixed(2) + " 个百分点。");
+              ff.push(legHtml("s", h, "持有中 · 高偏离") + '<div class="arrow">↔</div>' + legHtml("b", dip, "低偏离①"));
             } else {
-              hh.push("继续持有 " + esc(h.name));
-              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + (h.dev < T ? "，未到切换线 +" + T + "。" : "，已达切换线，暂无买入区候选，继续持有不空仓。"));
-              ff.push('<div class="leg"><small>持有中</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + "</span>" + (dip ? '<span class="lp">最近候选 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" : "") + depthHtml(h, "s") + "</em></div>");
+              hh.push(esc(h.name) + " 未满足条件");
+              pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + (h.dev < T ? "，未到高偏离线 +" + T + "。" : "，已达高偏离线，暂无低偏离区标的。"));
+              ff.push('<div class="leg"><small>持有中</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + "</span>" + (dip ? '<span class="lp">最低偏离 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" : "") + depthHtml(h, "s") + "</em></div>");
             }
           });
           act.h = hh.join("；"); act.p = pp.join(" ") + qNote; act.flow = ff.join("");
@@ -1198,9 +1198,9 @@
           if (z.code === "161130" || a.code === "161130") out.warn.push("LOF 盘口较薄，且溢价按 T-2 公布净值计算");
           var trig = a.dev != null && a.dev >= S.trig && inZone(z) && !qBlocks(z);
           out.trig = trig;
-          out.trigTxt = !inWin(b) ? "非交易时段：偏离只在交易日 09:15–15:00 计算，以下按最近价格演算，明早集合竞价重算" : trig ? "符合策略：" + a.name + " 偏离 " + f2(a.dev) + " ≥ +" + S.trig + "，" + z.name + " 偏离 " + f2(z.dev) + " 在买入区" :
-            "未触发策略：" + (a.dev == null ? a.name + " 暂无偏离" : a.dev < S.trig ? a.name + " 偏离 " + f2(a.dev) + "，未到切换线 +" + S.trig :
-              z.dev == null ? z.name + " 暂无偏离" : !inZone(z) ? z.name + " 偏离 " + f2(z.dev) + " 不在买入区 " + zoneTxt() : z.name + " 今日份额放开，策略会跳过");
+          out.trigTxt = !inWin(b) ? "非交易时段：偏离只在交易日 09:15–15:00 计算，以下按最近价格演算，明早集合竞价重算" : trig ? "条件满足：" + a.name + " 偏离 " + f2(a.dev) + " ≥ +" + S.trig + "，" + z.name + " 偏离 " + f2(z.dev) + " 在低偏离区" :
+            "条件未满足：" + (a.dev == null ? a.name + " 暂无偏离" : a.dev < S.trig ? a.name + " 偏离 " + f2(a.dev) + "，未到高偏离线 +" + S.trig :
+              z.dev == null ? z.name + " 暂无偏离" : !inZone(z) ? z.name + " 偏离 " + f2(z.dev) + " 不在低偏离区 " + zoneTxt() : z.name + " 今日份额放开");
           var bk = SIM_HIST[inWin(b) ? simBucket(b) : "d"];
           function est(h) { return { lo: h[0] - cost, mid: h[1] - cost, hi: h[2] - cost, n: h[3] }; }
           out.ok = true;
@@ -1248,7 +1248,7 @@
               "</div>" +
               (o.warn.length ? '<div class="sim-warn">' + o.warn.map(esc).join("<br/>") + "</div>" : "") +
               '<div class="sim-note">预估 = 同时段历史切换的中位数（括号为四分位区间）− 佣金。来源：2026-08-25～10-28 的 5 分钟回测，' +
-              "同时段样本 " + o.d0.n + " 次。单次切换当天几乎不回归，收益主要靠反复轮动累积，别把单笔预估当承诺。</div>";
+              "同时段样本 " + o.d0.n + " 次。单次切换当天几乎不回归，收益主要靠反复轮动累积，历史统计不代表未来，不构成投资建议。</div>";
           }
           $("sim-out").innerHTML = h;
           $("sim-rec").disabled = !o.ok;
@@ -1272,14 +1272,14 @@
             t2 < 34200 ? "09:25–09:30：竞价结束，等待连续交易" :
             t2 < 41400 ? "上午连续：按真实买一/卖一挂限价，卖出和买入数量对等" :
             t2 < 46800 ? "午休：13:00 后按当时 NQ 和价格重算" :
-            t2 < 53820 ? "下午连续：按真实买一/卖一挂限价；无候选继续持有，可持有过夜" :
+            t2 < 53820 ? "下午连续竞价" :
             t2 < 54000 ? "收盘集合竞价：谨慎下单" : "已收盘：明天集合竞价起重新计算偏离";
         }
 
         function sigOf(r) {
           if (r.halt) return { t: "停牌", c: "pX", o: 5 };
-          if (r.held) return r.dev == null ? { t: "持有", c: "pH", o: 0 } : r.dev >= S.trig ? { t: "持有·达切换线", c: "pS", o: 0 } : { t: "持有", c: "pH", o: 0 };
-          if (r.cand) return { t: "候选" + "①②③④⑤⑥⑦⑧⑨⑩⑪⑫".charAt(r.cand - 1), c: "pB", o: r.cand };
+          if (r.held) return r.dev == null ? { t: "持有", c: "pH", o: 0 } : r.dev >= S.trig ? { t: "持有·达高偏离线", c: "pS", o: 0 } : { t: "持有", c: "pH", o: 0 };
+          if (r.cand) return { t: "低偏离" + "①②③④⑤⑥⑦⑧⑨⑩⑪⑫".charAt(r.cand - 1), c: "pB", o: r.cand };
           if (r.dev != null && r.dev < -S.lo) return { t: "低于下限", c: "pX", o: 3 };
           return null;
         }
@@ -1392,9 +1392,9 @@
             var d = r.dev == null ? "" : "（" + f2(r.dev) + "）";
             if (c === "halt") pushLog(b, r.name + " 停牌");
             else if (a === "halt") pushLog(b, r.name + " 复牌" + d);
-            else if (c === "zone") pushLog(b, r.name + " 进入买入区" + d);
-            else if (c === "rich") pushLog(b, r.name + " 偏离 ≥ +" + S.trig + " → 达切换线" + d);
-            else if (a === "zone") pushLog(b, r.name + " 离开买入区" + d);
+            else if (c === "zone") pushLog(b, r.name + " 进入低偏离区" + d);
+            else if (c === "rich") pushLog(b, r.name + " 偏离 ≥ +" + S.trig + " → 达高偏离线" + d);
+            else if (a === "zone") pushLog(b, r.name + " 离开低偏离区" + d);
           });
           S.prevSig = cur;
         }
@@ -1416,8 +1416,8 @@
           $("etf-cap").textContent = capT;
           $("c-thr").textContent = "+" + S.trig; $("c-zone").textContent = zoneTxt(); $("c-halt").textContent = S.haltThr + "%"; $("c-sp").textContent = S.spTol;
           $("hold-amt").textContent = "¥ " + Math.round(SIM.amt).toLocaleString("zh-CN");
-          $("m-zone").textContent = "买入区 " + zoneTxt(); $("rule-halt").textContent = S.haltThr;
-          $("rule-txt").textContent = "偏离 = ETF相对昨收涨跌 − NQ自前一交易日15:00涨跌。只买 " + zoneTxt() + "；持有偏离 ≥ +" + S.trig + " 且有候选 → 切到回归概率最高的候选（同概率取偏离更低）；无候选继续持有，不空仓；可持有过夜。每次切换都有佣金、价差和滑点。";
+          $("m-zone").textContent = "低偏离区 " + zoneTxt(); $("rule-halt").textContent = S.haltThr;
+          $("rule-txt").textContent = "偏离 = ETF相对昨收涨跌 − NQ自前一交易日15:00涨跌。低偏离区 " + zoneTxt() + "，高偏离线 +" + S.trig + "（均可在设置里改）。页面只展示偏离数据和你设定条件是否满足，不构成投资建议。";
 
           var list = rows();
           S.spR = spRef(list, b);
@@ -1430,16 +1430,16 @@
           }
           var act = decide(list, b);
           trackSignals(list, b);
-          // 盘中轮动：操作建议出现切换/买入时通知；同一建议 5 分钟内不重复
-          if (/切换：|空仓：买入/.test(act.h)) {
+          // 盘中偏离：条件满足时通知；同一条 5 分钟内不重复
+          if (/条件满足：|低偏离最低：/.test(act.h)) {
             var ak = plain(act.h);
-            if (ak !== S.ntfAct || Date.now() - (S.ntfActAt || 0) > 3e5) { S.ntfAct = ak; S.ntfActAt = Date.now(); notify("盘中轮动 · " + ak, plain(act.p), "dev-act"); }
+            if (ak !== S.ntfAct || Date.now() - (S.ntfActAt || 0) > 3e5) { S.ntfAct = ak; S.ntfActAt = Date.now(); notify("偏离提醒 · " + ak, plain(act.p), "dev-act"); }
           } else S.ntfAct = "";
           list.forEach(function (r) { r.sigObj = sigOf(r); r.sig = r.sigObj ? r.sigObj.o : 9; });
 
           $("act-h").innerHTML = act.h; $("act-p").innerHTML = act.p; $("act-flow").innerHTML = act.flow; $("act-sp").innerHTML = S.spR && S.spR.devWin ? spHtml(S.spR, "dev") : ""; if (document.activeElement !== $("act-amt")) $("act-amt").value = SIM.amt;
           $("act-step").textContent = stepTxt(b);
-          $("act-rule").innerHTML = "<span>切换线 +" + S.trig + "</span><span>买入区 " + zoneTxt() + "</span><span>纯轮动不空仓</span><span>停牌不参与比较</span>";
+          $("act-rule").innerHTML = "<span>高偏离线 +" + S.trig + "</span><span>低偏离区 " + zoneTxt() + "</span><span>停牌不参与比较</span>";
 
           // 持仓卡
           var hl = (cycV ? all0 : list).filter(function (r) { return r.held; }); // 隔夜视图行情表过滤了停牌的，持仓卡仍按全部
@@ -1530,7 +1530,7 @@
           // 手机卡片
           var nz = list.filter(inZone).length, nh = list.filter(function (r) { return r.halt; }).length;
           var segB = document.querySelectorAll("#mseg button");
-          segB[0].textContent = "全部 " + list.length; segB[1].textContent = "买入区 " + nz; segB[2].textContent = "停牌 " + nh;
+          segB[0].textContent = "全部 " + list.length; segB[1].textContent = "低偏离区 " + nz; segB[2].textContent = "停牌 " + nh;
           [].forEach.call(segB, function (x) { x.classList.toggle("on", x.getAttribute("data-f") === S.filter); });
           $("m-cap").textContent = inWin(b) ? "持仓置顶 · 按偏离排序 ↑" : capT;
           var ml = bySort.slice().sort(function (a, c) { return c.held - a.held; }).filter(function (r) {
@@ -1556,7 +1556,7 @@
           }).join("") : '<div class="item"><div class="it-m">没有符合的标的</div></div>');
 
           $("foot-sig").textContent = String(S.log.length);
-          $("log").innerHTML = S.log.length ? S.log.map(function (x) { return "<li><span>" + x.t + "</span><span>" + esc(x.text) + "</span></li>"; }).join("") : "<li>暂无（交易时段内记录买入区、切换线、停牌/复牌变化）</li>";
+          $("log").innerHTML = S.log.length ? S.log.map(function (x) { return "<li><span>" + x.t + "</span><span>" + esc(x.text) + "</span></li>"; }).join("") : "<li>暂无（交易时段内记录低偏离区、高偏离线、停牌/复牌变化）</li>";
         }
 
         function tick() {
@@ -1749,7 +1749,7 @@
         }
         function cycAm(list) {
           var c = list.filter(function (r) { return isEtf(r) && !r.halt && r.dev != null; }).sort(function (x, y) { return x.dev - y.dev; });
-          // 买入区（偏离 ≤ −买入线）内按回归概率优先，其余仍按偏离从低到高
+          // 低偏离区（偏离 ≤ −买入线）内按回归概率优先，其余仍按偏离从低到高
           var z = c.filter(function (r) { return r.dev <= -S.thr; }).sort(byRev);
           c = z.concat(c.filter(function (r) { return r.dev > -S.thr; }));
           return { pick: c[0] || null, cands: c };
@@ -1871,7 +1871,7 @@
           pxSync(3, pm.pick ? pm.pick.code : "", pm.pick ? askOf(pm.pick) : 0);
           // 现在要做
           var nl = "现在", nh = "—", np = "";
-          if (!wk || t < 33300 || t >= 54000) { nl = "非交易时段"; nh = hr ? "隔夜持有 " + esc(hr.name) : "空仓"; np = "下个交易日 09:30–10:30 先卖出隔夜仓，10:30 复牌后换到买入区内回归概率最高的 ETF。"; }
+          if (!wk || t < 33300 || t >= 54000) { nl = "非交易时段"; nh = hr ? "隔夜持有 " + esc(hr.name) : "空仓"; np = "下个交易日 09:30–10:30 先卖出隔夜仓，10:30 复牌后换到低偏离区内回归概率最高的 ETF。"; }
           else if (t < 34200) { nl = "集合竞价"; nh = hr ? "准备卖出 " + esc(hr.name) : "空仓等待"; np = "09:30 开盘后择机卖出；停牌的 ETF 要等 10:30 复牌。"; }
           else if (on1) { nl = "① 开盘卖出 · 进行中"; nh = hr && !stepDone(1) ? (S.spR && S.spR.block ? "暂不卖出 " + esc(hr.name) + "（标普同向偏离）" : '卖出 <span class="hs">' + esc(hr.name) + "</span>") : "已空仓，等 10:30"; np = hr && !stepDone(1) ? "买一 " + fmt3(bidOf(hr)) + "，10:30 前择机卖出。" + (op ? "" : "（纸面还没记隔夜仓，今天 ③ 记录后开始跟踪）") : "10:30 复牌后按②买入。"; }
           else if (on2 || (t < 52800 && !stepDone(2) && !(op && op.stage === 2))) { nl = on2 ? "② 复牌换仓 · 进行中" : "② 复牌换仓 · 已过 10:30 未记录"; nh = $("cyc-s2-h").innerHTML; np = am.pick ? esc(am.pick.name) + " 偏离 " + minus(f2(am.pick.dev)) + "，卖一 " + fmt3(askOf(am.pick)) + "。" : ""; }
@@ -2171,7 +2171,7 @@
             NTF.on = p === "granted"; try { localStorage.setItem(KP + "nqNtf", NTF.on ? "1" : "0"); } catch (e) {}
             ntfBtn(); ntfCheck();
             if (!NTF.on) { $("ntf-msg").textContent = "权限没有给到，可在浏览器的网站设置里重新允许通知。"; return; }
-            return showN("纳指轮动", "通知已开启：盘中轮动切换建议与隔夜轮动各步到点会提醒。", "ntf-test").then(function (ok) { $("ntf-msg").textContent = ok ? "已开启，并发了一条测试通知，没看到就是被系统拦了。" : "已开启，但这个浏览器发不出通知。"; });
+            return showN("纳指轮动", "通知已开启：偏离条件满足与各步到点会提醒。", "ntf-test").then(function (ok) { $("ntf-msg").textContent = ok ? "已开启，并发了一条测试通知，没看到就是被系统拦了。" : "已开启，但这个浏览器发不出通知。"; });
           }).catch(function () { $("ntf-msg").textContent = "这个浏览器拒绝了通知请求。"; });
         });
         $("ntf-test").addEventListener("click", function () {

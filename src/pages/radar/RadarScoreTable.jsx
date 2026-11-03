@@ -46,10 +46,10 @@ function QuotaBadge({ badge }) {
 }
 
 function Tag({ row }) {
-  if (row.sellTag) return <span className="rounded bg-rose-100 px-1.5 py-px text-[10px] font-bold text-rose-700">{row.sellTag}</span>;
+  if (row.sellTag) return <span className="rounded bg-rose-100 px-1.5 py-px text-[10px] font-bold text-rose-700">额度大幅放开</span>;
   if (row.buyBlocked) return <span className="rounded bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800">{row.buyBlocked}</span>;
-  if (row.isRecommendedSell) return <span className="rounded bg-rose-50 px-1.5 py-px text-[10px] font-bold text-rose-600">首选卖出</span>;
-  if (row.isRecommendedBuy) return <span className="rounded bg-emerald-100 px-1.5 py-px text-[10px] font-bold text-emerald-700">首选买入</span>;
+  if (row.isRecommendedSell) return null;
+  if (row.isRecommendedBuy) return null;
   return null;
 }
 
@@ -79,7 +79,7 @@ function LimitStepChart({ steps }) {
 }
 
 function Breakdown({ data, row }) {
-  const sides = [['sell', '卖出紧迫度', row.sellScore], ['buy', '买入吸引力', row.buyScore]];
+  const sides = [['sell', '高位分', row.sellScore], ['buy', '低位分', row.buyScore]];
   return (
     <div className="grid gap-4 rounded-xl bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_minmax(0,1.1fr)]">
       {sides.map(([side, title, total]) => (
@@ -186,8 +186,8 @@ export function RadarScoreTable({ data }) {
               <th className="w-[13%] py-2.5 font-medium">溢价 <span className="text-slate-300">/ vs 同类</span></th>
               <th className="w-[23%] py-2.5 font-medium">份额状态</th>
               <th className="w-[10%] whitespace-nowrap py-2.5 font-medium">额度/成交</th>
-              <th className="w-[15%] py-2.5 font-medium">卖出紧迫度</th>
-              <th className="w-[15%] py-2.5 font-medium">买入吸引力</th>
+              <th className="w-[15%] py-2.5 font-medium">高位分</th>
+              <th className="w-[15%] py-2.5 font-medium">低位分</th>
             </tr>
           </thead>
           <tbody>

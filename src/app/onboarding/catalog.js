@@ -144,22 +144,14 @@ export const ONBOARDING_FLOWS = {
         id: 'switch.create',
         target: 'switch-create',
         title: '点「新建方案」',
-        body: '方案就是一组跟踪同一指数的基金。溢价差够大时会提醒你从贵的换到便宜的。',
+        body: '方案就是一组跟踪同一指数的基金。溢价差达到你设定的阈值时会推送提醒。',
         advanceOnClick: true
-      },
-      {
-        id: 'switch.autofill',
-        target: 'switch-autofill',
-        title: '用「自动填充」省掉手填',
-        body: '填你现在持有的场内基金代码和佣金（万分之几），会自动匹配候选基金并算出切换阈值。',
-        advanceOnClick: true,
-        waitMs: 20000
       },
       {
         id: 'switch.save',
         target: 'switch-save',
         title: '核对后再保存',
-        body: '看一下 H/L 两组基金和阈值是否合理，确认无误再点「保存方案」。自动生成的结果不会自动保存。',
+        body: '看一下 H/L 两组基金和阈值是否合理，确认无误再点「保存方案」。',
         waitMs: 30000
       }
     ]

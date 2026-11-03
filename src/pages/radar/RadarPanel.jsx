@@ -10,10 +10,8 @@ import RadarOpportunityCards from './RadarOpportunityCards.jsx';
 import RadarRanking from './RadarRanking.jsx';
 import RadarSidebar from './RadarSidebar.jsx';
 import RadarComputeDialog from './RadarComputeDialog.jsx';
-import RadarScoreHero from './RadarScoreHero.jsx';
 import RadarScoreTable from './RadarScoreTable.jsx';
 import RadarReviewPanel from './RadarReviewPanel.jsx';
-import RadarPaperPanel from './RadarPaperPanel.jsx';
 import { hasScoring } from '../../app/radarScoreModel.js';
 
 /**
@@ -114,7 +112,7 @@ export default function RadarPanel({ session }) {
       </span>
       <h3 className="text-base font-bold text-slate-800">今日雷达数据尚未计算</h3>
       <p className="mx-auto mt-2 max-w-xl text-[13px] leading-6 text-slate-500">
-        套利雷达基于每日收盘价与各基金公司披露的单位净值计算。为避免盘中伪溢价误导决策，
+        溢价雷达基于每日收盘价与各基金公司披露的单位净值计算。为避免盘中伪溢价误导决策，
         系统每日仅在净值披露完备后的计划窗口自动执行一次；当前没有可展示的有效快照。
       </p>
       <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left">
@@ -162,7 +160,6 @@ export default function RadarPanel({ session }) {
       )}
       {hasSnapshot && hasScoring(radar.data) ? (
         <>
-          <RadarScoreHero data={radar.data} />
           <RadarScoreTable data={radar.data} />
         </>
       ) : (
@@ -179,7 +176,7 @@ export default function RadarPanel({ session }) {
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">纳指 ETF 套利雷达</h2>
+            <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">纳指 ETF 溢价雷达</h2>
             <span className="rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">测试中</span>
             <span className="hidden text-xs text-slate-400 sm:inline">VIP 及以上可见</span>
           </div>
@@ -196,7 +193,7 @@ export default function RadarPanel({ session }) {
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="inline-flex self-start rounded-xl bg-slate-100 p-0.5" role="tablist" aria-label="雷达视图">
-          {[['radar', '今日雷达'], ['paper', '纸面记录'], ['review', '切换复盘']].map(([key, label]) => (
+          {[['radar', '今日雷达'], ['review', '交易复盘']].map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -247,16 +244,14 @@ export default function RadarPanel({ session }) {
 
       {view === 'review' ? (
         <RadarReviewPanel data={radar.data} />
-      ) : view === 'paper' ? (
-        firstLoading ? leftColumn : <RadarPaperPanel data={radar.data} />
-      ) : firstLoading ? (
+            ) : firstLoading ? (
         leftColumn
       ) : hasSnapshot && hasScoring(radar.data) ? (
         <div data-testid="radar-dashboard-stack" className="min-w-0 space-y-5">
           {leftColumn}
           <details data-testid="radar-sidebar-fold" className="group rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-bold text-slate-700 sm:px-5">
-              <span>计算控制台 · 数据流水线 · 成熟度 · 近期机会</span>
+              <span>计算控制台 · 数据流水线 · 成熟度 · 近期价差</span>
               <span className="text-xs font-normal text-slate-400 group-open:hidden">展开</span>
               <span className="hidden text-xs font-normal text-slate-400 group-open:inline">收起</span>
             </summary>

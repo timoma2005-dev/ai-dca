@@ -15,7 +15,7 @@ test('切换标尺保留跑者、终点旗帜和方向动画，但不显示安�
   assert.match(gaugeSource, /gauge-flag-wave/);
   assert.match(gaugeSource, /gauge-track-dash-right/);
   assert.match(gaugeSource, /gauge-track-dash-left/);
-  assert.match(gaugeSource, /冲向终点触发切仓/);
+  assert.match(gaugeSource, /距你设定的阈值/);
   assert.match(styleSource, /@keyframes runnerBob/);
   assert.match(styleSource, /@keyframes flagWave/);
 });

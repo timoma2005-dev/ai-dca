@@ -13,7 +13,7 @@ export function SwitchStrategySpreadGauge({ gauge, simulatedSpread = null, holdi
   const needleLeft = 10 + ratio * 75;
 
   let triggered = false;
-  let statusPart1 = '冲向终点触发切仓';
+  let statusPart1 = '距你设定的阈值';
   let statusPart2 = '';
 
   if (normalizedHoldingSide === 'H') {
@@ -21,22 +21,22 @@ export function SwitchStrategySpreadGauge({ gauge, simulatedSpread = null, holdi
     const toUpper = upper - spread;
     if (toUpper <= 0) {
       triggered = true;
-      statusPart1 = '🎉 已达终点线';
-      statusPart2 = '触发 H→L 切出！';
+      statusPart1 = '已达到设定阈值';
+      statusPart2 = '价差 ≥ 上阈值';
     } else {
-      statusPart1 = '冲向终点触发切仓';
-      statusPart2 = `距 H→L 还差 ${formatSwitchPercent(toUpper)}`;
+      statusPart1 = '距你设定的阈值';
+      statusPart2 = `距上阈值还差 ${formatSwitchPercent(toUpper)}`;
     }
   } else {
     // 持有 L 标的：只监控切回到 H (即利差收窄低于 lowerPct)
     const toLower = spread - lower;
     if (toLower <= 0) {
       triggered = true;
-      statusPart1 = '🎉 已达终点线';
-      statusPart2 = '触发 L→H 切回！';
+      statusPart1 = '已达到设定阈值';
+      statusPart2 = '价差 ≤ 下阈值';
     } else {
-      statusPart1 = '冲向终点触发切仓';
-      statusPart2 = `距 L→H 还差 ${formatSwitchPercent(toLower)}`;
+      statusPart1 = '距你设定的阈值';
+      statusPart2 = `距下阈值还差 ${formatSwitchPercent(toLower)}`;
     }
   }
 

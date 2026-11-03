@@ -49,7 +49,7 @@ export function RadarOpportunityCards({ data }) {
         <div className="relative mb-4 flex items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
             <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />
-            今日最优套利机会
+            今日溢价最高 / 最低
           </span>
           <span className="min-w-0 text-right text-[11px] text-indigo-100">
             {data?.date ? `${data.date} 收盘口径，净值日期未验证` : '基准日期未知'}
@@ -60,7 +60,7 @@ export function RadarOpportunityCards({ data }) {
             <div className="relative grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
               <div className="min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3">
                 <div className="flex items-center gap-1.5 text-[11px] text-indigo-100">
-                  <span aria-hidden="true" className="text-rose-300">●</span> 高溢价卖出
+                  <span aria-hidden="true" className="text-rose-300">●</span> 溢价最高
                 </div>
                 <div className="mt-0.5 text-xl font-extrabold leading-tight tracking-tight tabular-nums">{pair.sell.code}</div>
                 <div className="break-words text-xs leading-tight text-indigo-100">{pair.sell.name || '—'}</div>
@@ -72,9 +72,9 @@ export function RadarOpportunityCards({ data }) {
                   价差 {spreadText}
                 </span>
               </div>
-              {buyHidden ? <DemoLockedValue className="min-h-24 min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-indigo-100 sm:text-right">低溢价买入 ●●●●●● 升级查看</DemoLockedValue> : <div className="min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 sm:text-right">
+              {buyHidden ? <DemoLockedValue className="min-h-24 min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-indigo-100 sm:text-right">溢价最低 ●●●●●● SVIP 可见</DemoLockedValue> : <div className="min-w-0 rounded-xl border border-white/15 bg-white/10 px-4 py-3 sm:text-right">
                 <div className="flex items-center gap-1.5 text-[11px] text-indigo-100 sm:justify-end">
-                  低溢价买入 <span aria-hidden="true" className="text-emerald-300">●</span>
+                  溢价最低 <span aria-hidden="true" className="text-emerald-300">●</span>
                 </div>
                 <div className="mt-0.5 text-xl font-extrabold leading-tight tracking-tight tabular-nums">{pair.buy.code}</div>
                 <div className="break-words text-xs leading-tight text-indigo-100">{pair.buy.name || '—'}</div>
@@ -83,7 +83,7 @@ export function RadarOpportunityCards({ data }) {
             </div>
             {buyHidden && per100k != null ? (
               <p className="relative mt-3 rounded-xl bg-white/15 px-3 py-2 text-xs leading-5 text-white">
-                按今天价差，10 万元本金换一次约多换回 <b className="text-base font-extrabold tabular-nums">¥{per100k.toLocaleString('zh-CN')}</b> 的溢价差。升级 SVIP 查看该买哪一只。
+                按今天价差折算，每 10 万元对应溢价差约 <b className="text-base font-extrabold tabular-nums">¥{per100k.toLocaleString('zh-CN')}</b>。
               </p>
             ) : null}
             <div className="relative mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/15 pt-3 text-xs text-indigo-100">
@@ -102,15 +102,15 @@ export function RadarOpportunityCards({ data }) {
                     percentile.attention ? 'bg-emerald-400 text-emerald-950' : 'bg-white/20 text-white'
                   )}
                 >
-                  {percentile.attention ? '建议关注' : '观望'}
+                  {percentile.attention ? '≥85 分位' : '<85 分位'}
                 </span>
               )}
             </div>
           </>
         ) : (
           <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-5 text-sm leading-6 text-indigo-50">
-            当前快照缺少最优套利对（bestPair 缺失或不完整）。溢价排行仍可查看，
-            但请等待 21:35 计划计算产出完整快照后再参考套利结论。
+            当前快照缺少最高 / 最低溢价对（bestPair 缺失或不完整）。溢价排行仍可查看，
+            完整快照在 21:35 计算后产出。
           </div>
         )}
       </article>
@@ -130,7 +130,7 @@ export function RadarOpportunityCards({ data }) {
               <p className="mt-2 text-xs leading-5 text-slate-500">
                 当前价差 <b className="text-slate-800 tabular-nums">{spreadText}</b>，
                 超过了近 20 个交易日样本中 <b className="text-indigo-600 tabular-nums">{percentile.percentile}%</b> 的日子。
-                {percentile.attention ? '分位高于 85，建议关注轮动机会。' : '分位未高于 85，暂无特别提示。'}
+                {percentile.attention ? '分位高于 85。' : '分位未高于 85。'}
               </p>
               <div className="mt-3">
                 <PercentileBar percentile={percentile.percentile} />

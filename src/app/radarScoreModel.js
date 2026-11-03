@@ -77,8 +77,8 @@ export function quotaRatioTone(pct) {
 
 export const SCORE_SORTS = Object.freeze({
   overall: '综合',
-  sell: '按卖出',
-  buy: '按买入',
+  sell: '按高位分',
+  buy: '按低位分',
   quota: '只看份额异动',
 });
 
@@ -142,10 +142,10 @@ export function heroNotes(data) {
     const dr = Number.isFinite(q?.deltaRatioPct) ? `，新增额度约占日均成交 ${q.deltaRatioPct.toFixed(1)}%` : '';
     notes.push({ kind: 'sell', tag: sell.sellTag, text: `${shortName(sell.code, sell.name)}${q.label}：申购上限 ${quotaBadge(q).detail}${dr}，套利盘会压低溢价` });
   } else if (sell?.quota?.state === 'relaxing') {
-    notes.push({ kind: 'sell', tag: '卖出加分', text: `${shortName(sell.code, sell.name)}额度放开中，溢价易继续回落` });
+    notes.push({ kind: 'sell', tag: '额度放开', text: `${shortName(sell.code, sell.name)}额度放开中` });
   }
   if (buy?.quota?.state === 'tight') {
-    notes.push({ kind: 'buy', tag: '买入加分', text: `${shortName(buy.code, buy.name)}额度刚收紧（${quotaBadge(buy.quota).detail}），溢价下方有支撑` });
+    notes.push({ kind: 'buy', tag: '额度收紧', text: `${shortName(buy.code, buy.name)}额度刚收紧（${quotaBadge(buy.quota).detail}）` });
   }
   const skipped = blockedPairs.find((item) => item.buy.code !== pair.buy.code);
   if (skipped) {

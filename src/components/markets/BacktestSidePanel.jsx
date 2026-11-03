@@ -344,7 +344,7 @@ function GridMatrixModal({ open, onClose, attempts = [], bestThresholds = null, 
             </DialogTitle>
           </div>
           <DialogDescription className="mt-1 text-xs text-slate-500">
-            总收益最高；收益相同时选择绝对回撤较小者。有效阈值组合 {attemptMap.size} 组，初始状态尝试 {attempts.length} 次。手动阈值也择优初始 H/L。样本内寻优不代表未来表现。横轴为 H→L 切出阈值（溢价冲高切出），纵轴为 L→H 切回阈值（溢价收窄买回）。高亮项为当前锁定的最优解。
+            总收益最高；收益相同时选择绝对回撤较小者。有效阈值组合 {attemptMap.size} 组，初始状态尝试 {attempts.length} 次。手动阈值也择优初始 H/L。样本内寻优不代表未来表现。横轴为 H→L 切出阈值（溢价冲高切出），纵轴为 L→H 切回阈值（溢价收窄买回）。高亮项为回测收益最高的参数。
           </DialogDescription>
         </DialogHeader>
 
@@ -412,7 +412,7 @@ function GridMatrixModal({ open, onClose, attempts = [], bestThresholds = null, 
                         </div>
                         {isBest ? (
                           <span className="inline-block mt-0.5 px-1 py-0.2 rounded bg-emerald-600 text-white text-[9px] font-sans font-bold">
-                            最优解
+                            回测最高
                           </span>
                         ) : null}
                       </td>
@@ -428,7 +428,7 @@ function GridMatrixModal({ open, onClose, attempts = [], bestThresholds = null, 
           <div className="flex items-center space-x-3">
             <span className="flex items-center space-x-1">
               <span className="w-3 h-3 rounded bg-emerald-100 ring-1 ring-emerald-500" />
-              <span>总收益最优参数</span>
+              <span>回测收益最高参数</span>
             </span>
             <span className="flex items-center space-x-1">
               <span className="w-3 h-3 rounded bg-slate-100" />
@@ -898,7 +898,7 @@ export function BacktestSidePanel({
     writeStoredSwitchPrefs(nextPrefs);
     showActionToast({
       title: '已成功创建切换规则',
-      description: `已自动应用 ${ruleHighCodes[0]}/${ruleLowCodes[0]} 回测最优阈值`,
+      description: `已自动应用 ${ruleHighCodes[0]}/${ruleLowCodes[0]} 回测收益最高阈值`,
       tone: 'emerald'
     });
     onEvent?.('create_switch_rule', {
@@ -1227,9 +1227,9 @@ export function BacktestSidePanel({
               </span>
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="font-bold text-xs sm:text-sm text-slate-900">自动网格寻优 · 最优 H-L 触发阈值对</span>
+                  <span className="font-bold text-xs sm:text-sm text-slate-900">网格回测 · H-L 阈值对</span>
                   <span className="px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold font-mono">
-                    总收益最优解
+                    回测收益最高
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400">总收益最高；收益相同时选择绝对回撤较小者。样本内寻优不代表未来表现。</p>
@@ -1303,7 +1303,7 @@ export function BacktestSidePanel({
             <MetricCard
               label="轮动特征 / 胜率"
               value={`${rotation.rotationCount} 次轮动`}
-              subtext={<span>胜率: <b className="font-mono text-indigo-600 font-bold">{winRate}%</b> (最优配置)</span>}
+              subtext={<span>胜率: <b className="font-mono text-indigo-600 font-bold">{winRate}%</b> (回测收益最高)</span>}
               tone="neutral"
             />
           </div>
@@ -1423,7 +1423,7 @@ export function BacktestSidePanel({
                   </div>
                 </div>
                 <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                  <div className="text-slate-400 text-[10px]">自动寻优最优阈值</div>
+                  <div className="text-slate-400 text-[10px]">网格回测阈值</div>
                   <div className="mt-1 font-mono font-black text-emerald-700 text-sm">
                     {formatNumber(optimalSellLower)}% / {formatNumber(optimalBuyOther)}%
                   </div>
@@ -1832,7 +1832,7 @@ export function BacktestSidePanel({
                   <h3 className="text-base font-bold text-slate-700">准备开始回测</h3>
                   <p className="mt-2 text-sm text-slate-500">
                     {hasCounterpartInput
-                      ? '选择回测区间后点击「开始回测」，系统会自动寻找最优溢价差阈值。'
+                      ? '选择回测区间后点击「开始回测」，系统会网格回测各组溢价差阈值。'
                       : '未填写对手方时，将只回测当前基金的持有表现。'}
                   </p>
                 </div>
@@ -1881,7 +1881,7 @@ export function BacktestSidePanel({
                     </div>
                     <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
                       <div className="mb-2 flex justify-between">
-                        <span className="text-slate-500">最优阈值</span>
+                        <span className="text-slate-500">回测收益最高阈值</span>
                         <span className="font-semibold tabular-nums text-slate-900">
                           L→H {formatNumber(rotation.thresholds?.sellLowerThreshold)}% / H→L {formatNumber(rotation.thresholds?.buyOtherThreshold)}%
                         </span>
@@ -2028,7 +2028,7 @@ export function BacktestSidePanel({
                         </div>
                       ) : (
                         <p className="text-xs leading-5 text-indigo-700">
-                          本次最优组合没有形成完整卖出→买入轮动，图表仍展示权益和溢价差轨迹。
+                          本次回测收益最高组合没有形成完整卖出→买入轮动，图表仍展示权益和溢价差轨迹。
                         </p>
                       )}
                     </div>

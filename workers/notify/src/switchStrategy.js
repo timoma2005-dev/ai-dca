@@ -64,10 +64,10 @@ export function buildSwitchPushDigest({ clientId = '', computedAt = '', triggerR
   })[0]?.trigger || records[0].trigger;
   const keyCode = strongest.fromCode || codes[0] || '';
   const reason = strongest.kind === 'otc' || String(strongest.rule || '').startsWith('OTC_')
-    ? `${keyCode} 场外切换信号较强`
-    : `${keyCode} 溢价差触发 ${strongest.rule || '切换'} 规则`;
+    ? `${keyCode} 场外价差达到阈值`
+    : `${keyCode} 溢价差达到你设置的阈值`;
   const fundCount = codes.length || records.length;
-  const title = `今日 ${fundCount} 只纳指 ETF 触发切换信号`;
+  const title = `今日 ${fundCount} 只纳指 ETF 溢价差达到设定阈值`;
   const body = `${title}${codeText ? `（${codeText}）` : ''}，其中 ${reason}。点击查看 →`;
   return {
     clientId,
@@ -879,7 +879,7 @@ export function computeSwitchSnapshot(config, priceMap, navByCode, computedAt) {
         toName: cand.name || cand.code,
         gapPct: gap,
         threshold,
-        description: `${hCode}(H) − ${lCode}(L) 溢价差 ${gapStr}% ${cmp} ${threshold}%（${tag}，${arrow}）：卖 ${benchCode} 买 ${cand.code}`
+        description: `${hCode}(H) − ${lCode}(L) 溢价差 ${gapStr}% ${cmp} ${threshold}%（${tag}，${arrow}）：${benchCode} / ${cand.code}`
       });
     }
   }
@@ -1138,16 +1138,16 @@ function buildOtcSwitchTriggerNotification(snapshot, trigger, env) {
   });
   const minuteKey = String(snapshot?.computedAt || '').slice(0, 16);
   const eventId = `switch:${trigger.pairKey}:R${trigger.rule}:${minuteKey}`;
-  const title = `场外切换 ${level} | ${trigger.fromCode}→场外QDII`;
+  const title = `场外价差提醒 ${level} | ${trigger.fromCode}`;
   const ruleLabel = trigger.rule === 'OTC_STRONG'
     ? `场外强信号：基准溢价 > ${threshold}% 且场内最低溢价 < ${lowThreshold}%`
     : `场外弱信号：基准溢价 > ${threshold}% 且场内最低溢价 < ${highThreshold}%`;
-  const body = `基准溢价 ${benchPremium} > ${threshold}% · 场内最低 ${lowestPremium} < ${signalThreshold}%\n卖 ${fromLabel} → 申购场外 QDII 联接基金\n参考低溢价 ${refLabel}${otcOrderBookText}\n点此查看策略详情，下单前请以基金软件实时溢价和申购限额为准。`;
-  const summary = `场外切换 ${level} ${trigger.fromCode}→场外QDII ${benchPremium}/${lowestPremium}`;
+  const body = `基准溢价 ${benchPremium} > ${threshold}% · 场内最低 ${lowestPremium} < ${signalThreshold}%\n${fromLabel} · 场内最低 ${refLabel}${otcOrderBookText}\n仅为你设置条件的提醒，不构成投资建议。`;
+  const summary = `场外价差 ${level} ${trigger.fromCode} ${benchPremium}/${lowestPremium}`;
   const body_md = [
     `**基准溢价 ${benchPremium}** > ${threshold}%`,
     `**场内最低 ${lowestPremium}** < ${signalThreshold}%（参考 ${refLabel}）`,
-    `卖 **${fromLabel}** → 申购 **场外 QDII 联接基金**`,
+    `持仓 **${fromLabel}**`,
     ...otcOrderBookLines.map((line) => `- ${line}`),
     `*下单前请以基金软件实时溢价和申购限额为准。*`
   ].join('\n');
@@ -1156,7 +1156,7 @@ function buildOtcSwitchTriggerNotification(snapshot, trigger, env) {
     eventType: 'switch-strategy-trigger',
     ruleId: trigger.ruleId ? `switch-otc:${trigger.ruleId}:${trigger.fromCode}` : `switch-otc:${trigger.fromCode}`,
     symbol: trigger.fromCode,
-    strategyName: trigger.ruleName ? `场外切换 · ${trigger.ruleName}` : '场外切换',
+    strategyName: trigger.ruleName ? `场外价差 · ${trigger.ruleName}` : '场外价差',
     triggerCondition: ruleLabel,
     purchaseAmount: '',
     detailUrl: action.detailUrl,
@@ -1196,12 +1196,12 @@ export function buildSwitchTriggerNotification(snapshot, trigger, env) {
   const orderBookLines = findSwitchOrderBookLines(snapshot, trigger);
   const orderBookText = orderBookLines.length ? `\n${orderBookLines.join('\n')}` : '';
   const arrow = trigger.rule === 'A' ? '低→高' : '高→低';
-  const title = `切换 ${trigger.rule} ${arrow} | ${trigger.fromCode}→${trigger.toCode}`;
-  const body = `H−L ${gapStr}% ${cmp} ${threshold}%${navHint}\n卖 ${fromLabel} → 买 ${toLabel}${orderBookText}\n下单前请以基金软件实时溢价为准。`;
-  const summary = `切换 ${trigger.rule} ${trigger.fromCode}→${trigger.toCode} ${gapStr}%`;
+  const title = `价差提醒 ${trigger.rule} | ${trigger.fromCode} / ${trigger.toCode}`;
+  const body = `H−L ${gapStr}% ${cmp} ${threshold}%${navHint}\n${fromLabel} / ${toLabel}${orderBookText}\n仅为你设置条件的提醒，不构成投资建议。`;
+  const summary = `价差 ${trigger.rule} ${trigger.fromCode}/${trigger.toCode} ${gapStr}%`;
   const ruleLabel = trigger.rule === 'A'
-    ? `规则 A 低→高：H溢价 − L溢价 < ${threshold}%（溢价差收窄，从持仓 L 换到 H）`
-    : `规则 B 高→低：H溢价 − L溢价 > ${threshold}%（溢价差扩大，从持仓 H 换到 L）`;
+    ? `规则 A 低→高：H溢价 − L溢价 < ${threshold}%（溢价差收窄）`
+    : `规则 B 高→低：H溢价 − L溢价 > ${threshold}%（溢价差扩大）`;
   const action = buildNotificationAction(env, 'fundSwitch', {
     code: trigger.fromCode,
     targetCode: trigger.toCode,
@@ -1214,16 +1214,16 @@ export function buildSwitchTriggerNotification(snapshot, trigger, env) {
   const eventId = `switch:${trigger.pairKey}:R${trigger.rule}:${minuteKey}`;
   const body_md = [
     `**H−L ${gapStr}%** ${cmp} ${threshold}%${navHint}`,
-    `卖 **${fromLabel}** → 买 **${toLabel}**`,
+    `**${fromLabel}** / **${toLabel}**`,
     ...orderBookLines.map((line) => `- ${line}`),
-    `*点此查看策略详情，下单前请以基金软件实时溢价为准。*`
+    `*仅为你设置条件的提醒，不构成投资建议。*`
   ].join('\n');
   return {
     eventId,
     eventType: 'switch-strategy-trigger',
     ruleId: trigger.ruleId ? `switch:${trigger.ruleId}:${trigger.fromCode}` : `switch:${trigger.fromCode}`,
     symbol: trigger.fromCode,
-    strategyName: trigger.ruleName ? `场内切换 · ${trigger.ruleName}` : '场内切换',
+    strategyName: trigger.ruleName ? `场内价差 · ${trigger.ruleName}` : '场内价差',
     triggerCondition: ruleLabel,
     purchaseAmount: '',
     detailUrl: action.detailUrl,
@@ -1232,7 +1232,7 @@ export function buildSwitchTriggerNotification(snapshot, trigger, env) {
     target: action.target,
     params: action.params,
     title,
-    body: `${body}\n点此查看策略详情。`,
+    body: `${body}\n点此查看详情。`,
     summary,
     body_md,
     fromPremiumPct: typeof trigger.fromPremiumPct === 'number' && Number.isFinite(trigger.fromPremiumPct) ? trigger.fromPremiumPct : null,

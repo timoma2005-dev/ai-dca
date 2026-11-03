@@ -24,7 +24,7 @@ const SEED_MENUS = [
   ['notify', '通知管理', 'Bell', 'primary', 70, '管理消息推送与提醒设置'],
   ['articles', '文章', 'BookOpen', 'primary', 80, '基金科普指南与定投策略'],
   ['dataRepair', '数据修复', 'Wrench', 'primary', 90, '数据诊断与修复'],
-  ['adminRadar', '雷达', 'Radar', 'admin', 120, '套利雷达与溢价监控'],
+  ['adminRadar', '雷达', 'Radar', 'admin', 120, '溢价雷达与溢价监控'],
   ['adminAuction', '竞价看板', 'Gavel', 'admin', 130, '纳指期指与 ETF 竞价行情'],
   ['adminRbac', '权限管理', 'ShieldCheck', 'admin', 140, '用户角色、菜单权限与审计日志'],
 ];

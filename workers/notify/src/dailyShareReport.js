@@ -83,7 +83,7 @@ export function composeDailyReport(kind, rows, date) {
   if (lof && Number.isFinite(lof.premiumPct)) lines.push(`LOF 161130 溢价 ${f2(lof.premiumPct)}%`);
   lines.push(`标普500 ETF 溢价中位 ${f2(spMed)}%`);
   const url = link(`daily_${kind}_${date.replaceAll('-', '')}`);
-  const shareText = [...lines, '', `实时溢价/切换提醒 👉 ${url}`, '注：仅供参考，不构成投资建议。'].join('\n');
+  const shareText = [...lines, '', `实时溢价/价差提醒 👉 ${url}`, '注：仅供参考，不构成投资建议。'].join('\n');
   // 邮件正文：去掉与邮件标题重复的【】行和链接行（邮件底部有按钮）
   const emailText = [...lines.slice(1), '', '可转发的文字版：打开详情页点「复制文字版」。', '注：仅供参考，不构成投资建议。'].join('\n');
   return { kind, date, title, text: shareText, emailText, url, median: med, spMedian: spMed, navBase };

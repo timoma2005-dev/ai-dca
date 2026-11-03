@@ -3,7 +3,7 @@ import { nowIso, withTransaction } from '../db.js';
 import { enqueueEvent } from '../outbox.js';
 import { resolveUserId } from '../authSession.js';
 import { runSwitchConfigDryRun } from '../notify/switchDryRun.js';
-import { handleSwitchRecommend } from '../notify/switchRecommend.js';
+// handleSwitchRecommend（../notify/switchRecommend.js）2026-11-04 起停用。
 
 export function badRequest(message) { return Object.assign(new Error(message), { status: 400 }); }
 export function required(value, name) {
@@ -91,7 +91,8 @@ export async function handleDataRoute(db, method, url, body, headers = {}) {
         if (queryUser && body.user_id && queryUser !== body.user_id) throw badRequest('Conflicting user_id');
         return required(body.user_id ?? queryUser, 'user_id');
       })();
-  if (path === '/api/notify/switch/recommend') return handleSwitchRecommend(db, user, body);
+  // 2026-11-04 合规整改：停用自动选对手方/最优阈值（handleSwitchRecommend 保留代码，不再对外）。
+  if (path === '/api/notify/switch/recommend') return { status: 410, body: { ok: false, message: '该功能已停用' } };
   const now = nowIso();
   if (deletingRule) {
     let id;

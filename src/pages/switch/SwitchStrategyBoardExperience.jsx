@@ -349,7 +349,6 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
         row={editingRow}
         initialRule={editingRow}
         onClose={() => setModalOpen(false)}
-        onAutoFill={handleAutoFillRule}
         onSave={handleSaveRule}
         existingRules={config.rules || []}
       />

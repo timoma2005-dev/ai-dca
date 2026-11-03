@@ -170,34 +170,34 @@ test('clock-driven states: auction halt, resume, regression switch, candidates i
   assert.equal(page.$('phase').textContent, '竞价结束');
   await page.at('09:35');
   assert.equal(page.$('phase').textContent, '连续竞价');
-  assert.match(page.$('act-h').innerHTML, /继续持有 国泰/);
+  assert.match(page.$('act-h').innerHTML, /国泰 未满足条件/);
   assert.match(page.log(), /国泰 复牌/);
   assert.match(page.$('etf-body').innerHTML, /<span class="st halt">停牌<\/span>/); // 嘉实真实停牌
 
   await page.at('09:55');
-  assert.match(page.log(), /国泰 偏离 ≥ \+0\.1 → 达切换线/);
-  assert.match(page.$('act-h').innerHTML, /切换：卖出 <span class="hs">国泰<\/span> → 买入 <span class="hl">华泰柏瑞<\/span>/);
+  assert.match(page.log(), /国泰 偏离 ≥ \+0\.1 → 达高偏离线/);
+  assert.match(page.$('act-h').innerHTML, /条件满足：<span class="hs">国泰<\/span> 高偏离 \/ <span class="hl">华泰柏瑞<\/span> 低偏离/);
 
   await page.at('10:25');
-  assert.match(page.log(), /华泰柏瑞 离开买入区/);
-  assert.match(page.log(), /大成 进入买入区/);
-  assert.match(page.$('act-h').innerHTML, /买入 <span class="hl">大成<\/span>/);
+  assert.match(page.log(), /华泰柏瑞 离开低偏离区/);
+  assert.match(page.log(), /大成 进入低偏离区/);
+  assert.match(page.$('act-h').innerHTML, /<span class="hl">大成<\/span> 低偏离/);
 
   await page.at('10:35');
   assert.match(page.log(), /嘉实 复牌/);
   await page.at('11:10');
-  assert.match(page.$('act-h').innerHTML, /继续持有 国泰/);
-  assert.match(page.$('act-p').innerHTML, /已达切换线，暂无买入区候选，继续持有不空仓/);
+  assert.match(page.$('act-h').innerHTML, /国泰 未满足条件/);
+  assert.match(page.$('act-p').innerHTML, /已达高偏离线，暂无低偏离区标的/);
   assert.doesNotMatch(page.$('act-h').innerHTML, /等回 0/);
 
   await page.at('12:00');
   assert.equal(page.$('phase').textContent, '午休');
   await page.at('13:50');
-  assert.match(page.log(), /富国 进入买入区/);
+  assert.match(page.log(), /富国 进入低偏离区/);
   await page.at('14:40');
-  assert.match(page.log(), /博时 进入买入区/);
+  assert.match(page.log(), /博时 进入低偏离区/);
   // 候选按回归概率优先：富国（近 5 月 76%）排在博时（57%）前
-  assert.match(page.$('act-h').innerHTML, /切换：卖出 <span class="hs">国泰<\/span> → 买入 <span class="hl">富国<\/span>/);
+  assert.match(page.$('act-h').innerHTML, /条件满足：<span class="hs">国泰<\/span> 高偏离 \/ <span class="hl">富国<\/span> 低偏离/);
   await page.at('14:58');
   assert.equal(page.$('phase').textContent, '收盘集合竞价');
   await page.at('15:02');

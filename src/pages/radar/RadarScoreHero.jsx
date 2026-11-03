@@ -77,7 +77,7 @@ export function RadarScoreHero({ data }) {
   const visibleRows = useDemoVisibleRows();
   const buyHidden = Boolean(pair && !rankRadarEtfs(data).slice(0, visibleRows).some((etf) => etf.code === pair.buy.code));
   const notes = heroNotes(data).filter((note) => !(buyHidden && note.kind !== 'sell'));
-  const triggered = notes.some((note) => note.kind === 'sell' && note.tag === '果断卖出');
+  const triggered = notes.some((note) => note.kind === 'sell' && note.tag === '额度大幅放开');
   const parity = parityHint(data);
   const visibleCodes = rankRadarEtfs(data).slice(0, visibleRows).map((etf) => etf.code);
   const parityLocked = Boolean(parity && !(visibleCodes.includes(parity.sell.code) && visibleCodes.includes(parity.buy.code)));

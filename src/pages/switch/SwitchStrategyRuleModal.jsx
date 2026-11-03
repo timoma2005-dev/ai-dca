@@ -338,7 +338,7 @@ export function SwitchStrategyRuleModal({
                   <span className="w-3.5 h-3.5 rounded bg-rose-100 text-rose-700 font-bold flex items-center justify-center text-[9px]">H</span>
                   <span className="font-bold">持有 H 标的</span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-mono mt-1">仅监控切出到 L</span>
+                <span className="text-[10px] text-slate-400 font-mono mt-1">仅监控价差上阈值</span>
               </button>
 
               <button
@@ -355,7 +355,7 @@ export function SwitchStrategyRuleModal({
                   <span className="w-3.5 h-3.5 rounded bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-[9px]">L</span>
                   <span className="font-bold">持有 L 标的</span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-mono mt-1">仅监控切回 H</span>
+                <span className="text-[10px] text-slate-400 font-mono mt-1">仅监控价差下阈值</span>
               </button>
 
             </div>

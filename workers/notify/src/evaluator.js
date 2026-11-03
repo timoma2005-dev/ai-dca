@@ -93,7 +93,7 @@ export async function evaluateVixSignal(env, vixDigest, options = {}) {
   const fromLabel = vixLevelLabel(prevPushedLevel || 'calm');
   const toLabel = vixLevelLabel(level);
   const title = `VIX ${direction} ${toLabel}`;
-  const body = `当前 VIX ${value.toFixed(2)}，${fromLabel} → ${toLabel} → 点此查看策略详情。`;
+  const body = `当前 VIX ${value.toFixed(2)}，${fromLabel} → ${toLabel} → 点此查看详情。`;
   const body_md = [
     '**VIX 跨阈值提醒**',
     '',

@@ -38,7 +38,7 @@ export function RadarRanking({ data, selectedCode, onToggleSelected }) {
     <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-slate-900">{ranked.length} 只纳指 ETF 溢价排行</h3>
-        <span className="text-[11px] text-slate-400">按溢价率排序 · 点击行查看轮动建议</span>
+        <span className="text-[11px] text-slate-400">按溢价率排序 · 点击行查看与最低溢价的差</span>
       </div>
       <div className="space-y-2.5">
         {shown.map((etf, index) => {
@@ -72,10 +72,10 @@ export function RadarRanking({ data, selectedCode, onToggleSelected }) {
                   <b className="text-xs font-bold text-slate-800 tabular-nums">{etf.code}</b>
                   <span className="min-w-0 truncate text-[11px] text-slate-400">{etf.name || '—'}</span>
                   {isSellCandidate && (
-                    <span className="rounded bg-rose-100 px-1.5 py-px text-[10px] font-bold text-rose-700">卖出候选</span>
+                    <span className="rounded bg-rose-100 px-1.5 py-px text-[10px] font-bold text-rose-700">溢价最高</span>
                   )}
                   {isBuyCandidate && (
-                    <span className="rounded bg-emerald-100 px-1.5 py-px text-[10px] font-bold text-emerald-700">买入候选</span>
+                    <span className="rounded bg-emerald-100 px-1.5 py-px text-[10px] font-bold text-emerald-700">溢价最低</span>
                   )}
                 </span>
                 <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -108,7 +108,7 @@ export function RadarRanking({ data, selectedCode, onToggleSelected }) {
           className="mt-4 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-4 text-white shadow-[0_4px_12px_rgba(15,23,42,0.12)]"
         >
           <div className="mb-3 flex items-center justify-between gap-2 text-xs text-slate-400">
-            <span>持有 {advice.selected.code} 的轮动切换建议</span>
+            <span>{advice.selected.code} 与最低溢价标的对比</span>
             <button
               type="button"
               onClick={() => onToggleSelected?.(advice.selected.code)}
@@ -119,14 +119,13 @@ export function RadarRanking({ data, selectedCode, onToggleSelected }) {
           </div>
           {advice.isLowest ? (
             <p className="text-sm leading-6 text-emerald-300">
-              {advice.selected.code} 已是当前有效标的中最低溢价（{advice.selected.premium.toFixed(2)}%），
-              作为买入底仓最佳，无需切换。
+              {advice.selected.code} 是当前有效标的中溢价最低的（{advice.selected.premium.toFixed(2)}%）。
             </p>
           ) : (
             <>
               <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] text-slate-400">卖出高溢价</div>
+                  <div className="text-[11px] text-slate-400">所选标的</div>
                   <div className="text-base font-bold tabular-nums">{advice.selected.code}</div>
                   <div className="text-sm font-bold text-rose-300 tabular-nums">{advice.selected.premium.toFixed(2)}%</div>
                 </div>
@@ -138,13 +137,13 @@ export function RadarRanking({ data, selectedCode, onToggleSelected }) {
                   </div>
                 </div>
                 {!lowestHidden ? <div className="min-w-0 flex-1 text-right">
-                  <div className="text-[11px] text-slate-400">换入最低溢价</div>
+                  <div className="text-[11px] text-slate-400">最低溢价</div>
                   <div className="text-base font-bold tabular-nums">{advice.lowest.code}</div>
                   <div className="text-sm font-bold text-emerald-300 tabular-nums">{advice.lowest.premium.toFixed(2)}%</div>
-                </div> : <DemoLockedValue className="min-h-16 min-w-0 flex-1 rounded-xl text-right text-slate-400">换入 ●●●●●● --.--%</DemoLockedValue>}
+                </div> : <DemoLockedValue className="min-h-16 min-w-0 flex-1 rounded-xl text-right text-slate-400">最低 ●●●●●● --.--%</DemoLockedValue>}
               </div>
               <p className="mt-3 border-t border-white/10 pt-2 text-[11px] leading-5 text-slate-400">
-                溢价差（百分点），未计交易成本；差价来自当前快照 premium，不构成收益承诺。
+                溢价差（百分点），未计交易成本；数据来自当前快照，仅供参考，不构成投资建议。
               </p>
             </>
           )}

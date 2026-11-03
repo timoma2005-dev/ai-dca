@@ -528,7 +528,7 @@ export function SymbolDetailPanel({
     setLockedChartRow(null);
   }, []);
 
-  // LOF：场外申购→转托管→场内卖出，散户可做的溢价套利；ETF 一级市场申购门槛高，不估算。
+  // LOF：场外申购→转托管→场内卖出，溢价扣除申赎费后的估算；ETF 一级市场申购门槛高，不估算。
   const detailFundCode = String(row?.symbol || row?.code || '').replace(/^(sh|sz)/i, '').slice(-6);
   const detailIsLof = market === 'cn' && !currentIsCnOtcFund && /^(16|50)\d{4}$/.test(detailFundCode);
   const detailFundLimit = useDetailFundLimit(detailFundCode, detailIsLof && !row?.fundLimit && !localDirect);
@@ -565,7 +565,7 @@ export function SymbolDetailPanel({
   const detailPremiumPct = cnQuote?.premiumPercent != null && Number.isFinite(Number(cnQuote.premiumPercent)) ? Number(cnQuote.premiumPercent) : null;
   const arb = detailIsLof && detailPremiumPct != null ? estimatePremiumArbitrage(detailPremiumPct, row.fundLimit || detailFundLimit) : null;
   const arbText = !arb ? '--'
-    : arb.suspended ? '暂停申购，无法套利'
+    : arb.suspended ? '暂停申购'
       : `${arb.netPct > 0 ? '+' : ''}${arb.netPct.toFixed(2)}%${arb.profitAtCap != null ? `（限额 ¥${arb.maxPerDay.toLocaleString('zh-CN')}/日，约 ¥${arb.profitAtCap.toLocaleString('zh-CN')}）` : ''}`;
   const cnOverviewExtras = market === 'cn' && !isCnOtcFund ? [
     detailValueRow('开盘价', formatNumber(row.open ?? cnQuote?.open, 3)),
@@ -580,7 +580,7 @@ export function SymbolDetailPanel({
     detailValueRow('净值日期', cnQuote?.latestNavDate || '--'),
     detailValueRow('溢价率', cnQuote?.premiumPercent != null && Number.isFinite(Number(cnQuote.premiumPercent)) ? formatSignedPercent(cnQuote?.premiumPercent) : '--'),
     detailValueRow('10万买入', detailPremiumPct != null ? `比净值${formatPremiumOverpay(detailPremiumPct)}` : '--'),
-    detailValueRow('申购套利(估)', arbText, arb && !arb.suspended && arb.netPct > 0 ? 'text-[#a50e0e]' : undefined),
+    detailValueRow('溢价扣申赎费(估)', arbText, arb && !arb.suspended && arb.netPct > 0 ? 'text-[#a50e0e]' : undefined),
   ].filter((item) => item.value !== '--' && item.value !== '-').slice(0, 18) : [];
   const overviewRows = [
     detailValueRow(isCnOtcFund ? '最新净值' : '最新价', isCnOtcFund ? formatNumber(row.price) : formatMarketPrice(row.price, row)),

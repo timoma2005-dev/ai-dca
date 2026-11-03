@@ -487,9 +487,9 @@ test('notify worker OTC trigger notification uses OTC copy', () => {
     { NOTIFICATION_WEB_BASE_URL: 'https://tools.freebacktrack.tech/' }
   );
 
-  assert.equal(payload.strategyName, '场外切换');
-  assert.match(payload.title, /场外切换 强信号/);
-  assert.match(payload.body, /申购场外 QDII 联接基金/);
+  assert.equal(payload.strategyName, '场外价差');
+  assert.match(payload.title, /场外价差提醒 强信号/);
+  assert.match(payload.body, /不构成投资建议/);
   assert.equal(payload.detailUrl, 'https://tools.freebacktrack.tech/index.html?tab=fundSwitch&source=notification&code=513100&targetCode=159501&trigger=switch-otc&rule=OTC_STRONG');
 });
 
@@ -555,8 +555,8 @@ test('notify worker stores concise switch push digest copy', () => {
   assert.equal(switchPushDigestKey('web:test-client'), 'switch:push-digest:web:test-client');
   assert.equal(digest.status, 'triggered');
   assert.equal(digest.body.split('\n').length, 1);
-  assert.match(digest.body, /今日 2 只纳指 ETF 触发切换信号（513100\/159941）/);
-  assert.match(digest.body, /其中 513100 溢价差触发 B 规则。点击查看 →/);
+  assert.match(digest.body, /今日 2 只纳指 ETF 溢价差达到设定阈值（513100\/159941）/);
+  assert.match(digest.body, /其中 513100 溢价差达到你设置的阈值。点击查看 →/);
   assert.deepEqual(digest.codes, ['513100', '159941']);
   assert.equal(digest.triggers[0].eventId, 'evt-1');
   assert.equal(/513100 溢价 .*159941 溢价/.test(digest.body), false);
