@@ -13,7 +13,7 @@ function navigate(tab) {
 
 /**
  * 首页任务卡：把任务点击翻译成导航 + 步骤提示。
- * onRegister / onUpgrade 由工作台提供（打开注册框 / 打赏开通二维码）。
+ * onRegister / onUpgrade 由工作台提供（打开注册框 / 会员说明弹窗）。
  */
 export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, demoActive = false, takeover = false, roles = [] }) {
   const { state, tasks } = useOnboarding({ loggedIn, accessOf });

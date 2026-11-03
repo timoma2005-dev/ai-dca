@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Check, Coffee, Lock, LogIn, PlayCircle, ShieldAlert, Sparkles } from 'lucide-react';
+import { Check, Info, Lock, LogIn, PlayCircle, ShieldAlert, Sparkles } from 'lucide-react';
 import { isPaidRole, requiredRoleLabel } from '../../app/rbac/menuModel.js';
 import { demoQuotaText } from '../../app/demo/demoQuotaText.js';
 
@@ -22,7 +22,7 @@ function DemoPoints({ demo, tone }) {
 /**
  * 路由守卫页：
  * - status=login：游客访问需要登录的页面，展示登录入口（首次渲染自动弹一次登录框）；
- * - status=forbidden + VIP/SVIP：付费功能，引导打赏并备注账号名，由管理员开通（onUpgrade 打开打赏二维码）；
+ * - status=forbidden + VIP/SVIP：会员功能，VIP 注册赠送、SVIP 邀请制由管理员后台授权（onUpgrade 打开会员说明）；
  * - status=forbidden + 管理员：仅管理员可访问。
  */
 export function AccessGuardPage({ status, requiredRole, menuLabel = '', username = '', onLogin, onUpgrade, onBack, demo = null, onDemo, autoPromptLogin = true }) {
@@ -87,14 +87,8 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
           <h2 className="mt-2 text-lg font-bold text-slate-900">{menuLabel || '此功能'}为 {roleLabel} 会员功能</h2>
           <DemoPoints demo={demo} tone="text-amber-500" />
           <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500 [text-wrap:balance]">
-            如需使用该功能，请随意打赏并备注账号名，管理员看到后会尽快为您开通。
+            {roleLabel} 为邀请制，由管理员在后台授权，不提供付费开通。
           </p>
-          {username ? (
-            <div className="mt-4 inline-flex max-w-full items-center gap-2 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm" data-testid="access-guard-account">
-              <span className="shrink-0 text-slate-500">备注账号</span>
-              <span className="truncate font-semibold text-slate-800">{username}</span>
-            </div>
-          ) : null}
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             {demo && onDemo ? (
               <button
@@ -114,15 +108,15 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
                 className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-600"
                 onClick={() => onUpgrade()}
               >
-                <Coffee className="h-4 w-4" aria-hidden="true" />
-                打赏开通
+                <Info className="h-4 w-4" aria-hidden="true" />
+                会员说明
               </button>
             ) : null}
           </div>
           <p className="mt-3 text-xs text-slate-400">
-            {demo && !demo.unlimited ? `${demoQuotaText(demo)} · ` : ''}开通后刷新页面即可使用
+            {demo && !demo.unlimited ? `${demoQuotaText(demo)} · ` : ''}已获授权的账号刷新页面即可使用
           </p>
-          {demo?.retainedUntil ? <p className="mt-1 text-xs font-medium text-amber-700" data-testid="access-guard-retained">演示内容保留至 {new Date(demo.retainedUntil).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' })}，升级 后自动带入账号</p> : null}
+          {demo?.retainedUntil ? <p className="mt-1 text-xs font-medium text-amber-700" data-testid="access-guard-retained">演示内容保留至 {new Date(demo.retainedUntil).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' })}，获授权后自动带入账号</p> : null}
         </>
       ) : (
         <>

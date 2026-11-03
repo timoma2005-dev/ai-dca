@@ -1,5 +1,5 @@
-// 会员到期提醒：赠送 / 打赏开通的 VIP、SVIP 到期前 7 天在首页提醒一次（每个到期日可关闭一次）。
-// 到期后切换提醒和通知会停止推送，这是续费最需要被看到的时刻。
+// 会员到期提醒：注册赠送 / 管理员授权的 VIP、SVIP 到期前 7 天在首页提醒一次（每个到期日可关闭一次）。
+// 到期后切换提醒和通知会停止推送，只提示到期日，不提供续费入口。
 
 export const VIP_EXPIRY_WARN_DAYS = 7;
 export const VIP_EXPIRY_DISMISS_KEY = 'aiDcaVipExpiryNoticeDismissed';

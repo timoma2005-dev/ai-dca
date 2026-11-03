@@ -35,12 +35,12 @@ function TaskRow({ task, index, onAction, large = false }) {
           {task.badge ? <span className={cx('rounded-full px-1.5 py-px text-[10px] font-bold', BADGE_TONE[task.badgeTone] || BADGE_TONE.muted)}>{task.badge}</span> : null}
         </span>
         <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-          {done ? task.doneDescription || '已完成' : locked ? '当前会员等级未开通，开通后继续' : task.description}
+          {done ? task.doneDescription || '已完成' : locked ? '当前会员等级暂无此功能' : task.description}
         </span>
       </span>
       {clickable ? (
         <span className={cx('inline-flex shrink-0 items-center text-xs font-bold lg:mt-auto', locked ? 'text-amber-700' : 'text-indigo-600')}>
-          {locked ? '打赏开通' : replayable ? '再看一遍' : task.cta}
+          {locked ? '会员说明' : replayable ? '再看一遍' : task.cta}
           <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
       ) : null}

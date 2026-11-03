@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Coffee, LogIn, PlayCircle } from 'lucide-react';
+import { Info, LogIn, PlayCircle } from 'lucide-react';
 import { DEMO_READONLY_MESSAGE, DEMO_RETAIN_MS, demoBannerNote, demoLimitOf, installFeatureDemo, loadDemoModule } from '../../app/demo/featureDemo.js';
 import { showToast } from '../../app/toast.js';
 import { DEMO_ACTIVE_FLAG } from '../../app/demo/demoMode.js';
@@ -82,9 +82,9 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
   }
 
   const live = ready && typeof window !== 'undefined' && window[DEMO_ACTIVE_FLAG] === tab;
-  const ctaShort = guest ? '注册' : '升级';
-  const ctaLong = guest ? '免费注册，领 3 个月 VIP' : '打赏开通';
-  const CtaIcon = guest ? LogIn : Coffee;
+  const ctaShort = guest ? '注册' : '说明';
+  const ctaLong = guest ? '免费注册，领 3 个月 VIP' : '会员说明';
+  const CtaIcon = guest ? LogIn : Info;
   const status = limitInfo.timed ? `剩余 ${formatClock(left)}` : limitInfo.limit === 'count' ? '部分数据' : '不限时';
 
   return (
@@ -119,7 +119,7 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
               <p className="mt-2 text-sm leading-6 text-slate-500 [text-wrap:balance]">
                 {guest
                   ? '免费注册送 3 个月 VIP，行情、换基、通知都能直接用。'
-                  : `喜欢${label ? `「${label}」` : '这个功能'}的话，开通 ${roleLabel} 后就能一直使用。`}
+                  : `${label ? `「${label}」` : '这个功能'}为 ${roleLabel} 功能，${roleLabel} 为邀请制，由管理员授权。`}
               </p>
               {limitInfo.keeps ? <p className="mt-1 text-xs leading-5 text-amber-700 [text-wrap:balance]">演示内容保留 {RETAIN_MINUTES} 分钟，{guest ? '注册' : '升级'}后自动带入你的账号。</p> : null}
               {onUpgrade ? (

@@ -1,6 +1,6 @@
 export const ACCOUNT_AUTH_OPEN_EVENT = 'ai-dca:account-auth-open';
 export const ACCOUNT_AUTH_INTENT_KEY = 'aiDcaAccountAuthIntent_v1';
-// 付费功能内嵌入口（如份额历史 SVIP 锁）打开「打赏开通」二维码；WorkspacePage 监听。
+// 付费功能内嵌入口（如份额历史 SVIP 锁）打开「会员说明」弹窗（无付费入口）；WorkspacePage 监听。
 export const UPGRADE_QR_OPEN_EVENT = 'ai-dca:upgrade-qr-open';
 
 export function openUpgradeQr({ source = '' } = {}) {

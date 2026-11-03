@@ -8,7 +8,7 @@ function readDismissed() {
 }
 
 /** 首页 VIP 到期提醒：到期前 7 天出现，可按到期日关闭。 */
-export function VipExpiryNotice({ roles, onUpgrade, demoActive = false }) {
+export function VipExpiryNotice({ roles, demoActive = false }) {
   const notice = useMemo(() => vipExpiryNotice(roles), [roles]);
   const [dismissed, setDismissed] = useState(readDismissed);
   const tracked = useRef('');
@@ -32,13 +32,6 @@ export function VipExpiryNotice({ roles, onUpgrade, demoActive = false }) {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-extrabold text-amber-900">{notice.name} 还有 {notice.daysLeft} 天到期{date ? `（${date}）` : ''}</h2>
           <p className="mt-0.5 text-xs leading-5 text-amber-800">到期后切换提醒和通知会停止推送，溢价拉开时就收不到换基信号了。</p>
-          <button
-            type="button"
-            className="mt-2 inline-flex h-8 items-center rounded-lg bg-amber-500 px-3 text-xs font-extrabold text-white hover:bg-amber-600"
-            onClick={() => { trackFeatureEvent('membership', 'expiry_notice_renew', { role: notice.code, daysLeft: notice.daysLeft }); onUpgrade?.(); }}
-          >
-            打赏续费
-          </button>
         </div>
         <button type="button" aria-label="关闭到期提醒" className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-amber-500 hover:bg-amber-100" onClick={dismiss}>
           <X className="h-4 w-4" aria-hidden="true" />

@@ -31,7 +31,6 @@ import { GettingStartedEntry, GettingStartedSlot, OnboardingHomeGate } from '../
 import { StepHintHost } from '../components/onboarding/StepHintHost.jsx';
 import { ONBOARDING_FLOW_COMPLETE_EVENT, ONBOARDING_OPEN_EVENT, ONBOARDING_START_DEMO_EVENT, ONBOARDING_START_EVENT, consumeOnboardingDemoCompleted, isOnboardingHintActive, markOnboardingDemoCompleted, writeOnboardingState } from '../app/onboarding/state.js';
 import { ONBOARDING_FLOWS } from '../app/onboarding/catalog.js';
-import buyMeCoffeeQr from '../assets/buy-me-coffee-qr.jpg';
 import { useAutoPromptBusy, useAutoPromptSlot } from '../app/promptQueue.js';
 
 // 各主 tab 使用 React.lazy 按需加载，在 Vite 中会被拆成独立 chunk。
@@ -203,7 +202,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mobileBottomSheetHidden, setMobileBottomSheetHidden] = useState(() => isMobileBottomSheetOpen());
   const [showQrModal, setShowQrModal] = useState(false);
-  const [qrPurpose, setQrPurpose] = useState('coffee');
   const [demoTab, setDemoTab] = useState('');
   const [demoDoneFlow, setDemoDoneFlow] = useState(null);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -305,7 +303,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   useEffect(() => {
     function handleOpenUpgradeQr() {
-      setQrPurpose('upgrade');
       setShowQrModal(true);
     }
     window.addEventListener(UPGRADE_QR_OPEN_EVENT, handleOpenUpgradeQr);
@@ -473,13 +470,13 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const demoFeature = demoAsGuest || (activeAccess.status === 'forbidden' && isPaidRole(activeAccess.requiredRole)) ? demoFeatureFor(activeTab) : null;
   const handleDemoUpgrade = demoAsGuest
     ? () => openAccountAuth({ mode: 'register', source: 'feature-demo', trigger: activeTab })
-    : () => { setQrPurpose('upgrade'); setShowQrModal(true); };
+    : () => setShowQrModal(true);
   const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), points: demoFeature.points, pitch: demoFeature.pitch, retainedUntil: readDemoSession(activeTab)?.expiresAt || 0 } : null;
   const demoActive = Boolean(demoFeature) && demoTab === activeTab;
   function startFeatureDemo() {
     window.__AI_DCA_DEMO_VARIANT__ = '';
     if (consumeDemoQuota(activeTab)) setDemoTab(activeTab);
-    else showToast({ title: '本功能今日体验次数已用完', description: '明天可以再来体验，或打赏开通后不限次使用。', tone: 'amber' });
+    else showToast({ title: '本功能今日体验次数已用完', description: '明天可以再来体验。', tone: 'amber' });
   }
   useEffect(() => {
     if (demoTab && demoTab !== activeTab) setDemoTab('');
@@ -734,7 +731,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           menuLabel={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
           username={accountUsername}
           onLogin={() => openAccountAuth({ mode: 'login', source: 'rbac-route-guard', trigger: activeTab })}
-          onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+          onUpgrade={() => setShowQrModal(true)}
           demo={demoOffer}
           onDemo={startFeatureDemo}
           autoPromptLogin={!demoOffer}
@@ -758,7 +755,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
                     takeover={takeover}
                     roles={rbac.roles}
                     onRegister={() => openAccountAuth({ mode: 'register', source: 'onboarding', trigger: 'home' })}
-                    onUpgrade={() => { setQrPurpose('upgrade'); setShowQrModal(true); }}
+                    onUpgrade={() => setShowQrModal(true)}
                   />
                 )}
               />
@@ -806,7 +803,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         }
         topRole={rbac.loggedIn ? rbac.topRole : null}
         username={accountUsername}
-        onBuyMeCoffee={() => { setQrPurpose('coffee'); setShowQrModal(true); }}
         onShowDisclaimer={() => setShowDisclaimer(true)}
       />
       <ConsoleLayout
@@ -928,21 +924,18 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
       {!conversionPrompt && !cloudSession?.accessToken && !mobileBottomSheetHidden && !accountMenuOpen && activeAccess.status === 'ok' && activeTab !== 'notify' ? <ShareLandingBar /> : null}
       <StepHintHost paused={mobileBottomSheetHidden || autoPromptBusy} demoActive={demoActive} />
       {showQrModal ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/70 p-4" role="dialog" aria-modal="true" aria-label="Buy me coffee 二维码" onClick={() => setShowQrModal(false)}>
-          <div className="relative w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <button type="button" aria-label="关闭" className="absolute -top-3 -right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-700 shadow-md transition-colors hover:bg-slate-100" onClick={() => setShowQrModal(false)}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-label="会员说明" onClick={() => setShowQrModal(false)} data-testid="membership-info">
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <button type="button" aria-label="关闭" className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setShowQrModal(false)}>
               <X className="h-4 w-4" />
             </button>
-            <div className="overflow-hidden rounded-2xl bg-white shadow-2xl">
-              <img src={buyMeCoffeeQr} alt="Buy me coffee 二维码" className="block w-full" />
-              {qrPurpose === 'upgrade' ? (
-                <p className="px-4 py-3 text-center text-xs leading-5 text-slate-600" data-qr-upgrade-hint>
-                  金额随意，付款备注请填写账号名{accountUsername ? <>「<span className="font-bold text-slate-900">{accountUsername}</span>」</> : ''}，管理员看到后会尽快为您开通。
-                </p>
-              ) : (
-                <p className="px-4 py-3 text-center text-xs text-slate-600">扫码支持作者</p>
-              )}
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">会员说明</div>
+            <h3 className="mt-1 text-lg font-bold text-slate-900">会员权限不对外销售</h3>
+            <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-600">
+              <li><span className="font-bold text-slate-900">VIP</span>：新用户注册赠送，有效期以账号显示为准。</li>
+              <li><span className="font-bold text-slate-900">SVIP</span>：邀请制，由管理员在后台授权，不提供付费开通。</li>
+            </ul>
+            <p className="mt-4 text-xs leading-5 text-slate-400">已获授权的账号刷新页面即可使用。</p>
           </div>
         </div>
       ) : null}

@@ -39,7 +39,7 @@ function readStoredTheme() { try { return localStorage.getItem(THEME_KEY) === 'd
 function readStoredColorMode() { try { return localStorage.getItem(COLOR_MODE_KEY) === 'us' ? 'us' : 'cn'; } catch { return 'cn'; } }
 function cacheKey(section) { return `cn-home:${section}:v1`; }
 function readCache(section) { try { return JSON.parse(localStorage.getItem(cacheKey(section)) || 'null'); } catch { return null; } }
-function writeCache(section, value) { try { localStorage.setItem(cacheKey(section), JSON.stringify(value)); } catch {} }
+function writeCache(section, value) { try { localStorage.setItem(cacheKey(section), JSON.stringify(value)); } catch { /* 隐私模式忽略 */ } }
 async function request(path) {
   const response = await fetch(`${BASE}${path}`, { headers: { accept: 'application/json' }, cache: 'no-store' });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -212,7 +212,7 @@ export function CnHomeExperience({ topSlot = null, takeover = false } = {}) {
     if (key === 'today') { setRange('today'); return; }
     if (!canLong) {
       pendingRange.current = key;
-      if (!rbac?.loggedIn) openAccountAuth({ mode: 'login', source: 'home-premium-range', trigger: 'home', notice: '3月 / 半年 / 1年 溢价走势是 SVIP 专享：登录后还需开通 SVIP 才能查看，已是 SVIP 登录即可。' });
+      if (!rbac?.loggedIn) openAccountAuth({ mode: 'login', source: 'home-premium-range', trigger: 'home', notice: '3月 / 半年 / 1年 溢价走势是 SVIP 专享（邀请制）：已是 SVIP 登录即可查看。' });
       else openUpgradeQr({ source: 'home-premium-range' });
       return;
     }

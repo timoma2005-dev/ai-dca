@@ -92,10 +92,9 @@ test('route guard pages: 403 shows the required role, login page shows the login
   assert.match(forbidden, /SVIP 专享/);
   assert.doesNotMatch(forbidden, /403/);
   const paid = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'vip', name: 'VIP' }, menuLabel: '雷达', username: 'lovexl', onUpgrade() {} });
-  assert.match(paid, /请随意打赏并备注账号名/);
-  assert.match(paid, /lovexl/);
-  assert.match(paid, /管理员看到后会尽快为您开通/);
-  assert.match(paid, /打赏开通/);
+  assert.match(paid, /邀请制，由管理员在后台授权/);
+  assert.match(paid, /会员说明/);
+  assert.doesNotMatch(paid, /打赏|付款|备注账号/);
   const adminOnly = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'admin', name: '管理员' }, menuLabel: '权限管理' });
   assert.match(adminOnly, /data-testid="access-guard-forbidden"/);
   assert.match(adminOnly, /403/);

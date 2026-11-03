@@ -41,7 +41,7 @@ export function demoUnlockLabel(demo) {
   return demo?.guest ? '注册查看全部' : `升级 ${demo?.roleLabel || 'VIP'} 查看全部`;
 }
 
-/** 遮罩 CTA：「注册/升级 VIP 查看全部」+ 按钮（打开注册 / 打赏开通）。 */
+/** 遮罩 CTA：「注册/升级 VIP 查看全部」+ 按钮（打开注册 / 会员说明）。 */
 export function DemoUnlockOverlay({ demo, compact = false }) {
   return (
     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/40 px-3 text-center" data-testid="demo-lock-overlay">

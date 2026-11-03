@@ -429,7 +429,7 @@ function LockedCard({ loggedIn, onClose, mobile }) {
               openUpgradeQr({ source: 'etf-history' });
             }}
           >
-            开通 SVIP
+            SVIP 说明
           </button>
         ) : (
           <button

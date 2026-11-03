@@ -89,7 +89,7 @@ test('任务卡：游客第一项是注册，登录用户按 切换方案 → �
   assert.equal(both.allDone, true);
 });
 
-test('任务卡：无权限的任务显示为锁定（打赏开通），可选任务不影响全部完成', () => {
+test('任务卡：无权限的任务显示为锁定（会员说明），可选任务不影响全部完成', () => {
   const accessOf = (tab) => ({ status: tab === 'fundSwitch' ? 'forbidden' : 'ok' });
   const tasks = buildOnboardingTasks({ loggedIn: true, signals: {}, accessOf });
   assert.equal(tasks.items.find((item) => item.id === 'switch').status, 'locked');
