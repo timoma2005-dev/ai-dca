@@ -87,7 +87,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
           <h2 className="mt-2 text-lg font-bold text-slate-900">{menuLabel || '此功能'}为 {roleLabel} 会员功能</h2>
           <DemoPoints demo={demo} tone="text-amber-500" />
           <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500 [text-wrap:balance]">
-            {roleLabel} 为邀请制，由管理员在后台授权，不提供付费开通。
+            {requiredRole?.code === 'svip' ? '该权限属于 SVIP，暂不对外开放。' : `${roleLabel} 由管理员在后台授权，不提供付费开通。`}
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             {demo && onDemo ? (

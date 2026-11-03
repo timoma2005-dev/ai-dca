@@ -202,6 +202,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mobileBottomSheetHidden, setMobileBottomSheetHidden] = useState(() => isMobileBottomSheetOpen());
   const [showQrModal, setShowQrModal] = useState(false);
+  const [memberInfoRole, setMemberInfoRole] = useState('');
   const [demoTab, setDemoTab] = useState('');
   const [demoDoneFlow, setDemoDoneFlow] = useState(null);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -302,7 +303,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   }, []);
 
   useEffect(() => {
-    function handleOpenUpgradeQr() {
+    function handleOpenUpgradeQr(event) {
+      setMemberInfoRole(event?.detail?.role || '');
       setShowQrModal(true);
     }
     window.addEventListener(UPGRADE_QR_OPEN_EVENT, handleOpenUpgradeQr);
@@ -470,7 +472,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const demoFeature = demoAsGuest || (activeAccess.status === 'forbidden' && isPaidRole(activeAccess.requiredRole)) ? demoFeatureFor(activeTab) : null;
   const handleDemoUpgrade = demoAsGuest
     ? () => openAccountAuth({ mode: 'register', source: 'feature-demo', trigger: activeTab })
-    : () => setShowQrModal(true);
+    : () => { setMemberInfoRole(activeAccess.requiredRole?.code === 'svip' ? 'svip' : ''); setShowQrModal(true); };
   const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), points: demoFeature.points, pitch: demoFeature.pitch, retainedUntil: readDemoSession(activeTab)?.expiresAt || 0 } : null;
   const demoActive = Boolean(demoFeature) && demoTab === activeTab;
   function startFeatureDemo() {
@@ -731,7 +733,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           menuLabel={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
           username={accountUsername}
           onLogin={() => openAccountAuth({ mode: 'login', source: 'rbac-route-guard', trigger: activeTab })}
-          onUpgrade={() => setShowQrModal(true)}
+          onUpgrade={() => { setMemberInfoRole(''); setShowQrModal(true); }}
           demo={demoOffer}
           onDemo={startFeatureDemo}
           autoPromptLogin={!demoOffer}
@@ -755,7 +757,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
                     takeover={takeover}
                     roles={rbac.roles}
                     onRegister={() => openAccountAuth({ mode: 'register', source: 'onboarding', trigger: 'home' })}
-                    onUpgrade={() => setShowQrModal(true)}
+                    onUpgrade={() => { setMemberInfoRole(''); setShowQrModal(true); }}
                   />
                 )}
               />
@@ -929,6 +931,13 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
             <button type="button" aria-label="关闭" className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setShowQrModal(false)}>
               <X className="h-4 w-4" />
             </button>
+            {memberInfoRole === 'svip' ? (
+              <>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">SVIP 权限</div>
+                <h3 className="mt-1 text-lg font-bold text-slate-900" data-testid="svip-closed">该权限属于 SVIP，暂不对外开放</h3>
+                <p className="mt-4 text-xs leading-5 text-slate-400">已是 SVIP 的账号刷新页面即可使用。</p>
+              </>
+            ) : (<>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">会员说明</div>
             <h3 className="mt-1 text-lg font-bold text-slate-900">会员权限不对外销售</h3>
             <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-600">
@@ -936,6 +945,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
               <li><span className="font-bold text-slate-900">SVIP</span>：邀请制，由管理员在后台授权，不提供付费开通。</li>
             </ul>
             <p className="mt-4 text-xs leading-5 text-slate-400">已获授权的账号刷新页面即可使用。</p>
+            </>)}
           </div>
         </div>
       ) : null}

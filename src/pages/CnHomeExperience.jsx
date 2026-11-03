@@ -206,14 +206,14 @@ export function CnHomeExperience({ topSlot = null, takeover = false } = {}) {
     if (!rbac?.permVersion && !rbac?.isAdmin && !canLong) return; // 等服务端权限回来
     pendingRange.current = '';
     if (canLong) setRange(want);
-    else openUpgradeQr({ source: 'home-premium-range' });
+    else openUpgradeQr({ source: 'home-premium-range', role: 'svip' });
   }, [rbac, canLong]);
   function chooseRange(key) {
     if (key === 'today') { setRange('today'); return; }
     if (!canLong) {
       pendingRange.current = key;
-      if (!rbac?.loggedIn) openAccountAuth({ mode: 'login', source: 'home-premium-range', trigger: 'home', notice: '3月 / 半年 / 1年 溢价走势是 SVIP 专享（邀请制）：已是 SVIP 登录即可查看。' });
-      else openUpgradeQr({ source: 'home-premium-range' });
+      if (!rbac?.loggedIn) openAccountAuth({ mode: 'login', source: 'home-premium-range', trigger: 'home', notice: '3月 / 半年 / 1年 溢价走势属于 SVIP 权限，暂不对外开放；已是 SVIP 登录即可查看。' });
+      else openUpgradeQr({ source: 'home-premium-range', role: 'svip' });
       return;
     }
     setRange(key);

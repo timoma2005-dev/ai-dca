@@ -426,7 +426,7 @@ function LockedCard({ loggedIn, onClose, mobile }) {
             className="eh-btn"
             onClick={() => {
               onClose?.();
-              openUpgradeQr({ source: 'etf-history' });
+              openUpgradeQr({ source: 'etf-history', role: 'svip' });
             }}
           >
             SVIP 说明

@@ -3,9 +3,9 @@ export const ACCOUNT_AUTH_INTENT_KEY = 'aiDcaAccountAuthIntent_v1';
 // 付费功能内嵌入口（如份额历史 SVIP 锁）打开「会员说明」弹窗（无付费入口）；WorkspacePage 监听。
 export const UPGRADE_QR_OPEN_EVENT = 'ai-dca:upgrade-qr-open';
 
-export function openUpgradeQr({ source = '' } = {}) {
+export function openUpgradeQr({ source = '', role = '' } = {}) {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(UPGRADE_QR_OPEN_EVENT, { detail: { source: String(source || '').slice(0, 80) } }));
+  window.dispatchEvent(new CustomEvent(UPGRADE_QR_OPEN_EVENT, { detail: { source: String(source || '').slice(0, 80), role: String(role || '') } }));
 }
 
 function normalizeMode(mode = '') {
