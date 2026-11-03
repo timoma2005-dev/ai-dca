@@ -95,3 +95,10 @@ window.__aiDcaDailyAuth = {
     try { trackFeatureEvent('conversion', 'prompt_view', { trigger: 'daily_page' }); } catch { /* ignore */ }
   }
 };
+
+// 日报分享图：页面内联脚本调用 window.__aiDcaDailyPoster(report)。分享图模块按需加载，日报首屏不变重。
+window.__aiDcaDailyPoster = (report) => import('./app/sharePoster.js')
+  .then((m) => m.shareReportPoster(report, {
+    source: 'daily',
+    onEvent: (action) => { try { trackFeatureEvent('share_poster', action, { trigger: 'daily_page' }); } catch { /* ignore */ } },
+  }));

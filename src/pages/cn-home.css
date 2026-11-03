@@ -485,3 +485,6 @@
   .cn-home-chart-legend.is-readout{display:grid;grid-template-columns:1fr 1fr;gap:4px 6px;margin-top:6px;padding-top:4px;border-top:0;max-height:none;overflow:visible}
   .cn-home-chart-legend.is-readout .cn-home-legend-chip{width:100%;min-width:0;padding:4px 6px;font-size:11px}
 }
+/* 手机端顶栏隐藏，分享入口放在「场内走势」标题旁 */
+.cn-home-share-mini{display:none}
+@media(max-width:640px){.cn-home-share-mini{display:inline-flex;align-items:center;gap:3px;margin-left:4px;border:1px solid #dbe4ff;background:#eef2ff;color:#4f46e5;border-radius:999px;padding:0 9px;height:24px;min-height:0;line-height:1;font-size:11px;font-weight:700;cursor:pointer}.cn-home-share-mini svg{width:12px;height:12px}}

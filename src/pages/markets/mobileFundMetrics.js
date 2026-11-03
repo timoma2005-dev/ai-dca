@@ -6,6 +6,7 @@ import {
   formatSymbolDisplay,
   formatYearPercent,
   resolvePremiumPercent,
+  premiumOverpayAmount,
 } from './marketDisplayUtils.js';
 import { resolveCloseHighDrawdown, resolveDayHighDrawdown } from './marketHighDrawdown.js';
 import { resolveMarketPriceDisplay, resolveMarketPriceValue, resolveTurnoverDisplay, toNumberOrNull } from './marketMissingValue.js';
@@ -53,6 +54,8 @@ export const MOBILE_METRIC_CATALOG = [
   { id: 'price', label: '最新价/净值', shortLabel: '最新', resolve: (row) => { const view = resolveMarketPriceDisplay(row); return { text: view.note ? `${view.text} ${view.note}` : view.text, tone: view.missing ? 'text-[var(--market-text-muted)]' : 'text-[var(--market-text-strong)]' }; } },
   { id: 'changePercent', label: '日涨跌幅', shortLabel: '涨跌', resolve: (row) => ({ text: formatPercent(row.changePercent), tone: Number.isFinite(number(row.changePercent)) ? changeToneClass(number(row.changePercent)) : 'text-[var(--market-text-subtle)]' }) },
   { id: 'premium', label: '溢价率', shortLabel: '溢价', etfOnly: true, resolve: (row) => ({ text: formatPremiumPercent(row), tone: changeToneClass(resolvePremiumPercent(row)) }) },
+  // 溢价成本：10 万元按当前溢价买入比净值多付多少，新手一眼看懂溢价的代价。
+  { id: 'premiumCost', label: '10万多付', shortLabel: '10万多付', etfOnly: true, resolve: (row) => { const v = premiumOverpayAmount(resolvePremiumPercent(row)); return { text: v == null ? '—' : `¥${v.toLocaleString('zh-CN')}`, tone: v == null ? 'text-[var(--market-text-subtle)]' : v > 2000 ? 'text-amber-700' : 'text-[var(--market-text-strong)]' }; } },
   { id: 'limit', label: '申购状态', shortLabel: '申购', otcOnly: true, resolve: limitMetric },
   { id: 'turnover', label: '成交额', shortLabel: '成交额', etfOnly: true, resolve: (row) => ({ text: resolveTurnoverDisplay(row).text, tone: 'text-[var(--market-text-strong)]' }) },
   { id: 'currentYearPercent', label: '今年以来', shortLabel: '今年', dualShortLabel: '今年(价格)', resolve: (row) => ({ text: formatYearPercent(row), tone: changeToneClass(number(row.ytdReturn ?? row.currentYearPercent)) }) },
@@ -157,7 +160,7 @@ export function formatRowCode(row) {
 
 function sortValue(row, id) {
   if (id === 'heldRank') return row?.isHeld ? 1 : 0;
-  if (id === 'premium') return number(resolvePremiumPercent(row));
+  if (id === 'premium' || id === 'premiumCost') return number(resolvePremiumPercent(row));
   if (id === 'limit') return number(row?.fundLimit?.maxPurchasePerDay);
   if (id === 'currentYearPercent') return number(row?.ytdReturn ?? row?.currentYearPercent);
   if (id === 'navYtdPercent') return number(row?.navYtdReturn);

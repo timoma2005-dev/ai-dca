@@ -30,7 +30,8 @@ import {
   resolveHaltBadgeLabel,
   resolveFundFeeRate,
   resolveRedeemFeeRate,
-  resolvePremiumPercent
+  resolvePremiumPercent,
+  formatPremiumOverpay,
 } from './marketDisplayUtils.js';
 import {
   formatSwitchLimitAmount,
@@ -599,21 +600,22 @@ export function MarketListTable({
         const premiumPct = resolvePremiumPercent(row.original);
         const val = Number(premiumPct);
         if (!Number.isFinite(val)) return <span className="text-slate-400">—</span>;
+        const overpayTitle = `按当前溢价，10 万元买入比按净值${formatPremiumOverpay(val)}`;
         if (val > 2.0) {
           return (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold tabular-nums bg-amber-50 text-amber-700 border border-amber-200">
+            <span title={overpayTitle} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold tabular-nums bg-amber-50 text-amber-700 border border-amber-200">
               {formatPremiumPercent(row.original)}
             </span>
           );
         }
         if (val < -0.1) {
           return (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold tabular-nums bg-cyan-50 text-cyan-700 border border-cyan-200">
+            <span title={overpayTitle} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold tabular-nums bg-cyan-50 text-cyan-700 border border-cyan-200">
               {formatPremiumPercent(row.original)}
             </span>
           );
         }
-        return <span className="text-xs font-medium tabular-nums text-slate-700">{formatPremiumPercent(row.original)}</span>;
+        return <span title={overpayTitle} className="text-xs font-medium tabular-nums text-slate-700">{formatPremiumPercent(row.original)}</span>;
       },
       sortingFn: numericSortFn,
       filterFn: numberRangeFilterFn,

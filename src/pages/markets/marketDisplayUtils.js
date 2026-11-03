@@ -344,3 +344,41 @@ export function sortHeldRowsFirst(rows = []) {
     .map((entry) => entry.row);
 }
 
+
+// 溢价成本：按当前溢价买入 amount 元，比按净值买多付的金额（元）。
+export function premiumOverpayAmount(premiumPct, amount = 100000) {
+  if (premiumPct == null || premiumPct === '') return null;
+  const p = Number(premiumPct);
+  if (!Number.isFinite(p) || p <= -100) return null;
+  return Math.round(amount * p / (100 + p));
+}
+
+export function formatPremiumOverpay(premiumPct, amount = 100000) {
+  const v = premiumOverpayAmount(premiumPct, amount);
+  if (v == null) return '—';
+  const abs = Math.abs(v).toLocaleString('zh-CN');
+  return v >= 0 ? `多付 ¥${abs}` : `少付 ¥${abs}`;
+}
+
+// 申购卖出套利（LOF / 场外份额转场内）粗估：溢价 − 申购费（按一折约 0.15%）− 卖出佣金约 0.03%。
+// 未计 T+2 确认期间的净值波动；暂停申购不给数值。
+export const ARB_BUY_FEE_PCT = 0.15;
+export const ARB_SELL_FEE_PCT = 0.03;
+export function estimatePremiumArbitrage(premiumPct, limit = null) {
+  if (premiumPct == null || premiumPct === '') return null;
+  const p = Number(premiumPct);
+  if (!Number.isFinite(p)) return null;
+  const status = String(limit?.buyStatus || '').toLowerCase();
+  const statusText = String(limit?.buyStatusText || '');
+  const suspended = /suspend|closed/.test(status) || /暂停|关闭/.test(statusText);
+  const netPct = Math.round((p - ARB_BUY_FEE_PCT - ARB_SELL_FEE_PCT) * 100) / 100;
+  const maxPerDay = Number(limit?.maxPurchasePerDay);
+  const cap = !suspended && Number.isFinite(maxPerDay) && maxPerDay > 0 ? maxPerDay : null;
+  return {
+    netPct,
+    suspended,
+    known: Boolean(limit),
+    maxPerDay: cap,
+    profitAtCap: cap != null && netPct > 0 ? Math.round(cap * netPct / 100) : null,
+  };
+}

@@ -5,6 +5,7 @@ import { BREADTH_ITEMS, DEFAULT_RULES, useMarketSentimentWeather } from './marke
 import { setMobileBottomSheetOpen } from '../../app/mobileBottomSheet.js';
 import { changeToneClass } from './marketDisplayUtils.js';
 import { formatSentimentTime, sentimentCellState } from './marketSentimentSnapshot.js';
+import { INDEX_FUTURES, useIndexFutures } from './useIndexFutures.js';
 
 function createDefaultSettings() {
   return { rules: { ...DEFAULT_RULES } };
@@ -40,6 +41,7 @@ export function MarketSentimentStrip() {
     error, fearGreed, vix, breadth, tempLabel, weather, snapshot,
   } = useMarketSentimentWeather(settings.rules);
   const snapshotTime = formatSentimentTime(snapshot.lastSuccessAt);
+  const futures = useIndexFutures();
 
   useEffect(() => {
     setMobileBottomSheetOpen('market-sentiment-settings', settingsOpen);
@@ -70,6 +72,18 @@ export function MarketSentimentStrip() {
             </div>
           </div>
           <div className="market-sentiment-strip__chips flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto whitespace-nowrap" role="group" aria-label="市场情绪指标（可横向滑动）">
+            {INDEX_FUTURES.map((item) => {
+              const quote = futures.data[item.key];
+              const pct = quote?.changePercent;
+              const timeText = quote?.time ? new Date(quote.time).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+              return (
+                <div key={item.key} className="flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 backdrop-blur-sm dark:bg-slate-900/40" title={`${item.label} ${item.key}（东财 CME 连续合约，相对上一结算价）${timeText ? ' · ' + timeText : ''}`} data-testid={'futures-' + item.key}>
+                  <span className="text-[10px] text-[var(--market-text-muted)]">{item.label}</span>
+                  <span className="font-mono text-xs font-bold text-[var(--market-text-strong)]">{quote ? quote.price.toFixed(2) : '—'}</span>
+                  <span className={cx('font-mono text-xs font-black', changeToneClass(pct))}>{pct == null ? '' : formatChangePercent(pct)}</span>
+                </div>
+              );
+            })}
             <div className="flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 backdrop-blur-sm dark:bg-slate-900/40" title="CNN 贪婪与恐慌指数">
               <span className="text-[10px] text-[var(--market-text-muted)]">F&G</span>
               <span className="font-mono text-xs font-black text-sky-500">{fearGreed ?? '—'}</span>

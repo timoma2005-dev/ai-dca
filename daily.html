@@ -118,12 +118,19 @@
       : '<div class="card"><h1>' + esc(d.title) + '</h1><div class="meta">' + (pre ? "按昨收价" : "按收盘价") + (d.navBase ? "，净值基准 " + esc(d.navBase.slice(5)) + "（东财口径，未公布的按同类估算）" : "") + " · 更新于 " + esc(gen) + "</div>" +
         '<div class="kpis"><div class="kpi"><span>纳指100 溢价中位</span><b>' + f2(m) + '%</b></div><div class="kpi"><span>溢价最低</span><b>' + (lowR ? esc(lowR.short) : "—") + '</b></div><div class="kpi"><span>' + (pre ? "预计停牌" : "高于 10%") + "</span><b>" + nHalt + " 只</b></div></div>" +
         (function () { var t = (d.text || "").split("\n").filter(function (l) { return /^隔夜参考|^9:30 正常开盘/.test(l); })[0]; return t ? '<div class="pick">' + esc(t) + "</div>" : ""; })() +
-        '<div class="row"><button class="btn sec" id="copy">复制文字版</button></div></div>' +
+        '<div class="row"><button class="btn pri" id="poster">生成分享图</button><button class="btn sec" id="copy">复制文字版</button></div></div>' +
         '<div class="card" style="padding:6px 10px"><table><thead><tr><th>基金</th><th class="hm">' + (pre ? "昨收" : "收盘") + "</th><th>涨跌</th><th>溢价</th></tr></thead><tbody>" +
         '<tr class="grp"><td colspan="4">纳指 100 ETF · 按溢价从低到高</td></tr>' + nq.map(tr).join("") +
         (lof.length ? '<tr class="grp"><td colspan="4">LOF</td></tr>' + lof.map(tr).join("") : "") +
         '<tr class="grp"><td colspan="4">标普 500 ETF（参考）</td></tr>' + spx.map(tr).join("") + "</tbody></table></div>";
     root.innerHTML = body;
+    var pb = document.getElementById("poster");
+    if (pb) pb.onclick = function () {
+      var P = window.__aiDcaDailyPoster;
+      if (!P) return;
+      pb.disabled = true; pb.textContent = "生成中…";
+      P(d).then(function () { pb.textContent = "生成分享图"; pb.disabled = false; }, function () { pb.textContent = "生成失败，重试"; pb.disabled = false; });
+    };
     var cp = document.getElementById("copy");
     if (cp) cp.onclick = function () {
       var txt = d.text || "";

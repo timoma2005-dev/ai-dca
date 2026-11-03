@@ -79,7 +79,8 @@ test('theme state is scoped to the .cn-home root with cn-home: storage keys (D3)
 });
 
 test('theme and color-mode toggles sit in the head with lucide icons', () => {
-  assert.match(homeSource, /import \{ AlertCircle, ChevronRight, Lock, Moon, Palette, RefreshCw, Sun \} from 'lucide-react';/);
+  assert.match(homeSource, /import \{ AlertCircle, ChevronRight, Lock, Moon, Palette, RefreshCw, Share2, Sun \} from 'lucide-react';/);
+  assert.match(homeSource, /onClick=\{openSharePoster\}/);
   assert.match(homeSource, /className="cn-home-head-actions"/);
   assert.match(homeSource, /onClick=\{toggleTheme\}/);
   assert.match(homeSource, /onClick=\{toggleColorMode\}/);
