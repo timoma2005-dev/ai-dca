@@ -158,9 +158,8 @@ test('markets and fundSwitch pages wire the local-direct entry', () => {
   assert.doesNotMatch(panel, /fetchDanjuanDirectQuotes/);
 
   const fundSwitch = readFileSync(new URL('../src/pages/FundSwitchExperience.jsx', import.meta.url), 'utf8');
-  assert.match(fundSwitch, /\{ id: 'local', label: '本地直连'/);
-  assert.match(fundSwitch, /activeView === 'local'/);
-  assert.match(fundSwitch, /<FundSwitchLocalTab\s*\/>/);
+  // 2026-11-04 基金切换页移除「本地直连」子 tab。
+  assert.doesNotMatch(fundSwitch, /本地直连|FundSwitchLocalTab/);
   // 直连细节抽到独立组件，避免编排文件超过 refactor guard 的 100 行预算。
   const localTab = readFileSync(new URL('../src/components/markets/FundSwitchLocalTab.jsx', import.meta.url), 'utf8');
   assert.match(localTab, /scope=\{LOCAL_DIRECT_SCOPES\.FUND_SWITCH\}/);
