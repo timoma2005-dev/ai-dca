@@ -114,7 +114,6 @@ export function HoldingsQuickActions({ quickActions }) {
 	if (!hasAny) return null;
 	return (
 		<div className="flex flex-wrap items-center justify-end gap-2">
-			<ActionMenu label="更多" icon={MoreHorizontal} items={moreItems} />
 			<ActionMenu label="导入" icon={Download} items={importItems} tone="indigo" />
 			{quickActions.onNewTransaction ? (
 				<button
@@ -127,6 +126,7 @@ export function HoldingsQuickActions({ quickActions }) {
 					<span>新增单笔</span>
 				</button>
 			) : null}
+			<ActionMenu label="更多" icon={MoreHorizontal} items={moreItems} />
 		</div>
 	);
 }
