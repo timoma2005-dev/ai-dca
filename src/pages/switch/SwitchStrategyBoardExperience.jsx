@@ -139,18 +139,21 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
     ]).then(([nextConfig, nextSnapshot]) => {
       if (nextConfig) setConfig(nextConfig);
       if (nextSnapshot) setSnapshot(nextSnapshot);
-      const activeRule = (nextConfig?.rules || []).find((rule) => rule.id === nextConfig?.activeRuleId)
-        || (nextConfig?.rules || []).find((rule) => rule.enabled);
-      if (activeRule && !snapshotHasRulePremium(nextSnapshot, activeRule.id)) {
-        testSwitchConfig({
-          ...nextConfig,
-          enabled: true,
-          activeRuleId: activeRule.id,
-          rules: [{ ...activeRule, enabled: true }]
-        }).then((payload) => {
-          setSnapshot((current) => mergeSwitchSnapshot(current || nextSnapshot, payload));
-        }).catch(() => {});
-      }
+      // 首屏补算：只测已配置标的（有 H/L 代码）且快照里还没有溢价的方案，
+      // 不再拿 activeRuleId 指向的空「默认规则」去测。
+      const pending = (nextConfig?.rules || [])
+        .filter((rule) => rule.enabled !== false && ((rule.benchmarkCodes || []).length || (rule.enabledCodes || []).length))
+        .filter((rule) => !snapshotHasRulePremium(nextSnapshot, rule.id))
+        .sort((a, b) => (a.id === nextConfig?.activeRuleId ? -1 : 0) - (b.id === nextConfig?.activeRuleId ? -1 : 0))
+        .slice(0, 6);
+      pending.reduce((chain, rule) => chain.then(() => testSwitchConfig({
+        ...nextConfig,
+        enabled: true,
+        activeRuleId: rule.id,
+        rules: [{ ...rule, enabled: true }]
+      }).then((payload) => {
+        setSnapshot((current) => mergeSwitchSnapshot(current || nextSnapshot, payload));
+      }).catch(() => {})), Promise.resolve());
     });
   }, []);
 
