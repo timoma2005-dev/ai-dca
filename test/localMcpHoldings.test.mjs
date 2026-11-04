@@ -75,3 +75,14 @@ test('fetchTzzbHoldings speaks streamable http with session id', async () => {
   assert.deepEqual(calls.filter((c) => c.method === 'tools/call').length, 3);
   assert.ok(createLocalMcpClient('127.0.0.1:1').url.endsWith('/mcp'));
 });
+
+test('local MCP is desktop-only', async () => {
+  const { isLocalMcpSupportedDevice } = await import('../src/app/localMcpClient.js');
+  const mk = (ua, fine = true, extra = {}) => ({ navigator: { userAgent: ua, ...extra }, matchMedia: () => ({ matches: fine }) });
+  assert.equal(isLocalMcpSupportedDevice(mk('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130')), true);
+  assert.equal(isLocalMcpSupportedDevice(mk('Mozilla/5.0 (Linux; Android 14) Mobile Safari')), false);
+  assert.equal(isLocalMcpSupportedDevice(mk('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)')), false);
+  assert.equal(isLocalMcpSupportedDevice(mk('Mozilla/5.0 (Macintosh; Intel Mac OS X)', true, { platform: 'MacIntel', maxTouchPoints: 5 })), false);
+  assert.equal(isLocalMcpSupportedDevice(mk('Mozilla/5.0 (X11; Linux x86_64)', false)), false);
+  assert.equal(isLocalMcpSupportedDevice(null), false);
+});

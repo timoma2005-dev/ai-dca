@@ -1197,7 +1197,7 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
         },
         onPasteExcel: openPasteModal,
         onOcr: openOcrModal,
-        onLocalMcp: localMcp.openModal,
+        onLocalMcp: localMcp.supported ? localMcp.openModal : undefined,
         onDataRepair: () => window.dispatchEvent(new CustomEvent('workspace:navigate', { detail: { tab: 'dataRepair' } })),
         onCopyTable: handleCopyVisibleTable,
         copyTitle: '复制基金汇总为 TSV',

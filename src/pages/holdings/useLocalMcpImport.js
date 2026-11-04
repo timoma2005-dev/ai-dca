@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getTodayShanghaiDate, normalizeTransaction } from '../../app/holdingsLedgerCore.js';
 import { persistHoldingTransactionMutation } from '../../app/holdingTransactionMutations.js';
-import { LOCAL_MCP_DEFAULT_URL, normalizeLocalMcpUrl } from '../../app/localMcpClient.js';
+import { LOCAL_MCP_DEFAULT_URL, isLocalMcpSupportedDevice, normalizeLocalMcpUrl } from '../../app/localMcpClient.js';
 import { buildMcpSyncPlan, fetchTzzbHoldings, planRowsToDrafts } from '../../app/localMcpHoldings.js';
 import { showActionToast } from '../../app/toast.js';
 import { trackActionResult } from '../../app/analytics.js';
@@ -25,6 +25,7 @@ function writeStore(key, value) {
 
 // 本地 MCP（同花顺投资账本 tzzb-mcp）持仓导入：读取 → 对账 → 预览确认 / 自动写入调整流水。
 export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
+  const [supported] = useState(() => isLocalMcpSupportedDevice());
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState(() => readStore(URL_KEY, LOCAL_MCP_DEFAULT_URL));
   const [autoSync, setAutoSyncState] = useState(() => readStore(AUTO_KEY, '0') === '1');
@@ -112,7 +113,7 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
 
   // 自动导入：开启后进入持仓页即读取并直接写入差额（每 10 分钟最多一次）。
   useEffect(() => {
-    if (!autoSync || typeof window === 'undefined') return;
+    if (!autoSync || !supported) return;
     const last = Number(readStore(LAST_AUTO_KEY, '0')) || 0;
     if (Date.now() - last < 10 * 60 * 1000) return;
     let cancelled = false;
@@ -135,6 +136,7 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
   }, [autoSync]);
 
   return {
+    supported,
     open,
     openModal: () => { setOpen(true); setStatus({ state: 'idle', message: '' }); setPlan(null); },
     onClose: () => setOpen(false),

@@ -163,3 +163,16 @@ export function createLocalMcpClient(rawUrl, { fetchImpl, timeoutMs = DEFAULT_TI
 
   return { url, callTool, listTools };
 }
+
+// 本地 MCP 依赖电脑上运行的桥接服务，仅电脑端（非手机/平板、精确指针）开放。
+export function isLocalMcpSupportedDevice(env = typeof window === 'undefined' ? null : window) {
+  if (!env) return false;
+  const nav = env.navigator || {};
+  const ua = String(nav.userAgent || '');
+  if (/Android|iPhone|iPad|iPod|Mobile|HarmonyOS|MicroMessenger/i.test(ua)) return false;
+  if (nav.platform === 'MacIntel' && Number(nav.maxTouchPoints) > 1) return false; // iPadOS 桌面 UA
+  try {
+    if (typeof env.matchMedia === 'function' && !env.matchMedia('(pointer: fine)').matches) return false;
+  } catch { /* 忽略 */ }
+  return true;
+}
