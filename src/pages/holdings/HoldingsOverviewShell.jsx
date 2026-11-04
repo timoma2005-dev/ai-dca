@@ -1,4 +1,4 @@
-import { AlertTriangle, ScanLine, ReceiptText, Plus, Trash2, Wrench } from 'lucide-react';
+import { AlertTriangle, PlugZap, ScanLine, ReceiptText, Plus, Trash2, Wrench } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 import { IncomeSection } from '../../app/income/IncomeSection.jsx';
 import { ROUTES } from '../../app/incomeRoute.js';
@@ -11,6 +11,7 @@ import { HoldingsSidePanel } from './HoldingsSidePanel.jsx';
 const HoldingSummaryPanel = lazy(() => import('./HoldingSummaryPanel.jsx').then((module) => ({ default: module.HoldingSummaryPanel })));
 const PasteImportModal = lazy(() => import('./TransactionImportModals.jsx').then((module) => ({ default: module.PasteImportModal })));
 const OcrImportModal = lazy(() => import('./TransactionImportModals.jsx').then((module) => ({ default: module.OcrImportModal })));
+const LocalMcpImportModal = lazy(() => import('./LocalMcpImportModal.jsx').then((module) => ({ default: module.LocalMcpImportModal })));
 const SwitchCounterpartPickerModal = lazy(() => import('./SwitchCounterpartPickerModal.jsx').then((module) => ({ default: module.SwitchCounterpartPickerModal })));
 const TransactionDraftPanel = lazy(() => import('./TransactionDraftPanel.jsx').then((module) => ({ default: module.TransactionDraftPanel })));
 
@@ -39,6 +40,7 @@ export function HoldingsOverviewShell({
   onOpenAlertDialog,
   pasteModal,
   ocrModal,
+  localMcpModal,
   switchPicker,
   sidePanel,
 }) {
@@ -70,6 +72,13 @@ export function HoldingsOverviewShell({
       label: '截图 OCR',
       icon: ScanLine,
       onClick: quickActions.onOcr,
+    });
+  }
+  if (quickActions?.onLocalMcp) {
+    fabActions.push({
+      label: '本地 MCP',
+      icon: PlugZap,
+      onClick: quickActions.onLocalMcp,
     });
   }
   if (quickActions?.onClearAllData) {
@@ -167,6 +176,11 @@ export function HoldingsOverviewShell({
           </Suspense>
         ) : null}
       </>) : null}
+      {localMcpModal?.open ? (
+        <Suspense fallback={null}>
+          <LocalMcpImportModal mcp={localMcpModal} />
+        </Suspense>
+      ) : null}
       {switchPicker.open ? (
         <Suspense fallback={null}>
           <SwitchCounterpartPickerModal

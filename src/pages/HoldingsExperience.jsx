@@ -19,6 +19,7 @@ import { COMPACT_HOLDINGS_COLUMN_VISIBILITY, createAggregateHoldingsColumns } fr
 import { buildAggregateHoldingsTsv } from './holdings/holdingsClipboardExport.js';
 import { useHoldingsStorageSync } from './holdings/useHoldingsStorageSync.js';
 import { useHoldingAlerts } from './holdings/useHoldingAlerts.js';
+import { useLocalMcpImport } from './holdings/useLocalMcpImport.js';
 import { AlertRuleDialog } from '../components/AlertRuleDialog.jsx';
 import { WorkspaceReturnBar } from '../components/WorkspaceReturnBar.jsx';
 import { MarketSentimentPageSurface } from './markets/MarketSentimentPageSurface.jsx';
@@ -111,7 +112,6 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
   const totalAlertCount = holdingAlerts.length;
   const isFirstAlert = totalAlertCount === 0;
   const [ledger, setLedger] = useState(() => readLedgerState());
-  // v7.6: 移除交易日自动过滤场内数据的逻辑，避免出现不必要的"重置过滤"按钮
   const [columnFilters, setColumnFilters] = useState([]);
   const [selectedCode, setSelectedCode] = useState('');
   const selectedAggregationKeyRef = useRef('');
@@ -133,7 +133,6 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     selectedCode,
     embedded
   });
-  // v7.6: 移除交易日自动应用场内过滤的 useEffect
   useEffect(() => {
     function onMobileNew() {
       // 4.2: 已卖出 tab 已移除 (迁移到 #/liquidation)，默认留 BUY
@@ -264,6 +263,7 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     () => aggregateByCode(transactions, snapshotsByCode),
     [transactions, snapshotsByCode]
   );
+  const localMcp = useLocalMcpImport({ ledger, setLedger, aggregates });
   const aggregateByCodeMap = useMemo(() => {
     const map = new Map();
     for (const agg of aggregates) map.set(agg.code, agg);
@@ -369,7 +369,6 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     numericSortFn,
     onNavigateToMarkets: navigateToMarkets,
   }), [kindFilterOptions, links.markets]);
-  // v7.6: 简化过滤逻辑，移除交易日强制场内过滤
   const aggregatesTable = useReactTable({
     data: aggregatesTableData,
     columns: aggregateColumns,
@@ -517,13 +516,10 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
   function handleManualRefresh() {
     // 手动刷新：所有交易代码 + 切换链路里出现过的代码，保证已卖出/清仓记录也能同步确认 NAV。
     const codes = getManualNavRefreshCodes(transactions);
-    // 批次成本法改造后，前端数据全部本地存储，服务端不会自动推送新口径。
-    // 这里先在本地静默重算一遍派生字段（avgCost / totalCost / 未实现收益等），
-    // 让用户即便没拉到新净值也能立刻看到新口径下的均价。再异步刷新最新净值。
+    // 批次成本法改造后，前端数据全部本地存储，服务端不会自动推送新口径。这里先在本地静默重算一遍派生字段（avgCost / totalCost / 未实现收益等），让用户即便没拉到新净值也能立刻看到新口径下的均价。再异步刷新最新净值。
     setLedger((prev) => {
       const prevTxs = Array.isArray(prev.transactions) ? prev.transactions : [];
-      // sanitizeTransactions 会重新跑一遍 normalizeTransaction：触发 useMemo
-      // 重新执行 aggregateByCode，以最新的摊薄成本法重算 avgCost / totalCost。
+      // sanitizeTransactions 会重新跑一遍 normalizeTransaction：触发 useMemo重新执行 aggregateByCode，以最新的摊薄成本法重算 avgCost / totalCost。
       const nextTxs = sanitizeTransactions(prevTxs, { filterInvalid: false });
       return { ...prev, transactions: nextTxs };
     });
@@ -536,9 +532,7 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     setDraft(nextDraft);
     setDraftMode('create');
   }
-  // 扫描所有「价格为空 / 0」的场外/QDII 交易，如果快照中能找到与 tx.date 匹配的
-  // latestNavDate 或 previousNavDate，则自动回填净值。场内不走净值路径、跳过。
-  // 由「点击基金汇总 / 已卖出 tab」等 useEffect 触发。
+  // 扫描所有「价格为空 / 0」的场外/QDII 交易，如果快照中能找到与 tx.date 匹配的latestNavDate 或 previousNavDate，则自动回填净值。场内不走净值路径、跳过。由「点击基金汇总 / 已卖出 tab」等 useEffect 触发。
   function autoFillTransactionPricesFromSnapshots() {
     const snapMap = snapshotsByCode || {};
     setLedger((prev) => {
@@ -577,8 +571,7 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
       return { ...prev, transactions: nextList };
     });
   }
-  // 净值快照更新后，立即扫描交易记录，把价格为空 / 0 且日期匹配的场外/QDII 买卖单回填确认 NAV。
-  // 这样已卖出/清仓记录不需要用户再打开某个弹窗，也能在刷新净值后自动修正收益。
+  // 净值快照更新后，立即扫描交易记录，把价格为空 / 0 且日期匹配的场外/QDII 买卖单回填确认 NAV。这样已卖出/清仓记录不需要用户再打开某个弹窗，也能在刷新净值后自动修正收益。
   useEffect(() => {
     autoFillTransactionPricesFromSnapshots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1204,11 +1197,13 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
         },
         onPasteExcel: openPasteModal,
         onOcr: openOcrModal,
+        onLocalMcp: localMcp.openModal,
         onDataRepair: () => window.dispatchEvent(new CustomEvent('workspace:navigate', { detail: { tab: 'dataRepair' } })),
         onCopyTable: handleCopyVisibleTable,
         copyTitle: '复制基金汇总为 TSV',
         onClearAllData: handleClearAllData,
       }}
+      localMcpModal={localMcp}
       fileInputRef={fileInputRef}
       onOcrFile={handleOcrFile}
       aggregatesTable={aggregatesTable}

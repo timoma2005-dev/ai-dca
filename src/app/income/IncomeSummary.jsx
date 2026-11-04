@@ -8,7 +8,7 @@ import { useHoldingsDailyPush } from '../../pages/holdings/useHoldingsDailyPush.
 import { HoldingsDailyPushEntry } from '../../pages/holdings/HoldingsDailyPushEntry.jsx';
 import { cx } from '../../components/experience-ui.jsx';
 import { formatCurrency, formatPercent } from '../accumulation.js';
-import { RefreshCw, BarChart3, Receipt, PieChart, ArrowLeftRight, Plus, Copy, ScanLine, ReceiptText, Trash2, Settings2, WalletCards, Wrench } from 'lucide-react';
+import { RefreshCw, BarChart3, Receipt, PieChart, ArrowLeftRight, Plus, Copy, ScanLine, ReceiptText, PlugZap, Trash2, Settings2, WalletCards, Wrench } from 'lucide-react';
 
 const TONE_UP = 'text-rose-600';
 const TONE_DOWN = 'text-emerald-600';
@@ -356,6 +356,17 @@ export function IncomeSummary({ portfolio, navigate, navRefresh, accountAllocati
 							>
 								<Wrench className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
 								<span>数据修复</span>
+							</button>
+						) : null}
+						{quickActions.onLocalMcp ? (
+							<button
+								type="button"
+								onClick={quickActions.onLocalMcp}
+								title="从本机 MCP（同花顺投资账本）导入持仓"
+								className="inline-flex items-center gap-1.5 h-8 rounded-full border border-indigo-200 bg-indigo-50 px-3 text-xs font-semibold text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-100"
+							>
+								<PlugZap className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+								<span>本地 MCP</span>
 							</button>
 						) : null}
 						{quickActions.onPasteExcel ? (
