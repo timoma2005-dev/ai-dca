@@ -12,7 +12,7 @@ function buildBridgeCommand(url) {
   let port = '8765';
   try { port = new URL(url).port || port; } catch { /* 使用默认端口 */ }
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://fast.freebacktrack.tech';
-  return `mcp-proxy --port ${port} --allow-origin "${origin}" --expose-header mcp-session-id tzzb-mcp`;
+  return `python tzzb_bridge.py --port ${port} --allow-origin "${origin}" --expose-header mcp-session-id tzzb-mcp`;
 }
 
 export function LocalMcpImportModal({ mcp }) {
@@ -50,7 +50,7 @@ export function LocalMcpImportModal({ mcp }) {
             <ol className="mt-2 list-decimal space-y-1 pl-4">
               <li>在同花顺 App 的「投资账本」里绑定银河等券商账户，确认网页版 tzzb.10jqka.com.cn 能看到持仓。</li>
               <li>安装 tzzb-mcp 与桥接：<code className="rounded bg-white px-1">pip install mcp-proxy</code>，并在 tzzb-mcp 目录执行 <code className="rounded bg-white px-1">pip install .</code></li>
-              <li>启动桥接（保持窗口开着）：</li>
+              <li>下载桥接脚本 <a className="font-semibold text-indigo-600 underline" href="/tzzb_bridge.py" download="tzzb_bridge.py">tzzb_bridge.py</a>（在 mcp-proxy 上放行浏览器访问本机的预检），在它所在目录启动（保持窗口开着）：</li>
             </ol>
             <div className="mt-1 flex items-start gap-2">
               <code className="block flex-1 break-all rounded-lg bg-slate-900 px-2 py-1.5 font-mono text-[11px] text-slate-100">{command}</code>
