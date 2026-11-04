@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const readSource = (relativePath) => fs.readFileSync(path.resolve(testDir, '..', relativePath), 'utf8');
 
-const incomeSummarySource = readSource('src/app/income/IncomeSummary.jsx');
+const incomeSummarySource = readSource('src/app/income/IncomeSummary.jsx') + readSource('src/app/income/HoldingsQuickActions.jsx');
 const holdingsSource = readSource('src/pages/HoldingsExperience.jsx');
 const shellSource = readSource('src/pages/holdings/HoldingsOverviewShell.jsx');
 const modalSource = readSource('src/pages/holdings/TransactionImportModals.jsx');

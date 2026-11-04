@@ -7,8 +7,9 @@ import { ROUTES, useIncomeRoute } from '../incomeRoute.js';
 import { useHoldingsDailyPush } from '../../pages/holdings/useHoldingsDailyPush.js';
 import { HoldingsDailyPushEntry } from '../../pages/holdings/HoldingsDailyPushEntry.jsx';
 import { cx } from '../../components/experience-ui.jsx';
+import { HoldingsQuickActions } from './HoldingsQuickActions.jsx';
 import { formatCurrency, formatPercent } from '../accumulation.js';
-import { RefreshCw, BarChart3, Receipt, PieChart, ArrowLeftRight, Plus, Copy, ScanLine, ReceiptText, PlugZap, Trash2, Settings2, WalletCards, Wrench } from 'lucide-react';
+import { RefreshCw, BarChart3, Receipt, PieChart, ArrowLeftRight, Settings2, WalletCards } from 'lucide-react';
 
 const TONE_UP = 'text-rose-600';
 const TONE_DOWN = 'text-emerald-600';
@@ -312,87 +313,7 @@ export function IncomeSummary({ portfolio, navigate, navRefresh, accountAllocati
 						);
 					})}
 				</nav>
-				{quickActions && (quickActions.onCopyTable || quickActions.onNewTransaction || quickActions.onPasteExcel || quickActions.onOcr || quickActions.onClearAllData) ? (
-					<div className="flex flex-wrap items-center justify-end gap-2">
-						{quickActions.onClearAllData ? (
-							<button
-								type="button"
-								onClick={quickActions.onClearAllData}
-								title="清除所有数据（不可恢复）"
-								className="inline-flex items-center gap-1.5 h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
-							>
-								<Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-								<span>清除数据</span>
-							</button>
-						) : null}
-						{quickActions.onCopyTable ? (
-							<button
-								type="button"
-								onClick={quickActions.onCopyTable}
-								title={quickActions.copyTitle || '复制表格'}
-								className="inline-flex items-center gap-1.5 h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800"
-							>
-								<Copy className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-								<span>复制表格</span>
-							</button>
-						) : null}
-						{quickActions.onOcr ? (
-							<button
-								type="button"
-								onClick={quickActions.onOcr}
-								title="从截图识别交易流水"
-								className="inline-flex items-center gap-1.5 h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800"
-							>
-								<ScanLine className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-								<span>截图 OCR</span>
-							</button>
-						) : null}
-						{quickActions.onDataRepair ? (
-							<button
-								type="button"
-								onClick={quickActions.onDataRepair}
-								title="诊断持仓数据并一键修复异常代码与名称"
-								className="inline-flex items-center gap-1.5 h-8 rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700 transition-colors hover:border-amber-300 hover:bg-amber-100"
-							>
-								<Wrench className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-								<span>数据修复</span>
-							</button>
-						) : null}
-						{quickActions.onLocalMcp ? (
-							<button
-								type="button"
-								onClick={quickActions.onLocalMcp}
-								title="从本机 MCP（同花顺投资账本）导入持仓"
-								className="inline-flex items-center gap-1.5 h-8 rounded-full border border-indigo-200 bg-indigo-50 px-3 text-xs font-semibold text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-100"
-							>
-								<PlugZap className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-								<span>本地 MCP</span>
-							</button>
-						) : null}
-						{quickActions.onPasteExcel ? (
-							<button
-								type="button"
-								onClick={quickActions.onPasteExcel}
-								title="从 Excel 粘贴交易流水"
-								className="inline-flex items-center gap-1.5 h-8 rounded-full border border-indigo-200 bg-indigo-50 px-3 text-xs font-semibold text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-100"
-							>
-								<ReceiptText className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-								<span>Excel 粘贴</span>
-							</button>
-						) : null}
-						{quickActions.onNewTransaction ? (
-							<button
-								type="button"
-								onClick={quickActions.onNewTransaction}
-								title="新增单条交易"
-								className="inline-flex items-center gap-1.5 h-8 rounded-full bg-rose-500 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-rose-600"
-							>
-								<Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
-								<span>新增单笔</span>
-							</button>
-						) : null}
-					</div>
-				) : null}
+				<HoldingsQuickActions quickActions={quickActions} />
 			</div>
 		</div>
 	);

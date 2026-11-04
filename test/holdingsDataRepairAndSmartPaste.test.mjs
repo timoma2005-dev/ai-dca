@@ -101,7 +101,7 @@ test('DataRepair tab and buttons are properly integrated across screens', () => 
   assert.match(readSource('src/components/rbac/menu-icons.js'), /dataRepair:\s*Wrench/);
 
   // IncomeSummary.jsx
-  const incomeSummarySource = readSource('src/app/income/IncomeSummary.jsx');
+  const incomeSummarySource = readSource('src/app/income/IncomeSummary.jsx') + readSource('src/app/income/HoldingsQuickActions.jsx');
   assert.match(incomeSummarySource, /quickActions\.onDataRepair/);
   assert.match(incomeSummarySource, /<span>数据修复<\/span>/);
 
