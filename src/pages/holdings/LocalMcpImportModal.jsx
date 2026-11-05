@@ -18,11 +18,14 @@ function buildBridgeCommand(url) {
 export function LocalMcpImportModal({ mcp }) {
   const [copied, setCopied] = useState(false);
   if (!mcp?.open) return null;
-  const { url, setUrl, autoSync, setAutoSync, clearMissing, setClearMissing, status, plan } = mcp;
+  const { url, setUrl, autoSync, setAutoSync, clearMissing, setClearMissing, status, plan, startDate, setStartDate } = mcp;
   const loading = status.state === 'loading';
   const command = buildBridgeCommand(url);
   const changeRows = plan ? plan.rows.filter((row) => row.type) : [];
-  const selectedCount = changeRows.filter((row) => row.selected).length;
+  const trades = plan?.trades || [];
+  const selectedTrades = trades.filter((t) => t.selected).length;
+  const selectedAdjust = changeRows.filter((row) => row.selected).length;
+  const selectedCount = selectedTrades + selectedAdjust;
 
   async function copyCommand() {
     try {
@@ -37,7 +40,7 @@ export function LocalMcpImportModal({ mcp }) {
       <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <div>
-            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><PlugZap className="h-4 w-4 text-indigo-500" />本地 MCP 导入持仓</div>
+            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><PlugZap className="h-4 w-4 text-indigo-500" />本地 MCP 导入交易记录</div>
             <div className="mt-0.5 text-xs text-slate-500">浏览器直连你电脑上的 tzzb-mcp（同花顺投资账本），登录信息与持仓不经过本站服务器。</div>
           </div>
           <button type="button" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700" onClick={mcp.onClose}>
@@ -72,9 +75,20 @@ export function LocalMcpImportModal({ mcp }) {
                 onKeyDown={(event) => { if (event.key === 'Enter') mcp.onFetch(); }}
               />
               <button type="button" className={PRIMARY_BTN} disabled={loading} onClick={mcp.onFetch}>
-                {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}<span>读取持仓</span>
+                {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}<span>读取</span>
               </button>
             </div>
+          </label>
+
+          <label className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-slate-700">成交记录起始日</span>
+            <input
+              type="date"
+              className="h-8 rounded-lg border border-slate-200 px-2 text-xs focus:border-indigo-300 focus:outline-none"
+              value={startDate || ''}
+              onChange={(event) => setStartDate(event.target.value)}
+            />
+            <span className="text-[11px] text-slate-500">从这天到今天，逐笔读取 tzzb_trade_history 写入交易记录；已有的同一笔自动跳过。</span>
           </label>
 
           <div className="flex flex-wrap gap-x-5 gap-y-1.5">
@@ -98,6 +112,49 @@ export function LocalMcpImportModal({ mcp }) {
             <div className="text-[11px] text-slate-500">{plan.accounts.map((acc) => `${acc.label} ${acc.count} 只`).join('；')}</div>
           ) : null}
 
+          {trades.length ? (
+            <div className="rounded-xl border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+                <span className="font-semibold text-slate-700">新增成交 {trades.length} 笔（已选 {selectedTrades}）</span>
+                <span className="flex gap-3 text-[11px]">
+                  <button type="button" className="text-indigo-600 hover:underline" onClick={() => mcp.onSetAllTrades(true)}>全选</button>
+                  <button type="button" className="text-slate-500 hover:underline" onClick={() => mcp.onSetAllTrades(false)}>全不选</button>
+                </span>
+              </div>
+              <div className="max-h-64 overflow-auto">
+                <table className="w-full min-w-[560px] text-xs">
+                  <thead className="sticky top-0 bg-white text-slate-500">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left font-medium" />
+                      <th className="px-2 py-1.5 text-left font-medium">成交时间</th>
+                      <th className="px-2 py-1.5 text-left font-medium">代码 / 名称</th>
+                      <th className="px-2 py-1.5 text-left font-medium">方向</th>
+                      <th className="px-2 py-1.5 text-right font-medium">数量</th>
+                      <th className="px-2 py-1.5 text-right font-medium">价格</th>
+                      <th className="px-2 py-1.5 text-right font-medium">金额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trades.map((t) => (
+                      <tr key={t.id} className="border-t border-slate-100">
+                        <td className="px-2 py-1"><input type="checkbox" checked={t.selected} onChange={() => mcp.onToggleTrade(t.id)} /></td>
+                        <td className="px-2 py-1 tabular-nums text-slate-600">{t.date} {t.time}</td>
+                        <td className="px-2 py-1"><span className="font-mono text-slate-800">{t.code}</span> <span className="text-[11px] text-slate-500">{t.name}</span></td>
+                        <td className={cx('px-2 py-1 font-semibold', t.type === 'BUY' ? 'text-rose-600' : 'text-emerald-600')}>{t.type === 'BUY' ? '买入' : '卖出'}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{fmtShares(t.shares)}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{t.price}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{fmtShares(t.money)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          {changeRows.length ? (
+            <div className="font-semibold text-slate-700">写入成交后仍不一致的份额（起始日之前的持仓等），按 {plan.date} 记调整</div>
+          ) : null}
           {changeRows.length ? (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full min-w-[560px] text-xs">
@@ -134,12 +191,12 @@ export function LocalMcpImportModal({ mcp }) {
               </table>
             </div>
           ) : null}
-          {plan ? <div className="text-[11px] text-slate-400">调整按 {plan.date} 记为买入 / 卖出流水，记账价默认取账本现价（可改），会影响本站持仓成本。只同步股票与场内基金，场外基金不动。</div> : null}
+          {plan ? <div className="text-[11px] text-slate-400">成交按投资账本原始日期、价格、数量逐笔写入（备注含成交时间与编号）。剩余差额按 {plan.date} 记调整，记账价默认取账本现价（可改）。场外基金 tzzb-mcp 暂无持仓接口，不动。</div> : null}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
           <button type="button" className={GHOST_BTN} onClick={mcp.onClose}>关闭</button>
           <button type="button" className={PRIMARY_BTN} disabled={!selectedCount || loading} onClick={mcp.onImport}>
-            <span>{selectedCount ? `写入 ${selectedCount} 笔调整` : '无需调整'}</span>
+            <span>{selectedCount ? `写入 ${selectedCount} 笔` : '无需写入'}</span>
           </button>
         </div>
       </div>

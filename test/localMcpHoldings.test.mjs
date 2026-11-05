@@ -86,3 +86,40 @@ test('local MCP is desktop-only', async () => {
   assert.equal(isLocalMcpSupportedDevice(mk('Mozilla/5.0 (X11; Linux x86_64)', false)), false);
   assert.equal(isLocalMcpSupportedDevice(null), false);
 });
+
+test('trade history → per-trade drafts with dedupe and residual plan', async () => {
+  const m = await import('../src/app/localMcpHoldings.js');
+  const payload = { records: [
+    { entry_date: '2026-11-05', entry_time: '14:30:16', code: '513100', name: '纳指ETF', op: '1', op_name: '买入', entry_price: '2.233', entry_count: '79500', entry_money: '177523.5', market_code: '2', commission: '0', transfer_fee: '0.0', trans_no: '1722551' },
+    { entry_date: '20261105', entry_time: '11:01:52', code: '159696', name: '纳指ETF易方达', op: '2', op_name: '卖出', entry_price: '2.069', entry_count: '50000', entry_money: '103450', market_code: '1', commission: '5', trans_no: '1722001' },
+    { entry_date: '2026-11-05', code: '159696', op: '3', op_name: '分红', entry_count: '1' }
+  ] };
+  const trades = m.parseTzzbTradeHistory(payload, 'common:k1');
+  assert.equal(trades.length, 2);
+  assert.equal(trades[1].date, '2026-11-05');
+  assert.equal(trades[1].fee, 5);
+  const existing = [{ id: 'x', date: '2026-11-05', code: '159696', type: 'SELL', shares: 50000, price: 2.069 }];
+  const { trades: fresh, duplicate } = m.dedupeTrades(trades, existing);
+  assert.equal(duplicate, 1);
+  assert.equal(fresh.length, 1);
+  assert.equal(m.dedupeTrades(trades, [{ id: fresh[0].id }]).duplicate, 1);
+  const drafts = m.tradesToDrafts(fresh);
+  assert.equal(drafts[0].id, fresh[0].id);
+  assert.equal(drafts[0].kind, 'exchange');
+  assert.match(drafts[0].note, /14:30:16/);
+  assert.ok(drafts[0].tags.includes('mcp-trade'));
+  const plan = m.buildMcpSyncPlan({
+    positions: [{ code: '513100', name: '纳指ETF', shares: 100000, price: 2.2 }],
+    aggregates: [{ code: '513100', kind: 'exchange', totalShares: 20500 }],
+    date: '2026-11-05',
+    pendingTrades: fresh
+  });
+  assert.equal(plan.rows[0].delta, 0);
+  assert.deepEqual(m.splitDateRange('2026-10-15', '2026-11-05').map((r) => r.start), ['2026-10-15', '2026-11-01']);
+});
+
+test('trade dedupe drops repeats within one batch', async () => {
+  const m = await import('../src/app/localMcpHoldings.js');
+  const t = { accountKey: 'a', transNo: '9', date: '2026-11-05', time: '10:00:00', code: '513100', type: 'BUY', shares: 100, price: 2 };
+  assert.equal(m.dedupeTrades([t, { ...t }], []).trades.length, 1);
+});
