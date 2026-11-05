@@ -225,9 +225,8 @@ function hashKey(value) {
 
 // 每笔成交的稳定 id：同一笔重复导入会命中同一 id。
 export function tradeRecordId(trade) {
-  const base = trade.transNo
-    ? `${trade.accountKey}|${trade.transNo}`
-    : `${trade.accountKey}|${trade.date}|${trade.time}|${trade.code}|${trade.type}|${trade.shares}|${trade.price}`;
+  // trans_no 是委托号：同一委托分多笔成交时编号相同，必须带上时间 / 份额 / 价格区分。
+  const base = `${trade.accountKey}|${trade.transNo}|${trade.date}|${trade.time}|${trade.code}|${trade.type}|${trade.shares}|${trade.price}`;
   return `tzzb-${hashKey(base)}-${trade.transNo || hashKey(`${base}#`)}`;
 }
 
@@ -256,6 +255,20 @@ export function dedupeTrades(trades = [], transactions = []) {
     fresh.push({ ...trade, id, selected: true });
   }
   return { trades: fresh, duplicate };
+}
+
+// 旧版「汇总调整」流水（tag mcp-sync 且非 mcp-trade）：逐笔成交覆盖的区间内与成交重复，导入时删除。
+export function findStaleAdjustments(transactions = [], startDate = '', endDate = '') {
+  return (transactions || []).filter((tx) => {
+    const tags = Array.isArray(tx?.tags) ? tx.tags : [];
+    if (!tags.includes('mcp-sync') || tags.includes('mcp-trade')) return false;
+    const d = String(tx?.date || '');
+    return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
+  });
+}
+
+export function dayBefore(iso) {
+  return isoDate(iso) ? addDays(isoDate(iso), -1) : '';
 }
 
 // 待写入成交对每只代码的份额净变化（用于计算写入后剩余差额）。
@@ -295,12 +308,19 @@ export function tradesToDrafts(trades = []) {
 
 // 对账：本站场内持仓份额 vs 账本持仓份额 → 买入/卖出调整行。
 // aggregates 来自 aggregateByCode；只对场内（exchange）或账本里出现的代码生成调整，场外基金不动。
-export function buildMcpSyncPlan({ positions = [], aggregates = [], date = '', clearMissing = true, pendingTrades = [] } = {}) {
+export function buildMcpSyncPlan({ positions = [], aggregates = [], date = '', clearMissing = true, pendingTrades = [], removedTransactions = [] } = {}) {
   const ledgerByCode = new Map();
   for (const agg of aggregates || []) {
     if (agg && agg.code) ledgerByCode.set(agg.code, agg);
   }
   const pending = netSharesByCode(pendingTrades);
+  for (const tx of removedTransactions || []) {
+    const sh = Number(tx?.shares) || 0;
+    const sign = tx?.type === 'BUY' ? -1 : tx?.type === 'SELL' ? 1 : 0;
+    if (sign && tx?.code) pending.set(tx.code, round((pending.get(tx.code) || 0) + sign * sh, 4));
+  }
+  const firstTradePrice = new Map();
+  for (const t of pendingTrades) if (t.selected !== false && t.price > 0 && !firstTradePrice.has(t.code)) firstTradePrice.set(t.code, t.price);
   const pendingNames = new Map(pendingTrades.map((t) => [t.code, t.name]));
   const ledgerSharesOf = (code, agg) => round((Number(agg?.totalShares) || 0) + (pending.get(code) || 0), 4);
   const rows = [];
@@ -316,7 +336,7 @@ export function buildMcpSyncPlan({ positions = [], aggregates = [], date = '', c
       ledgerShares,
       brokerShares: pos.shares,
       delta,
-      price: pos.price > 0 ? pos.price : round(Number(agg?.latestNav) || 0, 4),
+      price: firstTradePrice.get(pos.code) || (pos.price > 0 ? pos.price : round(Number(agg?.latestNav) || 0, 4)),
       type: delta > 0 ? 'BUY' : delta < 0 ? 'SELL' : '',
       selected: delta !== 0
     });
@@ -329,17 +349,19 @@ export function buildMcpSyncPlan({ positions = [], aggregates = [], date = '', c
     if (!agg?.code || brokerCodes.has(agg.code)) continue;
     if (agg.kind !== 'exchange') continue;
     const ledgerShares = ledgerSharesOf(agg.code, agg);
-    if (!(ledgerShares > 0)) continue;
+    if (ledgerShares === 0) continue;
+    // 账本已无此持仓：本站为正 → 清仓（可选）；本站为负（起始日前的持仓没录）→ 补期初买入。
+    const missing = ledgerShares > 0;
     rows.push({
       code: agg.code,
-      name: agg.name || '',
+      name: agg.name || pendingNames.get(agg.code) || '',
       ledgerShares,
       brokerShares: 0,
       delta: -ledgerShares,
-      price: round(Number(agg.latestNav) || 0, 4),
-      type: 'SELL',
-      selected: Boolean(clearMissing),
-      missingInBroker: true
+      price: firstTradePrice.get(agg.code) || round(Number(agg.latestNav) || 0, 4),
+      type: missing ? 'SELL' : 'BUY',
+      selected: missing ? Boolean(clearMissing) : true,
+      missingInBroker: missing
     });
   }
   rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || a.code.localeCompare(b.code));

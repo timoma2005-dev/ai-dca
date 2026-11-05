@@ -123,3 +123,34 @@ test('trade dedupe drops repeats within one batch', async () => {
   const t = { accountKey: 'a', transNo: '9', date: '2026-11-05', time: '10:00:00', code: '513100', type: 'BUY', shares: 100, price: 2 };
   assert.equal(m.dedupeTrades([t, { ...t }], []).trades.length, 1);
 });
+
+test('fills sharing one order number stay separate; stale adjustments are replaced; negative ledger gets opening buy', async () => {
+  const m = await import('../src/app/localMcpHoldings.js');
+  const raw = [
+    { entry_date: '2026-11-05', entry_time: '11:01:52', code: '159696', op: '2', entry_price: '2.069', entry_count: '50000', market_code: '1', trans_no: '1135801' },
+    { entry_date: '2026-11-05', entry_time: '11:01:55', code: '159696', op: '2', entry_price: '2.069', entry_count: '300', market_code: '1', trans_no: '1135801' },
+    { entry_date: '2026-11-05', entry_time: '14:30:16', code: '513100', op: '1', entry_price: '2.233', entry_count: '79500', market_code: '2', trans_no: '1722551' }
+  ];
+  const trades = m.parseTzzbTradeHistory(raw, 'common:k1');
+  const existing = [
+    { id: 'adj1', date: '2026-11-05', code: '513100', type: 'BUY', shares: 79500, price: 2.229, tags: ['exchange', 'mcp-sync'] },
+    { id: 'old', date: '2026-10-29', code: '513100', type: 'SELL', shares: 100, price: 2, tags: ['exchange'] }
+  ];
+  const stale = m.findStaleAdjustments(existing, '2026-11-05', '2026-11-05');
+  assert.deepEqual(stale.map((t) => t.id), ['adj1']);
+  const { trades: fresh } = m.dedupeTrades(trades, existing.filter((t) => t.id !== 'adj1'));
+  assert.equal(fresh.length, 3);
+  const plan = m.buildMcpSyncPlan({
+    positions: [{ code: '513100', shares: 79500, price: 2.24 }],
+    aggregates: [{ code: '513100', kind: 'exchange', totalShares: 79500 }],
+    date: m.dayBefore('2026-11-05'),
+    pendingTrades: fresh,
+    removedTransactions: stale
+  });
+  const byCode = Object.fromEntries(plan.rows.map((r) => [r.code, r]));
+  assert.equal(byCode['513100'].delta, 0);
+  assert.equal(byCode['159696'].type, 'BUY');
+  assert.equal(byCode['159696'].delta, 50300);
+  assert.equal(byCode['159696'].price, 2.069);
+  assert.equal(plan.date, '2026-11-04');
+});

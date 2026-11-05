@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getTodayShanghaiDate, normalizeTransaction } from '../../app/holdingsLedgerCore.js';
 import { persistHoldingTransactionMutation } from '../../app/holdingTransactionMutations.js';
 import { LOCAL_MCP_DEFAULT_URL, isLocalMcpSupportedDevice, normalizeLocalMcpUrl } from '../../app/localMcpClient.js';
-import { buildMcpSyncPlan, dedupeTrades, fetchTzzbHoldings, planRowsToDrafts, tradesToDrafts } from '../../app/localMcpHoldings.js';
+import { buildMcpSyncPlan, dayBefore, dedupeTrades, fetchTzzbHoldings, findStaleAdjustments, planRowsToDrafts, tradesToDrafts } from '../../app/localMcpHoldings.js';
 import { showActionToast } from '../../app/toast.js';
 import { trackActionResult } from '../../app/analytics.js';
 
@@ -63,9 +63,15 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
     const historyStart = (fromDate || startDate || date) > date ? date : (fromDate || startDate || date);
     try {
       const data = await fetchTzzbHoldings(normalized, { history: { startDate: historyStart, endDate: date } });
-      const deduped = dedupeTrades(data.trades, ledgerRef.current?.transactions || []);
+      const existing = ledgerRef.current?.transactions || [];
+      const stale = data.historyError ? [] : findStaleAdjustments(existing, historyStart, date);
+      const staleIds = new Set(stale.map((tx) => tx.id));
+      const deduped = dedupeTrades(data.trades, existing.filter((tx) => !staleIds.has(tx.id)));
+      // 有逐笔成交时，剩余差额视为起始日之前没录的持仓，记在起始日前一天（期初）；否则按今天记调整。
+      const adjustDate = data.historyError ? date : (dayBefore(historyStart) || date);
       const next = {
-        ...buildMcpSyncPlan({ positions: data.positions, aggregates: aggregatesRef.current, date, clearMissing, pendingTrades: deduped.trades }),
+        ...buildMcpSyncPlan({ positions: data.positions, aggregates: aggregatesRef.current, date: adjustDate, clearMissing, pendingTrades: deduped.trades, removedTransactions: stale }),
+        staleAdjustments: stale,
         positions: data.positions,
         trades: deduped.trades,
         duplicateCount: deduped.duplicate,
@@ -77,6 +83,7 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
       setPlan(next);
       const parts = [`读到 ${data.positions.length} 只持仓`];
       if (!data.historyError) parts.push(`${historyStart} 起 ${data.trades.length} 笔成交，新增 ${deduped.trades.length} 笔（已有 ${deduped.duplicate} 笔跳过）`);
+      if (stale.length) parts.push(`删除区间内 ${stale.length} 笔旧的汇总调整`);
       parts.push(next.changeCount ? `写入后仍有 ${next.changeCount} 只份额不一致` : '写入后份额与账本一致');
       setStatus({ state: data.historyError ? 'error' : 'success', message: `${parts.join('，')}。${data.historyError ? ` ${data.historyError}` : ''}` });
       trackActionResult('holdings', 'local_mcp_fetch', 'success', { positionCount: data.positions.length, tradeCount: deduped.trades.length, changeCount: next.changeCount, silent });
@@ -88,29 +95,32 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
     }
   }, [url, clearMissing, startDate]);
 
-  const applyRows = useCallback(async (rows, date, { source = 'manual', trades = [] } = {}) => {
+  const applyRows = useCallback(async (rows, date, { source = 'manual', trades = [], removed = [] } = {}) => {
     const drafts = [...tradesToDrafts(trades), ...planRowsToDrafts(rows, date)].map((draft) => normalizeTransaction(draft));
+    const deletedIds = (drafts.length ? removed : []).map((tx) => tx.id).filter(Boolean);
     if (!drafts.length) return 0;
     const current = ledgerRef.current;
-    const nextState = { ...current, transactions: [...(current.transactions || []), ...drafts] };
+    const keep = (current.transactions || []).filter((tx) => !deletedIds.includes(tx.id));
+    const nextState = { ...current, transactions: [...keep, ...drafts] };
     try {
       await persistHoldingTransactionMutation(nextState, {
         kind: 'save',
         label: '正在同步本地 MCP 持仓',
         upsertIds: drafts.map((d) => d.id),
+        deletedIds,
         setLedger
       });
     } catch (error) {
       showActionToast('同步已保存到本地', 'warning', { description: error?.message || '云端同步稍后重试。' });
     }
-    writeStore(HISTORY_SYNCED_KEY, date);
+    writeStore(HISTORY_SYNCED_KEY, getTodayShanghaiDate());
     trackActionResult('holdings', 'local_mcp_import', 'success', { importedCount: drafts.length, source });
     return drafts.length;
   }, [setLedger]);
 
   const importSelected = useCallback(async () => {
     if (!plan) return;
-    const count = await applyRows(plan.rows, plan.date, { trades: plan.trades || [] });
+    const count = await applyRows(plan.rows, plan.date, { trades: plan.trades || [], removed: plan.staleAdjustments || [] });
     if (count) showActionToast('持仓已同步', 'success', { description: `已写入 ${count} 笔记录。` });
     setPlan(null);
     setOpen(false);
@@ -123,7 +133,7 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
     setPlan((prev) => {
       if (!prev) return prev;
       const trades = prev.trades.map((t) => (t.id === id ? { ...t, selected: !t.selected } : t));
-      const replan = buildMcpSyncPlan({ positions: prev.positions, aggregates: aggregatesRef.current, date: prev.date, clearMissing, pendingTrades: trades });
+      const replan = buildMcpSyncPlan({ positions: prev.positions, aggregates: aggregatesRef.current, date: prev.date, clearMissing, pendingTrades: trades, removedTransactions: prev.staleAdjustments || [] });
       return { ...prev, ...replan, trades };
     });
   }, [clearMissing]);
@@ -131,7 +141,7 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
     setPlan((prev) => {
       if (!prev) return prev;
       const trades = prev.trades.map((t) => ({ ...t, selected }));
-      const replan = buildMcpSyncPlan({ positions: prev.positions, aggregates: aggregatesRef.current, date: prev.date, clearMissing, pendingTrades: trades });
+      const replan = buildMcpSyncPlan({ positions: prev.positions, aggregates: aggregatesRef.current, date: prev.date, clearMissing, pendingTrades: trades, removedTransactions: prev.staleAdjustments || [] });
       return { ...prev, ...replan, trades };
     });
   }, [clearMissing]);
@@ -154,7 +164,7 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
         if (!next && !cancelled) showActionToast('本地 MCP 自动同步失败', 'warning', { description: '本机桥接服务未运行或投资账本未登录。' });
         return;
       }
-      const count = await applyRows(next.rows, next.date, { source: 'auto', trades: next.trades || [] });
+      const count = await applyRows(next.rows, next.date, { source: 'auto', trades: next.trades || [], removed: next.staleAdjustments || [] });
       if (count) showActionToast('已自动同步持仓', 'success', { description: `按投资账本写入 ${count} 笔记录（成交 ${next.trades?.length || 0} 笔）。` });
       setPlan(null);
     }, 6000);

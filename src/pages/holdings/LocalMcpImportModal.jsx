@@ -26,6 +26,7 @@ export function LocalMcpImportModal({ mcp }) {
   const selectedTrades = trades.filter((t) => t.selected).length;
   const selectedAdjust = changeRows.filter((row) => row.selected).length;
   const selectedCount = selectedTrades + selectedAdjust;
+  const staleCount = plan?.staleAdjustments?.length || 0;
 
   async function copyCommand() {
     try {
@@ -153,7 +154,7 @@ export function LocalMcpImportModal({ mcp }) {
           ) : null}
 
           {changeRows.length ? (
-            <div className="font-semibold text-slate-700">写入成交后仍不一致的份额（起始日之前的持仓等），按 {plan.date} 记调整</div>
+            <div className="font-semibold text-slate-700">写入成交后仍不一致的份额（起始日之前没录的持仓），按 {plan.date} 记期初调整</div>
           ) : null}
           {changeRows.length ? (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -191,12 +192,12 @@ export function LocalMcpImportModal({ mcp }) {
               </table>
             </div>
           ) : null}
-          {plan ? <div className="text-[11px] text-slate-400">成交按投资账本原始日期、价格、数量逐笔写入（备注含成交时间与编号）。剩余差额按 {plan.date} 记调整，记账价默认取账本现价（可改）。场外基金 tzzb-mcp 暂无持仓接口，不动。</div> : null}
+          {plan ? <div className="text-[11px] text-slate-400">成交按投资账本原始日期、价格、数量逐笔写入（备注含成交时间与编号）。起始日起旧的「本地 MCP 同步」汇总调整会被删除，避免和逐笔成交重复。剩余差额按 {plan.date} 记期初调整，记账价默认取该代码第一笔成交价（可改）。场外基金 tzzb-mcp 暂无持仓接口，不动。</div> : null}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
           <button type="button" className={GHOST_BTN} onClick={mcp.onClose}>关闭</button>
           <button type="button" className={PRIMARY_BTN} disabled={!selectedCount || loading} onClick={mcp.onImport}>
-            <span>{selectedCount ? `写入 ${selectedCount} 笔` : '无需写入'}</span>
+            <span>{selectedCount ? `写入 ${selectedCount} 笔${staleCount ? `，删除 ${staleCount} 笔旧调整` : ''}` : '无需写入'}</span>
           </button>
         </div>
       </div>
