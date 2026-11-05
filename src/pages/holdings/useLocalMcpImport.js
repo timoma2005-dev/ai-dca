@@ -12,6 +12,9 @@ const CLEAR_KEY = 'ai-dca:local-mcp:clear-missing';
 const LAST_AUTO_KEY = 'ai-dca:local-mcp:last-auto';
 const HISTORY_START_KEY = 'ai-dca:local-mcp:history-start';
 const HISTORY_SYNCED_KEY = 'ai-dca:local-mcp:history-synced';
+// 使用说明与授权同意（文案有实质变化时升版本号，要求重新同意）
+export const LOCAL_MCP_CONSENT_VERSION = '2026-11-05';
+const CONSENT_KEY = 'ai-dca:local-mcp:consent';
 
 function readStore(key, fallback = '') {
   try {
@@ -32,6 +35,7 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
   const [url, setUrl] = useState(() => readStore(URL_KEY, LOCAL_MCP_DEFAULT_URL));
   const [autoSync, setAutoSyncState] = useState(() => readStore(AUTO_KEY, '0') === '1');
   const [clearMissing, setClearMissingState] = useState(() => readStore(CLEAR_KEY, '1') === '1');
+  const [consented, setConsented] = useState(() => readStore(CONSENT_KEY, '') === LOCAL_MCP_CONSENT_VERSION);
   const [status, setStatus] = useState({ state: 'idle', message: '' });
   const [plan, setPlan] = useState(null);
   const [startDate, setStartDateState] = useState(() => readStore(HISTORY_START_KEY, '') || `${getTodayShanghaiDate().slice(0, 4)}-01-01`);
@@ -52,6 +56,10 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
   }, []);
 
   const fetchPlan = useCallback(async ({ silent = false, fromDate = '' } = {}) => {
+    if (readStore(CONSENT_KEY, '') !== LOCAL_MCP_CONSENT_VERSION) {
+      if (!silent) setStatus({ state: 'error', message: '请先阅读并同意使用说明。' });
+      return null;
+    }
     const normalized = normalizeLocalMcpUrl(url);
     if (!normalized) {
       setStatus({ state: 'error', message: '地址格式不正确，例如 http://127.0.0.1:8765/mcp' });
@@ -151,7 +159,7 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
 
   // 自动导入：开启后进入持仓页即读取并直接写入差额（每 10 分钟最多一次）。
   useEffect(() => {
-    if (!autoSync || !supported) return;
+    if (!autoSync || !supported || !consented) return;
     const last = Number(readStore(LAST_AUTO_KEY, '0')) || 0;
     if (Date.now() - last < 10 * 60 * 1000) return;
     let cancelled = false;
@@ -171,13 +179,16 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
     return () => { cancelled = true; clearTimeout(timer); };
     // 仅在页面进入 / 开关打开时触发
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSync]);
+  }, [autoSync, consented]);
 
   return {
     supported,
     open,
     openModal: () => { setOpen(true); setStatus({ state: 'idle', message: '' }); setPlan(null); },
     onClose: () => setOpen(false),
+    consented,
+    onConsent: () => { writeStore(CONSENT_KEY, LOCAL_MCP_CONSENT_VERSION); setConsented(true); },
+    onRevokeConsent: () => { writeStore(CONSENT_KEY, ''); writeStore(AUTO_KEY, '0'); setAutoSyncState(false); setConsented(false); },
     url,
     setUrl,
     autoSync,

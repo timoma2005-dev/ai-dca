@@ -15,9 +15,52 @@ function buildBridgeCommand(url) {
   return `python tzzb_bridge.py --port ${port} --allow-origin "${origin}" --expose-header mcp-session-id tzzb-mcp`;
 }
 
+function LocalMcpConsent({ onConsent, onClose }) {
+  const [agreed, setAgreed] = useState(false);
+  return (
+    <div className="flex flex-col gap-3 text-xs leading-relaxed text-slate-600">
+      <div className="font-semibold text-slate-800">使用前请阅读</div>
+      <ol className="list-decimal space-y-1.5 pl-4">
+        <li><span className="font-semibold text-slate-700">本机运行：</span>tzzb-mcp 与 tzzb_bridge.py 由你自行下载并在自己电脑上运行，用你本人登录的同花顺投资账本读取你自己的数据。本站不代你登录，也不在服务器上运行这些程序。</li>
+        <li><span className="font-semibold text-slate-700">登录信息不上传：</span>投资账本的登录状态（Cookie）只保存在你的电脑上，不会发送到本站服务器。</li>
+        <li><span className="font-semibold text-slate-700">上传到本站的内容：</span>只有你确认导入的交易记录（代码、日期、方向、数量、价格、金额、费用、成交编号），用于在你的账户里计算持仓收益。这些属于你的金融账户信息，仅你本人账户可见，不对外提供。</li>
+        <li><span className="font-semibold text-slate-700">随时删除：</span>导入的记录可在持仓页逐条或批量删除；关闭本功能后不再读取。</li>
+        <li><span className="font-semibold text-slate-700">第三方服务：</span>tzzb-mcp 为第三方开源工具，与同花顺及本站无合作关系。使用时请遵守同花顺的用户协议，并自行承担账号被限制等风险；请勿高频调用，勿用于他人账户。</li>
+        <li><span className="font-semibold text-slate-700">数据仅供参考：</span>导入结果可能与券商实际成交存在差异，请自行核对；本站不提供任何投资建议。</li>
+        <li><span className="font-semibold text-slate-700">本机安全：</span>运行期间会开启带调试端口的 Chrome，建议使用单独的浏览器配置，不要在其中登录网银或券商交易；用完关闭。</li>
+      </ol>
+      <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+        <input type="checkbox" className="mt-0.5" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
+        <span>我已阅读并同意以上说明，单独同意本站保存我确认导入的交易记录。</span>
+      </label>
+      <div className="flex justify-end gap-2">
+        <button type="button" className={GHOST_BTN} onClick={onClose}>取消</button>
+        <button type="button" className={PRIMARY_BTN} disabled={!agreed} onClick={onConsent}>同意并继续</button>
+      </div>
+    </div>
+  );
+}
+
 export function LocalMcpImportModal({ mcp }) {
   const [copied, setCopied] = useState(false);
   if (!mcp?.open) return null;
+  if (!mcp.consented) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 px-4 py-6" onClick={mcp.onClose}>
+        <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><PlugZap className="h-4 w-4 text-indigo-500" />本地 MCP 导入：使用说明</div>
+            <button type="button" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700" onClick={mcp.onClose}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="overflow-y-auto px-5 py-4">
+            <LocalMcpConsent onConsent={mcp.onConsent} onClose={mcp.onClose} />
+          </div>
+        </div>
+      </div>
+    );
+  }
   const { url, setUrl, autoSync, setAutoSync, clearMissing, setClearMissing, status, plan, startDate, setStartDate } = mcp;
   const loading = status.state === 'loading';
   const command = buildBridgeCommand(url);
@@ -195,6 +238,7 @@ export function LocalMcpImportModal({ mcp }) {
           {plan ? <div className="text-[11px] text-slate-400">成交按投资账本原始日期、价格、数量逐笔写入（备注含成交时间与编号）。起始日起旧的「本地 MCP 同步」汇总调整会被删除，避免和逐笔成交重复。剩余差额按 {plan.date} 记期初调整，记账价默认取该代码第一笔成交价（可改）。场外基金 tzzb-mcp 暂无持仓接口，不动。</div> : null}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
+          <button type="button" className="mr-auto text-[11px] text-slate-400 hover:text-slate-600 hover:underline" onClick={mcp.onRevokeConsent}>撤回同意</button>
           <button type="button" className={GHOST_BTN} onClick={mcp.onClose}>关闭</button>
           <button type="button" className={PRIMARY_BTN} disabled={!selectedCount || loading} onClick={mcp.onImport}>
             <span>{selectedCount ? `写入 ${selectedCount} 笔${staleCount ? `，删除 ${staleCount} 笔旧调整` : ''}` : '无需写入'}</span>
