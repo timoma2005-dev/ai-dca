@@ -458,6 +458,7 @@ async function runPullHoldingTransactions({ session, force, signal, bypassLoginS
     const nextRows = { ...(previous.rows || {}) };
     const pendingLocalIds = new Set();
     const previousPending = new Set((previous.pendingLocalIds || []).map(String));
+    const journalIds = new Set(Object.keys(readPendingJournal(session?.userId)?.entries || {}));
 
     for (const [id, local] of localMap) {
       const remote = remoteMap.get(id);
@@ -467,8 +468,9 @@ async function runPullHoldingTransactions({ session, force, signal, bypassLoginS
         // 已与云端同步过（有 revision）、本地未改、也不在待推送里，远端却没有了：说明已在云端 / 其他端删除，
         // 跟随删除，不再当作本地新增保留（否则服务端删除永远传不到这台设备，下次保存还会被推回去）。
         const baselineKnown = baselineBeforeFetch.rows?.[id];
-        if (known && Number(known.revision || 0) > 0 && !known.pending && !known.deleted && !localDirty && !previousPending.has(id)
-          && baselineKnown && !baselineKnown.pending && Number(baselineKnown.revision || 0) === Number(known.revision || 0)) {
+        // 注意不看 known.pending：旧版拉取会把「远端缺失」的行一律标 pending，真正未推送的改动以 pendingLocalIds 与 journal 为准。
+        if (known && Number(known.revision || 0) > 0 && !known.deleted && !localDirty && !previousPending.has(id) && !journalIds.has(id)
+          && baselineKnown && Number(baselineKnown.revision || 0) === Number(known.revision || 0)) {
           nextRows[id] = { ...known, deleted: true, pending: false, localHash: '' };
           continue;
         }
