@@ -447,6 +447,8 @@ async function runPullHoldingTransactions({ session, force, signal, bypassLoginS
     // journal 恢复优先：即使云端不可用，也已把未确认的本地变更恢复进 runtime。
     await runPendingJournalRecovery(session, signal, bypassLoginSyncGate).catch(() => null);
     await assertMigrationComplete(session, signal);
+    // 发请求前的同步基线：只有请求发出前就已确认同步的行，才可能被判定为「远端已删除」。
+    const baselineBeforeFetch = readSyncState();
     const remoteRows = await fetchAllRemoteRows(session, signal);
     const remoteMap = mapById(remoteRows);
     const localRows = readLocalTransactions();
@@ -455,12 +457,21 @@ async function runPullHoldingTransactions({ session, force, signal, bypassLoginS
     const merged = [];
     const nextRows = { ...(previous.rows || {}) };
     const pendingLocalIds = new Set();
+    const previousPending = new Set((previous.pendingLocalIds || []).map(String));
 
     for (const [id, local] of localMap) {
       const remote = remoteMap.get(id);
       const known = previous.rows?.[id];
       const localDirty = force ? false : !known || known.localHash !== hashValue(local);
       if (!remote) {
+        // 已与云端同步过（有 revision）、本地未改、也不在待推送里，远端却没有了：说明已在云端 / 其他端删除，
+        // 跟随删除，不再当作本地新增保留（否则服务端删除永远传不到这台设备，下次保存还会被推回去）。
+        const baselineKnown = baselineBeforeFetch.rows?.[id];
+        if (known && Number(known.revision || 0) > 0 && !known.pending && !known.deleted && !localDirty && !previousPending.has(id)
+          && baselineKnown && !baselineKnown.pending && Number(baselineKnown.revision || 0) === Number(known.revision || 0)) {
+          nextRows[id] = { ...known, deleted: true, pending: false, localHash: '' };
+          continue;
+        }
         merged.push(local);
         if (!known || localDirty) pendingLocalIds.add(id);
         nextRows[id] = { ...(known || {}), revision: Number(known?.revision || 0), contentHash: String(known?.contentHash || ''), localHash: hashValue(local), pending: true, deleted: false };
