@@ -272,14 +272,18 @@ export async function pullResources({ resources = null, force = false, session =
     const key = keyForResource(item.resource);
     const remoteRaw = entry.data === null || entry.data === undefined ? null : JSON.stringify(entry.data);
     if (remoteRaw === null) continue;
-    const localRaw = readLocalResourceRaw(item.resource);
-    // 下行统一走「远端权威 + 保留本地独有」，避免另一端的数据删掉本机独有记录。
+    const readRaw = readLocalResourceRaw(item.resource);
+    // 以接口为准：本机内容与上次同步时一致（没有待上传的改动）就直接采用云端内容，不再把本机缓存里的旧条目并回去；
+    // 只有本机确有未上传改动（dirty，或内容已偏离上次同步的哈希）时才合并保留这些改动。
+    const syncedState = readResourceState(item.resource);
+    const localEdited = readRaw != null && (!syncedState.localHash || hashString(readRaw) !== syncedState.localHash);
+    const localRaw = (dirtyResources.has(item.resource) || localEdited) ? readRaw : null;
     const unionRaw = localRaw == null ? remoteRaw : mergePayloadValueRemoteWins(key, remoteRaw, localRaw);
     // 三方合并：别的设备删掉的条目（基线有、云端没有）不再因本机还留着而被回传复活；本机待上传的删除同理。
     const mergedRaw = localRaw != null && isItemMergeKey(key)
       ? applyBaseDeletions(unionRaw, { key, baseIds: readSyncBaseIds(session.userId, item.resource), localRaw, remoteRaw })
       : unionRaw;
-    if (mergedRaw !== localRaw) {
+    if (mergedRaw !== readRaw) {
       applyLocalResource(item.resource, mergedRaw);
       applied.push(item.resource);
     }

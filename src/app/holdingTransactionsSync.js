@@ -464,20 +464,23 @@ async function runPullHoldingTransactions({ session, force, signal, bypassLoginS
       const remote = remoteMap.get(id);
       const known = previous.rows?.[id];
       const localDirty = force ? false : !known || known.localHash !== hashValue(local);
+      // 以接口为准：本机行只有确属「尚未上传成功的改动」才保留——
+      // 在 pending journal / pendingLocalIds 里，或在本次请求发出后才被保存 / 云确认（请求结果晚于它）。
+      // 其余本机行（含浏览器里残留的旧数据）一律以云端为准：云端没有就丢弃，云端有就用云端版本。
+      const baselineKnown = baselineBeforeFetch.rows?.[id];
+      const changedDuringFetch = Boolean(known) && (!baselineKnown
+        || Number(baselineKnown.revision || 0) !== Number(known.revision || 0)
+        || String(baselineKnown.localHash || '') !== String(known.localHash || ''));
+      const unsynced = !force && (journalIds.has(id) || previousPending.has(id) || changedDuringFetch);
       if (!remote) {
-        // 已与云端同步过（有 revision）、本地未改、也不在待推送里，远端却没有了：说明已在云端 / 其他端删除，
-        // 跟随删除，不再当作本地新增保留（否则服务端删除永远传不到这台设备，下次保存还会被推回去）。
-        const baselineKnown = baselineBeforeFetch.rows?.[id];
-        // 注意不看 known.pending：旧版拉取会把「远端缺失」的行一律标 pending，真正未推送的改动以 pendingLocalIds 与 journal 为准。
-        if (known && Number(known.revision || 0) > 0 && !known.deleted && !localDirty && !previousPending.has(id) && !journalIds.has(id)
-          && baselineKnown && Number(baselineKnown.revision || 0) === Number(known.revision || 0)) {
-          nextRows[id] = { ...known, deleted: true, pending: false, localHash: '' };
+        if (!unsynced) {
+          if (known) nextRows[id] = { ...known, deleted: true, pending: false, localHash: '' };
           continue;
         }
         merged.push(local);
-        if (!known || localDirty) pendingLocalIds.add(id);
+        pendingLocalIds.add(id);
         nextRows[id] = { ...(known || {}), revision: Number(known?.revision || 0), contentHash: String(known?.contentHash || ''), localHash: hashValue(local), pending: true, deleted: false };
-      } else if (!localDirty) {
+      } else if (!localDirty || !unsynced) {
         merged.push(remote);
         const remoteRow = remoteRows.find((row) => String(row.id) === id);
         nextRows[id] = { revision: Number(remoteRow?.revision || known?.revision || 0), contentHash: String(remoteRow?.contentHash || known?.contentHash || ''), localHash: hashValue(remote), deleted: false };
