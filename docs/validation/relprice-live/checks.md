@@ -9,3 +9,5 @@
   - `npm run lint -- --quiet`：account-data-migration-modal.jsx:399 Hooks 调用位置；NotifyEventDetailDialog.jsx:74 空块。
   - 通知扩展集原 111 个测试 105 过/6 失败：email 第五次配额提示 1 个，nasdaqRadar 4 个，radarScoring 1 个。原隔离测试需要 `--experimental-vm-modules`，加参数后这 3 个通过。
 - 交易时段真实 dry-run 与首封真实换仓邮件属于待到市况触发的验证；当前周六不会制造历史换仓/持有日推送来填充 D1。所有完成声明须保留这一区别。
+- CN 部署 worktree 在 `/root/ai-dca-relprice-live`，原库回放也通过，系统 Python 浮点误差上限 2.78e-12bp；CN 系统 Python 单元测试 18/18 通过。实际运行的周末 dry-run 正确写 `non_trading_day`，参考持仓仍为 513110。
+- 只读通知预检：Python urllib 默认 UA 受到 Cloudflare 1010 限制；客户端标识 `ai-dca-relprice/1.0` 后返回 HTTP 200，email `ready=true`。使用既有内部认证，未读取/落盘/输出密钥值，未修改防火墙或通道。

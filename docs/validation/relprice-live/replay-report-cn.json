@@ -1,0 +1,72 @@
+{
+  "sessions": 30,
+  "all_match": true,
+  "max_price_error": 0.0,
+  "max_gap_error_bp": 2.7746693831431912e-12,
+  "rotations": [
+    {
+      "holding": "513300",
+      "target": "513870",
+      "gap_bp": 72.37734646023577,
+      "decision": "rotate",
+      "next_holding": "513870",
+      "date": "20260922",
+      "backtest_holding": "513870",
+      "backtest_gap_bp": 72.37734646023632,
+      "gap_error_bp": 5.542233338928781e-13,
+      "execution_time": "1441",
+      "match": true
+    },
+    {
+      "holding": "513870",
+      "target": "159501",
+      "gap_bp": 129.35455331793452,
+      "decision": "rotate",
+      "next_holding": "159501",
+      "date": "20261009",
+      "backtest_holding": "159501",
+      "backtest_gap_bp": 129.35455331793452,
+      "gap_error_bp": 0.0,
+      "execution_time": "1441",
+      "match": true
+    },
+    {
+      "holding": "159501",
+      "target": "513110",
+      "gap_bp": 63.427191837737155,
+      "decision": "rotate",
+      "next_holding": "513110",
+      "date": "20261015",
+      "backtest_holding": "513110",
+      "backtest_gap_bp": 63.42719183773604,
+      "gap_error_bp": 1.1155520951433573e-12,
+      "execution_time": "1441",
+      "match": true
+    }
+  ],
+  "last": {
+    "holding": "513110",
+    "target": "159513",
+    "gap_bp": -2.070135907840526,
+    "decision": "hold",
+    "next_holding": "513110",
+    "date": "20261106",
+    "backtest_holding": "513110",
+    "backtest_gap_bp": -2.070135907839693,
+    "gap_error_bp": 8.331113576787175e-13,
+    "execution_time": "",
+    "match": true
+  },
+  "backtest_source_sha256": {
+    "discovery/engine.py": "3795e8b2855aeeeff149bef6b42729d72fc3bd2d4a1ad972684ee150063f99dd",
+    "discovery/market.py": "6fe298cd4b19501591dfaa875952030cf3517aa64955bde8076aab20fc4c08dd",
+    "round3/core.py": "4bc246d1a9442ab37549eb828bfc16fed35ce5d8895daa49dd5b0031214f66ec",
+    "round3b/legacy.py": "f72c35db9dd40150b00860db676f7d5502a3714c56a276e9638b57d03885e0b3",
+    "round3b/PROTOCOL.md": "a52929a5fe955d9c4461f3b5b684e936679da38a2ad4c7f86f7edc94bd7cee05",
+    "results/round3b/reference/B_REL_events.csv": "405336b8f9080cb6c129971a4305247d224ee337ebb722540eeece3d0e225d99",
+    "results/round3b/reference/main/B_REL_daily.csv": "ebe85ca8f6fe0045a55d111cb8f8a060f47a06236ea9bd5ee0e2fb781e4c377c",
+    "results/market_cache.npz": "110995d9272eea86c3b283541243c74b2f32ff2cd909cf9e21afc7e1cdc7070a"
+  },
+  "database": "/root/m1store/stockdb_m1.db",
+  "reference_sha256": "dc2572e0f794215c32beeb37fde71482da55dab180fb2683e558a381ca807263"
+}

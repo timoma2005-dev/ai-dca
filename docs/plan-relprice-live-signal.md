@@ -34,7 +34,9 @@
 - [x] 单元测试：公式、并列、60bp 两侧和等号、停牌/无量/缺失、过期、节假日、重复运行、dry-run 不投递/不推进实盘状态。
 - [x] 历史回放：最近 30 个交易日逐日对齐封存 B_REL 持仓/换仓；特别核对 2026-10-15 159501→513110 和 2026-11-06 持有 513110；保存机器可读证据与输入哈希。
 - [x] 已运行相关 Node 测试与仓库检查；新增代码及通知链路测试通过，现有分支的 refactor/lint/6 个旧测试失败均在干净基线复现，详见 `docs/validation/relprice-live/checks.md`。
-- [ ] CN 部署、live 路径 dry-run、安装 cron 和运行配置；核对日志/状态/部署文件哈希。
+- [x] CN 独立 worktree 部署，原库回放与 18 个 Python 测试通过；周末 dry-run 正确跳过，首次只读 email 预检已确认 ready。
+- [ ] 安装最终 cron 和推送运行配置；核对日志/状态/部署文件哈希。
+- [ ] 交易时段的完整新鲜数据 dry-run（每次 live 在投递前自动完整执行并落日志）；当前周六，尚不能进行此实测。
 - [ ] 首次实际换仓通知后，按 owner + event_id 查询 D1 `notify_delivery_attempts`，仅 email `delivered` 才通过最终投递验收。
 - [ ] 提交并汇报文件清单、提交状态；fork 推送等待用户一次性 token。
 
@@ -54,3 +56,5 @@
 Live 分钟资格适配确定为腾讯 `ifzq.gtimg.cn/appstock/app/kline/mkline` 的完成分钟 bar，最多 3 并发。12 只 × 11-06 的 14:40/14:41 共 24 个 close 与 CN 库逐个一致。快照用于源新鲜度与停牌门禁，分钟 bar 用于固定 14:40 价格及分钟正量；不会以 15:00 价格替换。冻结目标后等首个共同正量 bar，通常 14:41:08 后通知，正常一分多钟延迟用于落实回测执行资格。
 
 Cloudflare 部署采用 content-only API 增加入口包装，保留线上原 bundle 与 source map（仅额外导出现有投递函数供新模块调用）。已发现线上 index.js 与 fork 基线有既有差异，故不从本地全量重打包覆盖线上内容；其余现有 67 份 sourcemap 源码匹配已核对。保留线上所有原任务、绑定、secret 与配置，不用需要 git push 的 CI 触发流程。未来普通源码部署使用新的 wrangler entry，既有线上差异需要由原维护任务另行回收。
+
+CN 原库实测：30/30 一致，最大分差浮点误差 2.78e-12bp；系统 Python 下 18/18 测试通过。周末 dry-run 记录 `non_trading_day`，不推进初始参考持仓。通知客户端的 urllib 默认 UA 被 Cloudflare 1010 拒绝；使用明确 `ai-dca-relprice/1.0` 服务标识后只读认证预检 HTTP 200、email ready，未发送邮件，未修改任何防火墙配置。

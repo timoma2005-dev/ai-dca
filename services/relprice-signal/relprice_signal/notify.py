@@ -17,7 +17,8 @@ def notify(config, payload):
     if not url.startswith("https://"):
         raise DataUnavailable("notify_requires_https")
     request = urllib.request.Request(url, data=json.dumps(payload, allow_nan=False).encode(),
-                                     headers={"Content-Type": "application/json", "Authorization": "Bearer " + token}, method="POST")
+                                     headers={"Content-Type": "application/json", "User-Agent": "ai-dca-relprice/1.0",
+                                              "Authorization": "Bearer " + token}, method="POST")
     # Both loopback and upstream requests deliberately avoid inherited proxies.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     try:

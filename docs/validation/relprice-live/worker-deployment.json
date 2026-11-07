@@ -1,0 +1,46 @@
+{
+  "settings_preserved": true,
+  "original_bundle_sha256": "24b7123d2fd88d54bc6d25279abc79288b61f4af22b98b92468abe8fc59f3dc4",
+  "source_map_sha256": "bc4c90ab125c30244904de747514cbf7fede0d16a8089a10e815bf515bf3f9cc",
+  "wrapper_sha256": "b2a7e06b850670e89820efc41d564a3227ff2875e069493613caa82aa4e0d229",
+  "uploaded_route_sha256": "d8f92906987fd4133950d22cc3241f5e67d957806e4e989edfa60a18ff7426a5",
+  "prior_deployment": {
+    "id": "4ce1fb1a-2542-4dfe-89d8-4ee38816082e",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "author_email": "clar2866@umn.edu",
+    "annotations": {
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "2a712326-4fa0-4e8d-969c-1c57c6d06657",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-11-03T16:26:23.534101Z"
+  },
+  "deployment": {
+    "id": "18782c04-73c1-4427-a6f3-16f886a3787c",
+    "source": "api",
+    "strategy": "percentage",
+    "author_email": "clar2866@umn.edu",
+    "annotations": {
+      "workers/message": "Automatic deployment on upload.",
+      "workers/triggered_by": "upload"
+    },
+    "versions": [
+      {
+        "version_id": "0ac7847d-dfec-448b-bcd4-b7b55aa656e0",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-11-07T14:48:16.678079Z"
+  },
+  "entry": "relpriceEntry.js",
+  "handlers": [
+    "fetch",
+    "queue",
+    "scheduled"
+  ]
+}

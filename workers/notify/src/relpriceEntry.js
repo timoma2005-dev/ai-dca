@@ -2,7 +2,7 @@
 // Independent signal ingress; preserve the existing fetch/queue/cron handlers.
 import notifyWorker from './accountEntry.js';
 import { handleRelpriceSignal } from './relpriceSignalRoute.js';
-export * from './accountEntry.js';
+export { WsHub, stripDeviceIdentityFromAccountTestRequest } from './accountEntry.js';
 
 export default {
   ...notifyWorker,
