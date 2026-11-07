@@ -22,7 +22,7 @@
 ## 数据与通知
 
 - 历史只读 `/root/m1store/stockdb_m1.db` 的 `k1`，从分钟数据提取回测一致的 14:40 mark；校验完整的前 30 个交易日及最近交易日，严禁跳过缺失日凑数。
-- 本机 `http://127.0.0.1:18080/latest` 使用 `ProxyHandler({})`，校验快照和逐标的原始行情时间。还需证明 14:40 当分钟的正量与 close，不能用全日累计量大于零替代分钟正量。具体取数适配完成后记录在本计划。
+- 本机 `http://127.0.0.1:18080/latest` 使用 `ProxyHandler({})`，校验快照和逐标的原始行情时间；同源腾讯完成分钟 bar 证明 14:40 正量与 close，不以全日累计量大于零替代分钟正量。
 - lovexl 的 D1 `client-channel` 记录已只读确认：只有已验证且启用的 email。通知必须由现有 `deliverAccountNotification` → `deliveryEngine` → email providers 投递，动态读绑定，保留 D1 幂等和投递记录。不写死邮箱，不读取/输出密钥原文，不新增或改写绑定。
 - CN 到 Worker 的无人值守入口采用独立的 relprice 路由、复用现有内部同步认证；校验 owner、信号日期/时刻和换仓决策。部署前核对线上 Worker 源码，保留所有现有绑定、密钥与任务配置。
 
@@ -63,3 +63,5 @@ CN 原库实测：30/30 一致，最大分差浮点误差 2.78e-12bp；系统 Py
 通知传输又复用既有 `market_collector.cf_ip_selection` 的 IPv4/TLS 优选，以处理 CN 直连 CF anycast 偶发超时；仍保留真实域名/SNI/Host 和证书校验，且无代理、无重定向、不重试未知结果的 POST。CN 原型已用优选地址完成只读 email ready 预检；增加 3 个传输安全测试，本地 Python 共 21/21 通过。
 
 为严格落实“先算信号 dry-run，再开推送”，初始运行配置使用 `notification_mode=after_dry_run`，不是预先启用。首个交易时段完整新鲜数据验证成功、日志已落盘后，程序才一次性将配置切为 `enabled`，写 `live-dry-run-passed.json`；周末、无量、过期、缺失及显式 dry-run 命令都不会开启。配置 `disabled` 可永久停推，不会自动重开。增加门禁测试后本地 Python 23/23 通过；交易时段实测仍保持未完成。
+
+最终 CN 验证：系统 Python 23/23，通过同一生产入口实际 dry-run/live 写入周六跳过记录，状态仍为 513110/revision 0。cron 守护进程存活，独立 cron 文件与源码一致。配置目前仍为 `after_dry_run`，两份实盘验收凭证尚未生成，D1 查询没有 relprice email 投递行。运行证据、文件清单见 `docs/validation/relprice-live/{cn-deployment.json,deployment.md}`；未经真实时点验证，不宣布五门全部通过。

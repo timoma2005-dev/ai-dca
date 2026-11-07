@@ -12,3 +12,5 @@
 - CN 部署 worktree 在 `/root/ai-dca-relprice-live`，原库回放也通过，系统 Python 浮点误差上限 2.78e-12bp；CN 系统 Python 单元测试 18/18 通过。实际运行的周末 dry-run 正确写 `non_trading_day`，参考持仓仍为 513110。
 - 只读通知预检：Python urllib 默认 UA 受到 Cloudflare 1010 限制；客户端标识 `ai-dca-relprice/1.0` 后返回 HTTP 200，email `ready=true`。使用既有内部认证，未读取/落盘/输出密钥值，未修改防火墙或通道。
 - CN anycast 直连偶发超时，通知客户端复用现有 CF IPv4/TLS 选择器；CN 选中 IPv4 后只读预检 HTTP 200、email ready。额外 3 个测试证明无代理/无重定向、未知 POST 不重试、缺少认证不接触网络；Python 测试增加至 21/21。
+- 最终版本：本地及 CN 系统 Python **23/23** 通过；相关 Node 测试 **21/21** 通过。新增启用门禁证明周末与显式 dry-run 不会开启邮件，只有交易时段完整验证通过后自动切换配置。
+- 最终运行配置 `notification_mode=after_dry_run`；cron 已运行，23:15 实际 dry-run/live 均正确跳过周六，状态 revision 仍为 0、持仓 513110。D1 只读查询仍无 relprice email 投递行；`live-dry-run-passed.json` 与 `first-delivery.json` 均尚不存在，两个真实时点验证门继续待验收。

@@ -1,0 +1,122 @@
+{
+  "checked_at": "2026-11-07T23:15:39.630215+08:00",
+  "code_commit": "1860c02b339819bd8e121a8c69a2ab194984c4f5",
+  "worktree_clean": true,
+  "main_worktree_clean": true,
+  "initial_state": {
+    "held_code": "513110",
+    "as_of": "2026-11-06",
+    "revision": 0,
+    "kind": "strategy_reference",
+    "actual_holding_confirmed": false
+  },
+  "notification_mode": "after_dry_run",
+  "live_dry_run_proof_exists": false,
+  "cron": "SHELL=/bin/bash\nPATH=/usr/local/bin:/usr/bin:/bin\nTZ=Asia/Shanghai\n40 14 * * 1-5 root /usr/bin/python3 -B /root/ai-dca-relprice-live/services/relprice-signal/run-cn.py --config /etc/ai-dca-relprice.json --live >> /var/log/ai-dca-relprice.log 2>&1\n",
+  "cron_sha256": "b809a5560dd6357e188f7c174d57f4809a790f47ea0eaeb18a971a1c20a4bd06",
+  "cron_matches_source": true,
+  "protected_unchanged": true,
+  "protected_hashes": {
+    "root_crontab_sha256": "8e568829479c6a3becfb3b6f57ebe56db2fc6dfe256bebc6f00eaf5868f2a6d0",
+    "shadow_collect_sha256": "0f3fa1cc558cd6aaceb266f8c48d054f7c32b1746d53b0b6c98a8feb29a81139"
+  },
+  "switch_monitor_pids": [],
+  "readiness": {
+    "checked_at": "2026-11-07T15:07:16.118456+00:00",
+    "channel": "email",
+    "dry_run": true,
+    "ok": true,
+    "owner_user_id": "usr_ad2be81697b5eec7ca3b2204efb7270c",
+    "ready": true
+  },
+  "delivery_verification": {
+    "delivery_attempt": null,
+    "dry_run": true,
+    "ok": true
+  },
+  "first_delivery_proof_exists": false,
+  "recent_logs": [
+    {
+      "data_freshness": {},
+      "date": "2026-11-07",
+      "decision": "skip",
+      "gap_bp": null,
+      "holding": "513110",
+      "logged_at": "2026-11-07T23:07:52.903605+08:00",
+      "mode": "live",
+      "push": "disabled",
+      "reason": "non_trading_day",
+      "state_revision": 0,
+      "strategy": "B_REL",
+      "target": null
+    },
+    {
+      "data_freshness": {
+        "checked_at": "2026-11-07T23:08:53.997631+08:00",
+        "snapshot_age_sec": 113900.997631,
+        "snapshot_at": "2026-11-06T15:30:33+08:00",
+        "status": "stale_collector_snapshot"
+      },
+      "date": "2026-11-07",
+      "decision": "skip",
+      "gap_bp": null,
+      "holding": "513110",
+      "logged_at": "2026-11-07T23:08:54.003301+08:00",
+      "mode": "data-probe",
+      "push": "disabled",
+      "reason": "stale_collector_snapshot",
+      "strategy": "B_REL",
+      "target": null
+    },
+    {
+      "data_freshness": {},
+      "date": "2026-11-07",
+      "decision": "skip",
+      "gap_bp": null,
+      "holding": "513110",
+      "logged_at": "2026-11-07T23:15:08.246473+08:00",
+      "mode": "dry-run",
+      "push": "disabled",
+      "reason": "non_trading_day",
+      "state_revision": 0,
+      "strategy": "B_REL",
+      "target": null
+    },
+    {
+      "data_freshness": {},
+      "date": "2026-11-07",
+      "decision": "skip",
+      "gap_bp": null,
+      "holding": "513110",
+      "logged_at": "2026-11-07T23:15:08.500752+08:00",
+      "mode": "live",
+      "push": "disabled",
+      "reason": "non_trading_day",
+      "state_revision": 0,
+      "strategy": "B_REL",
+      "target": null
+    }
+  ],
+  "source_sha256": {
+    "services/relprice-signal/run-cn.py": "a9a86c881f60e5ac717fefc20aaf35258fe30514aa8464a4ee328d5d40dee7f5",
+    "services/relprice-signal/replay.py": "76787fb4db5569722ba0e200f0766847602912c30a0dd9c06b6b19e4ee14caf4",
+    "services/relprice-signal/build_reference.py": "f619ab4c68590760a2279c648242bbd9998080206a061ad94fd55388ad91c369",
+    "services/relprice-signal/relprice_signal/notify.py": "3f9fc0d0221d0746ff211d2f1b2679dfc9c46be828866227e0f48375b380a4aa",
+    "services/relprice-signal/relprice_signal/runner.py": "b2466fd6e902b97ab78cb55a8b9714ebc78bc24afffa8ecfd110a7e9c5dbd5c6",
+    "services/relprice-signal/relprice_signal/__init__.py": "9d6bc029d4fe3cacf016600ddab58cbf2be67a66673006837d9042d310086e65",
+    "services/relprice-signal/relprice_signal/__main__.py": "847aada48f414bfbc1b9529394d5216e2346c69898fe67d4577746f15a31191c",
+    "services/relprice-signal/relprice_signal/data.py": "9ba5b5d0ce64c8fc88033bcb022c4abe342a724088fcc764d0aa7399cd57901c",
+    "services/relprice-signal/relprice_signal/rules.py": "41da8211cb34ab16620622fbacccef0ca3672037518e1ddace61d1d469bed36f",
+    "services/relprice-signal/tests/test_signal.py": "fe5cba7da0b5d42c8880bffe63f496d81001dd86fc69632adbc750ae2888f0af",
+    "services/relprice-signal/tests/test_notify.py": "603c23bf63b5e04cf28acfb9979d748dc742c06e9f3a3ccb56d88ca22c346c06",
+    "services/relprice-signal/config.example.json": "3e0874d2ffa4b0eff539b46b0e3628211b71eb61da9ce34f40d901057e4014e0",
+    "services/relprice-signal/deploy/cron": "b809a5560dd6357e188f7c174d57f4809a790f47ea0eaeb18a971a1c20a4bd06",
+    "workers/notify/src/relpriceEntry.js": "bd52f85c865eaf920e11b177760e49bef046c6d4cd3c5905dfe5a11377f8ae16",
+    "workers/notify/src/relpriceSignalRoute.js": "1789f8434a52924b5af55014aead010cf761de55dd1e5186361f9f19081880ab",
+    "workers/notify/wrangler.toml": "d458d44dea3b916e3f9bf8b7ea322ee2454b4080ac2f32123c8ddeb2924982f5"
+  },
+  "cron_pids": [
+    "1056229"
+  ],
+  "server_timezone_is_shanghai": true
+}
