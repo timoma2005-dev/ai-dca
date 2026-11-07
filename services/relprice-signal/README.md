@@ -43,6 +43,8 @@ Worker 独立入口 `relpriceEntry.js` 将 relprice 路由交给 `relpriceSignal
 
 路由仅接受 lovexl、当天交易时段、60bp 达标的换仓消息，固定事件 ID `relprice:B_REL:YYYY-MM-DD`。调用现有 `deliverAccountNotification` 动态解析 D1 `client-channel`，仅选 email，继续使用现有 Resend → Brevo → Cloudflare Email Service 降级、每日配额与 `notify_delivery_attempts` 幂等。不创建或更改通道。
 
+客户端使用明确服务 UA，并复用同仓库 market-collector 的 CF IPv4/TLS 优选（最多 6 秒探测），保留真实域名、SNI、Host 与证书验证；本进程启用此选项，不改其他服务。代理与重定向关闭，POST 结果不确定时不自动重试。
+
 投递后路由再次按 owner + event ID 从 D1 查询 email 状态；只有 `delivered` 才返回成功及脱敏后的投递行。`--check-notify`、`--verify-delivery` 均为只读且绝不发消息。周末或持有日不得发历史回放/测试邮件来冒充首次真实推送。
 
 ## 验证

@@ -58,3 +58,5 @@ Live 分钟资格适配确定为腾讯 `ifzq.gtimg.cn/appstock/app/kline/mkline`
 Cloudflare 部署采用 content-only API 增加入口包装，保留线上原 bundle 与 source map（仅额外导出现有投递函数供新模块调用）。已发现线上 index.js 与 fork 基线有既有差异，故不从本地全量重打包覆盖线上内容；其余现有 67 份 sourcemap 源码匹配已核对。保留线上所有原任务、绑定、secret 与配置，不用需要 git push 的 CI 触发流程。未来普通源码部署使用新的 wrangler entry，既有线上差异需要由原维护任务另行回收。
 
 CN 原库实测：30/30 一致，最大分差浮点误差 2.78e-12bp；系统 Python 下 18/18 测试通过。周末 dry-run 记录 `non_trading_day`，不推进初始参考持仓。通知客户端的 urllib 默认 UA 被 Cloudflare 1010 拒绝；使用明确 `ai-dca-relprice/1.0` 服务标识后只读认证预检 HTTP 200、email ready，未发送邮件，未修改任何防火墙配置。
+
+通知传输又复用既有 `market_collector.cf_ip_selection` 的 IPv4/TLS 优选，以处理 CN 直连 CF anycast 偶发超时；仍保留真实域名/SNI/Host 和证书校验，且无代理、无重定向、不重试未知结果的 POST。CN 原型已用优选地址完成只读 email ready 预检；增加 3 个传输安全测试，本地 Python 共 21/21 通过。
