@@ -1,0 +1,9 @@
+/var/log/ai-dca-four-etf.log /var/lib/ai-dca-four-etf/signals.jsonl {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0600 root root
+}

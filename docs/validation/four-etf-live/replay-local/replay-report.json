@@ -1,0 +1,135 @@
+{
+  "actual_pushes": 0,
+  "closing_diagnostics": {
+    "historical_frozen": {
+      "cancelled": null,
+      "confirmed": null,
+      "decision": "close_signal_cancelled",
+      "deviations_pp": {
+        "159501": 20.885271336361452,
+        "159696": 16.85732352763879,
+        "159941": 15.777686012463391,
+        "513100": 17.100675872908933
+      },
+      "eligible": {
+        "159501": true,
+        "159696": true,
+        "159941": true,
+        "513100": false
+      },
+      "gap_pp": 1.0796375151753992,
+      "holding": "159696",
+      "minute": "202611061500",
+      "normal_pp": {
+        "159501": 2.77,
+        "159696": 2.74,
+        "159941": 3.0,
+        "513100": 4.04
+      },
+      "reason": "no_next_minute_today",
+      "target": "159941",
+      "threshold_pp": 0.5,
+      "would_push_count": 0
+    },
+    "live_seed": {
+      "cancelled": null,
+      "confirmed": null,
+      "decision": "close_signal_cancelled",
+      "deviations_pp": {
+        "159501": 16.424971336361452,
+        "159696": 12.85602352763879,
+        "159941": 12.029386012463391,
+        "513100": 13.435275872908932
+      },
+      "eligible": {
+        "159501": true,
+        "159696": true,
+        "159941": true,
+        "513100": false
+      },
+      "gap_pp": 0.8266375151753991,
+      "holding": "159696",
+      "minute": "202611061500",
+      "normal_pp": {
+        "159501": 7.2303,
+        "159696": 6.7413,
+        "159941": 6.7483,
+        "513100": 7.7054
+      },
+      "reason": "no_next_minute_today",
+      "target": "159941",
+      "threshold_pp": 0.5,
+      "would_push_count": 0
+    }
+  },
+  "days": {
+    "2026-11-05": {
+      "actual_push_count": 0,
+      "confirmed_switches": [],
+      "evaluated_minutes": 240,
+      "final_holding": "159941",
+      "initial_holding": "159941",
+      "input_sha256": "58ec8af4af603d60d911bd9bbd56133618d48d15aa2d8b84efa79e3e9d072705",
+      "trace_sha256": "fce211f6af4311c34e230ed07f2464c485a199b47fc19bfa171f98b5fb6f05a4",
+      "would_push_count": 0
+    },
+    "2026-11-06": {
+      "actual_push_count": 0,
+      "confirmed_switches": [
+        {
+          "buy_close": 1.579,
+          "buy_volume": 40665900.0,
+          "deviations_pp": {
+            "159501": 16.126142744441797,
+            "159696": 12.795742618602699,
+            "159941": 11.87922458893311,
+            "513100": 13.21073337824183
+          },
+          "due_minute": "202611061033",
+          "eligible": {
+            "159501": true,
+            "159696": true,
+            "159941": true,
+            "513100": true
+          },
+          "event_id": "fourETF:2026-11-06:1032",
+          "execution_minute": "202611061033",
+          "gap_pp": 0.9165180296695894,
+          "holding": "159696",
+          "input_sha256": "2ddf846fd31f5b6a93e5e133e1d9ab9e3ae689a42207aec4a2fff041d57a884e",
+          "sell_close": 1.982,
+          "sell_volume": 2263700.0,
+          "signal_minute": "202611061032",
+          "target": "159941"
+        }
+      ],
+      "evaluated_minutes": 240,
+      "final_holding": "159941",
+      "initial_holding": "159696",
+      "input_sha256": "24ff610372b12146e65b9969415f3f7eda7e5d5d33c12993a60ed1244df55e0d",
+      "trace_sha256": "0c73b23abd84f6fbe52e1caabe5ae4ab7fdaa80910abb626ec58440ae53a1ae5",
+      "would_push_count": 1
+    }
+  },
+  "hold_day_ledger_row": {
+    "begin_holding": "sz159941",
+    "begin_shares": "1.130376462724601",
+    "benchmark_return": "-0.004381694255111923",
+    "cancels": "0",
+    "date": "2026-11-05",
+    "end_holding": "sz159941",
+    "end_shares": "1.130376462724601",
+    "entries": "0",
+    "excess_return": "-0.0010927582996326235",
+    "held_ineligible_minutes": "61",
+    "pending_target": "",
+    "signals": "0",
+    "strategy_return": "-0.005474452554744547",
+    "strategy_wealth": "1.8481655165547224",
+    "switches": "0"
+  },
+  "hold_day_start_source": "/home/hatch/workspace/quant-backtest/four_etf/results/scenarios/supplied_d1_zero_daily.csv",
+  "interpretation": "11-05 hold path starts 159941 from replication ledger; 11-06 full deployment-initial replay starts 159696 and may rotate earlier. The requested 15:00 159696→159941 check is a separate fixed-holding diagnostic, cancelled without push.",
+  "network_used": false,
+  "passed": true
+}

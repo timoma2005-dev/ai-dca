@@ -1,0 +1,43 @@
+{
+  "python_tests": {
+    "passed": 32
+  },
+  "node_tests": {
+    "passed": 31
+  },
+  "targeted_worker_lint": "passed",
+  "esbuild_bundle": "passed; packaging only; not used to overwrite live bundle",
+  "refactor_guard": {
+    "status": "preexisting_failure",
+    "errors": [
+      "NotifyExperience.jsx 938 > 880",
+      "NewPlanExperience.jsx 652 > 650"
+    ]
+  },
+  "npm_lint": {
+    "status": "preexisting_failure",
+    "errors": [
+      "account-data-migration-modal.jsx:399 react-hooks/rules-of-hooks",
+      "NotifyEventDetailDialog.jsx:74 no-empty"
+    ]
+  },
+  "baseline_file_evidence": {
+    "src/pages/NotifyExperience.jsx": {
+      "unchanged_from_base": true,
+      "sha256": "82588e36a79b69a007753cc529f79fb5e17a2376e50f70fec55f60597d1554c9"
+    },
+    "src/pages/NewPlanExperience.jsx": {
+      "unchanged_from_base": true,
+      "sha256": "f94e4159121786af3ba56b9f959097583ee6ad5f53239b1a53e43c02a17a5c6f"
+    },
+    "src/components/account-data-migration-modal.jsx": {
+      "unchanged_from_base": true,
+      "sha256": "0a3b28760f0b8f7b40d49d55f0d5a29a42690436d4078431b02d41eeb545e89b"
+    },
+    "src/pages/NotifyEventDetailDialog.jsx": {
+      "unchanged_from_base": true,
+      "sha256": "ba38361095fbe89a426e86541dc35399402b732c747c515a10cccae5e7a9e61a"
+    }
+  },
+  "diff_check": "passed"
+}

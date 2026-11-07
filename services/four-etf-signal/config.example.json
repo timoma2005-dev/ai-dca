@@ -1,0 +1,11 @@
+{
+  "history_db": "/root/m1store/stockdb_m1.db",
+  "latest_url": "http://127.0.0.1:18080/latest",
+  "data_dir": "/var/lib/ai-dca-four-etf",
+  "initial_holding": "159696",
+  "initial_as_of": "2026-11-06",
+  "max_snapshot_age_sec": 45,
+  "owner_user_id": "usr_ad2be81697b5eec7ca3b2204efb7270c",
+  "notify_url": "https://api.freebacktrack.tech/api/notify/internal/four-etf-signal",
+  "notification_mode": "enabled"
+}

@@ -1,0 +1,7 @@
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+TZ=Asia/Shanghai
+# CN system timezone is independently verified as Asia/Shanghai.
+# Runner prepares NAV every 5 min before 09:30 and filters session/holidays.
+* 6-15 * * 1-5 root /usr/bin/python3 -B /root/ai-dca-four-etf-live/services/four-etf-signal/run-cn.py --config /etc/ai-dca-four-etf.json --live >> /var/log/ai-dca-four-etf.log 2>&1
+10 0 1 1,4,7,10 * root /usr/bin/python3 -B /root/ai-dca-four-etf-live/services/four-etf-signal/run-cn.py --config /etc/ai-dca-four-etf.json --recalculate >> /var/log/ai-dca-four-etf.log 2>&1

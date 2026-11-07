@@ -1,0 +1,77 @@
+# Four-ETF build configuration; original relprice config stays unchanged.
+name = "ai-dca-notify"
+main = "src/fourETFEntry.js"
+compatibility_date = "2026-03-30"
+compatibility_flags = ["nodejs_compat"]
+
+[[routes]]
+pattern = "api.freebacktrack.tech/api/notify*"
+zone_name = "freebacktrack.tech"
+[[routes]]
+pattern = "api.freebacktrack.tech/api/wechat*"
+zone_name = "freebacktrack.tech"
+
+[[kv_namespaces]]
+binding = "NOTIFY_STATE"
+id = "d3d7cf8351b24070a156649fdd50790d"
+preview_id = "0b6670c7493642ca9b69bc29672dcb46"
+# 只读：etf-shares worker 写入的 PCF 申购限额（etf-pcf:{code}:{yyyymmdd}），供雷达评分 v2 读取份额状态。
+[[kv_namespaces]]
+binding = "FUND_LIMIT_KV"
+id = "633d193bdcb045e3bdbc098ff6249224"
+preview_id = "1892e345c6754009ac678ce467189ef2"
+[[d1_databases]]
+binding = "SYNC_DB"
+database_name = "ai-dca-sync-db"
+database_id = "b0e5feab-dbcf-4ba7-9f3f-2e5169e8d868"
+
+[[queues.producers]]
+binding = "NOTIFY_JOBS"
+queue = "ai-dca-notify-jobs"
+[[queues.consumers]]
+queue = "ai-dca-notify-jobs"
+max_batch_size = 10
+max_batch_timeout = 2
+max_retries = 3
+dead_letter_queue = "ai-dca-notify-dlq"
+
+[triggers]
+crons = ["30 7 * * MON-FRI", "30 12 * * MON-FRI", "30 13 * * MON-FRI", "* 1-7 * * MON-FRI", "*/5 8 * * MON-FRI", "* 13-21 * * MON-FRI", "35 13 * * MON-FRI", "5 1 * * MON-FRI", "35 7 * * MON-FRI", "0 2 * * SAT"]
+[placement]
+mode = "smart"
+[limits]
+cpu_ms = 300000
+[observability]
+enabled = true
+head_sampling_rate = 1
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[[services]]
+binding = "OCR_PROXY"
+service = "ai-dca-ocr-proxy"
+[[services]]
+binding = "MARKETS"
+service = "ai-dca-markets"
+[[durable_objects.bindings]]
+name = "WS_HUB"
+class_name = "WsHub"
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["WsHub"]
+[[send_email]]
+name = "EMAIL"
+
+[vars]
+PUBLIC_DATA_BASE_URL = "https://api.freebacktrack.tech"
+NOTIFY_TIMEZONE = "Asia/Shanghai"
+QUANT_BACKTEST_DAILY_LIMIT = "100"
+QUANT_BACKTEST_IP_HOURLY_LIMIT = "50"
+MARKETS_DATA_READ_MODE = "cache-first"
+MARKETS_WS_DATA_READ_MODE = "cache-first"
+EMAIL_FROM = "notify@freebacktrack.tech"
+EMAIL_FROM_NAME = "美股策略助手"
+ANALYTICS_ENDPOINT = "about:blank"
