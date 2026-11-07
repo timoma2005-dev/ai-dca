@@ -21,15 +21,23 @@ const request = (payload, token = 'test-internal-only') => new Request('https://
 const attempt = (status = 'delivered') => ({ owner_user_id: owner, event_id: signal().event_id, channel: 'email', status });
 
 function environment(prior = null) {
-  const state = { attempt: prior, queries: [] };
+  const state = { attempt: prior, queries: [], claims: new Set() };
   return { state, INTERNAL_SYNC_TOKEN: 'test-internal-only', SYNC_DB: { prepare(sql) {
     state.queries.push(sql);
-    assert.doesNotMatch(sql, /INSERT|UPDATE|DELETE|token_hash/);
+    assert.doesNotMatch(sql, /UPDATE|DELETE|token_hash/);
+    if (sql.startsWith('INSERT')) assert.match(sql, /^INSERT OR IGNORE INTO notify_four_etf_signal_claims /);
     return { bind(userId, id) {
       assert.equal(userId, owner);
       if (sql.includes('client-channel')) assert.equal(id, `account:${owner}::email`);
       else assert.match(id, /^fourETF:/);
-      return { async first() { return sql.includes('client-channel') ? { verified: 1, enabled: 1 } : state.attempt; } };
+      return {
+        async first() { return sql.includes('client-channel') ? { verified: 1, enabled: 1 } : state.attempt; },
+        async run() {
+          assert.match(sql, /^INSERT OR IGNORE INTO notify_four_etf_signal_claims /);
+          const exists = state.claims.has(id); state.claims.add(id);
+          return { meta: { changes: exists ? 0 : 1 } };
+        }
+      };
     } };
   } } };
 }
@@ -125,6 +133,24 @@ test('provider claim alone and queued/failed email cannot be reported as deliver
       deliver: async () => ({ events: [{ channels: [{ channel: 'email', status }] }] }) });
     assert.equal(response.status, 503);
   }
+});
+
+test('concurrent duplicate requests cannot retry even if first delivery fails before D1 settles', async () => {
+  const env = environment(); let count = 0;
+  const deliver = async () => { count += 1; throw new Error('uncertain provider result'); };
+  const responses = await Promise.all([1, 2].map(() => handleFourETFSignal(request(signal()), env, { deliver, now })));
+  assert.equal(count, 1);
+  assert.equal(env.state.claims.size, 1);
+  assert.deepEqual(responses.map(r => r.status).sort(), [409, 503]);
+  const again = await handleFourETFSignal(request(signal()), env, { deliver, now });
+  assert.equal(again.status, 409); assert.equal(count, 1);
+});
+
+test('committed claim with no delivery attempt never invokes the shared retry engine', async () => {
+  const env = environment(); env.state.claims.add(signal().event_id);
+  const response = await handleFourETFSignal(request(signal()), env, { now, deliver: () => assert.fail('no retry after crash') });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).status, 'claimed_no_retry');
 });
 
 test('new entry preserves every relprice/notify handler and routes only its own path', async () => {

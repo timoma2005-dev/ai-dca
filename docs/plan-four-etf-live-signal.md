@@ -29,7 +29,7 @@
 
 - 新路由 `/api/notify/internal/four-etf-signal`，事件 ID `fourETF:YYYY-MM-DD:HHMM`（信号分钟）。新鲜性、交易日/时段、严格阈值、T−1/pre-open NAV 和下一分钟执行证明在 Worker 再检查。
 - 沿用现有 root sync daemon 内存中的 INTERNAL_SYNC_TOKEN；不保存密钥、不读邮箱原文/用户 session、不新建或更改绑定。只传 `['email']` 给现有账户投递链路，复用 Resend → Brevo → Cloudflare、额度和 D1 幂等。
-- 参考持仓与一次性投递标记先持久化再 POST；超时/失败不自动重发，宁可漏发。重启不得重复执行/推送；只能只读查询事件的 D1 结果。提供带原因的持仓覆盖命令。
+- 参考持仓与一次性投递标记先持久化再 POST；超时/失败不自动重发，宁可漏发。Worker 用独立 D1 `notify_four_etf_signal_claims` 的 owner+event 主键先原子认领，再调用共享投递器；并发重复请求和未知失败均不得重发。迁移只建本策略表，不改账户/通道或旧投递表。重启不得重复执行/推送；只能只读查询事件的 D1 结果。提供带原因的持仓覆盖命令。
 - 保留部署前 Worker 全部模块与设置，只新增两个模块并改 main_module；通过 CF API 独立下载核对原模块哈希、bindings、版本和原 handlers。不得从落后的本地 bundle 覆盖现网。此方式沿用 relprice 的直接 API 部署；用户本次禁止 push，不能触发依赖 push 的旧 CI 流程。
 
 ## 实施步骤与验收

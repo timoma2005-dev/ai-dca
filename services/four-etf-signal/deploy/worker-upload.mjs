@@ -13,15 +13,17 @@ export async function deployFourETF({ request, accountId, entry, route, expected
   if (deployment.versions.length !== 1 || deployment.versions[0].percentage !== 100 || deployment.versions[0].version_id !== expectedVersion) throw new Error('Live version changed; re-inspect before upload');
   if (typeof content !== 'string' || !content.startsWith('--')) throw new Error('Expected text-module multipart download');
   const boundary = content.slice(0, content.indexOf('\r\n'));
-  const modules = content.split(boundary).slice(1, -1).map(part => {
+  const downloaded = content.split(boundary).slice(1, -1).map(part => {
     const at = part.indexOf('\r\n\r\n');
     const name = /name="([^"]+)"/.exec(part.slice(0, at))?.[1];
     if (at < 0 || !/^[\w.-]+\.(js|map)$/.test(name || '')) throw new Error('Unexpected live module');
     return { name, code: part.slice(at + 4, -2) };
   });
-  const byName = Object.fromEntries(modules.map(m => [m.name, m.code]));
+  const byName = Object.fromEntries(downloaded.map(m => [m.name, m.code]));
   if (!byName['relpriceEntry.js'] || !byName['relpriceSignalRoute.js'] || !byName['accountEntry.js']?.includes('export { deliverAccountNotification };')) throw new Error('Expected unchanged relprice wrapper and account export');
-  if (byName['fourETFEntry.js'] || byName['fourETFSignalRoute.js']) throw new Error('Four-ETF ingress already present; inspect rather than overwrite');
+  if (Boolean(byName['fourETFEntry.js']) !== Boolean(byName['fourETFSignalRoute.js'])) throw new Error('Partial four-ETF ingress; inspect before update');
+  // Only our two modules can be replaced during a guarded follow-up upload.
+  const modules = downloaded.filter(m => !['fourETFEntry.js', 'fourETFSignalRoute.js'].includes(m.name));
   const sha = async text => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))), x => x.toString(16).padStart(2, '0')).join('');
   const manifest = async parts => Object.fromEntries(await Promise.all(parts.map(async p => [p.name, await sha(p.code)])));
   const oldHashes = await manifest(modules);

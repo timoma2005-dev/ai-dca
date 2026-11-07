@@ -8,7 +8,7 @@
 - 常态为最近一年正量分钟溢价中位数，初值按任务书，2027-01-01 起季度首日更新；完整历史/NAV 不齐不沿用过期常态。日历未知年份关闭；需在官方年度日历发布后只更新本服务 Python/Worker 的日历。
 - 严格偏离差 `>0.5pp` 才锁定目标，下一分钟双方正量新鲜 close 确认。午休 11:30 后的下一完成 bar 为 13:01。下一分钟缺失或不可交易取消，15:00 触发当日取消，不跨日。持有日不推送。
 - `notification_mode=enabled` 从首日允许真实确认换仓推送；账户 lovexl 的已有 email，经现有 Resend → Brevo → Cloudflare。配置/日志无密钥；启动时只从精确 root sync daemon 进程内存继承内部认证。
-- 状态先提交、事件发送意图先落盘、POST 不自动重试。可能漏信号，避免重复。事件 `fourETF:YYYY-MM-DD:HHMM`，D1 email 幂等，`first-delivery.json` 仅在 D1 真正 `delivered` 后生成。
+- 状态先提交、事件发送意图先落盘、POST 不自动重试。可能漏信号，避免重复。事件 `fourETF:YYYY-MM-DD:HHMM`，Worker 先在独立 D1 `notify_four_etf_signal_claims` 用 owner/event 主键原子认领，再走原 email 投递器；并发或未知失败也不重发。上线前应用 `deploy/20261108-four-etf-claims.sql`（只建独立表），`first-delivery.json` 仅在 D1 真正 `delivered` 后生成。
 
 CN 路径：源码 `/root/ai-dca-four-etf-live`，配置 `/etc/ai-dca-four-etf.json`，状态/`signals.jsonl`/`inputs`/`events`/`history.sqlite3`/`nav-*`/`normal-*` 均在 `/var/lib/ai-dca-four-etf`；任务 `/etc/cron.d/ai-dca-four-etf`；stdout `/var/log/ai-dca-four-etf.log`。
 

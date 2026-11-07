@@ -115,6 +115,15 @@ export async function handleFourETFSignal(request, env, { deliver = deliverAccou
   try {
     const prior = await deliveryAttempt(env, payload.event_id);
     if (prior) return Response.json({ ok: prior.status === 'delivered', duplicate: true, event_id: payload.event_id, channel: 'email', status: prior.status, delivery_attempt: prior }, { status: prior.status === 'delivered' ? 200 : 409 });
+    // A separate atomic ingress claim closes the check/send race. The shared
+    // engine intentionally retries failed reservations for other callers; this
+    // strategy must never retry an uncertain email, including concurrent POSTs.
+    const claim = await env.SYNC_DB.prepare('INSERT OR IGNORE INTO notify_four_etf_signal_claims (owner_user_id,event_id,input_sha256,claimed_at) VALUES (?,?,?,?)')
+      .bind(OWNER, payload.event_id, payload.input_sha256, now().toISOString()).run();
+    if (Number(claim?.meta?.changes || 0) !== 1) {
+      const previous = await deliveryAttempt(env, payload.event_id);
+      return Response.json({ ok: previous?.status === 'delivered', duplicate: true, event_id: payload.event_id, channel: 'email', status: previous?.status || 'claimed_no_retry', delivery_attempt: previous || null }, { status: previous?.status === 'delivered' ? 200 : 409 });
+    }
     const execution = payload.execution_reference;
     const message = {
       eventId: payload.event_id, eventType: 'four-etf-signal', ruleId: 'fourETF', strategyName: '四 ETF 溢价切换', symbol: payload.target,
