@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+TZ=Asia/Shanghai
+40 14 * * 1-5 root /usr/bin/python3 -B /root/ai-dca-relprice-live/services/relprice-signal/run-cn.py --config /etc/ai-dca-relprice.json --live >> /var/log/ai-dca-relprice.log 2>&1

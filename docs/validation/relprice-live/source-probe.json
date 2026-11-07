@@ -1,0 +1,199 @@
+{
+  "date": "2026-11-06",
+  "kind": "historical_live_source_probe",
+  "checks": {
+    "513100": {
+      "1440": {
+        "close": 2.159,
+        "positive_volume": false,
+        "cn_close": 2.159,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 2.159,
+        "positive_volume": false,
+        "cn_close": 2.159,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "513110": {
+      "1440": {
+        "close": 2.347,
+        "positive_volume": true,
+        "cn_close": 2.347,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 2.347,
+        "positive_volume": true,
+        "cn_close": 2.347,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "513300": {
+      "1440": {
+        "close": 2.572,
+        "positive_volume": true,
+        "cn_close": 2.572,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 2.572,
+        "positive_volume": true,
+        "cn_close": 2.572,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "513390": {
+      "1440": {
+        "close": 2.325,
+        "positive_volume": true,
+        "cn_close": 2.325,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 2.326,
+        "positive_volume": true,
+        "cn_close": 2.326,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "513870": {
+      "1440": {
+        "close": 1.984,
+        "positive_volume": true,
+        "cn_close": 1.984,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 1.984,
+        "positive_volume": true,
+        "cn_close": 1.984,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "159501": {
+      "1440": {
+        "close": 2.06,
+        "positive_volume": true,
+        "cn_close": 2.06,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 2.061,
+        "positive_volume": true,
+        "cn_close": 2.061,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "159513": {
+      "1440": {
+        "close": 1.703,
+        "positive_volume": true,
+        "cn_close": 1.703,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 1.703,
+        "positive_volume": true,
+        "cn_close": 1.703,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "159632": {
+      "1440": {
+        "close": 2.336,
+        "positive_volume": true,
+        "cn_close": 2.336,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 2.335,
+        "positive_volume": true,
+        "cn_close": 2.335,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "159659": {
+      "1440": {
+        "close": 2.257,
+        "positive_volume": true,
+        "cn_close": 2.257,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 2.259,
+        "positive_volume": true,
+        "cn_close": 2.259,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "159660": {
+      "1440": {
+        "close": 2.272,
+        "positive_volume": true,
+        "cn_close": 2.272,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 2.272,
+        "positive_volume": true,
+        "cn_close": 2.272,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "159696": {
+      "1440": {
+        "close": 1.977,
+        "positive_volume": true,
+        "cn_close": 1.977,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 1.978,
+        "positive_volume": true,
+        "cn_close": 1.978,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    },
+    "159941": {
+      "1440": {
+        "close": 1.578,
+        "positive_volume": true,
+        "cn_close": 1.578,
+        "close_match": true,
+        "volume_sign_match": true
+      },
+      "1441": {
+        "close": 1.577,
+        "positive_volume": true,
+        "cn_close": 1.577,
+        "close_match": true,
+        "volume_sign_match": true
+      }
+    }
+  },
+  "all_close_match": true
+}

@@ -1,5 +1,5 @@
 name = "ai-dca-notify"
-main = "src/accountEntry.js"
+main = "src/relpriceEntry.js"
 compatibility_date = "2026-03-30"
 compatibility_flags = ["nodejs_compat"]
 
