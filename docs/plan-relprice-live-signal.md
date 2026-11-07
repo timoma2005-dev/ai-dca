@@ -34,11 +34,12 @@
 - [x] 单元测试：公式、并列、60bp 两侧和等号、停牌/无量/缺失、过期、节假日、重复运行、dry-run 不投递/不推进实盘状态。
 - [x] 历史回放：最近 30 个交易日逐日对齐封存 B_REL 持仓/换仓；特别核对 2026-10-15 159501→513110 和 2026-11-06 持有 513110；保存机器可读证据与输入哈希。
 - [x] 已运行相关 Node 测试与仓库检查；新增代码及通知链路测试通过，现有分支的 refactor/lint/6 个旧测试失败均在干净基线复现，详见 `docs/validation/relprice-live/checks.md`。
-- [x] CN 独立 worktree 部署，原库回放与 18 个 Python 测试通过；周末 dry-run 正确跳过，首次只读 email 预检已确认 ready。
-- [ ] 安装最终 cron 和推送运行配置；核对日志/状态/部署文件哈希。
+- [x] CN 独立 worktree 部署，原库回放与系统 Python 测试通过；周末 dry-run 正确跳过，只读 email 预检已确认 ready。
+- [x] 安装独立 cron 和运行配置；服务器本地时区文件与 Asia/Shanghai 完全一致，cron 源文件哈希匹配。主工作区保持干净，root 原 crontab 与 shadow collect.py 哈希未变，switch monitor 进程仍不存在。
 - [ ] 交易时段的完整新鲜数据 dry-run（每次 live 在投递前自动完整执行并落日志）；当前周六，尚不能进行此实测。
 - [ ] 首次实际换仓通知后，按 owner + event_id 查询 D1 `notify_delivery_attempts`，仅 email `delivered` 才通过最终投递验收。
-- [ ] 提交并汇报文件清单、提交状态；fork 推送等待用户一次性 token。
+- [x] 本地提交并通过 bundle 部署；文件清单记录于 `docs/validation/relprice-live/deployment.md`。
+- [ ] fork 推送等待用户一次性 token；未推任何 remote。
 
 ## 风险与完成条件
 
@@ -60,3 +61,5 @@ Cloudflare 部署采用 content-only API 增加入口包装，保留线上原 bu
 CN 原库实测：30/30 一致，最大分差浮点误差 2.78e-12bp；系统 Python 下 18/18 测试通过。周末 dry-run 记录 `non_trading_day`，不推进初始参考持仓。通知客户端的 urllib 默认 UA 被 Cloudflare 1010 拒绝；使用明确 `ai-dca-relprice/1.0` 服务标识后只读认证预检 HTTP 200、email ready，未发送邮件，未修改任何防火墙配置。
 
 通知传输又复用既有 `market_collector.cf_ip_selection` 的 IPv4/TLS 优选，以处理 CN 直连 CF anycast 偶发超时；仍保留真实域名/SNI/Host 和证书校验，且无代理、无重定向、不重试未知结果的 POST。CN 原型已用优选地址完成只读 email ready 预检；增加 3 个传输安全测试，本地 Python 共 21/21 通过。
+
+为严格落实“先算信号 dry-run，再开推送”，初始运行配置使用 `notification_mode=after_dry_run`，不是预先启用。首个交易时段完整新鲜数据验证成功、日志已落盘后，程序才一次性将配置切为 `enabled`，写 `live-dry-run-passed.json`；周末、无量、过期、缺失及显式 dry-run 命令都不会开启。配置 `disabled` 可永久停推，不会自动重开。增加门禁测试后本地 Python 23/23 通过；交易时段实测仍保持未完成。

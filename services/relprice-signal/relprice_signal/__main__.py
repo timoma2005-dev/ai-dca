@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--reason")
     args = parser.parse_args()
     config = json.load(open(args.config))
+    config["_config_path"] = args.config
     if args.verify_delivery:
         result = notify(config, {"owner_user_id": config["owner_user_id"], "dry_run": True, "verify_event_id": args.verify_delivery})
     elif args.check_notify:

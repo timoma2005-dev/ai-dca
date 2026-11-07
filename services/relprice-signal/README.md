@@ -35,7 +35,7 @@ python3 -B /root/ai-dca-relprice-live/services/relprice-signal/run-cn.py \
 
 `signals.jsonl` 每次记录日期、持仓、目标（持有日也记录最优替代候选）、差值 bp、决策、新鲜度、输入哈希与模式。`decision-YYYYMMDD.json` 是单日已提交凭证；`first-delivery.json` 只在 Worker 从 D1 查询到真实 email `delivered` 后生成。不可手工删除单日凭证以重发；纠正持仓使用上述命令。
 
-关闭推送可将配置的 `notifications_enabled` 设为 false；仍记录参考状态。停止任务可移除本任务自己的 cron 文件。不要启停 `ai-dca-switch-monitor` 或编辑它的配置/状态，不访问 `/opt/quant-shadow/` 写路径。
+`notification_mode` 支持 `disabled`（停推）、`after_dry_run`（一次自动启用门禁）、`enabled`（允许换仓投递）。部署时设为 `after_dry_run`：只有交易时段完整新鲜数据 dry-run 成功并落日志后，程序才将配置自动切为 `enabled`，并写 `live-dry-run-passed.json`；周末/失败/dry-run 命令都不会启用。用户停推设为 `disabled`，此模式不会自动重新启用。停止任务可移除本任务自己的 cron 文件。不要启停 `ai-dca-switch-monitor` 或编辑它的配置/状态，不访问 `/opt/quant-shadow/` 写路径。
 
 ## 通知链路与密钥
 

@@ -89,6 +89,8 @@ def _run(config, store, dry_run, market, clock, sleeper, sender):
               "holding": state["held_code"], "target": None, "gap_bp": None,
               "decision": "skip", "data_freshness": {}, "state_revision": state["revision"]}
     try:
+        if config["notification_mode"] not in ("disabled", "after_dry_run", "enabled"):
+            raise DataUnavailable("invalid_notification_mode")
         if not trading_day(now.date()):
             raise DataUnavailable("non_trading_day")
         if now.strftime("%H%M") != "1440":
@@ -138,6 +140,21 @@ def _run(config, store, dry_run, market, clock, sleeper, sender):
         validated = store.log({**record, "mode": "dry-run", "stage": "validated", "push": "disabled"})
         if dry_run:
             return validated
+        # Bootstrap once: actual delivery remains disabled until a complete,
+        # fresh, trading-session dry-run has passed and been logged above.
+        if config["notification_mode"] == "after_dry_run":
+            config_path = config.get("_config_path")
+            if not config_path:
+                raise DataUnavailable("missing_config_path_for_arming")
+            persisted = {k: v for k, v in config.items() if not k.startswith("_")}
+            persisted["notification_mode"] = "enabled"
+            atomic_json(store.directory / "live-dry-run-passed.json", {
+                "date": record["date"], "input_sha256": record["input_sha256"],
+                "validated_at": clock().isoformat(), "event_id": record["event_id"]})
+            atomic_json(config_path, persisted)
+            Path(config_path).chmod(0o600)
+            config["notification_mode"] = "enabled"
+            record["notification_armed_after_dry_run"] = True
         # Commit the paper reference transition before uncertain network I/O.
         # An interrupted/failed send never causes an automatic duplicate email.
         record["push"] = "pending" if decision["decision"] == "rotate" else "not_required"
@@ -147,7 +164,7 @@ def _run(config, store, dry_run, market, clock, sleeper, sender):
                     "kind": "strategy_reference", "actual_holding_confirmed": False,
                     "last_event_id": record["event_id"]})
         if decision["decision"] == "rotate":
-            if not config["notifications_enabled"]:
+            if config["notification_mode"] != "enabled":
                 record["push"] = "disabled_by_config"
             else:
                 result = sender(config, {"owner_user_id": config["owner_user_id"], "date": record["date"],

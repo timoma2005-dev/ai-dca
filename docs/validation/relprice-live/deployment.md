@@ -1,6 +1,6 @@
 # CN 部署与验收状态（2026-11-07）
 
-- 分支：`feat/relprice-live-signal-20261107`；实现提交 `20c3a058`，客户端修正 `65fa6539`。本地及 CN 均使用独立 worktree；通过本地 bundle 传输，未推送任何 remote。
+- 分支：`feat/relprice-live-signal-20261107`；实现提交 `20c3a058`，客户端标识修正 `65fa6539`，IPv4 传输修正 `90b6a9ef`。本地及 CN 均使用独立 worktree；通过本地 bundle 传输，未推送任何 remote。
 - CN 源码：`/root/ai-dca-relprice-live/services/relprice-signal/`。
 - 运行配置：`/etc/ai-dca-relprice.json`（无密钥）；初始参考持仓 513110，日期 2026-11-06，实际持仓未确认。
 - 任务：`/etc/cron.d/ai-dca-relprice`，北京时间工作日 14:40；独立日历过滤。先完整 dry-run，冻结目标，等双方首个共同正量完成 bar 后，只有换仓才投递。
@@ -8,7 +8,7 @@
 - 首次 D1 投递核验通过后才会生成：`/var/lib/ai-dca-relprice/first-delivery.json`。没有这个真实成功证据不能宣称全部验收完成。
 - Worker 部署证据见 `worker-deployment.json`。保留原 Worker bundle / source map / bindings / secret / 原 handlers，新增独立 relprice 入口；投递后按 owner + event_id 查询 D1 email 状态。
 - 今天为周六：实际 dry-run 记录 `non_trading_day`。交易时段新鲜数据完整 dry-run 及首次真实换仓邮件 D1 成功记录仍待发生；每次 live 自动在投递前先验证并记录 dry-run。
-- 停推：配置中 `notifications_enabled=false`；停止整个任务：移除自己的 cron 文件。持仓纠正命令见服务 README。
+- 当前推送配置为 `notification_mode=after_dry_run`，等待首个交易时段完整新鲜数据 dry-run 成功后自动改为 `enabled`，周末不会启用。停推设为 `disabled`；停止整个任务可移除自己的 cron 文件。持仓纠正命令见服务 README。
 - fork 推送等待用户一次性 token。不会 force push，也不改写共享历史。
 
 改动文件清单：

@@ -7,5 +7,5 @@
   "max_snapshot_age_sec": 45,
   "owner_user_id": "usr_ad2be81697b5eec7ca3b2204efb7270c",
   "notify_url": "https://api.freebacktrack.tech/api/notify/internal/relprice-signal",
-  "notifications_enabled": false
+  "notification_mode": "disabled"
 }

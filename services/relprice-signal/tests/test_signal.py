@@ -92,7 +92,7 @@ class LiveTests(unittest.TestCase):
         self.now = datetime(2026, 11, 9, 14, 40, 0, tzinfo=TZ)
         self.config = {'history_db': self.tmp.name + '/m1.db', 'latest_url': 'http://127.0.0.1:18080/latest',
                        'data_dir': self.tmp.name + '/state', 'initial_holding': '513110', 'initial_as_of': '2026-11-06',
-                       'max_snapshot_age_sec': 45, 'notifications_enabled': True, 'owner_user_id': 'owner'}
+                       'max_snapshot_age_sec': 45, 'notification_mode': 'enabled', 'owner_user_id': 'owner'}
         db = sqlite3.connect(self.config['history_db'])
         db.execute('CREATE TABLE k1(code TEXT,ts TEXT,open REAL,close REAL,vol REAL,PRIMARY KEY(code,ts))')
         db.executemany('INSERT INTO k1 VALUES (?,?,?,?,?)', [(exchange_code(c), d + '1440', 1., 1., 1.) for c in CODES for d in prior_days(self.now.date())])
@@ -217,6 +217,26 @@ class LiveTests(unittest.TestCase):
         self.assertEqual(state['held_code'], '159501')
         self.assertTrue(state['actual_holding_confirmed'])
         self.assertIn('manual_override', (store.directory / 'signals.jsonl').read_text())
+
+    def test_bootstrap_arms_only_after_valid_trading_dry_run(self):
+        path = Path(self.tmp.name, 'config.json')
+        self.config.update(notification_mode='after_dry_run', _config_path=str(path))
+        path.write_text(json.dumps(self.config))
+        self.execute(dry_run=True)
+        self.assertEqual(json.loads(path.read_text())['notification_mode'], 'after_dry_run')
+        self.assertFalse(Path(self.config['data_dir'], 'live-dry-run-passed.json').exists())
+        self.now = self.now.replace(hour=14, minute=40, second=8)
+        self.execute(dry_run=False)
+        self.assertEqual(json.loads(path.read_text())['notification_mode'], 'enabled')
+        self.assertTrue(Path(self.config['data_dir'], 'live-dry-run-passed.json').exists())
+        self.assertEqual(len(self.sent), 1)
+
+    def test_closed_day_cannot_arm_bootstrap_delivery(self):
+        self.config['notification_mode'] = 'after_dry_run'
+        self.now = datetime(2026, 11, 7, 14, 40, tzinfo=TZ)
+        self.execute(dry_run=False)
+        self.assertEqual(self.config['notification_mode'], 'after_dry_run')
+        self.assertFalse(self.sent)
 
 
 if __name__ == '__main__':
