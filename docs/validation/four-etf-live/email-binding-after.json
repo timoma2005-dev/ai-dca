@@ -1,0 +1,13 @@
+{
+  "checked_at": "2026-11-08",
+  "binding_unchanged": true,
+  "channels": [
+    {
+      "record_id": "account:usr_ad2be81697b5eec7ca3b2204efb7270c::email",
+      "payload_sha256": "f3762c885e7a8dda5d5afbcdabcdec0a4af6a42ae45354cc54d53a07dd04b833",
+      "email_verified": true,
+      "email_enabled": true
+    }
+  ],
+  "four_etf_delivery_attempts": []
+}

@@ -1,0 +1,172 @@
+{
+  "checked_at": "2026-11-08T00:43:46.840596+08:00",
+  "collector_current_gate": "stale_collector_snapshot",
+  "collector_generated_at": "2026-11-06T15:30:33+08:00",
+  "collector_role": "freshness_and_suspension_only",
+  "initial_medians_independently_recomputed": {
+    "159501": {
+      "brief_pp": 7.2303,
+      "median_pp": 7.230282404919697,
+      "positive_minutes": 52965
+    },
+    "159696": {
+      "brief_pp": 6.7413,
+      "median_pp": 6.74127364774848,
+      "positive_minutes": 54165
+    },
+    "159941": {
+      "brief_pp": 6.7483,
+      "median_pp": 6.748283069573002,
+      "positive_minutes": 53813
+    },
+    "513100": {
+      "brief_pp": 7.7054,
+      "median_pp": 7.705382436260622,
+      "positive_minutes": 53300
+    }
+  },
+  "minute_probe": {
+    "159501": {
+      "close_or_eligibility_mismatches": [],
+      "date": "2026-11-06",
+      "first": "202611061031",
+      "last": "202611061500",
+      "returned_minutes": 180,
+      "source_db_minutes": 240
+    },
+    "159696": {
+      "close_or_eligibility_mismatches": [],
+      "date": "2026-11-06",
+      "first": "202611061031",
+      "last": "202611061500",
+      "returned_minutes": 180,
+      "source_db_minutes": 240
+    },
+    "159941": {
+      "close_or_eligibility_mismatches": [],
+      "date": "2026-11-06",
+      "first": "202611061031",
+      "last": "202611061500",
+      "returned_minutes": 180,
+      "source_db_minutes": 240
+    },
+    "513100": {
+      "close_or_eligibility_mismatches": [],
+      "date": "2026-11-06",
+      "first": "202611061031",
+      "last": "202611061500",
+      "returned_minutes": 180,
+      "source_db_minutes": 240
+    }
+  },
+  "nav_probe": {
+    "159501": {
+      "latest_date": "2026-11-05",
+      "latest_nav": 1.6732,
+      "mismatches": [],
+      "overlapping_dates": [
+        "2026-10-23",
+        "2026-10-26",
+        "2026-10-27",
+        "2026-10-28",
+        "2026-10-29",
+        "2026-10-30",
+        "2026-11-02",
+        "2026-11-03",
+        "2026-11-04",
+        "2026-11-05"
+      ]
+    },
+    "159696": {
+      "latest_date": "2026-11-05",
+      "latest_nav": 1.6589,
+      "mismatches": [],
+      "overlapping_dates": [
+        "2026-10-23",
+        "2026-10-26",
+        "2026-10-27",
+        "2026-10-28",
+        "2026-10-29",
+        "2026-10-30",
+        "2026-11-02",
+        "2026-11-03",
+        "2026-11-04",
+        "2026-11-05"
+      ]
+    },
+    "159941": {
+      "latest_date": "2026-11-05",
+      "latest_nav": 1.3319,
+      "mismatches": [],
+      "overlapping_dates": [
+        "2026-10-23",
+        "2026-10-26",
+        "2026-10-27",
+        "2026-10-28",
+        "2026-10-29",
+        "2026-10-30",
+        "2026-11-02",
+        "2026-11-03",
+        "2026-11-04",
+        "2026-11-05"
+      ]
+    },
+    "513100": {
+      "latest_date": "2026-11-05",
+      "latest_nav": 1.7814,
+      "mismatches": [],
+      "overlapping_dates": [
+        "2026-10-23",
+        "2026-10-26",
+        "2026-10-27",
+        "2026-10-28",
+        "2026-10-29",
+        "2026-10-30",
+        "2026-11-02",
+        "2026-11-03",
+        "2026-11-04",
+        "2026-11-05"
+      ]
+    }
+  },
+  "passed": true,
+  "price_close": "tencent_completed_m1",
+  "proxy_policy": "explicitly_bypassed",
+  "rejected_collector_nav_latest": {
+    "159501": "2026-09-10",
+    "159696": "2026-09-10",
+    "159941": "2026-09-10",
+    "513100": "2026-09-10"
+  },
+  "rejected_mirror": {
+    "159501": {
+      "date": "2026-11-06",
+      "nav": null,
+      "prevDayDate": "2026-11-04",
+      "prevDayNav": 1.7873,
+      "source": "szse_pcf"
+    },
+    "159696": {
+      "date": "2026-11-06",
+      "nav": null,
+      "prevDayDate": "2026-11-04",
+      "prevDayNav": 1.772,
+      "source": "szse_pcf"
+    },
+    "159941": {
+      "date": "2026-11-06",
+      "nav": null,
+      "prevDayDate": "2026-11-04",
+      "prevDayNav": 1.4227,
+      "source": "szse_pcf"
+    },
+    "513100": {
+      "date": "2026-11-06",
+      "nav": 1.9026,
+      "prevDayDate": "2026-11-04",
+      "prevDayNav": null,
+      "source": "sse_pcf"
+    }
+  },
+  "selected_nav": "eastmoney_f10_lsjz"
+}

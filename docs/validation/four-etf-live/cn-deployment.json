@@ -1,0 +1,268 @@
+{
+  "checked_at": "2026-11-08T00:47:24.403919+08:00",
+  "config": {
+    "data_dir": "/var/lib/ai-dca-four-etf",
+    "history_db": "/root/m1store/stockdb_m1.db",
+    "initial_as_of": "2026-11-06",
+    "initial_holding": "159696",
+    "latest_url": "http://127.0.0.1:18080/latest",
+    "max_snapshot_age_sec": 45,
+    "notification_mode": "enabled",
+    "notify_url": "https://api.freebacktrack.tech/api/notify/internal/four-etf-signal",
+    "owner_user_id": "usr_ad2be81697b5eec7ca3b2204efb7270c"
+  },
+  "config_mode": "0o644",
+  "cron": "SHELL=/bin/bash\nPATH=/usr/local/bin:/usr/bin:/bin\nTZ=Asia/Shanghai\n# CN system timezone is independently verified as Asia/Shanghai.\n# Runner prepares NAV every 5 min before 09:30 and filters session/holidays.\n* 6-15 * * 1-5 root /usr/bin/python3 -B /root/ai-dca-four-etf-live/services/four-etf-signal/run-cn.py --config /etc/ai-dca-four-etf.json --live >> /var/log/ai-dca-four-etf.log 2>&1\n10 0 1 1,4,7,10 * root /usr/bin/python3 -B /root/ai-dca-four-etf-live/services/four-etf-signal/run-cn.py --config /etc/ai-dca-four-etf.json --recalculate >> /var/log/ai-dca-four-etf.log 2>&1\n",
+  "cron_mode": "0o644",
+  "cron_sha256": "4f46c8bee590068d168ed41f98ef7aced2a1b3d71d492abfafb6282ac03c8c91",
+  "cron_verification": {
+    "cron_pids": [
+      "539288",
+      "1056229"
+    ],
+    "log_exists": true,
+    "rows": [
+      {
+        "date": "2026-11-08",
+        "decision": "skip",
+        "holding": "159696",
+        "logged_at": "2026-11-08T00:43:01.162879+08:00",
+        "minute": "0043",
+        "mode": "dry-run",
+        "push": "none",
+        "reason": "non_trading_day",
+        "state_revision": 0,
+        "strategy": "fourETF"
+      }
+    ],
+    "schedule": {
+      "log": "/var/log/ai-dca-four-etf-cron-verification.log",
+      "run_at": "2026-11-08T00:43:00+08:00",
+      "scheduled_at": "2026-11-08T00:41:59.322458+08:00",
+      "temporary_cron": "/etc/cron.d/ai-dca-four-etf-verification"
+    },
+    "system_zonefile_matches_shanghai": true,
+    "temporary_cron_removed": true
+  },
+  "delivery_verification": {
+    "date": "2026-11-08",
+    "delivery_attempt": null,
+    "dry_run": true,
+    "logged_at": "2026-11-08T00:44:23.312489+08:00",
+    "mode": "dry-run",
+    "ok": true,
+    "strategy": "fourETF"
+  },
+  "event_receipts": [],
+  "first_delivery_proof_exists": false,
+  "git_status": "",
+  "history_sha256": "6722e9de59e9fcc7d5a8c6439423d20b4a6bf0f671076b77c87007d89c919eb6",
+  "implementation_commit": "e21cdab630427b25574de2c6f93c1a9c084891ec",
+  "logrotate_installed": false,
+  "node_tests_tail": [
+    "✔ read-only verification queries owner and event, never delivers (3.383812ms)",
+    "ℹ tests 31",
+    "ℹ suites 0",
+    "ℹ pass 31",
+    "ℹ fail 0",
+    "ℹ cancelled 0",
+    "ℹ skipped 0",
+    "ℹ todo 0",
+    "ℹ duration_ms 1164.930271"
+  ],
+  "normal": {
+    "effective": "2026-11-07",
+    "fit_end": "2026-11-06",
+    "fit_start": "2025-11-07",
+    "method": "positive_volume_minute_median",
+    "next_recalculation": "2027-01-01",
+    "normal_pp": {
+      "159501": 7.2303,
+      "159696": 6.7413,
+      "159941": 6.7483,
+      "513100": 7.7054
+    },
+    "sha256": "0c6e3a32ba0bbd84ccb89a40822b8b21f4034a5f27efa4b2a165ff2a3d2c45cd",
+    "source": "FOUR_ETF_LIVE_BRIEF.md"
+  },
+  "notify_readiness": {
+    "channel": "email",
+    "date": "2026-11-08",
+    "dry_run": true,
+    "logged_at": "2026-11-08T00:44:10.516943+08:00",
+    "mode": "dry-run",
+    "ok": true,
+    "owner_user_id": "usr_ad2be81697b5eec7ca3b2204efb7270c",
+    "ready": true,
+    "strategy": "fourETF"
+  },
+  "protected_hashes_after": {
+    "/etc/ai-dca-relprice.json": "8aafb7abc2ccf4dda2aa0907f0458baf5f403c9e99e55ee0b9c9a63480a11542",
+    "/etc/cron.d/ai-dca-relprice": "b809a5560dd6357e188f7c174d57f4809a790f47ea0eaeb18a971a1c20a4bd06",
+    "/root/ai-dca-relprice-live/services/relprice-signal/README.md": "14b28402d66a05a2fe55d9789bcdddebcbb785bd128386b8af98b9af8d6a534d",
+    "/root/ai-dca-relprice-live/services/relprice-signal/build_reference.py": "f619ab4c68590760a2279c648242bbd9998080206a061ad94fd55388ad91c369",
+    "/root/ai-dca-relprice-live/services/relprice-signal/config.example.json": "3e0874d2ffa4b0eff539b46b0e3628211b71eb61da9ce34f40d901057e4014e0",
+    "/root/ai-dca-relprice-live/services/relprice-signal/deploy/cron": "b809a5560dd6357e188f7c174d57f4809a790f47ea0eaeb18a971a1c20a4bd06",
+    "/root/ai-dca-relprice-live/services/relprice-signal/relprice_signal/__init__.py": "9d6bc029d4fe3cacf016600ddab58cbf2be67a66673006837d9042d310086e65",
+    "/root/ai-dca-relprice-live/services/relprice-signal/relprice_signal/__main__.py": "847aada48f414bfbc1b9529394d5216e2346c69898fe67d4577746f15a31191c",
+    "/root/ai-dca-relprice-live/services/relprice-signal/relprice_signal/data.py": "9ba5b5d0ce64c8fc88033bcb022c4abe342a724088fcc764d0aa7399cd57901c",
+    "/root/ai-dca-relprice-live/services/relprice-signal/relprice_signal/notify.py": "3f9fc0d0221d0746ff211d2f1b2679dfc9c46be828866227e0f48375b380a4aa",
+    "/root/ai-dca-relprice-live/services/relprice-signal/relprice_signal/rules.py": "41da8211cb34ab16620622fbacccef0ca3672037518e1ddace61d1d469bed36f",
+    "/root/ai-dca-relprice-live/services/relprice-signal/relprice_signal/runner.py": "b2466fd6e902b97ab78cb55a8b9714ebc78bc24afffa8ecfd110a7e9c5dbd5c6",
+    "/root/ai-dca-relprice-live/services/relprice-signal/replay.py": "76787fb4db5569722ba0e200f0766847602912c30a0dd9c06b6b19e4ee14caf4",
+    "/root/ai-dca-relprice-live/services/relprice-signal/run-cn.py": "a9a86c881f60e5ac717fefc20aaf35258fe30514aa8464a4ee328d5d40dee7f5",
+    "/root/ai-dca-relprice-live/services/relprice-signal/tests/fixtures/backtest-reference.json": "3558cde8b75302a81bb3d7ffb9b7ce2222d9928f6db625b95d01074796bb7606",
+    "/root/ai-dca-relprice-live/services/relprice-signal/tests/test_notify.py": "603c23bf63b5e04cf28acfb9979d748dc742c06e9f3a3ccb56d88ca22c346c06",
+    "/root/ai-dca-relprice-live/services/relprice-signal/tests/test_signal.py": "fe5cba7da0b5d42c8880bffe63f496d81001dd86fc69632adbc750ae2888f0af",
+    "/root/ai-dca-relprice-live/workers/notify/src/relpriceEntry.js": "bd52f85c865eaf920e11b177760e49bef046c6d4cd3c5905dfe5a11377f8ae16",
+    "/root/ai-dca-relprice-live/workers/notify/src/relpriceSignalRoute.js": "1789f8434a52924b5af55014aead010cf761de55dd1e5186361f9f19081880ab",
+    "/root/ai-dca-relprice-live/workers/notify/wrangler.toml": "d458d44dea3b916e3f9bf8b7ea322ee2454b4080ac2f32123c8ddeb2924982f5",
+    "/var/lib/ai-dca-relprice/state.json": "e2711f86aa8224fe2736dc2834b2667fef737a3b1ce059224c1ca7933c60a010",
+    "root_crontab_sha256": "8e568829479c6a3becfb3b6f57ebe56db2fc6dfe256bebc6f00eaf5868f2a6d0"
+  },
+  "protected_relprice_unchanged": true,
+  "python_tests_tail": [
+    "----------------------------------------------------------------------",
+    "Ran 32 tests in 12.328s",
+    "",
+    "OK"
+  ],
+  "recent_logs": [
+    {
+      "date": "2026-11-08",
+      "decision": "initialized",
+      "holding": "159696",
+      "logged_at": "2026-11-08T00:41:59.033930+08:00",
+      "mode": "dry-run",
+      "revision": 0,
+      "strategy": "fourETF"
+    },
+    {
+      "date": "2026-11-08",
+      "decision": "skip",
+      "holding": "159696",
+      "logged_at": "2026-11-08T00:41:59.152965+08:00",
+      "minute": "0041",
+      "mode": "dry-run",
+      "push": "none",
+      "reason": "non_trading_day",
+      "state_revision": 0,
+      "strategy": "fourETF"
+    },
+    {
+      "date": "2026-11-08",
+      "decision": "skip",
+      "holding": "159696",
+      "logged_at": "2026-11-08T00:41:59.265610+08:00",
+      "minute": "0041",
+      "mode": "live",
+      "push": "none",
+      "reason": "non_trading_day",
+      "state_revision": 0,
+      "strategy": "fourETF"
+    },
+    {
+      "date": "2026-11-08",
+      "decision": "skip",
+      "holding": "159696",
+      "logged_at": "2026-11-08T00:43:01.162879+08:00",
+      "minute": "0043",
+      "mode": "dry-run",
+      "push": "none",
+      "reason": "non_trading_day",
+      "state_revision": 0,
+      "strategy": "fourETF"
+    },
+    {
+      "channel": "email",
+      "date": "2026-11-08",
+      "dry_run": true,
+      "logged_at": "2026-11-08T00:44:10.516943+08:00",
+      "mode": "dry-run",
+      "ok": true,
+      "owner_user_id": "usr_ad2be81697b5eec7ca3b2204efb7270c",
+      "ready": true,
+      "strategy": "fourETF"
+    },
+    {
+      "date": "2026-11-08",
+      "delivery_attempt": null,
+      "dry_run": true,
+      "logged_at": "2026-11-08T00:44:23.312489+08:00",
+      "mode": "dry-run",
+      "ok": true,
+      "strategy": "fourETF"
+    }
+  ],
+  "replay_matches_local": true,
+  "seed_history_matches_local": true,
+  "seed_manifest": {
+    "counts": {
+      "159501": {
+        "minutes": 58080,
+        "nav_dates": 245
+      },
+      "159696": {
+        "minutes": 58080,
+        "nav_dates": 245
+      },
+      "159941": {
+        "minutes": 58080,
+        "nav_dates": 245
+      },
+      "513100": {
+        "minutes": 58080,
+        "nav_dates": 245
+      }
+    },
+    "fit_start": "2025-11-07",
+    "input_sha256": {
+      "nav/sh513100_nav.csv": "71eac8a63ecefc05e075139e98de44fc1aada62d03931155ff4069b961f468bb",
+      "nav/sz159501_nav.csv": "2512766339625a904cee5eb0ff68fb1117a483204dead8dbf3eff0090b6e3771",
+      "nav/sz159696_nav.csv": "8ac592ecfaf3c1ba2a8ef95dd6c4e04099ecc4e2fe7ac37b53be47bc6ab39946",
+      "nav/sz159941_nav.csv": "7a32c7091d6ae209fd212dcd04c0e0a1c8bdac3d3058ca3cc7a1cdc26c5cf1d0",
+      "sh513100.csv.gz": "bb451efaec200723d21a7bfbe16dbc7a258b8aeeee041080df45f0a41f8aecb9",
+      "sz159501.csv.gz": "b76a4ea5b231082f2f4d31650d3d22386c2fc0df3476343a85932dcb90add4b2",
+      "sz159696.csv.gz": "8d87dc4304b2e32f86acf2807df9d90c3e1553a5b53f6824da3abfdb325de5cc",
+      "sz159941.csv.gz": "50871340a2791901d2b9ab082aa8ed2c363be580dd5756da24418f3e5219b768"
+    }
+  },
+  "source_matches_local": true,
+  "source_sha256": {
+    "services/four-etf-signal/README.md": "3efbdb7054b93854fc4e1f600dc05c088093505d58d0658c3fdb0bb464a5b1bb",
+    "services/four-etf-signal/config.example.json": "493628bea4d888148c2c915a53956dbbe6b679b5c49dcd71cc9ff87e3386b0d1",
+    "services/four-etf-signal/deploy/cron": "4f46c8bee590068d168ed41f98ef7aced2a1b3d71d492abfafb6282ac03c8c91",
+    "services/four-etf-signal/deploy/logrotate": "c0717d71511ba9b5c1472ba0c1935b1a09d47cab3fda493405ee4a5c157de048",
+    "services/four-etf-signal/deploy/worker-upload.mjs": "c9bedea07a43930d2142345f77e5ae860882481f620f1007e7215be5d7a4fe9e",
+    "services/four-etf-signal/four_etf_signal/__init__.py": "1af3582db9fd6930b5a291ba2a4540a35b67208ea848f1742f1da737ce6c3f48",
+    "services/four-etf-signal/four_etf_signal/calendar.py": "d978ae4f46ee5e8e04620c991e28d966660f6974e31c04852fab7a8f9931ba4f",
+    "services/four-etf-signal/four_etf_signal/data.py": "d6980518e1704ee5ac74a640a3a46d7d92cd4a5ea684dd5c1471ba3bf1114839",
+    "services/four-etf-signal/four_etf_signal/history.py": "d15b0cc380c9e1bae66cecc183f6a308791b69e453a363e8f84df6daf86f1f2f",
+    "services/four-etf-signal/four_etf_signal/notify.py": "65f4dfad9493ad84c8b87d97f5ebfa654490863cf9aa964e111359e551cb0a0d",
+    "services/four-etf-signal/four_etf_signal/rules.py": "ac5c01b31a4d04b21198960b0b0753be87baf5d31f3d2cab80166c84843b2fea",
+    "services/four-etf-signal/four_etf_signal/runner.py": "7748d6b422584845c548e696feaa2c39e9e3eef7af4ea2da8540939804c2062b",
+    "services/four-etf-signal/four_etf_signal/storage.py": "f2a6b764334408e210b7fed76e94ed14c20d8a73815cf2eb3469d2b6d76ebba6",
+    "services/four-etf-signal/probe-sources.py": "6bca0c7289a20600d895f0c2a97d4db26f50cc02681609afdbc92bc417c502c3",
+    "services/four-etf-signal/replay.py": "c00d3914c87dd4a7c95cc768556f03db6f96262aa1d41837d13b45dc2a9163f5",
+    "services/four-etf-signal/run-cn.py": "431c286b972cd0e07171a97e8d20ec5489bff3010b60e6d46f3cbc13e4256717",
+    "services/four-etf-signal/seed-history.py": "83332a0bda56ac714a9c01000fba021bb848ff775091af6f4ecb4d657b215fbe",
+    "services/four-etf-signal/tests/test_data.py": "c86eebf9aea557e8c9953f723a48ac349ab47adb5d5f79db74a2e4ebf92c7263",
+    "services/four-etf-signal/tests/test_quarterly.py": "13d494951efda4eb0163fcf38b6133e8fc64bc04ca2face9491aba8a02ee49bf",
+    "services/four-etf-signal/tests/test_rules.py": "5fd6a41b7180bae5596b4c18894c6b28b50f327486015b2dfbeaeca9163a38e9",
+    "services/four-etf-signal/tests/test_runner.py": "00e34eada6a7aae5bb735574ddb64002cef5790e03a55d56ea2d71ca99b8f846",
+    "workers/notify/src/fourETFEntry.js": "2e0d835c429cf56b4b9034927cbab6eda15b4f610489b0aa3f7aa9b4e4f35be7",
+    "workers/notify/src/fourETFSignalRoute.js": "fc7ff6831b121d3272849326fbc969a7cf13a33afce4c8ad31f5bf5c620442bd",
+    "workers/notify/test/fourETFSignal.test.mjs": "ebc5440b4b879c7eedc8ed169c67e037ff2e30c23497e818fbed79f7d4860406",
+    "workers/notify/wrangler.four-etf.toml": "15097d27b3da89f2065c8752b463c4ab81486c2edb08649aa49ab843bcc264e5"
+  },
+  "state": {
+    "actual_holding_confirmed": true,
+    "as_of": "2026-11-06",
+    "holding": "159696",
+    "last_minute": "",
+    "pending": null,
+    "revision": 0,
+    "strategy": "fourETF"
+  },
+  "temporary_cron_exists": false
+}

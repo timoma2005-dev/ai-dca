@@ -39,5 +39,16 @@
       "sha256": "ba38361095fbe89a426e86541dc35399402b732c747c515a10cccae5e7a9e61a"
     }
   },
-  "diff_check": "passed"
+  "diff_check": "passed",
+  "cn_python_tests": {
+    "passed": 32
+  },
+  "cn_node_tests": {
+    "passed": 31
+  },
+  "cn_replay_matches_local": true,
+  "cn_source_probe_passed": true,
+  "cn_cron_actual_execution_passed": true,
+  "cn_source_hashes_match": true,
+  "protected_relprice_unchanged": true
 }

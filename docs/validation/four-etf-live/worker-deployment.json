@@ -1,0 +1,67 @@
+{
+  "success": true,
+  "rollback_version": "75c05acc-77fa-4e64-8d48-b006365ef08f",
+  "deployment": {
+    "id": "31308db8-5c71-480f-892d-74d7e68222b3",
+    "source": "api",
+    "strategy": "percentage",
+    "author_email": "clar2866@umn.edu",
+    "annotations": {
+      "workers/message": "Four-ETF confirmed-switch email ingress; retain...",
+      "workers/triggered_by": "upload"
+    },
+    "versions": [
+      {
+        "version_id": "65b34fdc-82c6-4102-b822-733b55c1304a",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-11-07T16:38:15.167592Z"
+  },
+  "original_modules_before": {
+    "relpriceEntry.js": "bd52f85c865eaf920e11b177760e49bef046c6d4cd3c5905dfe5a11377f8ae16",
+    "relpriceSignalRoute.js": "d8f92906987fd4133950d22cc3241f5e67d957806e4e989edfa60a18ff7426a5",
+    "accountEntry.js.map": "bc4c90ab125c30244904de747514cbf7fede0d16a8089a10e815bf515bf3f9cc",
+    "accountEntry.js": "8c25313baaffe1ae5b2426ad84077b7612d033288b8ca5617f247ccffc8abf81"
+  },
+  "modules_after": {
+    "accountEntry.js.map": "bc4c90ab125c30244904de747514cbf7fede0d16a8089a10e815bf515bf3f9cc",
+    "accountEntry.js": "8c25313baaffe1ae5b2426ad84077b7612d033288b8ca5617f247ccffc8abf81",
+    "fourETFEntry.js": "2e0d835c429cf56b4b9034927cbab6eda15b4f610489b0aa3f7aa9b4e4f35be7",
+    "fourETFSignalRoute.js": "56a3ea5d769deabb8cd07daae09e33e49b4a0c78382fef2873c8cb750147adf0",
+    "relpriceEntry.js": "bd52f85c865eaf920e11b177760e49bef046c6d4cd3c5905dfe5a11377f8ae16",
+    "relpriceSignalRoute.js": "d8f92906987fd4133950d22cc3241f5e67d957806e4e989edfa60a18ff7426a5"
+  },
+  "expected_modules": {
+    "relpriceEntry.js": "bd52f85c865eaf920e11b177760e49bef046c6d4cd3c5905dfe5a11377f8ae16",
+    "relpriceSignalRoute.js": "d8f92906987fd4133950d22cc3241f5e67d957806e4e989edfa60a18ff7426a5",
+    "accountEntry.js.map": "bc4c90ab125c30244904de747514cbf7fede0d16a8089a10e815bf515bf3f9cc",
+    "accountEntry.js": "8c25313baaffe1ae5b2426ad84077b7612d033288b8ca5617f247ccffc8abf81",
+    "fourETFEntry.js": "2e0d835c429cf56b4b9034927cbab6eda15b4f610489b0aa3f7aa9b4e4f35be7",
+    "fourETFSignalRoute.js": "56a3ea5d769deabb8cd07daae09e33e49b4a0c78382fef2873c8cb750147adf0"
+  },
+  "original_modules_preserved": true,
+  "bindings_preserved": true,
+  "settings_preserved": true,
+  "schedules_preserved": true,
+  "binding_count": 27,
+  "handlers": [
+    "fetch",
+    "queue",
+    "scheduled"
+  ],
+  "named_handlers": [
+    {
+      "name": "WsHub",
+      "handlers": [
+        "class"
+      ]
+    },
+    {
+      "name": "stripDeviceIdentityFromAccountTestRequest",
+      "handlers": [
+        "class"
+      ]
+    }
+  ]
+}

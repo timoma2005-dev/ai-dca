@@ -1,0 +1,66 @@
+{
+  "checked_version": "65b34fdc-82c6-4102-b822-733b55c1304a",
+  "current_deployment": {
+    "id": "31308db8-5c71-480f-892d-74d7e68222b3",
+    "source": "api",
+    "strategy": "percentage",
+    "author_email": "clar2866@umn.edu",
+    "annotations": {
+      "workers/message": "Four-ETF confirmed-switch email ingress; retain...",
+      "workers/triggered_by": "upload"
+    },
+    "versions": [
+      {
+        "version_id": "65b34fdc-82c6-4102-b822-733b55c1304a",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-11-07T16:38:15.167592Z"
+  },
+  "version_metadata": {
+    "created_on": "2026-11-07T16:38:15.167592Z",
+    "source": "api",
+    "author_id": "5aab2da07d66a16ba913efa5f0369d46",
+    "author_email": "clar2866@umn.edu",
+    "has_preview": false
+  },
+  "version_keys": [
+    "id",
+    "number",
+    "metadata",
+    "annotations",
+    "resources"
+  ],
+  "resources_keys": [
+    "script",
+    "script_runtime",
+    "bindings"
+  ],
+  "script": {
+    "etag": "827259a3f7d2b947a280de3d0825b8e9ae04fca3c479a3f62431649c3e143830",
+    "handlers": [
+      "fetch",
+      "queue",
+      "scheduled"
+    ],
+    "named_handlers": [
+      {
+        "name": "WsHub",
+        "handlers": [
+          "class"
+        ]
+      },
+      {
+        "name": "stripDeviceIdentityFromAccountTestRequest",
+        "handlers": [
+          "class"
+        ]
+      }
+    ],
+    "placement_mode": "smart",
+    "placement": {
+      "mode": "smart"
+    },
+    "last_deployed_from": "api"
+  }
+}
