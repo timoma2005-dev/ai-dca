@@ -1,8 +1,8 @@
 {
   "success": true,
-  "rollback_version": "75c05acc-77fa-4e64-8d48-b006365ef08f",
+  "rollback_version": "65b34fdc-82c6-4102-b822-733b55c1304a",
   "deployment": {
-    "id": "31308db8-5c71-480f-892d-74d7e68222b3",
+    "id": "0b2079ac-af16-40d6-a1c0-33b038d26b37",
     "source": "api",
     "strategy": "percentage",
     "author_email": "clar2866@umn.edu",
@@ -12,11 +12,11 @@
     },
     "versions": [
       {
-        "version_id": "65b34fdc-82c6-4102-b822-733b55c1304a",
+        "version_id": "d90c2397-197d-4766-b8b9-7b722876e03c",
         "percentage": 100
       }
     ],
-    "created_on": "2026-11-07T16:38:15.167592Z"
+    "created_on": "2026-11-07T16:55:52.48082Z"
   },
   "original_modules_before": {
     "relpriceEntry.js": "bd52f85c865eaf920e11b177760e49bef046c6d4cd3c5905dfe5a11377f8ae16",
@@ -25,12 +25,12 @@
     "accountEntry.js": "8c25313baaffe1ae5b2426ad84077b7612d033288b8ca5617f247ccffc8abf81"
   },
   "modules_after": {
-    "accountEntry.js.map": "bc4c90ab125c30244904de747514cbf7fede0d16a8089a10e815bf515bf3f9cc",
     "accountEntry.js": "8c25313baaffe1ae5b2426ad84077b7612d033288b8ca5617f247ccffc8abf81",
     "fourETFEntry.js": "2e0d835c429cf56b4b9034927cbab6eda15b4f610489b0aa3f7aa9b4e4f35be7",
-    "fourETFSignalRoute.js": "56a3ea5d769deabb8cd07daae09e33e49b4a0c78382fef2873c8cb750147adf0",
+    "fourETFSignalRoute.js": "800a7fca6c4dcc4a8face4673bbe98945253c0c9586023f20d055c618a3248a0",
     "relpriceEntry.js": "bd52f85c865eaf920e11b177760e49bef046c6d4cd3c5905dfe5a11377f8ae16",
-    "relpriceSignalRoute.js": "d8f92906987fd4133950d22cc3241f5e67d957806e4e989edfa60a18ff7426a5"
+    "relpriceSignalRoute.js": "d8f92906987fd4133950d22cc3241f5e67d957806e4e989edfa60a18ff7426a5",
+    "accountEntry.js.map": "bc4c90ab125c30244904de747514cbf7fede0d16a8089a10e815bf515bf3f9cc"
   },
   "expected_modules": {
     "relpriceEntry.js": "bd52f85c865eaf920e11b177760e49bef046c6d4cd3c5905dfe5a11377f8ae16",
@@ -38,7 +38,7 @@
     "accountEntry.js.map": "bc4c90ab125c30244904de747514cbf7fede0d16a8089a10e815bf515bf3f9cc",
     "accountEntry.js": "8c25313baaffe1ae5b2426ad84077b7612d033288b8ca5617f247ccffc8abf81",
     "fourETFEntry.js": "2e0d835c429cf56b4b9034927cbab6eda15b4f610489b0aa3f7aa9b4e4f35be7",
-    "fourETFSignalRoute.js": "56a3ea5d769deabb8cd07daae09e33e49b4a0c78382fef2873c8cb750147adf0"
+    "fourETFSignalRoute.js": "800a7fca6c4dcc4a8face4673bbe98945253c0c9586023f20d055c618a3248a0"
   },
   "original_modules_preserved": true,
   "bindings_preserved": true,
@@ -63,5 +63,6 @@
         "class"
       ]
     }
-  ]
+  ],
+  "pre_four_etf_rollback_version": "75c05acc-77fa-4e64-8d48-b006365ef08f"
 }

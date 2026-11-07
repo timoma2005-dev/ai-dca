@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "verification": [
+    {
+      "schema": "CREATE TABLE notify_four_etf_signal_claims (\n    owner_user_id TEXT NOT NULL,\n    event_id TEXT NOT NULL,\n    input_sha256 TEXT NOT NULL,\n    claimed_at TEXT NOT NULL,\n    PRIMARY KEY (owner_user_id, event_id)\n)",
+      "claims": 0
+    }
+  ]
+}

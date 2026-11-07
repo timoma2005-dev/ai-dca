@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-08T00:47:24.403919+08:00",
+  "checked_at": "2026-11-08T01:00:53.005939+08:00",
   "config": {
     "data_dir": "/var/lib/ai-dca-four-etf",
     "history_db": "/root/m1store/stockdb_m1.db",
@@ -57,18 +57,18 @@
   "first_delivery_proof_exists": false,
   "git_status": "",
   "history_sha256": "6722e9de59e9fcc7d5a8c6439423d20b4a6bf0f671076b77c87007d89c919eb6",
-  "implementation_commit": "e21cdab630427b25574de2c6f93c1a9c084891ec",
+  "implementation_commit": "3985b438efec421841d93de78b2b27edb6e4bfe1",
   "logrotate_installed": false,
   "node_tests_tail": [
-    "✔ read-only verification queries owner and event, never delivers (3.383812ms)",
-    "ℹ tests 31",
+    "✔ read-only verification queries owner and event, never delivers (2.68955ms)",
+    "ℹ tests 33",
     "ℹ suites 0",
-    "ℹ pass 31",
+    "ℹ pass 33",
     "ℹ fail 0",
     "ℹ cancelled 0",
     "ℹ skipped 0",
     "ℹ todo 0",
-    "ℹ duration_ms 1164.930271"
+    "ℹ duration_ms 850.357258"
   ],
   "normal": {
     "effective": "2026-11-07",
@@ -89,7 +89,7 @@
     "channel": "email",
     "date": "2026-11-08",
     "dry_run": true,
-    "logged_at": "2026-11-08T00:44:10.516943+08:00",
+    "logged_at": "2026-11-08T00:59:33.170191+08:00",
     "mode": "dry-run",
     "ok": true,
     "owner_user_id": "usr_ad2be81697b5eec7ca3b2204efb7270c",
@@ -192,6 +192,27 @@
       "mode": "dry-run",
       "ok": true,
       "strategy": "fourETF"
+    },
+    {
+      "date": "2026-11-08",
+      "decision": "skip",
+      "holding": "159696",
+      "logged_at": "2026-11-08T00:58:10.943709+08:00",
+      "mode": "dry-run",
+      "push": "none",
+      "reason": "notify_transport_unavailable",
+      "strategy": "fourETF"
+    },
+    {
+      "channel": "email",
+      "date": "2026-11-08",
+      "dry_run": true,
+      "logged_at": "2026-11-08T00:59:33.170191+08:00",
+      "mode": "dry-run",
+      "ok": true,
+      "owner_user_id": "usr_ad2be81697b5eec7ca3b2204efb7270c",
+      "ready": true,
+      "strategy": "fourETF"
     }
   ],
   "replay_matches_local": true,
@@ -229,11 +250,12 @@
   },
   "source_matches_local": true,
   "source_sha256": {
-    "services/four-etf-signal/README.md": "3efbdb7054b93854fc4e1f600dc05c088093505d58d0658c3fdb0bb464a5b1bb",
+    "services/four-etf-signal/README.md": "191d107223925a08cada2583a22ad8f10b47dd8d9ae78c04a53114f7b79d13e9",
     "services/four-etf-signal/config.example.json": "493628bea4d888148c2c915a53956dbbe6b679b5c49dcd71cc9ff87e3386b0d1",
+    "services/four-etf-signal/deploy/20261108-four-etf-claims.sql": "b151af5342636858ab21fbcd97c28e6e584dfc1f0ee9065a09e5dc996fbf8e4d",
     "services/four-etf-signal/deploy/cron": "4f46c8bee590068d168ed41f98ef7aced2a1b3d71d492abfafb6282ac03c8c91",
     "services/four-etf-signal/deploy/logrotate": "c0717d71511ba9b5c1472ba0c1935b1a09d47cab3fda493405ee4a5c157de048",
-    "services/four-etf-signal/deploy/worker-upload.mjs": "c9bedea07a43930d2142345f77e5ae860882481f620f1007e7215be5d7a4fe9e",
+    "services/four-etf-signal/deploy/worker-upload.mjs": "0929f2ad3dcbcadc7a04824ce5dc7a34af7104596532b5504af3a5e97c0b7549",
     "services/four-etf-signal/four_etf_signal/__init__.py": "1af3582db9fd6930b5a291ba2a4540a35b67208ea848f1742f1da737ce6c3f48",
     "services/four-etf-signal/four_etf_signal/calendar.py": "d978ae4f46ee5e8e04620c991e28d966660f6974e31c04852fab7a8f9931ba4f",
     "services/four-etf-signal/four_etf_signal/data.py": "d6980518e1704ee5ac74a640a3a46d7d92cd4a5ea684dd5c1471ba3bf1114839",
@@ -251,8 +273,8 @@
     "services/four-etf-signal/tests/test_rules.py": "5fd6a41b7180bae5596b4c18894c6b28b50f327486015b2dfbeaeca9163a38e9",
     "services/four-etf-signal/tests/test_runner.py": "00e34eada6a7aae5bb735574ddb64002cef5790e03a55d56ea2d71ca99b8f846",
     "workers/notify/src/fourETFEntry.js": "2e0d835c429cf56b4b9034927cbab6eda15b4f610489b0aa3f7aa9b4e4f35be7",
-    "workers/notify/src/fourETFSignalRoute.js": "fc7ff6831b121d3272849326fbc969a7cf13a33afce4c8ad31f5bf5c620442bd",
-    "workers/notify/test/fourETFSignal.test.mjs": "ebc5440b4b879c7eedc8ed169c67e037ff2e30c23497e818fbed79f7d4860406",
+    "workers/notify/src/fourETFSignalRoute.js": "690e62749ae50aa95aed904841d1f714007500e988ca45006778a2fb14c5fad6",
+    "workers/notify/test/fourETFSignal.test.mjs": "09f7f89d276c253eab83b0085bac769be47f4da4ed60ab2e4a74fd3258371645",
     "workers/notify/wrangler.four-etf.toml": "15097d27b3da89f2065c8752b463c4ab81486c2edb08649aa49ab843bcc264e5"
   },
   "state": {

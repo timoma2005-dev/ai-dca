@@ -1,15 +1,15 @@
 # 四 ETF 实盘信号部署与验收
 
-结论：四 ETF 信号已隔离实现并部署 CN/线上 Worker，63 项相关测试、原库回放、真实 cron 周末跳过和只读 email 绑定核验通过；已从首日启用推送，周一实际盘中采样及首笔真实换仓邮件仍待市场事件验收。
+结论：四 ETF 信号已隔离实现并部署 CN/线上 Worker，65 项相关测试、原库回放、真实 cron 周末跳过和只读 email 绑定核验通过；已从首日启用推送，周一实际盘中采样及首笔真实换仓邮件仍待市场事件验收。
 
 ## 部署目标
 
-- 本地独立 worktree：`/home/hatch/workspace/ai-dca-four-etf-live`；分支 `feat/four-etf-live-signal-20261108`；基线 `af9745fb`，实现提交 `e21cdab6`。
+- 本地独立 worktree：`/home/hatch/workspace/ai-dca-four-etf-live`；分支 `feat/four-etf-live-signal-20261108`；基线 `af9745fb`，实现提交 `e21cdab6`，并发幂等加固 `3985b438`。
 - CN 独立 worktree：`/root/ai-dca-four-etf-live`；配置 `/etc/ai-dca-four-etf.json`；状态/历史/输入/事件/日志 `/var/lib/ai-dca-four-etf/`。
 - 初始参考持仓：**159696，截至 2026-11-06，用户已确认**；`notification_mode=enabled`，首个交易日起允许确认换仓邮件，不设置额外启用门槛。
 - cron：`/etc/cron.d/ai-dca-four-etf`；工作日 06:00–15:59 每分钟入口，程序按北京时间过滤；06:00–09:29 准备 NAV，09:30–11:30 / 13:00–15:00 逐分钟评估。自然季度首日 00:10 重算，首个重算日 2027-01-01。
 - Worker：`ai-dca-notify`，独立入口 `fourETFEntry.js`，新增路由 `/api/notify/internal/four-etf-signal`。
-- 上线版本 **`65b34fdc-82c6-4102-b822-733b55c1304a`**，100%；deployment `31308db8-5c71-480f-892d-74d7e68222b3`，2026-11-08 00:38:15 北京时间。回滚版本 `75c05acc-77fa-4e64-8d48-b006365ef08f`。
+- 上线版本 **`d90c2397-197d-4766-b8b9-7b722876e03c`**，100%；deployment `0b2079ac-af16-40d6-a1c0-33b038d26b37`，2026-11-08 00:55:52 北京时间。回滚版本 `75c05acc-77fa-4e64-8d48-b006365ef08f`。
 
 ## 数据及规则证据
 
@@ -17,7 +17,7 @@
 - `/latest` 只提供新鲜性/停牌资格；腾讯完成 m1 提供精确当前分钟 close/正量证明，端点后 8 秒读取、三并发、全部绕过代理。可返回的 11-06 四只各 180 bar 与 CN k1 close/正量资格逐条一致（720/720）；volume 转换手→份。
 - NAV 生产来源选择 CN 直拉东方财富 f10（pageSize=10）。四只最近 10 日期与本地原始 NAV 交叉核对；只用精确上一中国交易日，且当天 09:30 前全部就绪。mirror PCF 的 `prevDayDate=11-04`、collector 停留 09-10 的 NAV 均被拒；不使用 IOPV 或任意旧 NAV 补齐。
 - 触发阈值严格 `>0.5pp`，目标锁定；下一完成分钟双方正量新鲜 close 才推进参考持仓并投递。下一分钟缺失/无量取消，15:00 候选取消，无跨日挂单。持仓停牌等待，可交易池排除停牌/无量目标。
-- 投递前先持久化状态及一次性意图；不自动重试超时/失败邮件。事件 ID `fourETF:YYYY-MM-DD:HHMM`。只复用 lovexl 既有 email，无真实换仓不发信。
+- 投递前先持久化状态及一次性意图；不自动重试超时/失败邮件。Worker 的独立 D1 `notify_four_etf_signal_claims` 用 owner/event 主键原子认领，覆盖并发重复 POST 及发送后崩溃；共享投递引擎的失败重试机制无法绕过本策略认领。仅新增本策略表，账户/通道及旧投递表结构均未改，迁移后 0 条认领，见 [d1-migration.json](d1-migration.json)。事件 ID `fourETF:YYYY-MM-DD:HHMM`。只复用 lovexl 既有 email，无真实换仓不发信。
 
 ## 回放口径
 
@@ -35,11 +35,12 @@
 ## 检查结果与边界
 
 - Python 本地和 CN 均 32/32：偏离/阈值、目标排除/持仓停牌、下一分钟锁定/确认/取消、15:00/午休/日界、NAV 精确日期及盘前获取结束时间、行情过期、状态先于发送、幂等及失败不重试、正量分钟季度中位数/缺历史失败关闭。
-- 相关 Node 本地和 CN 均 31/31（新增路由 10 项 + relprice/account/email/reliability 21 项）：email-only、认证、大小限制、严格阈值/下一分钟/T−1 门禁、只读绑定/投递查询、D1 成功证明、重复/不确定事件拒绝重发、旧 fetch/queue/scheduled 及具名导出保留。
+- 相关 Node 本地和 CN 均 33/33（新增路由 12 项 + relprice/account/email/reliability 21 项）：email-only、认证、大小限制、严格阈值/下一分钟/T−1 门禁、只读绑定/投递查询、D1 成功证明、重复/不确定事件拒绝重发、旧 fetch/queue/scheduled 及具名导出保留。
 - 新增 Worker 文件 eslint 和 esbuild 打包通过；`git diff --check` 通过。
 - 全局 `npm run check:refactor` 仍失败：基线 NotifyExperience 938>880、NewPlanExperience 652>650；全局 `npm run lint -- --quiet` 仍报基线两处错误（account-data-migration-modal:399 hooks、NotifyEventDetailDialog:74 empty block）。四个文件逐字节等于基线，未修改。详见 [checks.json](checks.json)。
 - API 独立查询确认线上版本和全部 handlers；重新下载确认原四模块/源码 map 哈希不变，27 bindings、设置及 10 个原 cron 均保持。见 [Worker 部署证据](worker-deployment.json) 与 [独立 API 核验](worker-independent-check.json)。旧 Worker compatibility date / observability 也保持原设置，未顺带调整共享服务。
 - 部署用本地 bundle/scp 和已连接 Cloudflare API。未 push 任何 remote。旧 CI 依赖 push，本次按用户禁令沿用 relprice 的保留现网模块 API 部署方式（[Cloudflare 上传文档](https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/)）。
+- CN 对最新 Worker 的只读 email 查询在 00:58 遇到一次 `notify_transport_unavailable`；00:59:33 的只读复核返回 ready=true。真实投递仍不自动重试，网络错误的失败关闭记录保留在 signals.jsonl。
 - CN 源码逐文件与本地实现 SHA256 一致，worktree 干净；独立历史库与本地种子 SHA256 一致。初始 state 仍为 159696 / revision 0 / pending=null / actual_holding_confirmed=true。无密钥配置和正式 cron 均 root 所有、0644。系统时区文件逐字节匹配 Asia/Shanghai。
 - 临时独立 cron 于 **2026-11-08 00:43:01 北京时间** 真正启动本服务 dry-run，记录 `non_trading_day` / `push=none`；验证任务随后删除，正式工作日 cron 保留。详见 [cn-deployment.json](cn-deployment.json) 内的 cron_verification；不以手工运行冒充调度器证明。
 - lovexl 仍只有一条既有 email 绑定，verified/enabled=true；部署前后 payload SHA256 同为 `f3762c885e7a8dda5d5afbcdabcdec0a4af6a42ae45354cc54d53a07dd04b833`。CN 新路由只读检查 ready=true，投递查询 null；D1 没有 `fourETF:*` 投递记录，未占用额度或发送测试邮件。见 [email-binding-after.json](email-binding-after.json)。
@@ -50,7 +51,7 @@
 所有改动均在新 worktree；仅新增四 ETF 文件及验收产物，没有改已有 relprice 或其它产品源码。
 
 - `docs/plan-four-etf-live-signal.md`：步骤、数据源实测选择、冻结规则、隔离边界、风险与验收。
-- `services/four-etf-signal/`：标准库服务（rules/calendar/data/history/storage/notify/runner）、`run-cn.py`、历史种子/回放/数据源探针、配置示例、正式 cron、可选 logrotate 模板、保留现网模块的 Worker 上传器、四组 Python 测试与 README。
+- `services/four-etf-signal/`：标准库服务（rules/calendar/data/history/storage/notify/runner）、`run-cn.py`、历史种子/回放/数据源探针、配置示例、正式 cron、独立 D1 claim 迁移、可选 logrotate 模板、保留现网模块的 Worker 上传器、四组 Python 测试与 README。
 - `workers/notify/src/fourETFEntry.js`、`fourETFSignalRoute.js`：独立入口和确认换仓 email-only 路由。
 - `workers/notify/test/fourETFSignal.test.mjs`：新路由及旧入口保留测试；`workers/notify/wrangler.four-etf.toml`：独立构建配置，原 `wrangler.toml` 未动。
 - `docs/validation/four-etf-live/`：本报告、checks、CN 源/状态/cron 证据、数据探针、原始分钟回放 trace/报告、Worker 上传/独立 API 版本证明、email 绑定前后哈希、隔离保护哈希。

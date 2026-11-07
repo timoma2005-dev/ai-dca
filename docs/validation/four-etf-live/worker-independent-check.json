@@ -1,7 +1,7 @@
 {
-  "checked_version": "65b34fdc-82c6-4102-b822-733b55c1304a",
+  "checked_version": "d90c2397-197d-4766-b8b9-7b722876e03c",
   "current_deployment": {
-    "id": "31308db8-5c71-480f-892d-74d7e68222b3",
+    "id": "0b2079ac-af16-40d6-a1c0-33b038d26b37",
     "source": "api",
     "strategy": "percentage",
     "author_email": "clar2866@umn.edu",
@@ -11,33 +11,21 @@
     },
     "versions": [
       {
-        "version_id": "65b34fdc-82c6-4102-b822-733b55c1304a",
+        "version_id": "d90c2397-197d-4766-b8b9-7b722876e03c",
         "percentage": 100
       }
     ],
-    "created_on": "2026-11-07T16:38:15.167592Z"
+    "created_on": "2026-11-07T16:55:52.48082Z"
   },
   "version_metadata": {
-    "created_on": "2026-11-07T16:38:15.167592Z",
+    "created_on": "2026-11-07T16:55:52.48082Z",
     "source": "api",
     "author_id": "5aab2da07d66a16ba913efa5f0369d46",
     "author_email": "clar2866@umn.edu",
     "has_preview": false
   },
-  "version_keys": [
-    "id",
-    "number",
-    "metadata",
-    "annotations",
-    "resources"
-  ],
-  "resources_keys": [
-    "script",
-    "script_runtime",
-    "bindings"
-  ],
   "script": {
-    "etag": "827259a3f7d2b947a280de3d0825b8e9ae04fca3c479a3f62431649c3e143830",
+    "etag": "a62bf61f1456e4061decbad20c394b98c79bde5cc892e3ae52e05b93a6962b3d",
     "handlers": [
       "fetch",
       "queue",

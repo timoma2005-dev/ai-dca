@@ -9,5 +9,8 @@
       "email_enabled": true
     }
   ],
-  "four_etf_delivery_attempts": []
+  "four_etf_delivery_attempts": [],
+  "atomic_ingress_claims": 0,
+  "four_etf_delivery_attempt_count": 0,
+  "final_worker_version": "d90c2397-197d-4766-b8b9-7b722876e03c"
 }
