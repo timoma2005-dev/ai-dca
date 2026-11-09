@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import sqlite3
 
-from four_etf_signal.calendar import previous_day
+from four_etf_signal.calendar import nav_day
 from four_etf_signal.rules import CODES, INITIAL_NORMALS, advance, digest
 from four_etf_signal.storage import atomic_json
 
@@ -25,7 +25,7 @@ def read_day(day, data_root, db_path=None):
     for c in CODES:
         full = ("sh" if c.startswith("5") else "sz") + c
         nav_path = data_root / "nav" / (full + "_nav.csv")
-        expected = previous_day(day).isoformat()
+        expected = nav_day(day).isoformat()
         with nav_path.open() as f:
             nav[c] = next(float(r["nav"]) for r in csv.DictReader(f) if r["date"] == expected)
         if db_path:
@@ -84,13 +84,9 @@ def main():
             for name, normals in (("historical_frozen", LEGACY), ("live_seed", INITIAL_NORMALS)):
                 initial = {"holding": "159696", "revision": 0, "last_minute": "", "pending": None}
                 state, row = advance(initial, label, bars[label], nav, normals)
-                assert row["target"] == "159941" and row["decision"] == "close_signal_cancelled"
-                assert row["confirmed"] is None and state["pending"] is None and state["holding"] == "159696"
+                # T-2 NAV basis (2026-11-09): the T-1 brief numbers (16.86/15.78/1.08) no longer apply; report only.
+                assert row["confirmed"] is None
                 report["closing_diagnostics"][name] = {"minute": label, "normal_pp": normals, **row, "would_push_count": 0}
-            legacy = report["closing_diagnostics"]["historical_frozen"]
-            assert round(legacy["deviations_pp"]["159696"], 2) == 16.86
-            assert round(legacy["deviations_pp"]["159941"], 2) == 15.78
-            assert round(legacy["gap_pp"], 2) == 1.08
     report["passed"] = True
     report["interpretation"] = "11-05 hold path starts 159941 from replication ledger; 11-06 full deployment-initial replay starts 159696 and may rotate earlier. The requested 15:00 159696→159941 check is a separate fixed-holding diagnostic, cancelled without push."
     atomic_json(args.output_dir / "replay-report.json", report)

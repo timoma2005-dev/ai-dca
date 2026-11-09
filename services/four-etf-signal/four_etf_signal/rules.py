@@ -8,7 +8,8 @@ import json
 import math
 
 CODES = ("513100", "159696", "159501", "159941")
-INITIAL_NORMALS = dict(zip(CODES, (7.7054, 6.7413, 7.2303, 6.7483)))
+# T-2 NAV medians, fit 2025-11-07..2026-11-06 (T-1 version was 7.7054/6.7413/7.2303/6.7483).
+INITIAL_NORMALS = dict(zip(CODES, (7.5228, 6.547, 7.1734, 6.599)))
 THRESHOLD_PP = 0.5
 
 
@@ -40,7 +41,7 @@ def next_minute(label):
 
 
 def deviations(bars, nav, normal):
-    """NAV completeness is mandatory even when an ETF is suspended."""
+    """NAV(T-2) completeness is mandatory even when an ETF is suspended."""
     if set(nav) != set(CODES) or any(not positive(nav[c]) for c in CODES):
         raise DataUnavailable("missing_or_invalid_nav")
     if set(normal) != set(CODES) or any(not isinstance(normal[c], (float, int)) or not math.isfinite(normal[c]) for c in CODES):

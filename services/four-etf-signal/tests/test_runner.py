@@ -36,7 +36,7 @@ class RunnerTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def ready_nav(self):
-        record = preopen_nav(self.now.date(), self.now.replace(hour=9, minute=0), {c: {"2026-11-06": 1.0} for c in CODES})
+        record = preopen_nav(self.now.date(), self.now.replace(hour=9, minute=0), {c: {"2026-11-05": 1.0} for c in CODES})
         atomic_json(self.directory / "nav-2026-11-09.json", record)
 
     def sender(self, config, payload):
@@ -111,7 +111,7 @@ class RunnerTest(unittest.TestCase):
     def test_nav_fetch_must_finish_before_open(self):
         start = self.now.replace(hour=9, minute=29, second=59)
         with self.assertRaisesRegex(DataUnavailable, "before_open"):
-            prepare_nav(self.directory, start, fetcher=lambda c: {"2026-11-06": 1.0},
+            prepare_nav(self.directory, start, fetcher=lambda c: {"2026-11-05": 1.0},
                         clock_now=lambda: start + timedelta(seconds=2))
         self.assertFalse((self.directory / "nav-2026-11-09.json").exists())
 

@@ -27,6 +27,11 @@ def previous_day(day):
     raise DataUnavailable("previous_trading_day_unavailable")
 
 
+def nav_day(day):
+    """NAV date used for `day`: T-2 China trading day (QDII T-1 NAV is published after the T open)."""
+    return previous_day(previous_day(day))
+
+
 def sessions(start, end):
     output = []
     while start <= end:

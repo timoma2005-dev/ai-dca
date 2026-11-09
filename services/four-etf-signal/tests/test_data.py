@@ -9,11 +9,11 @@ from four_etf_signal.rules import CODES, DataUnavailable, digest
 class DataTest(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026, 11, 9, 9, 20, 0, tzinfo=TZ)
-        self.histories = {c: {"2026-11-06": 1.0} for c in CODES}
+        self.histories = {c: {"2026-11-05": 1.0} for c in CODES}
 
-    def test_preopen_exact_t1_weekend_alignment(self):
+    def test_preopen_exact_t2_weekend_alignment(self):
         record = preopen_nav(self.now.date(), self.now, self.histories)
-        self.assertEqual(record["nav_date"], "2026-11-06")
+        self.assertEqual(record["nav_date"], "2026-11-05")
         self.assertEqual(validate_nav(record, self.now.date()), dict.fromkeys(CODES, 1.0))
         self.assertEqual(previous_day(date(2026, 10, 8)), date(2026, 9, 30))
 
@@ -21,13 +21,13 @@ class DataTest(unittest.TestCase):
         for now in (self.now.replace(hour=9, minute=30), self.now.replace(hour=10)):
             with self.assertRaisesRegex(DataUnavailable, "before_open"):
                 preopen_nav(now.date(), now, self.histories)
-        self.histories["159941"] = {"2026-11-05": 1.0}
-        with self.assertRaisesRegex(DataUnavailable, "missing_t1"):
+        self.histories["159941"] = {"2026-11-06": 1.0, "2026-11-04": 1.0}
+        with self.assertRaisesRegex(DataUnavailable, "missing_t2"):
             preopen_nav(self.now.date(), self.now, self.histories)
 
     def test_record_tamper_source_and_date_rejected(self):
         original = preopen_nav(self.now.date(), self.now, self.histories)
-        for patch in ({"source": "pcf"}, {"nav_date": "2026-11-05"}, {"ready_at": "2026-11-09T09:30:00+08:00"}):
+        for patch in ({"source": "pcf"}, {"nav_date": "2026-11-06"}, {"ready_at": "2026-11-09T09:30:00+08:00"}):
             record = {**original, **patch}
             record["sha256"] = digest({k: v for k, v in record.items() if k != "sha256"})
             with self.assertRaises(DataUnavailable):

@@ -67,7 +67,7 @@ export function validateFourETFSignal(payload, now = new Date()) {
   if (payload.normal_effective !== effective || CODES.some(c => !Number.isFinite(payload.normal_pp?.[c]))) return 'invalid_normal';
   const ready = Date.parse(payload.nav_ready_at || '');
   const open = Date.parse(`${date}T09:30:00+08:00`);
-  if (payload.nav_date !== previousDay(date) || !Number.isFinite(ready) || ready >= open || ready < Date.parse(`${date}T00:00:00+08:00`)) return 'invalid_preopen_t1_nav';
+  if (payload.nav_date !== previousDay(previousDay(date)) || !Number.isFinite(ready) || ready >= open || ready < Date.parse(`${date}T00:00:00+08:00`)) return 'invalid_preopen_t2_nav';
   const generated = Date.parse(payload.generated_at || '');
   if (!Number.isFinite(generated) || now.getTime() - generated > 45000 || generated - now.getTime() > 2000 || Number(local.slice(17, 19)) > 50) return 'stale_signal';
   return '';

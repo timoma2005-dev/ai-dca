@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from four_etf_signal.calendar import previous_day, sessions
+from four_etf_signal.calendar import nav_day, sessions
 from four_etf_signal.history import archive, calculate_normal, completed_labels, initial_normal, load_normal
 from four_etf_signal.rules import CODES, INITIAL_NORMALS, DataUnavailable
 
@@ -18,7 +18,7 @@ class QuarterlyTest(unittest.TestCase):
                 (c, ts, 1.05, 100 if index else 0, "fixture")
                 for day in days for index, ts in enumerate(sorted(completed_labels(day)))])
             cls.db.executemany("INSERT OR REPLACE INTO nav VALUES(?,?,?,?)", [
-                (c, previous_day(day).isoformat(), 1.0, "fixture") for day in days])
+                (c, nav_day(day).isoformat(), 1.0, "fixture") for day in days])
         cls.db.commit()
 
     @classmethod
@@ -47,9 +47,9 @@ class QuarterlyTest(unittest.TestCase):
         with self.assertRaisesRegex(DataUnavailable, "incomplete_training_minutes"):
             calculate_normal(self.db, date(2027, 1, 1))
 
-    def test_missing_t1_cannot_be_replaced_by_t2(self):
-        self.db.execute("DELETE FROM nav WHERE code='159941' AND date='2025-12-31'")
-        with self.assertRaisesRegex(DataUnavailable, "missing_training_t1_nav"):
+    def test_missing_t2_cannot_be_replaced_by_other_dates(self):
+        self.db.execute("DELETE FROM nav WHERE code='159941' AND date='2025-12-30'")
+        with self.assertRaisesRegex(DataUnavailable, "missing_training_t2_nav"):
             calculate_normal(self.db, date(2027, 1, 1))
 
     def test_brief_initials_and_expiry(self):

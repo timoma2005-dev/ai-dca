@@ -11,8 +11,8 @@ const signal = () => ({
   signal_ts: '2026-11-09T10:00:00+08:00', event_id: 'fourETF:2026-11-09:1000', input_sha256: 'a'.repeat(64),
   gap_pp: 1, deviations_pp: { '513100': 2, '159696': 1, '159501': 2, '159941': 0 },
   eligible: { '513100': true, '159696': true, '159501': true, '159941': true },
-  normal_pp: { '513100': 7.7054, '159696': 6.7413, '159501': 7.2303, '159941': 6.7483 },
-  normal_effective: '2026-11-07', nav_date: '2026-11-06', nav_ready_at: '2026-11-09T09:20:00+08:00',
+  normal_pp: { '513100': 7.5228, '159696': 6.547, '159501': 7.1734, '159941': 6.599 },
+  normal_effective: '2026-11-07', nav_date: '2026-11-05', nav_ready_at: '2026-11-09T09:20:00+08:00',
   generated_at: now().toISOString(), execution_reference: { time: '1001', sell_close: 1.984, buy_close: 1.582, sell_volume: 100, buy_volume: 100 }
 });
 const request = (payload, token = 'test-internal-only') => new Request('https://notify.test/api/notify/internal/four-etf-signal', {
@@ -53,7 +53,7 @@ test('fresh next-minute confirmed rotation passes; exact 0.5pp does not', () => 
 test('rejects held/unknown codes, gap mismatch, missing NAV, late NAV, stale data, wrong quarter and eligibility', () => {
   for (const patch of [
     { holding: '159941' }, { target: '513110' }, { decision: 'hold' }, { owner_user_id: 'other' },
-    { gap_pp: 0.9 }, { nav_date: '2026-11-05' }, { nav_date: '' }, { nav_ready_at: '2026-11-09T09:30:00+08:00' },
+    { gap_pp: 0.9 }, { nav_date: '2026-11-06' }, { nav_date: '' }, { nav_ready_at: '2026-11-09T09:30:00+08:00' },
     { nav_ready_at: '2026-11-08T09:00:00+08:00' }, { generated_at: '2026-11-09T02:00:00Z' },
     { normal_effective: '2026-10-01' }, { normal_pp: {} }, { date: '2026-11-06' }, { input_sha256: 'bad' },
     { eligible: { ...signal().eligible, '159941': false } }, { eligible: {} },

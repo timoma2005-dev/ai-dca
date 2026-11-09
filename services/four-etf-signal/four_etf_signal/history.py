@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 import statistics
 
-from .calendar import next_quarter, previous_day, sessions
+from .calendar import nav_day, next_quarter, sessions
 from .rules import CODES, INITIAL_NORMALS, DataUnavailable, digest, positive
 from .storage import atomic_json, read_json
 
@@ -46,8 +46,8 @@ def initial_normal(directory):
     if not path.exists():
         record = {"effective": "2026-11-07", "next_recalculation": "2027-01-01",
                   "fit_start": "2025-11-07", "fit_end": "2026-11-06",
-                  "method": "positive_volume_minute_median", "normal_pp": INITIAL_NORMALS,
-                  "source": "FOUR_ETF_LIVE_BRIEF.md"}
+                  "method": "positive_volume_minute_median", "nav_lag": "T-2", "normal_pp": INITIAL_NORMALS,
+                  "source": "independent_history_archive_t2_20261109"}
         record["sha256"] = digest(record)
         atomic_json(path, record)
 
@@ -89,15 +89,15 @@ def calculate_normal(db, effective):
             expected = completed_labels(day)
             if not expected.issubset(rows):
                 raise DataUnavailable("incomplete_training_minutes:" + c + ":" + day.isoformat())
-            nav_day = previous_day(day).isoformat()
-            value = nav.get(nav_day)
+            nav_date = nav_day(day).isoformat()
+            value = nav.get(nav_date)
             if not positive(value):
-                raise DataUnavailable("missing_training_t1_nav:" + c + ":" + nav_day)
+                raise DataUnavailable("missing_training_t2_nav:" + c + ":" + nav_date)
             for ts in sorted(expected):
                 close, volume = rows[ts]
                 if not positive(close) or not isinstance(volume, (int, float)) or volume < 0:
                     raise DataUnavailable("invalid_training_minute")
-                input_rows.append([c, ts, close, volume, nav_day, value])
+                input_rows.append([c, ts, close, volume, nav_date, value])
                 if positive(volume):
                     values.append(100 * (close / value - 1))
         if len(values) < 1000:
@@ -105,7 +105,7 @@ def calculate_normal(db, effective):
         normal[c], counts[c] = statistics.median(values), len(values)
     record = {"effective": effective.isoformat(), "next_recalculation": next_quarter(effective).isoformat(),
               "fit_start": start.isoformat(), "fit_end": end.isoformat(), "trading_days": len(days),
-              "method": "positive_volume_minute_median", "normal_pp": normal, "positive_minutes": counts,
+              "method": "positive_volume_minute_median", "nav_lag": "T-2", "normal_pp": normal, "positive_minutes": counts,
               "input_sha256": digest(input_rows), "source": "independent_history_archive"}
     record["sha256"] = digest(record)
     return record

@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 import urllib.request
 from zoneinfo import ZoneInfo
 
-from .calendar import previous_day
+from .calendar import nav_day
 from .rules import CODES, DataUnavailable, digest, positive
 
 TZ = ZoneInfo("Asia/Shanghai")
@@ -66,14 +66,14 @@ def fetch_nav(code, fetch=get_json):
 
 def preopen_nav(day, now, histories):
     cutoff = datetime.combine(day, time(9, 30), TZ)
-    expected = previous_day(day).isoformat()
+    expected = nav_day(day).isoformat()
     if now.date() != day or now >= cutoff:
         raise DataUnavailable("nav_not_ready_before_open")
     values = {}
     for c in CODES:
         value = histories.get(c, {}).get(expected)
         if not positive(value):
-            raise DataUnavailable("missing_t1_nav:" + c)
+            raise DataUnavailable("missing_t2_nav:" + c)
         values[c] = value
     record = {"date": day.isoformat(), "nav_date": expected, "source": NAV_SOURCE,
               "ready_at": now.isoformat(), "nav": values}
@@ -87,7 +87,7 @@ def validate_nav(record, day):
         claimed = record.get("sha256")
         unsigned = {k: v for k, v in record.items() if k != "sha256"}
         if (record.get("source") != NAV_SOURCE or record.get("date") != day.isoformat()
-                or record.get("nav_date") != previous_day(day).isoformat()
+                or record.get("nav_date") != nav_day(day).isoformat()
                 or ready.date() != day or ready.time() >= time(9, 30)
                 or claimed != digest(unsigned)
                 or set(record.get("nav", {})) != set(CODES)
