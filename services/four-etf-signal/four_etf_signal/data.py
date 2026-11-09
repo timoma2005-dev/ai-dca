@@ -141,13 +141,38 @@ def parse_minutes(code, payload, label):
     return output
 
 
+def tick_snapshot_payload(path):
+    """Collector's ~3.5 s tick-snapshot.json in /latest shape (one capture time for every symbol)."""
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    captured = raw.get("captured_at")
+    symbols = raw.get("symbols") if isinstance(raw.get("symbols"), dict) else {}
+    return {"generated_at": captured, "symbols": [
+        {"symbol": c, "price": (symbols.get(c) or {}).get("price"), "volume": (symbols.get(c) or {}).get("volume"),
+         "suspended": (symbols.get(c) or {}).get("suspended"), "price_timestamp": captured} for c in CODES]}
+
+
 class LiveMarket:
-    def __init__(self, latest_url="http://127.0.0.1:18080/latest", fetch=get_json):
-        self.latest_url, self.fetch = latest_url, fetch
+    def __init__(self, latest_url="http://127.0.0.1:18080/latest", fetch=get_json, snapshot_path=None):
+        self.latest_url, self.fetch, self.snapshot_path = latest_url, fetch, snapshot_path
+
+    def eligibility(self, now):
+        # /latest only refreshes about every 60 s, which drifted past the 45 s limit for ~5 of every
+        # ~13 minutes (2026-11-09). Prefer the high-frequency tick snapshot; fall back to /latest.
+        if self.snapshot_path:
+            try:
+                flags, freshness = quote_eligibility(tick_snapshot_payload(self.snapshot_path), now)
+                freshness["source"] = "tick_snapshot"
+                return flags, freshness
+            except (DataUnavailable, OSError, ValueError):
+                pass
+        flags, freshness = quote_eligibility(self.fetch(self.latest_url), now)
+        freshness["source"] = "collector_latest"
+        return flags, freshness
 
     def collect(self, now):
         label = now.strftime("%Y%m%d%H%M")
-        flags, freshness = quote_eligibility(self.fetch(self.latest_url), now)
+        flags, freshness = self.eligibility(now)
         def one(c):
             full = ("sh" if c.startswith("5") else "sz") + c
             try:

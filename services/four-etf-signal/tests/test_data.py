@@ -77,5 +77,26 @@ class DataTest(unittest.TestCase):
             parse_minutes("159696", payload, "202611090931")
 
 
+class TickSnapshotTest(unittest.TestCase):
+    def test_fresh_tick_snapshot_preferred_and_stale_falls_back(self):
+        import json as _json, tempfile as _tempfile
+        from four_etf_signal.data import LiveMarket
+        now = datetime(2026, 11, 9, 10, 0, 8, tzinfo=TZ)
+        def payload(at):
+            return {"captured_at": at.isoformat(), "symbols": {c: {"price": 1.5, "volume": 100.0, "suspended": False} for c in CODES}}
+        latest = {"generated_at": now.isoformat(), "symbols": [
+            {"symbol": c, "price": 1.5, "volume": 100.0, "price_timestamp": now.isoformat()} for c in CODES]}
+        with _tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            _json.dump(payload(now.replace(second=5)), f)
+        market = LiveMarket(fetch=lambda url: latest, snapshot_path=f.name)
+        flags, fresh = market.eligibility(now)
+        self.assertEqual(fresh["source"], "tick_snapshot")
+        self.assertFalse(any(v["stale"] for v in flags.values()))
+        with open(f.name, "w") as g:
+            _json.dump(payload(now.replace(minute=58, hour=9)), g)
+        flags, fresh = market.eligibility(now)
+        self.assertEqual(fresh["source"], "collector_latest")
+
+
 if __name__ == "__main__":
     unittest.main()

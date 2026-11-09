@@ -113,7 +113,7 @@ def run(config, args, directory, state, now, market=None, sender=notify, clock_n
     label = now.strftime("%Y%m%d%H%M")
     if state.get("last_minute", "") >= label:
         return {**log, "decision": "skip", "reason": "minute_already_processed"}
-    market = market or LiveMarket(config["latest_url"])
+    market = market or LiveMarket(config["latest_url"], snapshot_path=config.get("tick_snapshot_path"))
     bars, histories, freshness = market.collect(now)
     finished = clock_now()
     elapsed = (finished - now).total_seconds()
