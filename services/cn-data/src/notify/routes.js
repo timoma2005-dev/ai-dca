@@ -441,6 +441,25 @@ function handleSettings(db, account, body) {
   } });
 }
 
+// 已删计划的通知规则清理：CF notify 按 notify_rules 经 outbox 同步过去的副本发计划提醒，而 /sync 只写 cn-data 的
+// client 记录，用户删掉计划后 CF 副本还在、继续提醒（2026-11-09 1098185446）。
+// 以账号资源 plans/store 为准：规则对应的计划已不在（记录已删或从未存在）就删规则并发 delete-rule。
+// 不用 /sync 的 payload.plans 判断：有设备会同步空列表（计划仍在），按它删会误伤。
+export function purgeDeletedPlanRules(db, account, now = nowIso()) {
+  const store = db.prepare("SELECT deleted FROM account_resources WHERE user_id = ? AND resource = 'plans/store'").get(account.userId);
+  if (!store) return [];
+  const live = new Set(db.prepare("SELECT record_id FROM account_resource_records WHERE user_id = ? AND resource = 'plans/store' AND record_kind = 'item' AND deleted = 0")
+    .all(account.userId).map((row) => row.record_id));
+  const removed = [];
+  for (const row of db.prepare("SELECT client_id, rule_id FROM notify_rules WHERE user_id = ? AND rule_type = 'plans'").all(account.userId)) {
+    if (live.has(row.rule_id)) continue;
+    db.prepare('DELETE FROM notify_rules WHERE user_id = ? AND client_id = ? AND rule_id = ?').run(account.userId, row.client_id, row.rule_id);
+    enqueueEvent(db, 'notify', 'delete-rule', { user_id: account.userId, client_id: row.client_id, rule_id: row.rule_id, updated_at: now });
+    removed.push(row.rule_id);
+  }
+  return removed;
+}
+
 function handleSync(db, account, body) {
   const payload = normalizeNotifyPayload(body);
   const compiled = compileNotifyRules(payload);
@@ -477,7 +496,7 @@ function handleSync(db, account, body) {
         payload = excluded.payload, updated_at = excluded.updated_at`)
         .run(`${account.clientId}:${venue}`, JSON.stringify(groups[venue]), now);
     }
-    // No sync outbox: unlike holdings-rule, /sync has no CF migration consumer.
+    purgeDeletedPlanRules(db, account, now);
   });
   // Skip evaluateVixSignal and the other push tails; the full push engine stays on CF.
   return ok({ ok: true, clientId: account.clientId, accountClientId: account.clientId,
