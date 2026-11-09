@@ -113,10 +113,25 @@ def history_from_db(path, days):
     return prices, validity
 
 
+def tick_snapshot_payload(path):
+    """Collector's ~3.5 s tick-snapshot.json in /latest shape (one capture time for every symbol)."""
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    captured = raw.get("captured_at")
+    symbols = raw.get("symbols") if isinstance(raw.get("symbols"), dict) else {}
+    return {"generated_at": captured, "source": "tick_snapshot", "symbols": [
+        {"symbol": c, "price": (symbols.get(c) or {}).get("price"), "volume": (symbols.get(c) or {}).get("volume"),
+         "suspended": (symbols.get(c) or {}).get("suspended", c not in symbols), "price_timestamp": captured}
+        for c in CODES]}
+
+
 class LiveMarket:
-    def __init__(self, latest_url="http://127.0.0.1:18080/latest", minute_base="https://ifzq.gtimg.cn/appstock/app/kline/mkline"):
+    def __init__(self, latest_url="http://127.0.0.1:18080/latest", minute_base="https://ifzq.gtimg.cn/appstock/app/kline/mkline",
+                 snapshot_path=None, max_age=45, clock=None):
         self.latest_url = latest_url
         self.minute_base = minute_base
+        self.snapshot_path, self.max_age = snapshot_path, max_age
+        self.clock = clock or (lambda: datetime.now(TZ))
 
     @staticmethod
     def get_json(url):
@@ -125,6 +140,16 @@ class LiveMarket:
             return json.loads(response.read(2_000_000))
 
     def latest(self):
+        # /latest refreshes about every 60 s and its per-symbol stamps drift past 45 s
+        # (2026-11-09 14:40 skipped on stale_symbol:513100). Prefer the tick snapshot when it
+        # validates; otherwise fall back to /latest and let validate_latest decide.
+        if self.snapshot_path:
+            try:
+                payload = tick_snapshot_payload(self.snapshot_path)
+                validate_latest(payload, self.clock(), self.max_age)
+                return payload
+            except (DataUnavailable, OSError, ValueError):
+                pass
         return self.get_json(self.latest_url)
 
     def minute(self, code, day, now):

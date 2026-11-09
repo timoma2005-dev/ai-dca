@@ -241,3 +241,25 @@ class LiveTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TickSnapshotLatestTest(unittest.TestCase):
+    def test_prefers_fresh_tick_snapshot_and_falls_back(self):
+        import json as _json, tempfile as _tempfile
+        from datetime import datetime as _dt
+        from relprice_signal.data import LiveMarket, TZ as _TZ, validate_latest as _vl
+        from relprice_signal.rules import CODES as _CODES
+        now = _dt(2026, 11, 9, 14, 40, 8, tzinfo=_TZ)
+        snap = {"captured_at": now.replace(second=5).isoformat(),
+                "symbols": {c: {"price": 1.5, "volume": 100.0, "suspended": False} for c in _CODES}}
+        with _tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            _json.dump(snap, f)
+        market = LiveMarket(snapshot_path=f.name, clock=lambda: now)
+        market.get_json = lambda url: {"from": "latest"}
+        payload = market.latest()
+        self.assertEqual(payload["source"], "tick_snapshot")
+        _vl(payload, now)
+        snap["captured_at"] = now.replace(minute=30).isoformat()
+        with open(f.name, "w") as g:
+            _json.dump(snap, g)
+        self.assertEqual(market.latest(), {"from": "latest"})

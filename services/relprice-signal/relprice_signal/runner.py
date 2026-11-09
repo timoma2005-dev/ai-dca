@@ -77,7 +77,7 @@ def completed_time(now):
 def run(config, *, dry_run=True, market=None, clock=None, sleeper=time.sleep, sender=notify):
     store = Store(config)
     with store.lock():
-        return _run(config, store, dry_run, market or LiveMarket(config["latest_url"]),
+        return _run(config, store, dry_run, market or LiveMarket(config["latest_url"], snapshot_path=config.get("tick_snapshot_path"), max_age=config["max_snapshot_age_sec"], clock=clock),
                     clock or (lambda: datetime.now(TZ)), sleeper, sender)
 
 
