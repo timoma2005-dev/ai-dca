@@ -154,3 +154,15 @@ test('fills sharing one order number stay separate; stale adjustments are replac
   assert.equal(byCode['159696'].price, 2.069);
   assert.equal(plan.date, '2026-11-04');
 });
+
+test('findExchangeTransactions picks every exchange record for full re-import, leaves OTC alone', async () => {
+  const m = await import('../src/app/localMcpHoldings.js');
+  const txs = [
+    { id: 'a', code: '513100', kind: 'exchange' },
+    { id: 'b', code: '159632', tags: ['exchange'] },
+    { id: 'c', code: '159659' },
+    { id: 'd', code: '021000', tags: ['otc'] },
+    { id: 'e', code: '600000', tags: ['mcp-sync'] }
+  ];
+  assert.deepEqual(m.findExchangeTransactions(txs, ['159659']).map((t) => t.id), ['a', 'b', 'c', 'e']);
+});

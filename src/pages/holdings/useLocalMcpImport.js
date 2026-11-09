@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getTodayShanghaiDate, normalizeTransaction } from '../../app/holdingsLedgerCore.js';
 import { persistHoldingTransactionMutation } from '../../app/holdingTransactionMutations.js';
 import { LOCAL_MCP_DEFAULT_URL, isLocalMcpSupportedDevice, normalizeLocalMcpUrl } from '../../app/localMcpClient.js';
-import { buildMcpSyncPlan, dayBefore, dedupeTrades, fetchTzzbHoldings, findStaleAdjustments, planRowsToDrafts, tradesToDrafts } from '../../app/localMcpHoldings.js';
+import { buildMcpSyncPlan, dayBefore, dedupeTrades, fetchTzzbHoldings, findExchangeTransactions, findStaleAdjustments, planRowsToDrafts, tradesToDrafts } from '../../app/localMcpHoldings.js';
 import { showActionToast } from '../../app/toast.js';
 import { trackActionResult } from '../../app/analytics.js';
 
@@ -72,9 +72,16 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
     try {
       const data = await fetchTzzbHoldings(normalized, { history: { startDate: historyStart, endDate: date } });
       const existing = ledgerRef.current?.transactions || [];
-      const stale = data.historyError ? [] : findStaleAdjustments(existing, historyStart, date);
+      // 全量模式：读到逐笔成交时，先清掉本站全部场内记录，再按账本全量写入（成交 + 起始日前的期初）。
+      // 读不到成交（旧版工具 / 出错）时不清空，只按持仓差额调整，避免把记录清空却写不回来。
+      const exchangeCodes = [
+        ...(aggregatesRef.current || []).filter((agg) => agg?.kind === 'exchange').map((agg) => agg.code),
+        ...data.positions.map((pos) => pos.code),
+        ...data.trades.map((t) => t.code)
+      ];
+      const stale = data.historyError ? findStaleAdjustments(existing, date, date) : findExchangeTransactions(existing, exchangeCodes);
       const staleIds = new Set(stale.map((tx) => tx.id));
-      const deduped = dedupeTrades(data.trades, existing.filter((tx) => !staleIds.has(tx.id)));
+      const deduped = dedupeTrades(data.trades, data.historyError ? existing.filter((tx) => !staleIds.has(tx.id)) : []);
       // 有逐笔成交时，剩余差额视为起始日之前没录的持仓，记在起始日前一天（期初）；否则按今天记调整。
       const adjustDate = data.historyError ? date : (dayBefore(historyStart) || date);
       const next = {
@@ -90,9 +97,9 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
       };
       setPlan(next);
       const parts = [`读到 ${data.positions.length} 只持仓`];
-      if (!data.historyError) parts.push(`${historyStart} 起 ${data.trades.length} 笔成交，新增 ${deduped.trades.length} 笔（已有 ${deduped.duplicate} 笔跳过）`);
-      if (stale.length) parts.push(`删除区间内 ${stale.length} 笔旧的汇总调整`);
-      parts.push(next.changeCount ? `写入后仍有 ${next.changeCount} 只份额不一致` : '写入后份额与账本一致');
+      if (!data.historyError) parts.push(`${historyStart} 起 ${deduped.trades.length} 笔成交`);
+      if (stale.length) parts.push(`将清空本站 ${stale.length} 笔场内记录后全量写入`);
+      parts.push(next.changeCount ? `另有 ${next.changeCount} 只按期初补齐份额` : '写入后份额与账本一致');
       setStatus({ state: data.historyError ? 'error' : 'success', message: `${parts.join('，')}。${data.historyError ? ` ${data.historyError}` : ''}` });
       trackActionResult('holdings', 'local_mcp_fetch', 'success', { positionCount: data.positions.length, tradeCount: deduped.trades.length, changeCount: next.changeCount, silent });
       return next;
@@ -105,8 +112,8 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
 
   const applyRows = useCallback(async (rows, date, { source = 'manual', trades = [], removed = [] } = {}) => {
     const drafts = [...tradesToDrafts(trades), ...planRowsToDrafts(rows, date)].map((draft) => normalizeTransaction(draft));
-    const deletedIds = (drafts.length ? removed : []).map((tx) => tx.id).filter(Boolean);
-    if (!drafts.length) return 0;
+    const deletedIds = removed.map((tx) => tx.id).filter(Boolean);
+    if (!drafts.length && !deletedIds.length) return 0;
     const current = ledgerRef.current;
     const keep = (current.transactions || []).filter((tx) => !deletedIds.includes(tx.id));
     const nextState = { ...current, transactions: [...keep, ...drafts] };
@@ -122,14 +129,14 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
       showActionToast('同步已保存到本地', 'warning', { description: error?.message || '云端同步稍后重试。' });
     }
     writeStore(HISTORY_SYNCED_KEY, getTodayShanghaiDate());
-    trackActionResult('holdings', 'local_mcp_import', 'success', { importedCount: drafts.length, source });
-    return drafts.length;
+    trackActionResult('holdings', 'local_mcp_import', 'success', { importedCount: drafts.length, removedCount: deletedIds.length, source });
+    return drafts.length || deletedIds.length;
   }, [setLedger]);
 
   const importSelected = useCallback(async () => {
     if (!plan) return;
     const count = await applyRows(plan.rows, plan.date, { trades: plan.trades || [], removed: plan.staleAdjustments || [] });
-    if (count) showActionToast('持仓已同步', 'success', { description: `已写入 ${count} 笔记录。` });
+    if (count) showActionToast('持仓已同步', 'success', { description: `已按账本全量写入（清空 ${(plan.staleAdjustments || []).length} 笔旧场内记录）。` });
     setPlan(null);
     setOpen(false);
   }, [plan, applyRows]);
@@ -167,7 +174,8 @@ export function useLocalMcpImport({ ledger, setLedger, aggregates }) {
     const timer = setTimeout(async () => {
       if (cancelled || !(ledgerRef.current?.transactions || []).length) return;
       writeStore(LAST_AUTO_KEY, Date.now());
-      const next = await fetchPlan({ silent: true, fromDate: readStore(HISTORY_SYNCED_KEY, '') || getTodayShanghaiDate() });
+      // 自动导入同样全量：从起始日重读、清空场内记录后整体重写。
+      const next = await fetchPlan({ silent: true });
       if (cancelled || !next) {
         if (!next && !cancelled) showActionToast('本地 MCP 自动同步失败', 'warning', { description: '本机桥接服务未运行或投资账本未登录。' });
         return;

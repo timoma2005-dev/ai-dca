@@ -61,7 +61,7 @@ export function LocalMcpImportModal({ mcp }) {
       </div>
     );
   }
-  const { url, setUrl, autoSync, setAutoSync, clearMissing, setClearMissing, status, plan, startDate, setStartDate } = mcp;
+  const { url, setUrl, autoSync, setAutoSync, status, plan, startDate, setStartDate } = mcp;
   const loading = status.state === 'loading';
   const command = buildBridgeCommand(url);
   const changeRows = plan ? plan.rows.filter((row) => row.type) : [];
@@ -132,17 +132,13 @@ export function LocalMcpImportModal({ mcp }) {
               value={startDate || ''}
               onChange={(event) => setStartDate(event.target.value)}
             />
-            <span className="text-[11px] text-slate-500">从这天到今天，逐笔读取 tzzb_trade_history 写入交易记录；已有的同一笔自动跳过。</span>
+            <span className="text-[11px] text-slate-500">每次全量导入：清空本站全部场内记录，再从这天到今天逐笔写入 tzzb_trade_history；这天之前的持仓记一笔期初。</span>
           </label>
 
           <div className="flex flex-wrap gap-x-5 gap-y-1.5">
             <label className="inline-flex items-center gap-1.5">
               <input type="checkbox" checked={autoSync} onChange={(event) => setAutoSync(event.target.checked)} />
               <span>进入持仓页自动导入（不再弹确认，10 分钟内最多一次）</span>
-            </label>
-            <label className="inline-flex items-center gap-1.5">
-              <input type="checkbox" checked={clearMissing} onChange={(event) => setClearMissing(event.target.checked)} />
-              <span>账本里已没有的场内持仓，按清仓记录</span>
             </label>
           </div>
 
@@ -235,13 +231,13 @@ export function LocalMcpImportModal({ mcp }) {
               </table>
             </div>
           ) : null}
-          {plan ? <div className="text-[11px] text-slate-400">成交按投资账本原始日期、价格、数量逐笔写入（备注含成交时间与编号）。起始日起旧的「本地 MCP 同步」汇总调整会被删除，避免和逐笔成交重复。剩余差额按 {plan.date} 记期初调整，记账价默认取该代码第一笔成交价（可改）。场外基金 tzzb-mcp 暂无持仓接口，不动。</div> : null}
+          {plan ? <div className="text-[11px] text-slate-400">写入前会删除本站全部场内记录（含手工录入），场外基金不动。成交按投资账本原始日期、价格、数量逐笔写入（备注含成交时间与编号）。起始日之前的持仓按 {plan.date} 记期初，记账价默认取该代码第一笔成交价（可改）。场外基金 tzzb-mcp 暂无持仓接口，不动。</div> : null}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
           <button type="button" className="mr-auto text-[11px] text-slate-400 hover:text-slate-600 hover:underline" onClick={mcp.onRevokeConsent}>撤回同意</button>
           <button type="button" className={GHOST_BTN} onClick={mcp.onClose}>关闭</button>
-          <button type="button" className={PRIMARY_BTN} disabled={!selectedCount || loading} onClick={mcp.onImport}>
-            <span>{selectedCount ? `写入 ${selectedCount} 笔${staleCount ? `，删除 ${staleCount} 笔旧调整` : ''}` : '无需写入'}</span>
+          <button type="button" className={PRIMARY_BTN} disabled={(!selectedCount && !staleCount) || loading} onClick={mcp.onImport}>
+            <span>{selectedCount || staleCount ? `${staleCount ? `清空 ${staleCount} 笔场内记录，` : ''}写入 ${selectedCount} 笔` : '无需写入'}</span>
           </button>
         </div>
       </div>

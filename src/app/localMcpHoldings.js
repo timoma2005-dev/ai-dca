@@ -267,6 +267,16 @@ export function findStaleAdjustments(transactions = [], startDate = '', endDate 
   });
 }
 
+// 全量导入：本站所有场内记录（kind/tag 为场内、MCP 写入过的、或代码属于场内持仓 / 本次账本数据），导入前整体清掉。
+export function findExchangeTransactions(transactions = [], exchangeCodes = []) {
+  const codes = new Set(exchangeCodes || []);
+  return (transactions || []).filter((tx) => {
+    if (!tx) return false;
+    const tags = Array.isArray(tx.tags) ? tx.tags : [];
+    return tx.kind === 'exchange' || tags.includes('exchange') || tags.includes('mcp-sync') || codes.has(String(tx.code || ''));
+  });
+}
+
 export function dayBefore(iso) {
   return isoDate(iso) ? addDays(isoDate(iso), -1) : '';
 }
