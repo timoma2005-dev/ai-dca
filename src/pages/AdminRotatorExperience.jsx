@@ -129,7 +129,7 @@ export default function AdminRotatorExperience() {
           {data?.running ? '运行中' : '未运行'}
         </span>
         <span className="ml-auto text-xs text-muted-foreground">
-          腾讯行情 · 每 5 秒刷新 · 更新于 {clock(st?.updated_at)}{stale && st ? '（非盘中或已停止）' : ''}
+          腾讯行情 · 每 5 秒刷新 · 更新于 {clock(st?.updated_at)}{stale && st ? `（非实时，显示最近一条${st.note ? `：${st.note}` : ''}）` : ''}
         </span>
       </div>
 
