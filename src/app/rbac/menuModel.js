@@ -26,6 +26,7 @@ const SEED_MENUS = [
   ['dataRepair', '数据修复', 'Wrench', 'primary', 90, '数据诊断与修复'],
   ['adminRadar', '雷达', 'Radar', 'admin', 120, '溢价雷达与溢价监控'],
   ['adminAuction', '竞价看板', 'Gavel', 'admin', 130, '纳指期指与 ETF 竞价行情'],
+  ['adminRotator', '日内轮动', 'Repeat', 'admin', 135, '纳指 ETF 溢价偏离轮动（腾讯源实时）'],
   ['adminRbac', '权限管理', 'ShieldCheck', 'admin', 140, '用户角色、菜单权限与审计日志'],
 ];
 
@@ -77,7 +78,8 @@ export function buildGuestFallback() {
  */
 export function buildUserFallback({ isAdmin = false } = {}) {
   const menus = SEED_MENUS
-    .filter(([key]) => isAdmin || key !== 'adminRbac')
+    // adminRotator 仅超级管理员（服务端 menu:adminRotator:*），兜底菜单一律不展示。
+    .filter(([key]) => key !== 'adminRotator' && (isAdmin || key !== 'adminRbac'))
     .map((row) => {
       const requiredCode = isAdmin ? null : USER_LOCKED[row[0]];
       const item = seedItem(row, Boolean(requiredCode));

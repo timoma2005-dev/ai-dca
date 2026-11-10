@@ -9,6 +9,7 @@ import {
   LineChart,
   ListChecks,
   Radar,
+  Repeat,
   ShieldCheck,
   Shuffle,
   Wallet,
@@ -17,7 +18,7 @@ import {
 
 // 服务端菜单的 icon 字段 → lucide 组件。未知名称按 key 兜底，再兜底为 LayoutGrid。
 const ICONS_BY_NAME = {
-  House, LineChart, BarChart3, Wallet, ListChecks, Shuffle, Bell, BookOpen, Wrench, FlaskConical, Radar, Gavel, ShieldCheck, LayoutGrid,
+  House, LineChart, BarChart3, Wallet, ListChecks, Shuffle, Bell, BookOpen, Wrench, FlaskConical, Radar, Gavel, Repeat, ShieldCheck, LayoutGrid,
 };
 
 const ICONS_BY_KEY = {
@@ -33,6 +34,7 @@ const ICONS_BY_KEY = {
   dataRepair: Wrench,
   adminRadar: Radar,
   adminAuction: Gavel,
+  adminRotator: Repeat,
   adminRbac: ShieldCheck,
 };
 

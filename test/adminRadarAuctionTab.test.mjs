@@ -14,10 +14,10 @@ const workspaceSource = readSource('src/pages/WorkspacePage.jsx');
 const menuIconsSource = readSource('src/components/rbac/menu-icons.js');
 
 test('auction is a top-level admin tab immediately after radar', () => {
-  assert.deepEqual(ADMIN_TAB_ORDER, ['adminRadar', 'adminAuction', 'adminRbac']);
+  assert.deepEqual(ADMIN_TAB_ORDER, ['adminRadar', 'adminAuction', 'adminRotator', 'adminRbac']);
   assert.deepEqual(PRIMARY_TAB_META.adminAuction, { label: '竞价看板', hrefKey: 'adminAuction', adminOnly: true });
   assert.equal(isWorkspaceGroup('adminAuction'), true);
-  assert.deepEqual(SCENARIOS.stock.visibleTabs.slice(-3), ADMIN_TAB_ORDER);
+  assert.deepEqual(SCENARIOS.stock.visibleTabs.slice(-ADMIN_TAB_ORDER.length), ADMIN_TAB_ORDER);
 });
 
 test('auction links point to the workspace in both page directories', () => {

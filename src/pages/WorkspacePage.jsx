@@ -45,6 +45,7 @@ const ArticlesExperience = lazy(() => import('./ArticlesExperience.jsx').then((m
 const DataRepairExperience = lazy(() => import('./DataRepairExperience.jsx').then((m) => ({ default: m.DataRepairExperience })));
 const AdminRadarExperience = lazy(() => import('./AdminRadarExperience.jsx').then((m) => ({ default: m.AdminRadarExperience })));
 const AdminAuctionExperience = lazy(() => import('./AdminAuctionExperience.jsx'));
+const AdminRotatorExperience = lazy(() => import('./AdminRotatorExperience.jsx'));
 const SharesExperience = lazy(() => import('./SharesExperience.jsx'));
 const AdminRbacExperience = lazy(() => import('./AdminRbacExperience.jsx'));
 const GlobalSearch = lazy(() => import('../components/global-search.jsx').then((m) => ({ default: m.GlobalSearch })));
@@ -92,6 +93,7 @@ const WORKSPACE_TITLES = {
   dataRepair: '数据诊断与修复',
   adminRadar: '纳指雷达',
   adminAuction: '竞价看板',
+  adminRotator: '日内轮动',
   adminRbac: '权限管理'
 };
 
@@ -783,6 +785,8 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
         return <AdminRadarExperience {...sharedProps} />;
       case 'adminAuction':
         return <AdminAuctionExperience {...sharedProps} />;
+      case 'adminRotator':
+        return <AdminRotatorExperience />;
       case 'adminRbac':
         return <AdminRbacExperience />;
       case 'holdings':
