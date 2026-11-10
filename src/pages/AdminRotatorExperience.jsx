@@ -186,7 +186,7 @@ export default function AdminRotatorExperience() {
               <th className="px-3 py-2 text-right">基准 %</th>
               <th className="px-3 py-2 text-right">偏离 bps</th>
               <th className="px-3 py-2 text-right">买一 / 卖一</th>
-              <th className="px-3 py-2 text-right">单边成本</th>
+              <th className="px-3 py-2 text-right" title="半价差 + 让档 + 佣金">{`单边成本（让${st?.params?.slip_ticks ?? 0}档+佣金万${st?.params?.comm_bps ?? 0.5}）`}</th>
             </tr>
           </thead>
           <tbody>
