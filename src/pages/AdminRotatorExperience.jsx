@@ -182,8 +182,8 @@ export default function AdminRotatorExperience() {
               <th className="px-3 py-2 text-left">名称</th>
               <th className="px-3 py-2 text-right">现价</th>
               <th className="px-3 py-2 text-right">IOPV</th>
-              <th className="px-3 py-2 text-right">溢价 bps</th>
-              <th className="px-3 py-2 text-right">基准 bps</th>
+              <th className="px-3 py-2 text-right">溢价 %</th>
+              <th className="px-3 py-2 text-right">基准 %</th>
               <th className="px-3 py-2 text-right">偏离 bps</th>
               <th className="px-3 py-2 text-right">买一 / 卖一</th>
               <th className="px-3 py-2 text-right">单边成本</th>
@@ -199,8 +199,8 @@ export default function AdminRotatorExperience() {
                   <td className="px-3 py-1.5">{r.name}</td>
                   <td className="px-3 py-1.5 text-right">{fmt(r.price)}</td>
                   <td className="px-3 py-1.5 text-right">{fmt(r.iopv, 4)}</td>
-                  <td className="px-3 py-1.5 text-right">{fmt(r.prem_bps, 0)}</td>
-                  <td className="px-3 py-1.5 text-right">{fmt(r.base_bps, 0)}</td>
+                  <td className="px-3 py-1.5 text-right">{r.prem_bps === null || r.prem_bps === undefined ? '—' : fmt(r.prem_bps / 100, 2)}</td>
+                  <td className="px-3 py-1.5 text-right">{r.base_bps === null || r.base_bps === undefined ? '—' : fmt(r.base_bps / 100, 2)}</td>
                   <td className={`px-3 py-1.5 text-right ${r.dev_bps < 0 ? 'text-emerald-600' : r.dev_bps > 0 ? 'text-red-600' : ''}`}>{bps(r.dev_bps)}</td>
                   <td className="px-3 py-1.5 text-right">{r.bid || r.ask ? `${fmt(r.bid)} / ${fmt(r.ask)}` : '—'}</td>
                   <td className="px-3 py-1.5 text-right">{r.cost_bps === null || r.cost_bps === undefined ? '—' : fmt(r.cost_bps, 1)}</td>
