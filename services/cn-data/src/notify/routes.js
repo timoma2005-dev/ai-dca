@@ -460,6 +460,59 @@ export function purgeDeletedPlanRules(db, account, now = nowIso()) {
   return removed;
 }
 
+const RULE_FEATURES = [
+  ['plans', (payload) => payload.plans],
+  ['dca', (payload) => (payload.dca && typeof payload.dca === 'object' ? [{ ...payload.dca, __active: true }] : [])],
+  ['dca-list', (payload) => payload.dcaList],
+  ['market-alerts', (payload) => payload.marketAlerts],
+  ['holding-alerts', (payload) => payload.holdingAlerts]
+];
+
+// /sync → notify_rules → outbox → CF notify_user_feature_items。CF 按这份副本发提醒，/sync 以前不入队，
+// 导致 10-12 迁移后的新增/修改/删除都到不了 CF。按 CF splitFeatureItems 同样的拆法对齐：
+// 有变化才 upsert；payload 里没有的删掉。计划例外：payload 没有但 plans/store 里仍在的不删
+// （有设备会同步空列表），plans/store 里已删的一律删（purgeDeletedPlanRules）。
+export function syncNotifyRules(db, account, payload = {}, now = nowIso()) {
+  const client = account.clientId;
+  const existing = db.prepare('SELECT rule_id, rule_type, payload, enabled FROM notify_rules WHERE user_id = ? AND client_id = ?')
+    .all(account.userId, client);
+  const byId = new Map(existing.map((row) => [row.rule_id, row]));
+  const livePlans = new Set(db.prepare("SELECT record_id FROM account_resource_records WHERE user_id = ? AND resource = 'plans/store' AND record_kind = 'item' AND deleted = 0")
+    .all(account.userId).map((row) => row.record_id));
+  const keep = new Set();
+  const stats = { upserted: 0, deleted: 0 };
+  for (const [type, pick] of RULE_FEATURES) {
+    const values = pick(payload || {});
+    for (const [index, raw] of (Array.isArray(values) ? values : []).entries()) {
+      if (!raw || typeof raw !== 'object') continue;
+      const { __active, ...value } = raw;
+      const id = __active ? 'active' : String(value.id || value.ruleId || value.code || value.symbol || `${type}-${index + 1}`).trim().slice(0, 240);
+      if (keep.has(id)) continue;
+      keep.add(id);
+      const json = JSON.stringify(value);
+      const enabled = value.enabled === false ? 0 : 1;
+      const prev = byId.get(id);
+      if (prev && prev.rule_type === type && prev.payload === json && Number(prev.enabled) === enabled) continue;
+      db.prepare(`INSERT INTO notify_rules(user_id, client_id, rule_id, rule_type, payload, enabled, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, client_id, rule_id) DO UPDATE SET
+        rule_type = excluded.rule_type, payload = excluded.payload, enabled = excluded.enabled, updated_at = excluded.updated_at`)
+        .run(account.userId, client, id, type, json, enabled, now);
+      enqueueEvent(db, 'notify', 'upsert-rule', { user_id: account.userId, client_id: client, rule_id: id, rule_type: type,
+        payload: value, enabled, updated_at: now });
+      stats.upserted += 1;
+    }
+  }
+  for (const row of existing) {
+    if (keep.has(row.rule_id)) continue;
+    if (row.rule_type === 'plans' && livePlans.has(row.rule_id)) continue;
+    db.prepare('DELETE FROM notify_rules WHERE user_id = ? AND client_id = ? AND rule_id = ?').run(account.userId, client, row.rule_id);
+    enqueueEvent(db, 'notify', 'delete-rule', { user_id: account.userId, client_id: client, rule_id: row.rule_id, updated_at: now });
+    stats.deleted += 1;
+  }
+  stats.deleted += purgeDeletedPlanRules(db, account, now).length;
+  return stats;
+}
+
 function handleSync(db, account, body) {
   const payload = normalizeNotifyPayload(body);
   const compiled = compileNotifyRules(payload);
@@ -496,7 +549,7 @@ function handleSync(db, account, body) {
         payload = excluded.payload, updated_at = excluded.updated_at`)
         .run(`${account.clientId}:${venue}`, JSON.stringify(groups[venue]), now);
     }
-    purgeDeletedPlanRules(db, account, now);
+    syncNotifyRules(db, account, payload, now);
   });
   // Skip evaluateVixSignal and the other push tails; the full push engine stays on CF.
   return ok({ ok: true, clientId: account.clientId, accountClientId: account.clientId,

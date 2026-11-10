@@ -30,3 +30,20 @@ test('purgeDeletedPlanRules does nothing when the user has no plans/store resour
   db.prepare("INSERT INTO notify_rules VALUES('u2','account:u2','p','plans','{}',1,'x')").run();
   assert.deepEqual(purgeDeletedPlanRules(db, { userId: 'u2' }), []);
 });
+
+test('syncNotifyRules mirrors every feature to notify_rules + outbox, keeps store-live plans missing from payload', async () => {
+  const { syncNotifyRules } = await import('../src/notify/routes.js');
+  const db = setup();
+  db.prepare("INSERT INTO account_resources VALUES('u1','plans/store',0)").run();
+  db.prepare("INSERT INTO account_resource_records VALUES('u1','plans/store','p1','item',0)").run();
+  db.prepare("INSERT INTO account_resource_records VALUES('u1','plans/store','pLive','item',0)").run();
+  db.prepare("INSERT INTO notify_rules VALUES('u1','account:u1','pLive','plans','{}',1,'x')").run();
+  db.prepare("INSERT INTO notify_rules VALUES('u1','account:u1','oldAlert','market-alerts','{}',1,'x')").run();
+  const acc = { userId: 'u1', clientId: 'account:u1' };
+  const payload = { plans: [{ id: 'p1' }], dca: { id: 'd1' }, dcaList: [{ id: 'd1' }], marketAlerts: [{ id: 'm1', enabled: false }], holdingAlerts: [] };
+  const stats = syncNotifyRules(db, acc, payload);
+  assert.deepEqual(stats, { upserted: 4, deleted: 1 });
+  assert.deepEqual(db.prepare('SELECT rule_id, rule_type, enabled FROM notify_rules ORDER BY rule_id').all().map((r) => `${r.rule_id}:${r.rule_type}:${r.enabled}`),
+    ['active:dca:1', 'd1:dca-list:1', 'm1:market-alerts:0', 'p1:plans:1', 'pLive:plans:1']);
+  assert.deepEqual(syncNotifyRules(db, acc, payload), { upserted: 0, deleted: 0 });
+});
