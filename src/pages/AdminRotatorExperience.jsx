@@ -180,11 +180,11 @@ export default function AdminRotatorExperience() {
             <tr className="border-b border-border">
               <th className="px-3 py-2 text-left">代码</th>
               <th className="px-3 py-2 text-left">名称</th>
+              <th className="px-3 py-2 text-right">偏离 bps</th>
               <th className="px-3 py-2 text-right">现价</th>
               <th className="px-3 py-2 text-right">IOPV</th>
               <th className="px-3 py-2 text-right">溢价 %</th>
               <th className="px-3 py-2 text-right">基准 %</th>
-              <th className="px-3 py-2 text-right">偏离 bps</th>
               <th className="px-3 py-2 text-right">买一 / 卖一</th>
               <th className="px-3 py-2 text-right" title="半价差 + 让档 + 佣金">{`单边成本（让${st?.params?.slip_ticks ?? 0}档+佣金万${st?.params?.comm_bps ?? 0.5}）`}</th>
             </tr>
@@ -197,11 +197,11 @@ export default function AdminRotatorExperience() {
                 <tr key={r.code} className={`border-b border-border/60 last:border-0 ${held ? 'bg-primary/10 font-medium' : ''} ${muted ? 'opacity-50' : ''}`}>
                   <td className="px-3 py-1.5">{r.code}{held ? ' ◀ 持仓' : ''}{muted ? ' · 停用' : ''}</td>
                   <td className="px-3 py-1.5">{r.name}</td>
+                  <td className={`px-3 py-1.5 text-right ${r.dev_bps < 0 ? 'text-emerald-600' : r.dev_bps > 0 ? 'text-red-600' : ''}`}>{bps(r.dev_bps)}</td>
                   <td className="px-3 py-1.5 text-right">{fmt(r.price)}</td>
                   <td className="px-3 py-1.5 text-right">{fmt(r.iopv, 4)}</td>
                   <td className="px-3 py-1.5 text-right">{r.prem_bps === null || r.prem_bps === undefined ? '—' : fmt(r.prem_bps / 100, 2)}</td>
                   <td className="px-3 py-1.5 text-right">{r.base_bps === null || r.base_bps === undefined ? '—' : fmt(r.base_bps / 100, 2)}</td>
-                  <td className={`px-3 py-1.5 text-right ${r.dev_bps < 0 ? 'text-emerald-600' : r.dev_bps > 0 ? 'text-red-600' : ''}`}>{bps(r.dev_bps)}</td>
                   <td className="px-3 py-1.5 text-right">{r.bid || r.ask ? `${fmt(r.bid)} / ${fmt(r.ask)}` : '—'}</td>
                   <td className="px-3 py-1.5 text-right">{r.cost_bps === null || r.cost_bps === undefined ? '—' : fmt(r.cost_bps, 1)}</td>
                 </tr>
