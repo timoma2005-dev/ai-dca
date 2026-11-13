@@ -92,8 +92,8 @@ test('route guard pages: 403 shows the required role, login page shows the login
   assert.match(forbidden, /SVIP 专享/);
   assert.doesNotMatch(forbidden, /403/);
   const paid = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'vip', name: 'VIP' }, menuLabel: '雷达', username: 'lovexl', onUpgrade() {} });
-  assert.match(paid, /由管理员在后台授权/);
-  assert.match(forbidden, /该权限属于 SVIP，暂不对外开放/);
+  assert.match(paid, /近 30 天活跃满 10 天自动升级/);
+  assert.match(forbidden, /近 30 天活跃满 20 天自动升级 SVIP/);
   assert.match(paid, /会员说明/);
   assert.doesNotMatch(paid, /打赏|付款|备注账号/);
   const adminOnly = mod.render('AccessGuardPage', { status: 'forbidden', requiredRole: { code: 'admin', name: '管理员' }, menuLabel: '权限管理' });

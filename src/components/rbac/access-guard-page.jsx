@@ -22,7 +22,7 @@ function DemoPoints({ demo, tone }) {
 /**
  * 路由守卫页：
  * - status=login：游客访问需要登录的页面，展示登录入口（首次渲染自动弹一次登录框）；
- * - status=forbidden + VIP/SVIP：会员功能，VIP 注册赠送、SVIP 邀请制由管理员后台授权（onUpgrade 打开会员说明）；
+ * - status=forbidden + VIP/SVIP：会员功能，VIP / SVIP 按注册天数 + 近 30 天活跃天数自动升降级（onUpgrade 打开会员体系说明）；
  * - status=forbidden + 管理员：仅管理员可访问。
  */
 export function AccessGuardPage({ status, requiredRole, menuLabel = '', username = '', onLogin, onUpgrade, onBack, demo = null, onDemo, autoPromptLogin = true }) {
@@ -87,7 +87,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
           <h2 className="mt-2 text-lg font-bold text-slate-900">{menuLabel || '此功能'}为 {roleLabel} 会员功能</h2>
           <DemoPoints demo={demo} tone="text-amber-500" />
           <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500 [text-wrap:balance]">
-            {requiredRole?.code === 'svip' ? '该权限属于 SVIP，暂不对外开放。' : `${roleLabel} 由管理员在后台授权，不提供付费开通。`}
+            {requiredRole?.code === 'svip' ? '注册满 30 天、近 30 天活跃满 20 天自动升级 SVIP，不提供付费开通。' : `注册满 30 天、近 30 天活跃满 10 天自动升级 ${roleLabel}，不提供付费开通。`}
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             {demo && onDemo ? (
@@ -114,7 +114,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
             ) : null}
           </div>
           <p className="mt-3 text-xs text-slate-400">
-            {demo && !demo.unlimited ? `${demoQuotaText(demo)} · ` : ''}已获授权的账号刷新页面即可使用
+            {demo && !demo.unlimited ? `${demoQuotaText(demo)} · ` : ''}达标后刷新页面即可使用
           </p>
           {demo?.retainedUntil ? <p className="mt-1 text-xs font-medium text-amber-700" data-testid="access-guard-retained">演示内容保留至 {new Date(demo.retainedUntil).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' })}，获授权后自动带入账号</p> : null}
         </>

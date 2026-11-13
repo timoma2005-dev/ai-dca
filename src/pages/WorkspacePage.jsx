@@ -32,6 +32,8 @@ import { StepHintHost } from '../components/onboarding/StepHintHost.jsx';
 import { ONBOARDING_FLOW_COMPLETE_EVENT, ONBOARDING_OPEN_EVENT, ONBOARDING_START_DEMO_EVENT, ONBOARDING_START_EVENT, consumeOnboardingDemoCompleted, isOnboardingHintActive, markOnboardingDemoCompleted, writeOnboardingState } from '../app/onboarding/state.js';
 import { ONBOARDING_FLOWS } from '../app/onboarding/catalog.js';
 import { useAutoPromptBusy, useAutoPromptSlot } from '../app/promptQueue.js';
+import { markMembershipSeen, membershipAutoReason } from '../app/membership.js';
+import { MembershipDialog } from '../components/membership/MembershipDialog.jsx';
 
 // 各主 tab 使用 React.lazy 按需加载，在 Vite 中会被拆成独立 chunk。
 // 定投、卖出、VIX、回测工具已并入 TradePlansExperience 作为二级视图。
@@ -204,7 +206,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mobileBottomSheetHidden, setMobileBottomSheetHidden] = useState(() => isMobileBottomSheetOpen());
   const [showQrModal, setShowQrModal] = useState(false);
-  const [memberInfoRole, setMemberInfoRole] = useState('');
+  const [membershipDismissedKey, setMembershipDismissedKey] = useState('');
   const [demoTab, setDemoTab] = useState('');
   const [demoDoneFlow, setDemoDoneFlow] = useState(null);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -306,7 +308,6 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
 
   useEffect(() => {
     function handleOpenUpgradeQr(event) {
-      setMemberInfoRole(event?.detail?.role || '');
       setShowQrModal(true);
     }
     window.addEventListener(UPGRADE_QR_OPEN_EVENT, handleOpenUpgradeQr);
@@ -474,9 +475,23 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
   const demoFeature = demoAsGuest || (activeAccess.status === 'forbidden' && isPaidRole(activeAccess.requiredRole)) ? demoFeatureFor(activeTab) : null;
   const handleDemoUpgrade = demoAsGuest
     ? () => openAccountAuth({ mode: 'register', source: 'feature-demo', trigger: activeTab })
-    : () => { setMemberInfoRole(activeAccess.requiredRole?.code === 'svip' ? 'svip' : ''); setShowQrModal(true); };
+    : () => setShowQrModal(true);
   const demoOffer = demoFeature ? { ...demoQuotaFor(activeTab), points: demoFeature.points, pitch: demoFeature.pitch, retainedUntil: readDemoSession(activeTab)?.expiresAt || 0 } : null;
   const demoActive = Boolean(demoFeature) && demoTab === activeTab;
+  // 会员体系弹窗：每个账号首次弹一次，之后等级升降时再弹一次（管理员不自动弹）；「会员说明」入口手动打开同一弹窗。
+  const membershipUserKey = rbac.loggedIn ? String(cloudSession?.userId || accountUsername || '') : '';
+  const membershipAuto = rbac.loggedIn && !rbac.isAdmin && !demoActive ? membershipAutoReason(membershipUserKey, rbac.membership) : null;
+  const membershipAutoKey = membershipAuto ? `${membershipUserKey}:${rbac.membership?.tier || ''}` : '';
+  const membershipWant = Boolean(membershipAuto) && membershipDismissedKey !== membershipAutoKey;
+  const membershipGranted = useAutoPromptSlot('membership', membershipWant, { priority: 60 });
+  const membershipAutoOpen = membershipWant && membershipGranted;
+  const membershipEffectiveTier = ['svip', 'vip'].includes(rbac.topRole?.code) ? rbac.topRole.code : (rbac.isAdmin ? 'svip' : '');
+  const membershipDisplayTier = rbac.membership && membershipEffectiveTier !== rbac.membership.tier ? membershipEffectiveTier : '';
+  const closeMembership = useCallback(() => {
+    setShowQrModal(false);
+    if (membershipUserKey && rbac.membership) markMembershipSeen(membershipUserKey, rbac.membership);
+    if (membershipAutoKey) setMembershipDismissedKey(membershipAutoKey);
+  }, [membershipUserKey, rbac.membership, membershipAutoKey]);
   function startFeatureDemo() {
     window.__AI_DCA_DEMO_VARIANT__ = '';
     if (consumeDemoQuota(activeTab)) setDemoTab(activeTab);
@@ -735,7 +750,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
           menuLabel={activeAccess.menu?.label || WORKSPACE_TAB_META[activeTab]?.label || ''}
           username={accountUsername}
           onLogin={() => openAccountAuth({ mode: 'login', source: 'rbac-route-guard', trigger: activeTab })}
-          onUpgrade={() => { setMemberInfoRole(''); setShowQrModal(true); }}
+          onUpgrade={() => setShowQrModal(true)}
           demo={demoOffer}
           onDemo={startFeatureDemo}
           autoPromptLogin={!demoOffer}
@@ -759,7 +774,7 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
                     takeover={takeover}
                     roles={rbac.roles}
                     onRegister={() => openAccountAuth({ mode: 'register', source: 'onboarding', trigger: 'home' })}
-                    onUpgrade={() => { setMemberInfoRole(''); setShowQrModal(true); }}
+                    onUpgrade={() => setShowQrModal(true)}
                   />
                 )}
               />
@@ -929,30 +944,15 @@ export function WorkspacePage({ initialTab = DEFAULT_WORKSPACE_TAB, inPagesDir =
       <ConversionPromptCard prompt={conversionGranted ? conversionPrompt : null} onClose={() => setConversionPrompt(null)} />
       {!conversionPrompt && !cloudSession?.accessToken && !mobileBottomSheetHidden && !accountMenuOpen && activeAccess.status === 'ok' && activeTab !== 'notify' ? <ShareLandingBar /> : null}
       <StepHintHost paused={mobileBottomSheetHidden || autoPromptBusy} demoActive={demoActive} />
-      {showQrModal ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-label="会员说明" onClick={() => setShowQrModal(false)} data-testid="membership-info">
-          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <button type="button" aria-label="关闭" className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setShowQrModal(false)}>
-              <X className="h-4 w-4" />
-            </button>
-            {memberInfoRole === 'svip' ? (
-              <>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">SVIP 权限</div>
-                <h3 className="mt-1 text-lg font-bold text-slate-900" data-testid="svip-closed">该权限属于 SVIP，暂不对外开放</h3>
-                <p className="mt-4 text-xs leading-5 text-slate-400">已是 SVIP 的账号刷新页面即可使用。</p>
-              </>
-            ) : (<>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">会员说明</div>
-            <h3 className="mt-1 text-lg font-bold text-slate-900">会员权限不对外销售</h3>
-            <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-600">
-              <li><span className="font-bold text-slate-900">VIP</span>：新用户注册赠送，有效期以账号显示为准。</li>
-              <li><span className="font-bold text-slate-900">SVIP</span>：邀请制，由管理员在后台授权，不提供付费开通。</li>
-            </ul>
-            <p className="mt-4 text-xs leading-5 text-slate-400">已获授权的账号刷新页面即可使用。</p>
-            </>)}
-          </div>
-        </div>
-      ) : null}
+      <MembershipDialog
+        open={showQrModal || membershipAutoOpen}
+        onClose={closeMembership}
+        membership={rbac.membership}
+        reason={showQrModal ? '' : membershipAuto?.reason || ''}
+        displayTier={membershipDisplayTier}
+        loggedIn={rbac.loggedIn}
+        onLogin={() => openAccountAuth({ mode: 'login', source: 'membership-info', trigger: activeTab })}
+      />
       {showDisclaimer ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" onClick={() => setShowDisclaimer(false)}>
           <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>

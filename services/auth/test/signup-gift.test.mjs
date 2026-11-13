@@ -12,10 +12,10 @@ test('signup gift: 3 months VIP ending 23:59:59 Beijing time', () => {
   assert.equal(signupGiftExpiresAt(new Date('2026-11-30T04:00:00Z')), '2027-02-28T15:59:59.000Z');
 });
 
-test('registerUser grants the signup VIP inside the register transaction (can be switched off)', () => {
+test('signup VIP is off by default and only granted with AUTH_SIGNUP_GIFT=1', () => {
   const db = openDb(':memory:');
   try {
-    delete process.env.AUTH_SIGNUP_GIFT;
+    process.env.AUTH_SIGNUP_GIFT = '1';
     const res = registerUser(db, { username: 'giftuser', clientPasswordHash: 'a'.repeat(64) });
     assert.ok(!res.error, res.error);
     const id = db.prepare('SELECT id FROM users WHERE username = ?').get('giftuser').id;
@@ -23,7 +23,7 @@ test('registerUser grants the signup VIP inside the register transaction (can be
     assert.equal(row.role_code, 'vip');
     assert.equal(row.granted_by, 'signup-gift');
     assert.ok(row.expires_at > new Date().toISOString());
-    process.env.AUTH_SIGNUP_GIFT = '0';
+    delete process.env.AUTH_SIGNUP_GIFT;
     registerUser(db, { username: 'plainuser', clientPasswordHash: 'b'.repeat(64) });
     const id2 = db.prepare('SELECT id FROM users WHERE username = ?').get('plainuser').id;
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM user_roles WHERE user_id = ?').get(id2).n, 0);

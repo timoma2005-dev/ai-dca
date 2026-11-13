@@ -2,6 +2,7 @@ import { openDb, closeDb } from './db.js';
 import { registerUser, loginUser, sha256Hex, SESSION_TTL_SECONDS } from './auth.js';
 import { outboxStats } from './outbox.js';
 import { notifyRoleGranted } from './roleNotice.js';
+import { ensureMembershipSchema, membershipSummary, recomputeAll, recordActivity } from './membership.js';
 import {
   authenticateRequest,
   buildAuthPayload,
@@ -144,7 +145,12 @@ async function handleAdmin(db, req, res, url) {
   sendJson(res, 200, { ok: true, ...result });
 }
 
+function safeMembership(db, userId) {
+  try { return membershipSummary(db, userId); } catch { return null; }
+}
+
 export function createApp(db) {
+  ensureMembershipSchema(db);
   return async function handler(req, res) {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
 
@@ -184,17 +190,19 @@ export function createApp(db) {
         }
         // 迁移期：旧登录只有 localStorage token，没有会话 cookie。用 Bearer 调 /me 时补发 cookie，
         // 让同源 iframe（竞价看板）与 nginx auth_request 能识别同一会话。
+        recordActivity(db, user.id);
         const row = db.prepare('SELECT expires_at FROM sessions WHERE token_hash = ?').get(sha256Hex(token));
         const cookieHeader = row?.expires_at ? sessionCookieHeader({ accessToken: token, expiresAt: row.expires_at }) : {};
-        sendJson(res, 200, { userId: user.id, username: user.username, ...buildAuthPayload(db, user) }, cookieHeader);
+        sendJson(res, 200, { userId: user.id, username: user.username, ...buildAuthPayload(db, user), membership: safeMembership(db, user.id) }, cookieHeader);
         return;
       }
 
       // 游客或当前登录者的菜单（未登录/无效 token 都返回 guest 菜单）。
       if (req.method === 'GET' && url.pathname === '/api/sync/auth/menus') {
         const { user } = authenticateRequest(db, req.headers);
+        if (user) recordActivity(db, user.id);
         const payload = buildAuthPayload(db, user);
-        sendJson(res, 200, { loggedIn: Boolean(user), username: user?.username || '', ...payload });
+        sendJson(res, 200, { loggedIn: Boolean(user), username: user?.username || '', ...payload, membership: user ? safeMembership(db, user.id) : null });
         return;
       }
 
@@ -202,6 +210,7 @@ export function createApp(db) {
       if (req.method === 'GET' && url.pathname === '/api/sync/auth/check') {
         const perm = url.searchParams.get('perm') || '';
         const result = requirePerm(db, req.headers, perm);
+        if (result.user) recordActivity(db, result.user.id);
         const headers = result.user ? { 'X-Auth-User-Id': result.user.id, 'X-Auth-Username': result.user.username } : {};
         sendJson(res, result.ok ? 200 : result.status, result.ok ? { ok: true } : { message: result.message }, headers);
         return;
@@ -231,6 +240,14 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   const db = openDb();
   const { createServer } = await import('node:http');
   const server = createServer(createApp(db));
+  // 会员等级：启动时与之后每小时全量重算（不达标自动降级）。AUTH_MEMBERSHIP_RECOMPUTE=0 可关闭。
+  if (String(process.env.AUTH_MEMBERSHIP_RECOMPUTE ?? '1') !== '0') {
+    const runRecompute = () => {
+      try { console.log('[membership] recompute', JSON.stringify(recomputeAll(db))); } catch (err) { console.error('[membership] recompute failed', err?.message || err); }
+    };
+    runRecompute();
+    setInterval(runRecompute, 60 * 60 * 1000).unref();
+  }
   server.listen(PORT, HOST, () => {
     console.log(`[auth-service] listening on http://${HOST}:${PORT}`);
   });

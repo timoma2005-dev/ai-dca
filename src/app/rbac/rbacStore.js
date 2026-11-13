@@ -7,6 +7,7 @@
 import { apiUrl } from '../apiBase.js';
 import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession } from '../authSession.js';
 import { buildGuestFallback, buildUserFallback } from './menuModel.js';
+import { normalizeMembership, sameMembership } from '../membership.js';
 
 export const RBAC_STORE_KEY = 'aiDcaRbacMenus_v1';
 export const RBAC_CHANGED_EVENT = 'rbac:changed';
@@ -46,6 +47,8 @@ export function normalizeRbacPayload(payload = {}, { loggedIn, username = '' } =
     perms: Array.isArray(payload.perms) ? payload.perms.map(String) : [],
     permVersion: String(payload.permVersion || ''),
     isAdmin: Boolean(payload.isAdmin),
+    // 会员进度（注册天数 / 近 30 天活跃）；游客为 null。
+    membership: isLoggedIn ? normalizeMembership(payload.membership) : null,
     source: payload.source || 'server',
   };
 }
@@ -98,7 +101,7 @@ export function applyRbacPayload(payload, { session = loadCloudSession(), logged
   if (!clientLoggedIn && (payload?.loggedIn || payload?.userId)) return false;
   const state = normalizeRbacPayload(payload, { loggedIn: clientLoggedIn, username: session?.username });
   const current = memoryState && memoryState.key === key ? memoryState.state : null;
-  if (current && current.permVersion && current.permVersion === state.permVersion) return false;
+  if (current && current.permVersion && current.permVersion === state.permVersion && sameMembership(current.membership, state.membership)) return false;
   memoryState = { key, state };
   const ls = storage();
   try {

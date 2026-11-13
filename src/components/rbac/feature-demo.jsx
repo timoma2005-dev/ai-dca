@@ -119,7 +119,7 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
               <p className="mt-2 text-sm leading-6 text-slate-500 [text-wrap:balance]">
                 {guest
                   ? '免费注册送 3 个月 VIP，行情、换基、通知都能直接用。'
-                  : `${label ? `「${label}」` : '这个功能'}为 ${roleLabel} 功能，${roleLabel} 为邀请制，由管理员授权。`}
+                  : `${label ? `「${label}」` : '这个功能'}为 ${roleLabel} 功能，${roleLabel} 按注册天数和近 30 天活跃天数自动获得。`}
               </p>
               {limitInfo.keeps ? <p className="mt-1 text-xs leading-5 text-amber-700 [text-wrap:balance]">演示内容保留 {RETAIN_MINUTES} 分钟，{guest ? '注册' : '升级'}后自动带入你的账号。</p> : null}
               {onUpgrade ? (

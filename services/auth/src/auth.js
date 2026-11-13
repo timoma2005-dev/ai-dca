@@ -96,6 +96,7 @@ function createSessionRow(db, user) {
 }
 
 // 新注册赠送会员（2026-10-24 产品决定）：注册即送 3 个月 VIP，到期日为北京时间当天 23:59:59。
+// 2026-11-13 起停用：会员改为按注册天数 + 活跃天数自动升降级（见 membership.js），仅在 AUTH_SIGNUP_GIFT=1 时恢复赠送。
 export const SIGNUP_GIFT = { role: 'vip', months: 3 };
 
 export function signupGiftExpiresAt(now = new Date(), months = SIGNUP_GIFT.months) {
@@ -108,8 +109,7 @@ export function signupGiftExpiresAt(now = new Date(), months = SIGNUP_GIFT.month
 }
 
 function grantSignupGift(db, userId, now) {
-  // 测试（以及临时关闭活动）可设置 AUTH_SIGNUP_GIFT=0。
-  if (String(process.env.AUTH_SIGNUP_GIFT ?? '1') === '0') return;
+  if (String(process.env.AUTH_SIGNUP_GIFT ?? '0') !== '1') return;
   const hasRole = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'roles'").get()
     && db.prepare('SELECT 1 FROM roles WHERE code = ?').get(SIGNUP_GIFT.role);
   if (!hasRole) return;
