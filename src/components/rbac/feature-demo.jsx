@@ -83,7 +83,7 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
 
   const live = ready && typeof window !== 'undefined' && window[DEMO_ACTIVE_FLAG] === tab;
   const ctaShort = guest ? '注册' : '说明';
-  const ctaLong = guest ? '免费注册，领 3 个月 VIP' : '会员说明';
+  const ctaLong = guest ? '免费注册' : '会员说明';
   const CtaIcon = guest ? LogIn : Info;
   const status = limitInfo.timed ? `剩余 ${formatClock(left)}` : limitInfo.limit === 'count' ? '部分数据' : '不限时';
 
@@ -118,7 +118,7 @@ export function FeatureDemo({ tab, label = '', roleLabel = 'VIP', guest = false,
               <h3 className="text-base font-bold text-slate-900">演示结束</h3>
               <p className="mt-2 text-sm leading-6 text-slate-500 [text-wrap:balance]">
                 {guest
-                  ? '免费注册送 3 个月 VIP，行情、换基、通知都能直接用。'
+                  ? '免费注册保存你的配置，常来自动升级 VIP。'
                   : `${label ? `「${label}」` : '这个功能'}为 ${roleLabel} 功能，${roleLabel} 按注册天数和近 30 天活跃天数自动获得。`}
               </p>
               {limitInfo.keeps ? <p className="mt-1 text-xs leading-5 text-amber-700 [text-wrap:balance]">演示内容保留 {RETAIN_MINUTES} 分钟，{guest ? '注册' : '升级'}后自动带入你的账号。</p> : null}

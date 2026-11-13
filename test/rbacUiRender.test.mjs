@@ -111,7 +111,7 @@ test('route guard demo offer: intro points render one per line, signup note is t
   const login = mod.render('AccessGuardPage', { status: 'login', requiredRole: { code: 'vip', name: 'VIP' }, menuLabel: '换基策略', demo, onDemo() {}, autoPromptLogin: false });
   assert.match(login, /data-testid="access-guard-points"/);
   assert.equal((login.match(/<li /g) || []).length, 2);
-  assert.match(login, /免费注册送 3 个月 VIP<\/span><span class="block">数据存在账号里，换设备也能接着用/);
+  assert.match(login, /免费注册，常来自动升级 VIP<\/span><span class="block">数据存在账号里，换设备也能接着用/);
   assert.match(login, /体验一下/);
   assert.doesNotMatch(login, /免费体验|分钟/);
   assert.match(login, /今日还可体验 2 次/);

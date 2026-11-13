@@ -22,7 +22,7 @@ export function DemoDoneDialog({ flow, onRegister, onBack }) {
             <Dialog.Title className="text-base font-extrabold text-slate-900">{flow?.doneTitle || '教程完成 ✓'}</Dialog.Title>
           </div>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            你还没注册，演示里填的内容不会保存，<span className="font-bold text-rose-600">第二天就清空了</span>。注册就送 3 个月 VIP，配置保留下来，溢价拉开时才会真的推到你手机。
+            你还没注册，演示里填的内容不会保存，<span className="font-bold text-rose-600">第二天就清空了</span>。注册后配置会保留下来，常来还能自动升级 VIP。
           </p>
           <button type="button" className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-indigo-600 text-sm font-extrabold text-white hover:bg-indigo-700" onClick={onRegister}>
             免费注册，保留配置

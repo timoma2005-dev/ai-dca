@@ -53,7 +53,7 @@ export function AccessGuardPage({ status, requiredRole, menuLabel = '', username
           <h2 className="mt-4 text-lg font-bold text-slate-900">登录后即可使用{target}</h2>
           <DemoPoints demo={demo} tone="text-indigo-500" />
           <p className="mt-4 text-sm leading-6 text-slate-500" data-testid="access-guard-signup-note">
-            <span className="block font-semibold text-indigo-600">{demo ? '免费注册送 3 个月 VIP' : '免费注册即可使用'}</span>
+            <span className="block font-semibold text-indigo-600">{demo ? '免费注册，常来自动升级 VIP' : '免费注册即可使用'}</span>
             <span className="block">数据存在账号里，换设备也能接着用</span>
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">

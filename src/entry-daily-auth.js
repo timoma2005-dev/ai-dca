@@ -71,7 +71,7 @@ function build() {
     <div class="da-tabs"><button type="button" data-t="register">注册</button><button type="button" data-t="login">登录</button></div>
     <label for="da-user">用户名</label><input id="da-user" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="至少 3 位" />
     <label for="da-pw">登录密码</label><input id="da-pw" type="password" />
-    <div class="da-gift">新用户免费注册，送 3 个月 VIP</div>
+    <div class="da-gift">新用户免费注册，常来自动升级 VIP</div>
     <div class="da-err" role="alert"></div>
     <button type="submit" class="da-go">注册并开启提醒</button>
   </form></div>`);

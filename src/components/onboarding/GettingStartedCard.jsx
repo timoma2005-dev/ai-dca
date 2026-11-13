@@ -109,13 +109,13 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish, onSki
           <span className="gs-pop flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600" style={{ animation: 'gs-pop .6s ease-out both' }}><PartyPopper className="h-5 w-5" aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-extrabold text-slate-900">{guest ? '恭喜，教程都完成了 🎉' : '恭喜，全部完成 🎉'}</h2>
-            <p className="text-xs text-slate-500">{guest ? '注册就送 3 个月 VIP，把切换方案和手机通知用到你自己的账户上。' : '切换方案和通知都已就绪，溢价拉开时会第一时间推到你手机。'}</p>
+            <p className="text-xs text-slate-500">{guest ? '注册后把切换方案保存到自己的账户，常来自动升级 VIP。' : '切换方案和通知都已就绪，溢价拉开时会第一时间推到你手机。'}</p>
           </div>
           <button type="button" className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50" onClick={finish}>收起</button>
         </div>
         {guest ? (
           <button type="button" className="relative mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-indigo-600 text-sm font-extrabold text-white hover:bg-indigo-700" onClick={() => onAction(tasks.items[0])}>
-            免费注册，领 3 个月 VIP
+            免费注册
           </button>
         ) : null}
       </section>

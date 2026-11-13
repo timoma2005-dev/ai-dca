@@ -3,7 +3,7 @@
 export const GUEST_TASKS = [
   {
     id: 'register',
-    title: '注册账号，领 3 个月 VIP',
+    title: '注册账号，常来自动升级 VIP',
     description: '溢价拉开时推送换基信号，近 6 周已推送 9,000+ 条',
     cta: '去注册',
     action: 'register'
