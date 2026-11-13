@@ -12,6 +12,7 @@ import { cx, inputClass, primaryButtonClass } from './experience-ui.jsx';
 import { PrivacyNotice } from './PrivacyNotice.jsx';
 import { GettingStartedEntry } from './onboarding/GettingStartedSlot.jsx';
 import { LoginSyncPendingEntry } from './login-sync-pending-entry.jsx';
+import { MembershipProgress } from './membership/MembershipProgress.jsx';
 import { evaluateTabAccess } from '../app/rbac/menuModel.js';
 import { authFieldAttrs, missingAuthField, resolveAuthFormHint } from '../app/authFormState.js';
 
@@ -249,6 +250,13 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
               <div className="mb-1.5 text-[11px] font-semibold text-slate-400">我的角色</div>
               <RoleList roles={rbac.roles} />
             </div>
+          ) : null}
+          {!rbac.isAdmin ? (
+            <MembershipProgress
+              membership={rbac.membership}
+              effectiveTier={['svip', 'vip'].includes(rbac.topRole?.code) ? rbac.topRole.code : ''}
+              onOpened={closeMenu}
+            />
           ) : null}
           <LoginSyncPendingEntry onOpened={closeMenu} />
           <GettingStartedEntry loggedIn accessOf={(tab) => evaluateTabAccess(rbac, tab)} onOpened={closeMenu} />

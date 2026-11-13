@@ -87,3 +87,26 @@ export function markMembershipSeen(userKey, m) {
     window.localStorage.setItem(MEMBERSHIP_SEEN_KEY, JSON.stringify(seen));
   } catch { /* 隐私模式：本次会话内不再弹由组件状态保证 */ }
 }
+
+/** 账号菜单里的升级进度条：下一级目标、活跃 / 注册两项进度（已是最高级时 target 为当前级，用于保级）。 */
+export function membershipMeter(m) {
+  if (!m) return null;
+  const rules = [...m.rules].sort((x, y) => (TIER_RANK[x.role] || 0) - (TIER_RANK[y.role] || 0));
+  const next = rules.find((r) => (TIER_RANK[r.role] || 0) > (TIER_RANK[m.tier] || 0));
+  const target = next || rules.find((r) => r.role === m.tier) || null;
+  if (!target) return null;
+  const activePct = target.minActiveDays ? Math.min(1, m.activeDays / target.minActiveDays) : 1;
+  const regPct = target.minRegisteredDays ? Math.min(1, m.registeredDays / target.minRegisteredDays) : 1;
+  return {
+    upgrading: Boolean(next),
+    from: tierName(m.tier),
+    to: target.name,
+    activeDays: m.activeDays,
+    activeGoal: target.minActiveDays,
+    registeredDays: m.registeredDays,
+    registeredGoal: target.minRegisteredDays,
+    windowDays: m.windowDays,
+    // 两个条件都要满足，进度取较慢的那一项。
+    percent: Math.round(Math.min(activePct, regPct) * 100),
+  };
+}
