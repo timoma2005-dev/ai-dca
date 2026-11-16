@@ -124,7 +124,7 @@ export function getChartConfigFromUrl() {
 
   // 图表类型
   const chartType = params.get('chartType') || 'area';
-  const validChartTypes = ['area', 'line', 'candlestick'];
+  const validChartTypes = ['area', 'line', 'bar', 'baseline', 'candlestick'];
   const normalizedChartType = validChartTypes.includes(chartType) ? chartType : 'area';
 
   // 指标列表

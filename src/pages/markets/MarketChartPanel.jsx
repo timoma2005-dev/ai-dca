@@ -6,6 +6,7 @@ import { cx } from '../../components/experience-ui.jsx';
 import { formatMarketPrice, formatNumber, formatPercentNoPlus, formatSignedPercent, formatSymbolDisplay } from './marketDisplayUtils.js';
 import { buildChartRowsWithTradeMarkerDomain, buildVisibleTradeMarkerPoints, shanghaiDateFromEpochSec } from './marketFundMetrics.js';
 import { useClickOutside } from '../../hooks/useClickOutside.js';
+import { BaselineChart } from '../../components/detent/baseline/BaselineChart.jsx';
 
 // ---------- 图表工具栏（图表类型 / 指标 / 对比标的） ----------
 const toolbarIconClass = 'h-[18px] w-[18px] stroke-[2.2] text-[var(--market-text-strong)]';
@@ -16,12 +17,14 @@ export const TOOLBAR_ICONS = {
   bar: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={toolbarIconClass}><path d="M5 20V9" /><path d="M12 20V4" /><path d="M19 20v-7" /><path d="M3 20h18" /></svg>,
   pie: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={toolbarIconClass}><path d="M12 3v9h9" /><path d="M21 12a9 9 0 1 1-9-9" /><path d="M12 12l6.4 6.4" /></svg>,
   indicators: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={toolbarIconClass}><path d="M4 17c3-8 6 4 9-4s5 0 7-6" /><path d="M4 7h4" /><path d="M16 17h4" /></svg>,
+  baseline: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={toolbarIconClass}><path d="M3 13h18" strokeDasharray="2 2.5" /><path d="M3 17c3-1 4-8 7-8s3 9 6 7 3-10 5-11" /></svg>,
   compare: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className={toolbarIconClass}><path d="M4 8c2.5-3 5.5-3 8 0s5.5 3 8 0" /><path d="M4 16c2.5 3 5.5 3 8 0s5.5-3 8 0" /></svg>,
 };
 export const CHART_TYPE_OPTIONS = [
   { key: 'area', label: '面积图', hint: '连续走势与面积填充', icon: TOOLBAR_ICONS.area },
   { key: 'line', label: '点线图', hint: '连续折线展示', icon: TOOLBAR_ICONS.indicators },
   { key: 'bar', label: '柱形图', hint: '柱形展示收盘价', icon: TOOLBAR_ICONS.bar },
+  { key: 'baseline', label: '基准图', hint: '点任一天作基准看涨跌', icon: TOOLBAR_ICONS.baseline },
 ];
 export const CHART_TYPE_LABEL = CHART_TYPE_OPTIONS.reduce((acc, o) => { acc[o.key] = o.label; return acc; }, {});
 export const CN_FUND_PARAM_OPTIONS = [
@@ -834,5 +837,20 @@ export function ChartToolbarPopover({ label, icon, active, children, align = 'le
         </div>
       ) : null}
     </div>
+  );
+}
+
+// 基准图（Detent Baseline chart）：点图上任一天设为基准，之上红、之下绿。
+export function SymbolBaselineChart({ candles, tf, valueRow = null, symbol = '' }) {
+  const data = useMemo(() => (Array.isArray(candles) ? candles : [])
+    .filter((candle) => Number.isFinite(Number(candle?.c)))
+    .map((candle) => ({ label: fmtChartLabel(candle.t, tf), value: Number(candle.c) })), [candles, tf]);
+  if (data.length < 2) return null;
+  return (
+    <BaselineChart
+      data={data}
+      label={`${formatSymbolDisplay(symbol)} 基准图`}
+      format={(value) => formatMarketPrice(value, valueRow)}
+    />
   );
 }

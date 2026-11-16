@@ -18,6 +18,7 @@ import {
   COMPARE_MAIN_COLOR,
   ChartToolbarPopover,
   INDICATOR_OPTIONS,
+  SymbolBaselineChart,
   SymbolDetailChart,
   TOOLBAR_ICONS,
 } from './MarketChartPanel.jsx';
@@ -803,7 +804,8 @@ export function SymbolDetailPanel({
     : (market !== 'cn' || cnFundParam === 'price'
       ? chartCandles
       : buildDetailMetricCandles(chartCandles, navHistoryState?.items, cnFundParam, premiumState, chartRange, isQdii, { code: mainFundCode, customRange: chartCustomRange }));
-  const effectiveChartType = chartType;
+  const baselineActive = chartType === 'baseline' && compareSymbols.length === 0 && cnFundParam !== 'premium';
+  const effectiveChartType = chartType === 'baseline' ? 'area' : chartType;
   const premiumCompareMode = market === 'cn' && cnFundParam === 'premium';
   const premiumUnavailable = isCnOtcFund && cnFundParam === 'premium';
   const buildPremiumTableRow = (quoteRow, keyPrefix, metricCandles) => {
@@ -1307,6 +1309,13 @@ export function SymbolDetailPanel({
           ) : null}
           {premiumUnavailable ? (
             <div className="flex h-full items-center justify-center text-sm font-medium text-[#5f6368]">场外基金无溢价数据</div>
+          ) : hasFullCandles && baselineActive ? (
+            <SymbolBaselineChart
+              candles={effectiveChartCandles}
+              tf={chartTf}
+              valueRow={cnFundParam === 'price' ? row : null}
+              symbol={cnFundParam === 'price' ? displaySymbol : CN_FUND_PARAM_LABEL[cnFundParam]}
+            />
           ) : hasFullCandles ? (
             <SymbolDetailChart
               candles={effectiveChartCandles}
