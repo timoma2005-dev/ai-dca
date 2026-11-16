@@ -11,6 +11,7 @@ import RadarRanking from './RadarRanking.jsx';
 import RadarSidebar from './RadarSidebar.jsx';
 import RadarComputeDialog from './RadarComputeDialog.jsx';
 import RadarScoreTable from './RadarScoreTable.jsx';
+import RadarScoreExplainer from './RadarScoreExplainer.jsx';
 import RadarReviewPanel from './RadarReviewPanel.jsx';
 import { hasScoring } from '../../app/radarScoreModel.js';
 
@@ -160,6 +161,7 @@ export default function RadarPanel({ session }) {
       )}
       {hasSnapshot && hasScoring(radar.data) ? (
         <>
+          <RadarScoreExplainer data={radar.data} />
           <RadarScoreTable data={radar.data} />
         </>
       ) : (

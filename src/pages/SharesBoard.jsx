@@ -2,12 +2,15 @@
  * 份额页看板视图（tab=shares）。
  * - PC：顶部统计小块 + 搜索 + 卡片/表格切换 + 刷新（参考 tab=fundSwitch），卡片 auto-fill 270px；
  *   表格模式只替换卡片区，顶部、日期行、筛选不变；视图选择存 localStorage `etf-shares:view-mode`。
+ * - 视图三选一（Detent Shift 风格，滑块随选项移动）：卡片 / 表格 / 变化；「变化」按盘前份额变化排成发散条形图，
+ *   条目在视图与筛选间切换时平移到新位置（motion layout）。手机只有 列表 / 变化 两项。
  * - 手机（≤640px）：Home 面板式紧凑列表，标题「N只基金收紧，对比 P → T。」+ 三行条目。
  * - 点「PCF 清单」/ 手机条目弹出居中弹窗（X、背景、Esc 关闭）：「PCF 清单」页签复用 PcfDetailDrawer，「历史」页签（SVIP）见 shares/EtfHistoryTab.jsx。
  * 数据：快照 sharesClient（worker 预计算 limitChanges / prevLimitDate / 沪市份额 / 行情名称）；
  * 老快照没有 limitChanges 时，按 code + 日期用 pcfDetailClient 读两天 PCF 自行对比（模块级缓存，失败重试一次）。
  */
-import { Fragment, Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useEffect, useId, useState } from 'react';
+import { LayoutGroup, motion, useReducedMotion } from 'motion/react';
 import { Search, RefreshCw, Inbox, CircleAlert, X, Diamond } from 'lucide-react';
 import { previousSession } from '../../shared/etfPcfSharesSchema.js';
 import { sharesClient, shanghaiAccessDay } from '../app/etfPcfSharesClient.js';
@@ -570,28 +573,165 @@ function ListIcon() {
     </svg>
   );
 }
-function ViewToggle({ mode, setMode }) {
+function ChangeIcon() {
   return (
-    <div className="nx-toggle" role="group" aria-label="视图切换">
-      <button
-        type="button"
-        className={mode === 'card' ? 'on' : ''}
-        aria-pressed={mode === 'card'}
-        title="卡片"
-        onClick={() => setMode('card')}
-      >
-        <GridIcon />
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3v18" />
+      <path d="M12 6h7M12 11h4M5 16h7M8 20h4" />
+    </svg>
+  );
+}
+const VIEW_OPTIONS = [
+  ['card', '卡片', GridIcon],
+  ['table', '表格', ListIcon],
+  ['change', '变化', ChangeIcon]
+];
+const MOBILE_VIEW_OPTIONS = [
+  ['card', '列表', ListIcon],
+  ['change', '变化', ChangeIcon]
+];
+const SHIFT_SPRING = { type: 'spring', stiffness: 520, damping: 40, mass: 0.7 };
+// Detent「Shift」：分段切换，白色滑块跟着选项滑过去。
+function ViewToggle({ mode, setMode, options = VIEW_OPTIONS, labels = false }) {
+  const group = useId();
+  const reduce = useReducedMotion();
+  return (
+    <LayoutGroup id={group}>
+      <div className={`nx-toggle${labels ? ' with-labels' : ''}`} role="group" aria-label="视图切换">
+        {options.map(([key, label, Icon]) => {
+          const on = mode === key || (key === 'card' && mode === 'table' && options === MOBILE_VIEW_OPTIONS);
+          return (
+            <button
+              key={key}
+              type="button"
+              className={on ? 'on' : ''}
+              aria-pressed={on}
+              title={label}
+              onClick={() => setMode(key)}
+            >
+              {on && (
+                <motion.span
+                  layoutId="nx-toggle-pill"
+                  className="nx-toggle-pill"
+                  transition={reduce ? { duration: 0 } : SHIFT_SPRING}
+                />
+              )}
+              <span className="nx-toggle-inner">
+                <Icon />
+                {labels && <span>{label}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </LayoutGroup>
+  );
+}
+
+// 「变化」视图：每只基金一行，盘前份额变化画成以 0 为中线的发散条（增红减绿），按变化从大到小排。
+function ChangeRow({ row, calendar, max, onOpen, onOverall, atLimit, index }) {
+  const info = useReportOverall(row, onOverall, calendar);
+  const ov = info.overall;
+  const reduce = useReducedMotion();
+  const d = row.deltaShares;
+  const has = Number.isFinite(d) && d !== 0;
+  const frac = has && max > 0 ? Math.max(0.02, Math.abs(d) / max) : 0;
+  const delta = deltaView(d, '无变化');
+  const base = Number.isFinite(row.shares) && Number.isFinite(d) ? row.shares - d : null;
+  const pct = has && base > 0 ? (d / base) * 100 : null;
+  return (
+    <motion.li
+      layout={reduce ? false : 'position'}
+      initial={reduce ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...SHIFT_SPRING, delay: reduce ? 0 : Math.min(index, 12) * 0.018 }}
+      className={`nx-chg-row ${rowClass(ov)}`}
+    >
+      <button type="button" className="nx-chg-btn" aria-haspopup="dialog" onClick={onOpen}>
+        <span className="nx-chg-name">
+          <b title={row.name}>{row.name}</b>
+          <span className="nx-chg-sub">
+            {row.code}
+            {isMoved(ov) || ov === 'mixed' ? (
+              <span className={`nx-chg-ov ${CLS[ov] || ''}`}>{overallLabel(ov)}</span>
+            ) : null}
+            {atLimit && <span className="nx-chg-ov warn">额度用满</span>}
+          </span>
+        </span>
+        <span className="nx-chg-track" aria-hidden="true">
+          <span className="nx-chg-axis" />
+          {has && (
+            <motion.span
+              className={`nx-chg-bar ${d > 0 ? 'pos' : 'neg'}`}
+              initial={reduce ? false : { scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={reduce ? { duration: 0 } : { ...SHIFT_SPRING, delay: 0.05 + Math.min(index, 12) * 0.02 }}
+              style={{ width: `${frac * 50}%`, [d > 0 ? 'left' : 'right']: '50%', transformOrigin: d > 0 ? 'left' : 'right' }}
+            />
+          )}
+        </span>
+        <span className="nx-chg-val">
+          <span className={`nx-delta ${delta.cls}`}>{delta.text}</span>
+          <span className="nx-chg-pct">
+            {pct !== null ? `${pct > 0 ? '+' : ''}${Math.abs(pct) >= 10 ? pct.toFixed(0) : pct.toFixed(2)}%` : `总 ${fmtShares(row.shares)}`}
+          </span>
+        </span>
       </button>
-      <button
-        type="button"
-        className={mode === 'table' ? 'on' : ''}
-        aria-pressed={mode === 'table'}
-        title="表格"
-        onClick={() => setMode('table')}
-      >
-        <ListIcon />
-      </button>
-    </div>
+    </motion.li>
+  );
+}
+
+function ChangeView({ list, calendar, onOpen, onOverall, atLimitCodes, range }) {
+  const sorted = list.slice().sort((a, b) => {
+    const x = Number.isFinite(a.deltaShares) ? a.deltaShares : -Infinity;
+    const y = Number.isFinite(b.deltaShares) ? b.deltaShares : -Infinity;
+    return y - x;
+  });
+  const max = sorted.reduce((m, r) => (Number.isFinite(r.deltaShares) ? Math.max(m, Math.abs(r.deltaShares)) : m), 0);
+  const up = sorted.filter((r) => r.deltaShares > 0);
+  const down = sorted.filter((r) => r.deltaShares < 0);
+  const sum = (arr) => arr.reduce((t, r) => t + r.deltaShares, 0);
+  return (
+    <section className="nx-chg">
+      <p className="nx-chg-head">
+        {up.length ? (
+          <>
+            <b>{up.length}</b> 只份额增加，合计 <span className="nx-delta pos">+{fmtShares(sum(up))}</span>
+          </>
+        ) : (
+          '没有份额增加的基金'
+        )}
+        {down.length ? (
+          <>
+            ；<b>{down.length}</b> 只减少，合计 <span className="nx-delta neg">{fmtShares(sum(down))}</span>
+          </>
+        ) : null}
+        <span className="nx-chg-range">{range}</span>
+      </p>
+      <ul className="nx-chg-list">
+        {sorted.map((r, i) => (
+          <ChangeRow
+            key={r.code}
+            index={i}
+            row={r}
+            calendar={calendar}
+            max={max}
+            onOpen={onOpen(r)}
+            onOverall={onOverall}
+            atLimit={atLimitCodes.has(r.code)}
+          />
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -617,7 +757,8 @@ function FilterChips({ rows, ov, filter, setFilter, className = '' }) {
 function useViewMode() {
   const [mode, setModeRaw] = useState(() => {
     try {
-      return globalThis.localStorage?.getItem(VIEW_KEY) === 'table' ? 'table' : 'card';
+      const v = globalThis.localStorage?.getItem(VIEW_KEY);
+      return v === 'table' || v === 'change' ? v : 'card';
     } catch {
       return 'card';
     }
@@ -742,6 +883,11 @@ export default function SharesBoard({ DetailDrawer }) {
           </div>
         )}
         {c && (
+          <div className="nx-m-view">
+            <ViewToggle mode={mode} setMode={setMode} options={MOBILE_VIEW_OPTIONS} labels />
+          </div>
+        )}
+        {c && (
           <FilterChips rows={rows} ov={ov} filter={filter} setFilter={setFilter} className="nx-m-filters" />
         )}
         {c && rows.length > 0 && <HistoryHint compact onClick={firstHistory} />}
@@ -755,7 +901,17 @@ export default function SharesBoard({ DetailDrawer }) {
             )}
           </div>
         )}
-        {c && (
+        {c && mode === 'change' && list.length > 0 && (
+          <ChangeView
+            list={list}
+            calendar={c.calendar}
+            onOpen={(r) => open(r)}
+            onOverall={onOverall}
+            atLimitCodes={atLimitCodes}
+            range={`${md(c.prevDate)} → ${md(c.date)}`}
+          />
+        )}
+        {c && mode !== 'change' && (
           <div className="nx-m-list">
             {list.map((r) => (
               <MobileRow
@@ -819,7 +975,7 @@ export default function SharesBoard({ DetailDrawer }) {
               </button>
             )}
           </label>
-          <ViewToggle mode={mode} setMode={setMode} />
+          <ViewToggle mode={mode} setMode={setMode} labels />
           <button type="button" className="refresh-btn" aria-label="刷新" title="刷新" onClick={refresh}>
             <RefreshCw size={15} aria-hidden="true" />
           </button>
@@ -866,7 +1022,16 @@ export default function SharesBoard({ DetailDrawer }) {
       )}
       {c &&
         list.length > 0 &&
-        (mode === 'table' ? (
+        (mode === 'change' ? (
+          <ChangeView
+            list={list}
+            calendar={c.calendar}
+            onOpen={(r) => open(r)}
+            onOverall={onOverall}
+            atLimitCodes={atLimitCodes}
+            range={`份额 ${c.prevDate || '—'} → ${c.date}`}
+          />
+        ) : mode === 'table' ? (
           <section className="nx-table-wrap">
             <table className="nx-table">
               <thead>
