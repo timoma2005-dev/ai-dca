@@ -175,7 +175,7 @@ export const ONBOARDING_FLOWS = {
         id: 'switchDemo.threshold',
         target: 'switch-threshold',
         title: '第二步：填切换阈值',
-        body: '溢价差扩大到「切出阈值」以上，提醒你从 H 组换到 L 组；回落到「切回阈值」以下再换回来。示例已填好 0.10% / 0.90%，可以改改试试。',
+        body: '条件写成了一句话：点句子里的数字可以直接输入，按住左右拖也能微调；点「H 组」可以改成持有 L 组。示例已填好 0.90% / 0.10%，可以改改试试。',
         waitMs: 15000
       },
       {

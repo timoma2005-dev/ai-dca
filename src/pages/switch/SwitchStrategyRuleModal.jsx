@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftRight, Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog.jsx';
 import { Field, TextInput, cx, primaryButtonClass, secondaryButtonClass } from '../../components/experience-ui.jsx';
 import { resolveCnFundName } from '../markets/marketsCatalog.js';
+import { Phrase } from '../../components/detent/phrase/Phrase.jsx';
 import { buildDefaultSwitchRuleName, validateSwitchRuleName } from './switchRuleName.js';
 
 const CODE_PATTERN = /^\d{6}$/;
@@ -51,6 +52,33 @@ function describeCodeList(codes, fallback) {
 
 function sanitizePctInput(value) {
   return String(value || '').replace(/[^\d.-]/g, '').slice(0, 8);
+}
+
+
+const SIDE_OPTIONS = [
+  { value: 'H', label: 'H 组（高溢价）' },
+  { value: 'L', label: 'L 组（低溢价）' }
+];
+const PCT_DIAL = { min: -5, max: 10, step: 0.01, suffix: '%' };
+
+function toDialNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export function buildSwitchConditionParts(holdingSide) {
+  const side = { id: 'side', label: '当前持有', options: SIDE_OPTIONS };
+  const upper = { id: 'upper', label: 'H→L 切出阈值', ...PCT_DIAL };
+  const lower = { id: 'lower', label: 'L→H 切回阈值', ...PCT_DIAL };
+  return holdingSide === 'L'
+    ? ['我现在持有 ', side, '。溢价差回落到 ', lower, ' 以下，提醒我换到 H 组；之后升到 ', upper, ' 以上，再提醒换回 L 组。']
+    : ['我现在持有 ', side, '。溢价差升到 ', upper, ' 以上，提醒我换到 L 组；之后回落到 ', lower, ' 以下，再提醒换回 H 组。'];
+}
+
+function shortCodeName(codes, fallback) {
+  if (!codes.length) return fallback;
+  const name = resolveCnFundName(codes[0]) || codes[0];
+  return codes.length > 1 ? `${name} 等 ${codes.length} 只` : name;
 }
 
 export function SwitchStrategyRuleModal({
@@ -321,61 +349,6 @@ export function SwitchStrategyRuleModal({
             />
           </Field>
 
-          {/* 持仓按钮：根据持有 H 或 L 单独判断 */}
-          <Field className="min-w-0" label="当前持仓标的" helper="选择您当前实际持有的标的，系统将据此执行单向触发提醒">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setHoldingSide('H')}
-                className={cx(
-                  'flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer',
-                  holdingSide === 'H'
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                )}
-              >
-                <div className="flex items-center space-x-1">
-                  <span className="w-3.5 h-3.5 rounded bg-rose-100 text-rose-700 font-bold flex items-center justify-center text-[9px]">H</span>
-                  <span className="font-bold">持有 H 标的</span>
-                </div>
-                <span className="text-[10px] text-slate-400 font-mono mt-1">仅监控价差上阈值</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setHoldingSide('L')}
-                className={cx(
-                  'flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer',
-                  holdingSide === 'L'
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                )}
-              >
-                <div className="flex items-center space-x-1">
-                  <span className="w-3.5 h-3.5 rounded bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-[9px]">L</span>
-                  <span className="font-bold">持有 L 标的</span>
-                </div>
-                <span className="text-[10px] text-slate-400 font-mono mt-1">仅监控价差下阈值</span>
-              </button>
-
-            </div>
-            <div className="mt-2 flex min-w-0 items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5">
-              <div className="min-w-0 flex-1 overflow-hidden text-[11px] leading-5 text-indigo-800">
-                当前监控 <span className="font-bold">{holdingSide}→{opponentSide}</span>
-                <div className="truncate text-indigo-600">对手方：{describeCodeList(opponentCodes, `${opponentSide} 组未配置`)}</div>
-              </div>
-              <button
-                type="button"
-                disabled={!opponentCodes.length}
-                onClick={() => setHoldingSide(opponentSide)}
-                className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-200 bg-white px-2 py-2 text-[11px] font-bold text-indigo-700 shadow-xs transition-colors hover:border-indigo-300 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2.5"
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5" />
-                切换持有 {opponentSide}
-              </button>
-            </div>
-          </Field>
-
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="H 组标的代码" helper={describeCodeList(highCodes, '高溢价组，可用空格或逗号分隔')}>
               <TextInput value={highCode} inputMode="text" placeholder="159632, 159501" onChange={(event) => setHighCode(sanitizeCodeListInput(event.target.value))} />
@@ -385,14 +358,25 @@ export function SwitchStrategyRuleModal({
             </Field>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2" data-onboarding="switch-threshold">
-            <Field label="L→H 切回阈值" rightLabel="%" helper="溢价差回落到该值以下时提醒切回 H 组">
-              <TextInput value={lowerPct} inputMode="decimal" placeholder="0.10" onChange={(event) => setLowerPct(sanitizePctInput(event.target.value))} />
-            </Field>
-            <Field label="H→L 切出阈值" rightLabel="%" helper="溢价差扩大到该值以上时提醒切出到 L 组">
-              <TextInput value={upperPct} inputMode="decimal" placeholder="0.90" onChange={(event) => setUpperPct(sanitizePctInput(event.target.value))} />
-            </Field>
-          </div>
+          <Phrase
+            data-onboarding="switch-threshold"
+            title="提醒条件"
+            aside="点数字可输入，左右拖动微调"
+            parts={buildSwitchConditionParts(holdingSide)}
+            value={{
+              side: holdingSide,
+              upper: toDialNumber(upperPct, 0.9),
+              lower: toDialNumber(lowerPct, 0.1)
+            }}
+            onChange={(next) => {
+              if (next.side !== holdingSide) setHoldingSide(next.side === 'L' ? 'L' : 'H');
+              if (Number(next.upper) !== Number(upperPct)) setUpperPct(Number(next.upper).toFixed(2));
+              if (Number(next.lower) !== Number(lowerPct)) setLowerPct(Number(next.lower).toFixed(2));
+            }}
+            says={() => (opponentCodes.length
+              ? `现在盯 ${holdingSide}→${opponentSide}：卖出 ${shortCodeName(holdingSide === 'H' ? highCodes : lowCodes, `${holdingSide} 组`)}，换成 ${shortCodeName(opponentCodes, `${opponentSide} 组`)}`
+              : `${opponentSide} 组还没填代码`)}
+          />
 
           {autoCompleted && autoMessage ? (
             <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-5 text-emerald-700">{autoMessage}</p>
