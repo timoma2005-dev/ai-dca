@@ -1,4 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
+import { motionTokens } from '../../components/arc/lib/motion-tokens.js';
 import { ArrowUp, Bell, CalendarClock, Loader2, Maximize2, Search, Star, TrendingDown, TrendingUp, Wallet, X, BarChart3 } from 'lucide-react';
 import { fetchKline, fetchQuotes, searchSymbols } from '../../app/marketsApi.js';
 import { CN_ETF_WATCHLIST_PRESETS } from '../../app/marketsWatchlistStorage.js';
@@ -169,6 +171,8 @@ export function SymbolDetailPanel({
   // 本地直连：数据来自浏览器直连行情厂商，隐藏依赖服务端的对比 / 回测 / 溢价历史 / 资金年报。
   localDirect = false,
 }) {
+  const rangeTabsId = useId();
+  const reduceMotion = useReducedMotion();
   const urlChartConfig = getChartConfigFromUrl();
   const [chartType, setChartType] = useState(urlChartConfig.chartType);
   const [cnFundParam, setCnFundParam] = useState(localDirect ? 'price' : urlChartConfig.cnFundParam);
@@ -1374,12 +1378,20 @@ export function SymbolDetailPanel({
                     tabIndex={selected ? 0 : -1}
                     onClick={() => handleChartRangeSelect(tab.key)}
                     className={cx(
-                      'relative flex h-7 min-w-[38px] shrink-0 items-center justify-center rounded-[10px] px-2 transition-colors sm:h-7 sm:min-w-[44px] sm:rounded-[11px] sm:px-2.5',
+                      'relative isolate flex h-7 min-w-[38px] shrink-0 items-center justify-center rounded-[10px] px-2 transition-colors sm:h-7 sm:min-w-[44px] sm:rounded-[11px] sm:px-2.5',
                       highlighted
-                        ? 'bg-[#EEF1F5] font-bold text-[#202124]'
-                        : 'text-[#5f6368] hover:bg-white/60 hover:text-[#202124]'
+                        ? 'font-semibold text-[#202124]'
+                        : 'text-[#5f6368] hover:text-[#202124]'
                     )}
                   >
+                    {highlighted ? (
+                      <motion.span
+                        layoutId={`${rangeTabsId}-range`}
+                        className="absolute inset-0 -z-10 rounded-[inherit] bg-white shadow-[var(--arc-shadow-resting)]"
+                        transition={reduceMotion ? { duration: 0 } : motionTokens.spring.morph}
+                        aria-hidden="true"
+                      />
+                    ) : null}
                     {tab.label}
                   </button>
                 );

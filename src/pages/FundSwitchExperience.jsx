@@ -1,6 +1,7 @@
 import { Suspense, lazy, useState } from 'react';
 import { BarChart3, History, Settings2 } from 'lucide-react';
 import { cx } from '../components/experience-ui.jsx';
+import SegmentedControl from '../components/arc/segmented-control/segmented-control.jsx';
 import { SwitchTestFeedbackModal } from '../components/fund-switch/SwitchTestFeedbackModal.jsx';
 
 const SwitchStrategyBoardExperienceLazy = lazy(() => import('./switch/SwitchStrategyBoardExperience.jsx').then((m) => ({ default: m.SwitchStrategyBoardExperience })));
@@ -40,33 +41,18 @@ export function FundSwitchExperience({ embedded = false } = {}) {
 
   return (
     <div className={cx('mx-auto max-w-7xl space-y-3 sm:space-y-4', embedded ? 'px-3 sm:px-6' : 'px-3 sm:px-6 lg:px-8 py-3 sm:py-5')}>
-      {/* 顶部子选项卡 */}
-      <div className="bg-white rounded-xl border border-slate-200 p-1.5 shadow-xs">
-        <div className="grid w-full grid-cols-3 gap-1 py-0.5 sm:flex sm:w-auto sm:flex-1 sm:items-center">
-          {SUB_TABS.map((tab) => {
-            const Icon = tab.icon;
-            const active = activeView === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => selectView(tab.id)}
-                className={cx(
-                  'tab-btn min-w-0 flex items-center justify-center space-x-1.5 rounded-lg px-2 py-1.5 font-medium text-xs transition-colors cursor-pointer sm:shrink-0 sm:px-3 sm:text-sm',
-                  active
-                    ? 'bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                )}
-              >
-                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                <span className="truncate">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* 顶部子选项卡：Arc 分段控件，选中块在三项之间滑动 */}
+      <SegmentedControl
+        className="arc-seg-brand w-full sm:w-auto"
+        fullWidth
+        label="基金切换视图"
+        value={activeView}
+        onValueChange={selectView}
+        options={SUB_TABS.map((tab) => {
+          const Icon = tab.icon;
+          return { value: tab.id, label: <><Icon className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden="true" /><span>{tab.label}</span></> };
+        })}
+      />
 
       <div role="tabpanel" className="min-w-0">
         <Suspense fallback={<SubViewLoadingFallback />}>

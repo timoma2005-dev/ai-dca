@@ -1,5 +1,7 @@
 import { demoAccessToken } from '../../app/demo/demoMode.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { motionTokens } from '../../components/arc/lib/motion-tokens.js';
 import {
   loadSwitchConfigFromWorker,
   loadSwitchSnapshotFromWorker,
@@ -121,6 +123,7 @@ function snapshotHasRulePremium(snapshot, ruleId) {
 
 export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade } = {}) {
   const demoActive = useDemoActive();
+  const reduceMotion = useReducedMotion();
   const featureDemo = useFeatureDemo();
   const [config, setConfig] = useState(() => normalizeSwitchConfigShape(readSwitchConfigCache()));
   const [snapshot, setSnapshot] = useState(null);
@@ -321,18 +324,29 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
       {/* 方案卡片列表 */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {visibleRows.map((row) => (
-            <SwitchStrategyCardItem
-              key={row.id}
-              row={row}
-              busy={busyRuleId === row.id}
-              testing={testingRuleId === row.id}
-              onToggle={() => handleToggleRule(row)}
-              onEdit={() => { setEditingRuleId(row.id); setModalOpen(true); }}
-              onTest={() => handleTestRule(row)}
-              onDelete={() => handleDeleteRule(row)}
-            />
-          ))}
+          {/* 搜索/删除时卡片淡出，其余卡片沿网格滑到新位置；新建的方案从下方轻微上浮 */}
+          <AnimatePresence initial={false} mode="popLayout">
+            {visibleRows.map((row) => (
+              <motion.div
+                key={row.id}
+                layout={!reduceMotion}
+                initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={reduceMotion ? { opacity: 0, transition: { duration: 0.1 } } : { opacity: 0, scale: 0.97, transition: { duration: motionTokens.duration.fast, ease: [...motionTokens.ease.standard] } }}
+                transition={reduceMotion ? { duration: 0 } : motionTokens.spring.smooth}
+              >
+                <SwitchStrategyCardItem
+                  row={row}
+                  busy={busyRuleId === row.id}
+                  testing={testingRuleId === row.id}
+                  onToggle={() => handleToggleRule(row)}
+                  onEdit={() => { setEditingRuleId(row.id); setModalOpen(true); }}
+                  onTest={() => handleTestRule(row)}
+                  onDelete={() => handleDeleteRule(row)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       ) : (
         <SwitchStrategyTable

@@ -1,4 +1,5 @@
 import { cx } from '../../components/experience-ui.jsx';
+import Switch from '../../components/arc/switch/switch.jsx';
 import { formatSwitchDate, formatSwitchPercent, formatSwitchPrice } from '../switchStrategyHelpers.js';
 import { resolveCnFundName } from '../markets/marketsCatalog.js';
 import { SwitchStrategySpreadGauge } from './SwitchStrategySpreadGauge.jsx';
@@ -65,7 +66,7 @@ export function SwitchStrategyCardItem({
   const computedAt = formatSwitchDate(row.computedAt);
 
   return (
-    <div className="flex flex-col justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs transition-all hover:border-indigo-300">
+    <div className="arc-lift flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs hover:border-indigo-200">
       <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-3.5 py-2.5 sm:px-4 sm:py-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h3 className="truncate text-xs font-bold text-slate-900 sm:text-sm">{row.name}</h3>
@@ -81,16 +82,13 @@ export function SwitchStrategyCardItem({
             {holdingLabel(row, holdingSide)}
           </span>
         </div>
-        <label className="relative ml-2 inline-flex shrink-0 cursor-pointer items-center">
-          <input
-            type="checkbox"
-            checked={Boolean(row.enabled)}
-            disabled={busy || testing}
-            onChange={onToggle}
-            className="peer sr-only"
-          />
-          <div className="peer h-4.5 w-8 rounded-full bg-slate-200 after:absolute after:left-[2px] after:top-[2px] after:h-3.5 after:w-3.5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-checked:after:border-white sm:h-5 sm:w-9 sm:after:h-4 sm:after:w-4"></div>
-        </label>
+        <Switch
+          className="ml-2 shrink-0"
+          checked={Boolean(row.enabled)}
+          disabled={busy || testing}
+          onCheckedChange={() => onToggle?.()}
+          aria-label={row.enabled ? `暂停 ${row.name}` : `启用 ${row.name}`}
+        />
       </div>
 
       <div className="space-y-2.5 p-3 sm:space-y-3 sm:p-4">

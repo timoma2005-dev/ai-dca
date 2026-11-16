@@ -83,13 +83,13 @@ export function SwitchStrategySpreadGauge({ gauge, simulatedSpread = null, holdi
         {/* 跑道虚线区：在小人与终点旗之间延伸 */}
         {normalizedHoldingSide === 'H' && needleLeft < 85 ? (
           <div
-            className="pointer-events-none absolute inset-y-0.5 z-[5] rounded-full bg-indigo-50/70 gauge-track-dash-right"
+            className="switch-gauge-track pointer-events-none absolute inset-y-0.5 z-[5] rounded-full bg-indigo-50/70 gauge-track-dash-right"
             style={{ left: `${needleLeft}%`, right: '15%' }}
           />
         ) : null}
         {normalizedHoldingSide === 'L' && needleLeft > 10 ? (
           <div
-            className="pointer-events-none absolute inset-y-0.5 z-[5] rounded-full bg-emerald-50/70 gauge-track-dash-left"
+            className="switch-gauge-track pointer-events-none absolute inset-y-0.5 z-[5] rounded-full bg-emerald-50/70 gauge-track-dash-left"
             style={{ left: '10%', right: `${100 - needleLeft}%` }}
           />
         ) : null}
@@ -97,7 +97,7 @@ export function SwitchStrategySpreadGauge({ gauge, simulatedSpread = null, holdi
         {/* 跑者指针 (自适应朝向与奔跑姿态 + 脚下跟随当前值气泡) */}
         <div
           className={cx(
-            'pointer-events-none absolute top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 select-none transition-all duration-200',
+            'switch-gauge-runner pointer-events-none absolute top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 select-none',
             normalizedHoldingSide === 'L' && '-scale-x-100'
           )}
           style={{ left: `${needleLeft}%` }}

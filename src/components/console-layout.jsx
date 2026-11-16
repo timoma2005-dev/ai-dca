@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Menu, ChevronsRight, ChevronsLeft, X, Lock } from 'lucide-react';
+import { Menu, ChevronsRight, ChevronsLeft, X, Lock, Info, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { motionTokens } from './arc/lib/motion-tokens.js';
 import { consumePendingToasts, subscribeToToasts } from '../app/toast.js';
 import { AccountLoadingIndicator } from './account-loading-indicator.jsx';
 import { sidenavLinkA11y } from './consoleSidenavA11y.js';
@@ -8,16 +10,17 @@ function cx(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
-const toastToneClasses = {
-  slate: 'border-slate-200 bg-white text-slate-700',
-  indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',
-  emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  red: 'border-red-200 bg-red-50 text-red-700',
-  amber: 'border-amber-200 bg-amber-50 text-amber-700'
+const toastToneIcons = {
+  slate: { Icon: Info, className: 'text-slate-500' },
+  indigo: { Icon: Info, className: 'text-indigo-600' },
+  emerald: { Icon: CheckCircle2, className: 'text-emerald-600' },
+  red: { Icon: XCircle, className: 'text-red-600' },
+  amber: { Icon: AlertTriangle, className: 'text-amber-600' }
 };
 
 function ConsoleToastViewport() {
   const [toasts, setToasts] = useState([]);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     function appendToast(toast) {
@@ -55,26 +58,35 @@ function ConsoleToastViewport() {
     };
   }, [toasts]);
 
-  if (!toasts.length) {
-    return null;
-  }
-
+  // Arc toast stack: newest on top, each toast drops in from above on a spring, the rest slide down to make room,
+  // and a leaving toast fades up and out quickly. Reduced motion keeps only the fades.
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,24rem)] flex-col gap-3">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className={cx(
-            'pointer-events-auto rounded-2xl border px-4 py-3 shadow-lg shadow-slate-200/70 backdrop-blur-sm',
-            toastToneClasses[toast.tone] || toastToneClasses.slate
-          )}
-        >
-          <div className="text-sm font-bold">{toast.title}</div>
-          {toast.description ? (
-            <div className="mt-1 text-sm leading-6 opacity-90">{toast.description}</div>
-          ) : null}
-        </div>
-      ))}
+    <div className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(92vw,24rem)] flex-col gap-2" role="status" aria-live="polite">
+      <AnimatePresence initial={false}>
+        {[...toasts].reverse().map((toast) => {
+          const tone = toastToneIcons[toast.tone] || toastToneIcons.slate;
+          const Icon = tone.Icon;
+          return (
+            <motion.div
+              key={toast.id}
+              layout={!reduceMotion}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -12, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduceMotion ? { opacity: 0, transition: { duration: 0.1 } } : { opacity: 0, y: -6, scale: 0.98, transition: { duration: motionTokens.duration.fast, ease: [...motionTokens.ease.standard] } }}
+              transition={reduceMotion ? { duration: 0.1 } : motionTokens.spring.smooth}
+              className="pointer-events-auto flex items-start gap-2.5 rounded-2xl border border-[var(--ds-border)] bg-[var(--ds-surface)] px-3.5 py-3 text-[var(--ds-ink)] shadow-[var(--arc-shadow-floating)]"
+            >
+              <Icon className={cx('mt-0.5 h-4 w-4 shrink-0', tone.className)} aria-hidden="true" />
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{toast.title}</div>
+                {toast.description ? (
+                  <div className="mt-0.5 text-[13px] leading-5 text-[var(--ds-muted)]">{toast.description}</div>
+                ) : null}
+              </div>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 }

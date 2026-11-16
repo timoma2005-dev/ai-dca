@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, Check, Filter, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cx } from '../../components/experience-ui.jsx';
+import SegmentedControl from '../../components/arc/segmented-control/segmented-control.jsx';
 import { MarketSymbolSearchBox } from './MarketSymbolSearchBox.jsx';
 import { WatchlistSelector } from './WatchlistControls.jsx';
 import { MarketRefreshTime } from './MarketRefreshTime.jsx';
@@ -165,26 +166,13 @@ export function MobileFundList({
         </div>
 
         {watchLists?.length > 1 ? (
-          <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pt-0.5">
-            {watchLists.map((item) => {
-              const active = item.id === activeWatchListId;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onSelectWatchlist?.(item.id)}
-                  className={cx(
-                    "px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 transition-colors",
-                    active
-                      ? "bg-indigo-600 text-white shadow-2xs"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  )}
-                >
-                  {item.name}
-                </button>
-              );
-            })}
-          </div>
+          <SegmentedControl
+            className="arc-seg-brand max-w-full"
+            label="监控列表"
+            value={activeWatchListId}
+            onValueChange={(id) => onSelectWatchlist?.(id)}
+            options={watchLists.map((item) => ({ value: item.id, label: item.name }))}
+          />
         ) : null}
 
         {searchOpen ? (

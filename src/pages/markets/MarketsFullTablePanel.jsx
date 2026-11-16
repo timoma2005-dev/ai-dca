@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Search, X, RefreshCw } from 'lucide-react';
 import { cx } from '../../components/experience-ui.jsx';
+import SegmentedControl from '../../components/arc/segmented-control/segmented-control.jsx';
 import { MarketListTable } from './MarketListTable.jsx';
 import { MobileFundList } from './MobileFundList.jsx';
 import { MarketSymbolSearchBox } from './MarketSymbolSearchBox.jsx';
@@ -86,26 +87,13 @@ export function MarketsFullTablePanel({
     const health = feedHealth || { status: (marketRefreshAt || rows?.length > 0) ? 'live' : 'waiting', label: (marketRefreshAt || rows?.length > 0) ? '实时行情连接正常' : '等待行情数据', title: '' };
 
     const watchlistPills = watchLists?.length > 1 ? (
-      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {watchLists.map((item) => {
-          const active = item.id === activeWatchListId;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelectWatchlist?.(item.id)}
-              className={cx(
-                "px-3 py-1 rounded-full text-xs font-medium shrink-0 transition-colors",
-                active
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              )}
-            >
-              {item.name}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedControl
+        className="arc-seg-brand max-w-full"
+        label="监控列表"
+        value={activeWatchListId}
+        onValueChange={(id) => onSelectWatchlist?.(id)}
+        options={watchLists.map((item) => ({ value: item.id, label: item.name }))}
+      />
     ) : null;
 
     const toolbarButtons = (

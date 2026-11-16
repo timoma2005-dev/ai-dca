@@ -1,4 +1,7 @@
+import { useId } from 'react';
 import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+import { motionTokens } from './arc/lib/motion-tokens.js';
 
 export function cx(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -112,6 +115,8 @@ export function SectionHeading({ eyebrow, title, description, action, className 
 }
 
 export function PageTabs({ tabs = [], activeKey = '', className = '', onSelect, tablistLabel }) {
+  const highlightId = useId();
+  const reduceMotion = useReducedMotion();
   if (!tabs.length) {
     return null;
   }
@@ -149,6 +154,14 @@ export function PageTabs({ tabs = [], activeKey = '', className = '', onSelect, 
                 onSelect(tab.key);
               }}
             >
+              {isActive ? (
+                <motion.span
+                  layoutId={`${highlightId}-highlight`}
+                  className="ui-page-tabs__highlight"
+                  transition={reduceMotion ? { duration: 0 } : motionTokens.spring.morph}
+                  aria-hidden="true"
+                />
+              ) : null}
               {tab.label}
             </a>
           );

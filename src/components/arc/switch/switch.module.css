@@ -1,0 +1,13 @@
+/* Vendored from Arc (uiarc.dev, MIT); tokens are --arc-* (design-system.css). */
+.switch { display: inline-flex; min-height: var(--arc-control-height-md); align-items: center; gap: var(--arc-space-3); padding: 0; border: 0; color: var(--arc-foreground); background: transparent; font: inherit; font-size: var(--arc-text-sm); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.switch:disabled { cursor: not-allowed; opacity: .5; }
+/* Fixed box: the thumb moves inside it with transforms, so nothing around the switch shifts. The track crossfades between the two fills. */
+.track { position: relative; box-sizing: border-box; display: flex; flex: 0 0 auto; width: 42px; height: 24px; align-items: center; padding: 3px; border-radius: var(--arc-radius-pill); background: var(--arc-control-track); isolation: isolate; transition: background-color var(--arc-duration-fast) var(--arc-ease-standard); }
+.track::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--arc-control-on); opacity: 0; transition: opacity var(--arc-duration-standard) var(--arc-ease-standard); }
+.switch[data-state="checked"] .track::before { opacity: 1; }
+.thumb { flex: 0 0 auto; width: 18px; height: 18px; border-radius: var(--arc-radius-pill); background: var(--arc-control-thumb); box-shadow: var(--arc-control-thumb-shadow); will-change: transform; transition: background-color var(--arc-duration-standard) var(--arc-ease-standard); }
+.switch[data-state="checked"] .thumb { background: var(--arc-control-thumb-on); }
+@media (hover: hover) and (pointer: fine) { .switch[data-state="unchecked"]:hover:not(:disabled) .track { background: var(--arc-control-track-hover); } }
+.switch:focus-visible { outline: none; }
+.label { line-height: var(--arc-leading-body); }
+@media (prefers-reduced-motion: reduce) { .track, .track::before, .thumb { transition: none; } }
