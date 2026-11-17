@@ -1,5 +1,5 @@
 import { demoAccessToken } from '../../app/demo/demoMode.js';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { motionTokens } from '../../components/arc/lib/motion-tokens.js';
 import {
@@ -138,6 +138,12 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
   const [busyRuleId, setBusyRuleId] = useState('');
   const [testingRuleId, setTestingRuleId] = useState('');
   const [guide, setGuide] = useState(null);
+  // 新建方案：有引导数据时进入「换基引导」全页流程，保存后回到方案列表；没有数据时退回老弹窗
+  const [creating, setCreating] = useState(false);
+  const rootRef = useRef(null);
+  const backToTop = useCallback(() => {
+    requestAnimationFrame(() => rootRef.current?.scrollIntoView({ block: 'start' }));
+  }, []);
 
   // 换基引导（看懂溢价 / 价差 / 平时，再一步建方案）：演示模式用固定快照，登录用户取实时统计
   useEffect(() => {
@@ -317,16 +323,38 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
     return payload.rule;
   }, []);
 
-  return (
-    <div className="space-y-3 sm:space-y-4">
-      {guide ? (
+  if (creating && guide) {
+    return (
+      <div className="space-y-3 sm:space-y-4" ref={rootRef} style={{ scrollMarginTop: 76 }}>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            onClick={() => { setCreating(false); backToTop(); }}
+          >
+            ← 返回方案列表
+          </button>
+          <button
+            type="button"
+            className="text-sm text-slate-500 underline-offset-2 hover:underline"
+            onClick={() => { setCreating(false); setEditingRuleId(''); setModalOpen(true); }}
+          >
+            用高级设置新建
+          </button>
+        </div>
         <SwitchGuide
           guide={guide}
           existingRules={config.rules || []}
           saving={Boolean(busyRuleId)}
-          onSave={async (payload) => { await handleSaveRule(payload); return !demoActive; }}
+          onSave={async (payload) => { await handleSaveRule(payload); return true; }}
+          onDone={() => { setCreating(false); setKeyword(''); backToTop(); }}
         />
-      ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 sm:space-y-4" ref={rootRef} style={{ scrollMarginTop: 76 }}>
       {demoActive ? <SwitchDemoTeaserCard onUpgrade={featureDemo?.onUpgrade} /> : null}
       {!demoActive && rows.length === 0 ? <FollowAlongHint flow="switch" text="第一次用？跟着做，约 1 分钟设好一个切换提醒" /> : null}
       {/* 统计概览与操作栏 */}
@@ -338,7 +366,10 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
         onKeywordChange={setKeyword}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        onCreate={() => { setEditingRuleId(''); setModalOpen(true); }}
+        onCreate={() => {
+          if (guide) { setCreating(true); backToTop(); return; }
+          setEditingRuleId(''); setModalOpen(true);
+        }}
       />
 
       {/* 方案卡片列表 */}

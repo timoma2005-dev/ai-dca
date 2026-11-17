@@ -231,7 +231,7 @@ function Meter({ plan, gap, go, back, onChange }) {
   );
 }
 
-function PlanCard({ guide, sel, days, existingRules, onSave, saving, cardRef }) {
+function PlanCard({ guide, sel, days, existingRules, onSave, onDone, saving, cardRef }) {
   const base = useMemo(() => buildPlan(guide, sel.hold, sel.target, days), [guide, sel.hold, sel.target, days]);
   const [state, setState] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -257,7 +257,7 @@ function PlanCard({ guide, sel, days, existingRules, onSave, saving, cardRef }) 
   const doSave = async () => {
     setConfirmOpen(false);
     const ok = await onSave(buildGuideRulePayload({ plan: { ...base, go, back }, hold: sel.hold, target: sel.target, name: uniqueName }));
-    if (ok !== false) setSavedKey(key);
+    if (ok !== false) { setSavedKey(key); onDone?.(); }
   };
 
   return (
@@ -297,7 +297,7 @@ function PlanCard({ guide, sel, days, existingRules, onSave, saving, cardRef }) 
         <button type="button" className={`sg-btn ${isSaved ? 'ghost' : 'dark'} block`} disabled={saving} onClick={() => setConfirmOpen(true)}>
           {saving ? '保存中…' : isSaved ? '已保存 ✓' : savedKey ? '保存修改' : '保存这个方案，帮我盯着'}
         </button>
-        <div className="sg-muted" style={{ textAlign: 'center', marginTop: 6 }}>{isSaved ? '已加到下面「我的方案」，到了你定的线会提醒你' : '保存后会出现在下面的方案列表，到了你定的线就提醒你'}</div>
+        <div className="sg-muted" style={{ textAlign: 'center', marginTop: 6 }}>{isSaved ? '已加到「我的方案」，到了你定的线会提醒你' : '保存后回到方案列表，到了你定的线就提醒你'}</div>
       </section>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -325,9 +325,9 @@ function PlanCard({ guide, sel, days, existingRules, onSave, saving, cardRef }) 
 
 /**
  * 换基引导：给第一次来的人看懂「溢价 / 价差 / 平时」，并一步建好一个 H/L 切换方案。
- * guide：/api/notify/switch/guide 的 data；onSave：同规则弹窗的保存回调（返回 false 表示失败）。
+ * guide：/api/notify/switch/guide 的 data；onSave：同规则弹窗的保存回调（返回 false 表示失败）；onDone：保存成功后回到方案列表。
  */
-export function SwitchGuide({ guide, existingRules = [], onSave, saving = false }) {
+export function SwitchGuide({ guide, existingRules = [], onSave, onDone, saving = false }) {
   const rootRef = useRef(null);
   const planRef = useRef(null);
   const [days, setDays] = useState(60);
@@ -357,6 +357,8 @@ export function SwitchGuide({ guide, existingRules = [], onSave, saving = false 
     const target = findScrollParent(rootRef.current);
     let last = scrollTopOf(target);
     armY.current = last;
+    // 刚进入（从方案列表点「新建方案」跳过来会先回到顶部）这段滚动不算往下滑
+    quietUntil.current = Date.now() + 1200;
     const onScroll = () => {
       const y = scrollTopOf(target);
       const down = y > last;
@@ -389,7 +391,7 @@ export function SwitchGuide({ guide, existingRules = [], onSave, saving = false 
       <Story guide={guide} folded={storyFolded} onFold={fold} onTip={onTip} />
       <Ladder guide={guide} days={days} setDays={setDays} sel={sel} onPick={onPick} collapsed={picked} onRepick={onRepick} />
       {picked ? (
-        <PlanCard guide={guideWithTip} sel={sel} days={days} existingRules={existingRules} onSave={onSave} saving={saving} cardRef={planRef} />
+        <PlanCard guide={guideWithTip} sel={sel} days={days} existingRules={existingRules} onSave={onSave} onDone={onDone} saving={saving} cardRef={planRef} />
       ) : null}
       <div className={`sg-tip${tip ? ' on' : ''}`} role="status" onClick={() => setTip('')}>
         {tip ? <><b>{GLOSSARY[tip][0]}</b>{GLOSSARY[tip][1]}</> : null}
