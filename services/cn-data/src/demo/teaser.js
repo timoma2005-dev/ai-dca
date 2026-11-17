@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { request as httpsRequest } from 'node:https';
 import { auctionTeaser } from './auctionReplay.js';
+import { resolveUserId } from '../authSession.js';
 
 // 付费功能演示的「公开数据预告」接口（游客可访问，只下发结论型数字）。
 // 设计原则：真实数据证明功能有效，但不下发足以手动算出可操作结论的完整数据：
@@ -314,4 +315,102 @@ export async function handleDemoTeaserRoute(method, url, headers, { fetchImpl = 
     return { body: { ok: true, data: { ...result, remaining: quota.remaining } }, headers: cacheHeaders };
   }
   return { status: 404, body: { ok: false, error: 'Not found' } };
+}
+
+// 换基引导页（「平时谁贵谁便宜」）：按近 60 / 120 个交易日的逐日溢价，给每只相对同类中位数的「平时偏离」
+// 和每组配对价差的中位数 / 四分位。只下发统计结果，不下发逐日序列；需登录且有换基权限（路由在 /api/notify/switch/ 下）。
+export const GUIDE_WINDOWS = [60, 120];
+export const GUIDE_PATH = '/api/notify/switch/guide';
+
+function median(values) {
+  return quantile(values, 0.5);
+}
+
+function quantile(values, q) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+const round2 = (value) => (Number.isFinite(value) ? Math.round(value * 100) / 100 : null);
+
+export function shortEtfName(name = '') {
+  const text = String(name || '').trim();
+  return text.replace(/^(纳指(100)?|纳斯达克(100)?)ETF/, '') || text;
+}
+
+export function buildSwitchGuide(data) {
+  const etfs = (Array.isArray(data?.etfs) ? data.etfs : []).filter((e) => /^\d{6}$/.test(String(e?.code || '')) && Number.isFinite(Number(e?.premium)));
+  const codes = etfs.map((e) => String(e.code)).sort();
+  if (codes.length < 2) return null;
+  const today = Object.fromEntries(etfs.map((e) => [String(e.code), round2(Number(e.premium))]));
+  const todayMedian = median(codes.map((c) => today[c]));
+  const history = (Array.isArray(data?.premiumHistory) ? data.premiumHistory : [])
+    .filter((row) => row && row.date && row.premiums && typeof row.premiums === 'object')
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const win = {};
+  for (const days of GUIDE_WINDOWS) {
+    const rows = history.slice(-days);
+    if (!rows.length) continue;
+    const relSeries = Object.fromEntries(codes.map((c) => [c, []]));
+    for (const row of rows) {
+      const values = codes.map((c) => Number(row.premiums[c])).filter(Number.isFinite);
+      if (values.length < 2) continue;
+      const mid = median(values);
+      for (const c of codes) {
+        const v = Number(row.premiums[c]);
+        if (Number.isFinite(v)) relSeries[c].push(v - mid);
+      }
+    }
+    const pairs = {};
+    for (let i = 0; i < codes.length; i += 1) {
+      for (let j = i + 1; j < codes.length; j += 1) {
+        const a = codes[i];
+        const b = codes[j];
+        const diffs = rows.map((row) => Number(row.premiums[a]) - Number(row.premiums[b])).filter(Number.isFinite);
+        if (diffs.length < 5) continue;
+        pairs[`${a}-${b}`] = [round2(median(diffs)), round2(quantile(diffs, 0.25)), round2(quantile(diffs, 0.75))];
+      }
+    }
+    win[days] = {
+      from: rows[0].date,
+      days: rows.length,
+      rel: Object.fromEntries(codes.map((c) => [c, round2(median(relSeries[c]))])),
+      relToday: Object.fromEntries(codes.map((c) => [c, round2(today[c] - todayMedian)])),
+      pairs
+    };
+  }
+  return {
+    date: data.date || null,
+    computedAt: data.computedAt || null,
+    codes,
+    names: Object.fromEntries(etfs.map((e) => [String(e.code), shortEtfName(e.name)])),
+    fullNames: Object.fromEntries(etfs.map((e) => [String(e.code), String(e.name || '')])),
+    today,
+    win
+  };
+}
+
+/** GET /api/notify/switch/guide：需登录（RBAC 已在 enforceRoutePermission 按 api:fund-switch 校验）。 */
+export async function handleSwitchGuideRoute(method, url, headers, { fetchImpl = null, now = Date.now(), requireUser = defaultRequireUser } = {}) {
+  if (url.pathname !== GUIDE_PATH) return null;
+  if (method !== 'GET') return { status: 405, body: { ok: false, error: 'Method not allowed' } };
+  requireUser(headers, url);
+  let data;
+  try {
+    data = await loadRadar({ fetchImpl, now });
+  } catch (error) {
+    console.warn('[cn-data] switch guide upstream failed:', error?.message || error);
+    return { status: 503, body: { ok: false, code: 'GUIDE_UNAVAILABLE', error: '溢价数据暂不可用' } };
+  }
+  const guide = buildSwitchGuide(data);
+  if (!guide) return { status: 503, body: { ok: false, code: 'GUIDE_UNAVAILABLE', error: '溢价数据暂不可用' } };
+  return { body: { ok: true, data: guide }, headers: { 'Cache-Control': 'private, max-age=300' } };
+}
+
+function defaultRequireUser(headers, url) {
+  return resolveUserId(url, {}, headers);
 }

@@ -429,6 +429,12 @@ export async function loadSwitchConfigFromWorker() {
   return config;
 }
 
+/** 换基引导页统计：12 只纳指 ETF 今日溢价、近 60/120 天相对同类的平时偏离与两两价差分位。 */
+export async function loadSwitchGuide() {
+  const payload = await requestSwitch('/switch/guide', { method: 'GET' });
+  return payload?.data || null;
+}
+
 export async function saveSwitchConfigToWorker(config) {
   const next = normalizeSwitchConfigShape(config);
   const payload = await requestSwitch('/switch/config', {

@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { motionTokens } from '../../components/arc/lib/motion-tokens.js';
 import {
   loadSwitchConfigFromWorker,
+  loadSwitchGuide,
   loadSwitchSnapshotFromWorker,
   normalizeSwitchConfigShape,
   readSwitchConfigCache,
@@ -19,6 +20,8 @@ import { SwitchStrategyCardItem } from './SwitchStrategyCardItem.jsx';
 import { SwitchStrategyTable } from './SwitchStrategyTable.jsx';
 import { SwitchStrategyRuleModal } from './SwitchStrategyRuleModal.jsx';
 import { SwitchDemoTeaserCard } from './SwitchDemoTeaserCard.jsx';
+import { SwitchGuide } from './SwitchGuide.jsx';
+import { SWITCH_GUIDE_DEMO } from '../../app/demo/fixtures/switchGuide.js';
 import { useDemoActive, useFeatureDemo } from '../../components/rbac/demo-lock.jsx';
 import { FollowAlongHint } from '../../components/onboarding/FollowAlongHint.jsx';
 
@@ -134,6 +137,15 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
   const [channelMap] = useState(() => readSwitchRuleChannelMap());
   const [busyRuleId, setBusyRuleId] = useState('');
   const [testingRuleId, setTestingRuleId] = useState('');
+  const [guide, setGuide] = useState(null);
+
+  // 换基引导（看懂溢价 / 价差 / 平时，再一步建方案）：演示模式用固定快照，登录用户取实时统计
+  useEffect(() => {
+    if (demoActive) { setGuide(SWITCH_GUIDE_DEMO); return undefined; }
+    let alive = true;
+    loadSwitchGuide().then((data) => { if (alive && data?.win) setGuide(data); }).catch(() => {});
+    return () => { alive = false; };
+  }, [demoActive]);
 
   useEffect(() => {
     Promise.all([
@@ -307,6 +319,14 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
 
   return (
     <div className="space-y-3 sm:space-y-4">
+      {guide ? (
+        <SwitchGuide
+          guide={guide}
+          existingRules={config.rules || []}
+          saving={Boolean(busyRuleId)}
+          onSave={async (payload) => { await handleSaveRule(payload); return !demoActive; }}
+        />
+      ) : null}
       {demoActive ? <SwitchDemoTeaserCard onUpgrade={featureDemo?.onUpgrade} /> : null}
       {!demoActive && rows.length === 0 ? <FollowAlongHint flow="switch" text="第一次用？跟着做，约 1 分钟设好一个切换提醒" /> : null}
       {/* 统计概览与操作栏 */}

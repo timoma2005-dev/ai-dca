@@ -8,7 +8,7 @@ import { handleNotifyRoute } from './notify/routes.js';
 import { ROLE_NOTICE_PATH, handleRoleNoticeRoute } from './notify/roleNotice.js';
 import { badRequest, handleDataRoute } from './routes/data.js';
 import { enforceRoutePermission } from './rbacGuard.js';
-import { handleDemoTeaserRoute } from './demo/teaser.js';
+import { handleDemoTeaserRoute, handleSwitchGuideRoute } from './demo/teaser.js';
 import { startAuctionRecorder } from './demo/auctionReplay.js';
 
 export const MAX_BODY_BYTES = 2 * 1024 * 1024;
@@ -67,6 +67,9 @@ export function createApp(db, { maxBodyBytes = MAX_BODY_BYTES } = {}) {
       }
       // RBAC：token 有效但缺少接口权限时 403（权限由共享 auth 库在服务端重新计算）。
       enforceRoutePermission(req.headers, url.pathname);
+      // 换基引导页统计（平时谁贵谁便宜 / 配对价差中位数）：需登录 + api:fund-switch
+      const guide = await handleSwitchGuideRoute(req.method, url, req.headers);
+      if (guide) { sendJson(res, guide.status ?? 200, guide.body, guide.headers); return; }
       const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readJsonBody(req, maxBodyBytes) : {};
       const result = await handleNotifyRoute(db, req.method, url, body, req.headers)
         ?? handleAccountV1Route(db, req.method, url, body, req.headers)
