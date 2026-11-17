@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { signupGiftExpiresAt, SIGNUP_GIFT, registerUser } from '../src/auth.js';
 import { openDb, closeDb } from '../src/db.js';
 
-test('signup gift: 3 months VIP ending 23:59:59 Beijing time', () => {
-  assert.deepEqual(SIGNUP_GIFT, { role: 'vip', months: 3 });
-  assert.equal(signupGiftExpiresAt(new Date('2026-10-24T01:00:00Z')), '2027-01-24T15:59:59.000Z');
+test('signup gift: 1 month VIP ending 23:59:59 Beijing time', () => {
+  assert.deepEqual(SIGNUP_GIFT, { role: 'vip', months: 1 });
+  assert.equal(signupGiftExpiresAt(new Date('2026-10-24T01:00:00Z')), '2026-11-24T15:59:59.000Z');
   // 北京时间已是次日
-  assert.equal(signupGiftExpiresAt(new Date('2026-10-24T17:00:00Z')), '2027-01-25T15:59:59.000Z');
-  // 月末截断：11-30 + 3 个月 → 2 月最后一天
-  assert.equal(signupGiftExpiresAt(new Date('2026-11-30T04:00:00Z')), '2027-02-28T15:59:59.000Z');
+  assert.equal(signupGiftExpiresAt(new Date('2026-10-24T17:00:00Z')), '2026-11-25T15:59:59.000Z');
+  // 月末截断：11-30 + 1 个月 → 12-30
+  assert.equal(signupGiftExpiresAt(new Date('2026-11-30T04:00:00Z')), '2026-12-30T15:59:59.000Z');
 });
 
 test('signup VIP is off by default and only granted with AUTH_SIGNUP_GIFT=1', () => {

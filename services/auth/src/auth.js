@@ -97,7 +97,8 @@ function createSessionRow(db, user) {
 
 // 新注册赠送会员（2026-10-24 产品决定）：注册即送 3 个月 VIP，到期日为北京时间当天 23:59:59。
 // 2026-11-13 起停用：会员改为按注册天数 + 活跃天数自动升降级（见 membership.js），仅在 AUTH_SIGNUP_GIFT=1 时恢复赠送。
-export const SIGNUP_GIFT = { role: 'vip', months: 3 };
+// 2026-11-17 恢复：新注册送 1 个月 VIP 试用（AUTH_SIGNUP_GIFT=1）；期间达标会被自动等级覆盖，之后按活跃度自动升降。
+export const SIGNUP_GIFT = { role: 'vip', months: 1 };
 
 export function signupGiftExpiresAt(now = new Date(), months = SIGNUP_GIFT.months) {
   const sh = new Date(now.getTime() + 8 * 60 * 60 * 1000);
