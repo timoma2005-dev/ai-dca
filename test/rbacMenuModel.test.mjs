@@ -38,7 +38,8 @@ const USER_STATE = {
 test('guest fallback mirrors the server tiers: free menus open, VIP menus locked, SVIP/admin menus hidden', () => {
   const guest = buildGuestFallback();
   const byKey = Object.fromEntries(flattenMenus(guest.menus).map((m) => [m.key, m]));
-  for (const key of ['home', 'articles', 'holdings', 'tradePlans', 'dataRepair']) assert.equal(byKey[key].locked, false, key);
+  for (const key of ['home', 'articles', 'holdings', 'dataRepair']) assert.equal(byKey[key].locked, false, key);
+  assert.equal(byKey.tradePlans, undefined); // 2026-11-17 交易计划下线
   for (const key of ['markets', 'shares', 'fundSwitch', 'notify']) {
     assert.equal(byKey[key].locked, true, key);
     assert.equal(byKey[key].requiredRole.code, 'vip');

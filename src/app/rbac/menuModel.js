@@ -19,7 +19,7 @@ const SEED_MENUS = [
   ['markets', '行情中心', 'LineChart', 'primary', 20, '浏览市场行情与关注标的'],
   ['shares', '份额新增', 'BarChart3', 'primary', 30, 'ETF 份额变化与申购限额跟踪'],
   ['holdings', '持仓总览', 'Wallet', 'primary', 40, '查看持仓分布与收益表现'],
-  ['tradePlans', '交易计划', 'ListChecks', 'primary', 50, '管理交易计划与执行记录'],
+  // 2026-11-17：交易计划下线（菜单停用，代码与用户数据保留，可在权限管理里重新启用）。
   ['fundSwitch', '基金切换', 'Shuffle', 'primary', 60, '切换定投目标基金，查看调仓方案'],
   ['notify', '通知管理', 'Bell', 'primary', 70, '管理消息推送与提醒设置'],
   ['articles', '文章', 'BookOpen', 'primary', 80, '基金科普指南与定投策略'],
@@ -37,7 +37,7 @@ export const RBAC_MANAGED_TABS = new Set(SEED_MENUS.map(([key]) => key));
 const USER_LOCKED = { markets: 'vip', shares: 'vip', fundSwitch: 'vip', notify: 'vip', adminRadar: 'svip', adminAuction: 'svip' };
 const VIP_NAMES = { vip: 'VIP', svip: 'SVIP' };
 
-const GUEST_OPEN = new Set(['home', 'articles', 'holdings', 'tradePlans', 'dataRepair']);
+const GUEST_OPEN = new Set(['home', 'articles', 'holdings', 'dataRepair']);
 const GUEST_LOCKED = new Set(['markets', 'shares', 'fundSwitch', 'notify']);
 
 function seedItem([key, label, icon, group, sort, subtitle], locked) {

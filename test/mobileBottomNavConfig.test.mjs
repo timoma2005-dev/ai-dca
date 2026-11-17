@@ -30,7 +30,7 @@ test('only menus returned by the server appear; dataRepair stays desktop-only', 
 
 test('guest menus: holdings/plans open, VIP features (incl. shares) visible but locked, SVIP features absent', () => {
   const items = resolveMobileBottomNavItems(flattenMenus(buildGuestFallback().menus));
-  assert.deepEqual(items.map((item) => item.key), ['home', 'markets', 'holdings', 'tradePlans', 'shares', 'fundSwitch', 'notify', 'articles']);
+  assert.deepEqual(items.map((item) => item.key), ['home', 'markets', 'holdings', 'shares', 'fundSwitch', 'notify', 'articles']);
   assert.deepEqual(items.filter((item) => item.locked).map((item) => item.key), ['markets', 'shares', 'fundSwitch', 'notify']);
 });
 

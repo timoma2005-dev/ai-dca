@@ -17,9 +17,9 @@ function declarations(selector, property) {
   return values;
 }
 
-test('overview is a compact two-row bar (breadth + median / OTC quotas)', () => {
+test('overview is a compact one-row bar (breadth + median); OTC quotas removed 2026-11-17', () => {
   assert.match(source, /function OverviewBar\(/);
-  assert.equal(source.match(/className="cn-home-ovbar-row"/g)?.length, 2);
+  assert.equal(source.match(/className="cn-home-ovbar-row"/g)?.length, 1);
   assert.doesNotMatch(source, /function OverviewCards\(/);
 });
 
@@ -39,10 +39,9 @@ test('median keeps 实时口径 hint when the previous-day median is missing', (
   assert.match(source, /prevMedian == null \? '，实时口径'/);
 });
 
-test('quota chips open the full-detail page per currency', () => {
-  assert.match(source, /quota\(cny, 'CNY'\)/);
-  assert.match(source, /quota\(usd, 'USD'\)/);
-  assert.match(source, /onClick=\{\(\) => onOpenDetail\?\.\(currency\)\}/);
+test('home no longer shows OTC quota chips or the 场外额度 section', () => {
+  assert.doesNotMatch(source, /quota\(cny, 'CNY'\)/);
+  assert.doesNotMatch(source, /className="cn-home-limits"/);
 });
 
 test('rows stay on one line each', () => {
