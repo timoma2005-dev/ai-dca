@@ -17,21 +17,21 @@ const ADMIN_MENUS = USER_MENUS.map((item) => ({ ...item, locked: false })).conca
 test('mobile bottom nav keeps the cn presentation order', () => {
   assert.deepEqual(
     MOBILE_BOTTOM_NAV_ITEMS.map((item) => item.key),
-    ['home', 'markets', 'holdings', 'tradePlans', 'shares', 'fundSwitch', 'notify', 'articles', 'adminRadar', 'adminAuction', 'adminRbac'],
+    ['home', 'markets', 'holdings', 'fundSwitch', 'tradePlans', 'shares', 'notify', 'articles', 'adminRadar', 'adminAuction', 'adminRbac'],
   );
 });
 
 test('only menus returned by the server appear; dataRepair stays desktop-only', () => {
   const items = resolveMobileBottomNavItems(USER_MENUS);
-  assert.deepEqual(items.map((item) => item.key), ['home', 'markets', 'holdings', 'tradePlans', 'shares', 'fundSwitch', 'notify', 'articles', 'adminRadar', 'adminAuction']);
+  assert.deepEqual(items.map((item) => item.key), ['home', 'markets', 'holdings', 'fundSwitch', 'tradePlans', 'shares', 'notify', 'articles', 'adminRadar', 'adminAuction']);
   assert.deepEqual(items.filter((item) => item.locked).map((item) => item.key), ['adminRadar', 'adminAuction']);
   assert.equal(items.find((item) => item.key === 'adminRadar').requiredRole.code, 'vip');
 });
 
 test('guest menus: holdings/plans open, VIP features (incl. shares) visible but locked, SVIP features absent', () => {
   const items = resolveMobileBottomNavItems(flattenMenus(buildGuestFallback().menus));
-  assert.deepEqual(items.map((item) => item.key), ['home', 'markets', 'holdings', 'shares', 'fundSwitch', 'notify', 'articles']);
-  assert.deepEqual(items.filter((item) => item.locked).map((item) => item.key), ['markets', 'shares', 'fundSwitch', 'notify']);
+  assert.deepEqual(items.map((item) => item.key), ['home', 'markets', 'holdings', 'fundSwitch', 'shares', 'notify', 'articles']);
+  assert.deepEqual(items.filter((item) => item.locked).map((item) => item.key), ['markets', 'fundSwitch', 'shares', 'notify']);
 });
 
 test('scenario visible list still filters known tabs; unknown server menus are appended by sort', () => {
@@ -42,8 +42,8 @@ test('scenario visible list still filters known tabs; unknown server menus are a
 test('admin sees the RBAC entry in overflow; fifth slot is reserved for “more”', () => {
   const { directItems, overflowItems } = splitMobileBottomNavItems(ADMIN_MENUS);
   assert.equal(MOBILE_BOTTOM_NAV_MAX_TABS, 5);
-  assert.deepEqual(directItems.map((item) => item.key), ['home', 'markets', 'holdings', 'tradePlans']);
-  assert.deepEqual(overflowItems.map((item) => item.key), ['shares', 'fundSwitch', 'notify', 'articles', 'adminRadar', 'adminAuction', 'adminRbac']);
+  assert.deepEqual(directItems.map((item) => item.key), ['home', 'markets', 'holdings', 'fundSwitch']);
+  assert.deepEqual(overflowItems.map((item) => item.key), ['tradePlans', 'shares', 'notify', 'articles', 'adminRadar', 'adminAuction', 'adminRbac']);
 });
 
 test('no overflow when five or fewer menus are visible', () => {
@@ -57,6 +57,6 @@ test('“more” sheet lists accessible items first and locked ones last, keepin
   const menus = ['home', 'markets', 'holdings', 'tradePlans'].map((k) => m(k))
     .concat([m('shares'), m('fundSwitch', true), m('notify'), m('articles'), m('adminRadar'), m('adminAuction', true)]);
   const { directItems, overflowItems } = splitMobileBottomNavItems(menus);
-  assert.deepEqual(directItems.map((item) => item.key), ['home', 'markets', 'holdings', 'tradePlans']);
-  assert.deepEqual(overflowItems.map((item) => item.key), ['shares', 'notify', 'articles', 'adminRadar', 'fundSwitch', 'adminAuction']);
+  assert.deepEqual(directItems.map((item) => item.key), ['home', 'markets', 'holdings', 'fundSwitch']);
+  assert.deepEqual(overflowItems.map((item) => item.key), ['tradePlans', 'shares', 'notify', 'articles', 'adminRadar', 'adminAuction']);
 });
