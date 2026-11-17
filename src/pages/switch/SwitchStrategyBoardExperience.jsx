@@ -139,7 +139,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
   const [testingRuleId, setTestingRuleId] = useState('');
   const [guide, setGuide] = useState(null);
   // 新建方案：有引导数据时进入「换基引导」全页流程，保存后回到方案列表；没有数据时退回老弹窗
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(false); // false | 'guide' | 'legacy'
   const [flip, setFlip] = useState('');
   const rootRef = useRef(null);
   const backToTop = useCallback(() => {
@@ -324,23 +324,23 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
     return payload.rule;
   }, []);
 
-  // 「旧版」：引导页翻过去，再打开原来的新建弹窗
-  const openLegacyCreate = () => {
+  // 新版 ⇄ 旧版：整页翻过去，再翻回来
+  const flipTo = (mode) => {
     if (flip) return;
     setFlip('out');
     setTimeout(() => {
       setFlip('');
-      setCreating(false);
       setEditingRuleId('');
-      setModalOpen(true);
+      setCreating(mode);
       backToTop();
     }, 320);
   };
 
-  if (creating && guide) {
+  if (creating) {
+    const legacy = creating === 'legacy' || !guide;
     return (
       <div className="sg-flipstage" ref={rootRef} style={{ scrollMarginTop: 76 }}>
-      <div className={`space-y-3 sm:space-y-4 ${flip === 'out' ? 'sg-flipout' : 'sg-flipin'}`}>
+      <div key={legacy ? 'legacy' : 'guide'} className={`space-y-3 sm:space-y-4 ${flip === 'out' ? 'sg-flipout' : 'sg-flipin'}`}>
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
@@ -349,14 +349,26 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
           >
             ← 返回方案列表
           </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-            onClick={openLegacyCreate}
-          >
-            ⇄ 旧版
-          </button>
+          {guide ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              onClick={() => flipTo(legacy ? 'guide' : 'legacy')}
+            >
+              ⇄ {legacy ? '新版' : '旧版'}
+            </button>
+          ) : null}
         </div>
+        {legacy ? (
+          <SwitchStrategyRuleModal
+            inline
+            open
+            saving={Boolean(busyRuleId)}
+            onClose={() => { setCreating(false); backToTop(); }}
+            onSave={(payload) => { handleSaveRule(payload); setCreating(false); setKeyword(''); backToTop(); }}
+            existingRules={config.rules || []}
+          />
+        ) : (
         <SwitchGuide
           guide={guide}
           existingRules={config.rules || []}
@@ -364,6 +376,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
           onSave={async (payload) => { await handleSaveRule(payload); return true; }}
           onDone={() => { setCreating(false); setKeyword(''); backToTop(); }}
         />
+        )}
       </div>
       </div>
     );
@@ -383,8 +396,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         onCreate={() => {
-          if (guide) { setCreating(true); backToTop(); return; }
-          setEditingRuleId(''); setModalOpen(true);
+          setEditingRuleId(''); setCreating(guide ? 'guide' : 'legacy'); backToTop();
         }}
       />
 

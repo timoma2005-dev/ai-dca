@@ -160,3 +160,7 @@
 @keyframes sgFlipIn { from { transform: rotateY(-90deg); opacity: .2; } to { transform: rotateY(0); opacity: 1; } }
 @keyframes sgFlipOut { from { transform: rotateY(0); opacity: 1; } to { transform: rotateY(90deg); opacity: .2; } }
 @media (prefers-reduced-motion: reduce) { .sg-flipin, .sg-flipout { animation-duration: .01s; } }
+
+/* 旧版新建：沿用原表单，套进 sg 卡片 */
+.sg-legacy .sg-legacy-body > div { padding-left: 0 !important; padding-right: 0 !important; }
+.sg-legacy .sg-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }

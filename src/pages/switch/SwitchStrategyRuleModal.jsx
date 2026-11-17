@@ -90,7 +90,8 @@ export function SwitchStrategyRuleModal({
   onAutoFill,
   onSave,
   onSubmit,
-  existingRules = []
+  existingRules = [],
+  inline = false
 }) {
   const activeRow = row || initialRule;
   const isEditing = Boolean(activeRow?.id);
@@ -259,6 +260,148 @@ export function SwitchStrategyRuleModal({
     (onSave || onSubmit)?.(payload);
   }
 
+  const formBody = (
+        <div className="min-w-0 space-y-4 px-5 py-4">
+      {!isEditing && onAutoFill && !autoCompleted ? (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-bold text-indigo-900">
+                <Sparkles className="h-4 w-4" />
+                智能自动填充
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-indigo-700">填写当前持仓与预计交易费用，由云端 API 匹配候选基金并填写 H/L 标的和阈值。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAutoPanelOpen((current) => !current);
+                setAutoError('');
+                setAutoMessage('');
+              }}
+              data-onboarding="switch-autofill"
+              className="shrink-0 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 shadow-xs"
+            >
+              {autoPanelOpen ? '收起' : '自动填充'}
+            </button>
+          </div>
+
+          {autoPanelOpen ? (
+            <div className="mt-3 border-t border-indigo-100 pt-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="当前持仓代码" helper="填写实际持有的场内基金代码">
+                  <TextInput
+                    value={autoHoldingCode}
+                    inputMode="numeric"
+                    placeholder="例如：159632"
+                    onChange={(event) => {
+                      setAutoHoldingCode(sanitizeSingleCodeInput(event.target.value));
+                      setAutoError('');
+                      setAutoMessage('');
+                    }}
+                  />
+                </Field>
+                <Field label="交易费率" rightLabel="万分之" helper="例如填 1 表示万1，买入和卖出各计算一次">
+                  <TextInput
+                    value={autoFeeWanRate}
+                    inputMode="decimal"
+                    placeholder="1"
+                    onChange={(event) => {
+                      setAutoFeeWanRate(sanitizePctInput(event.target.value));
+                      setAutoError('');
+                      setAutoMessage('');
+                    }}
+                  />
+                </Field>
+              </div>
+              <button
+                type="button"
+                onClick={runAutoFill}
+                disabled={autoFilling}
+                className={cx(primaryButtonClass, 'mt-3 w-full')}
+              >
+                {autoFilling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {autoFilling ? '正在调用 API…' : '生成并填充方案'}
+              </button>
+              {autoError ? <p role="alert" className="mt-2 text-[11px] font-bold leading-5 text-rose-600">{autoError}</p> : null}
+              <p className="mt-2 text-[11px] leading-5 text-indigo-700">将读取该基金的当前持仓金额计算费用；未找到持仓时按 10,000 元计算。</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!autoPanelOpen ? (
+      <>
+      <Field label="方案名称（必填）">
+        <TextInput
+          value={name}
+          placeholder="例如：纳指100轮动套利"
+          maxLength={40}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </Field>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="H 组标的代码" helper={describeCodeList(highCodes, '高溢价组，可用空格或逗号分隔')}>
+          <TextInput value={highCode} inputMode="text" placeholder="159632, 159501" onChange={(event) => setHighCode(sanitizeCodeListInput(event.target.value))} />
+        </Field>
+        <Field label="L 组标的代码" helper={describeCodeList(lowCodes, '低溢价组，可用空格或逗号分隔')}>
+          <TextInput value={lowCode} inputMode="text" placeholder="513100 159659" onChange={(event) => setLowCode(sanitizeCodeListInput(event.target.value))} />
+        </Field>
+      </div>
+
+      <Phrase
+        data-onboarding="switch-threshold"
+        title="提醒条件"
+        aside="点数字可输入，左右拖动微调"
+        parts={buildSwitchConditionParts(holdingSide)}
+        value={{
+          side: holdingSide,
+          upper: toDialNumber(upperPct, 0.9),
+          lower: toDialNumber(lowerPct, 0.1)
+        }}
+        onChange={(next) => {
+          if (next.side !== holdingSide) setHoldingSide(next.side === 'L' ? 'L' : 'H');
+          if (Number(next.upper) !== Number(upperPct)) setUpperPct(Number(next.upper).toFixed(2));
+          if (Number(next.lower) !== Number(lowerPct)) setLowerPct(Number(next.lower).toFixed(2));
+        }}
+        says={() => (opponentCodes.length
+          ? `现在盯 ${holdingSide}→${opponentSide}：卖出 ${shortCodeName(holdingSide === 'H' ? highCodes : lowCodes, `${holdingSide} 组`)}，换成 ${shortCodeName(opponentCodes, `${opponentSide} 组`)}`
+          : `${opponentSide} 组还没填代码`)}
+      />
+
+      {autoCompleted && autoMessage ? (
+        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-5 text-emerald-700">{autoMessage}</p>
+      ) : null}
+
+      {validation ? (
+        <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-5 text-amber-800">{validation}</p>
+      ) : null}
+      </>
+      ) : null}
+    </div>
+  );
+
+  // 「旧版」页面：跟新版引导同一套外观（sg 卡片），不再是弹窗
+  if (inline) {
+    return (
+      <div className="sg sg-legacy">
+        <section className="sg-card">
+          <h2>{isEditing ? '编辑切换方案' : '新建切换方案'}</h2>
+          <p className="sg-muted" style={{ margin: 0 }}>{isEditing ? '修改 H / L 双腿与持仓判断条件，保存后即刻生效。' : '配置 H / L 双腿与持仓判断条件，命中后自动推送提醒。'}</p>
+          <div className="sg-legacy-body">{formBody}</div>
+          <div className="sg-row" style={{ marginTop: 6 }}>
+            <button type="button" className="sg-btn ghost" onClick={onClose}>取消</button>
+            <button ref={saveButtonRef} type="button" data-onboarding="switch-save" className="sg-btn dark" style={{ flex: 1 }} onClick={submit} disabled={Boolean(validation) || saving}>
+              {saving ? <Loader2 className="inline h-4 w-4 animate-spin" /> : null}
+              保存方案
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose?.(); }}>
       <DialogContent className="max-h-[88dvh] overflow-y-auto p-0 sm:max-w-xl" overlayClassName="bg-slate-950/45 backdrop-blur-[2px]">
@@ -269,125 +412,7 @@ export function SwitchStrategyRuleModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-w-0 space-y-4 px-5 py-4">
-          {!isEditing && onAutoFill && !autoCompleted ? (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-1.5 text-sm font-bold text-indigo-900">
-                    <Sparkles className="h-4 w-4" />
-                    智能自动填充
-                  </div>
-                  <p className="mt-1 text-[11px] leading-5 text-indigo-700">填写当前持仓与预计交易费用，由云端 API 匹配候选基金并填写 H/L 标的和阈值。</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAutoPanelOpen((current) => !current);
-                    setAutoError('');
-                    setAutoMessage('');
-                  }}
-                  data-onboarding="switch-autofill"
-                  className="shrink-0 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 shadow-xs"
-                >
-                  {autoPanelOpen ? '收起' : '自动填充'}
-                </button>
-              </div>
-
-              {autoPanelOpen ? (
-                <div className="mt-3 border-t border-indigo-100 pt-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="当前持仓代码" helper="填写实际持有的场内基金代码">
-                      <TextInput
-                        value={autoHoldingCode}
-                        inputMode="numeric"
-                        placeholder="例如：159632"
-                        onChange={(event) => {
-                          setAutoHoldingCode(sanitizeSingleCodeInput(event.target.value));
-                          setAutoError('');
-                          setAutoMessage('');
-                        }}
-                      />
-                    </Field>
-                    <Field label="交易费率" rightLabel="万分之" helper="例如填 1 表示万1，买入和卖出各计算一次">
-                      <TextInput
-                        value={autoFeeWanRate}
-                        inputMode="decimal"
-                        placeholder="1"
-                        onChange={(event) => {
-                          setAutoFeeWanRate(sanitizePctInput(event.target.value));
-                          setAutoError('');
-                          setAutoMessage('');
-                        }}
-                      />
-                    </Field>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={runAutoFill}
-                    disabled={autoFilling}
-                    className={cx(primaryButtonClass, 'mt-3 w-full')}
-                  >
-                    {autoFilling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                    {autoFilling ? '正在调用 API…' : '生成并填充方案'}
-                  </button>
-                  {autoError ? <p role="alert" className="mt-2 text-[11px] font-bold leading-5 text-rose-600">{autoError}</p> : null}
-                  <p className="mt-2 text-[11px] leading-5 text-indigo-700">将读取该基金的当前持仓金额计算费用；未找到持仓时按 10,000 元计算。</p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {!autoPanelOpen ? (
-          <>
-          <Field label="方案名称（必填）">
-            <TextInput
-              value={name}
-              placeholder="例如：纳指100轮动套利"
-              maxLength={40}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </Field>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="H 组标的代码" helper={describeCodeList(highCodes, '高溢价组，可用空格或逗号分隔')}>
-              <TextInput value={highCode} inputMode="text" placeholder="159632, 159501" onChange={(event) => setHighCode(sanitizeCodeListInput(event.target.value))} />
-            </Field>
-            <Field label="L 组标的代码" helper={describeCodeList(lowCodes, '低溢价组，可用空格或逗号分隔')}>
-              <TextInput value={lowCode} inputMode="text" placeholder="513100 159659" onChange={(event) => setLowCode(sanitizeCodeListInput(event.target.value))} />
-            </Field>
-          </div>
-
-          <Phrase
-            data-onboarding="switch-threshold"
-            title="提醒条件"
-            aside="点数字可输入，左右拖动微调"
-            parts={buildSwitchConditionParts(holdingSide)}
-            value={{
-              side: holdingSide,
-              upper: toDialNumber(upperPct, 0.9),
-              lower: toDialNumber(lowerPct, 0.1)
-            }}
-            onChange={(next) => {
-              if (next.side !== holdingSide) setHoldingSide(next.side === 'L' ? 'L' : 'H');
-              if (Number(next.upper) !== Number(upperPct)) setUpperPct(Number(next.upper).toFixed(2));
-              if (Number(next.lower) !== Number(lowerPct)) setLowerPct(Number(next.lower).toFixed(2));
-            }}
-            says={() => (opponentCodes.length
-              ? `现在盯 ${holdingSide}→${opponentSide}：卖出 ${shortCodeName(holdingSide === 'H' ? highCodes : lowCodes, `${holdingSide} 组`)}，换成 ${shortCodeName(opponentCodes, `${opponentSide} 组`)}`
-              : `${opponentSide} 组还没填代码`)}
-          />
-
-          {autoCompleted && autoMessage ? (
-            <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold leading-5 text-emerald-700">{autoMessage}</p>
-          ) : null}
-
-          {validation ? (
-            <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-5 text-amber-800">{validation}</p>
-          ) : null}
-          </>
-          ) : null}
-        </div>
+        {formBody}
 
         <DialogFooter className="border-t border-slate-100 px-5 py-4">
           <button type="button" onClick={onClose} className={secondaryButtonClass}>取消</button>
@@ -400,5 +425,6 @@ export function SwitchStrategyRuleModal({
     </Dialog>
   );
 }
+
 
 export default SwitchStrategyRuleModal;
