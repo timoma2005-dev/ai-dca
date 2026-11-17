@@ -1,7 +1,7 @@
 // 换基引导（「30 秒看懂换基」+「平时谁贵谁便宜」+ 方案卡）的纯计算部分。
-// 数据来自 /api/notify/switch/guide（服务端按近 60 / 120 个交易日逐日溢价算好的统计）。
+// 数据来自 /api/notify/switch/guide（服务端按近 60 / 120 / 180 个交易日逐日溢价算好的统计）。
 
-export const GUIDE_WINDOWS = [60, 120];
+export const GUIDE_WINDOWS = [60, 120, 180];
 
 export function round2(value) {
   return Math.round(Number(value) * 100) / 100;

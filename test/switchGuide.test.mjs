@@ -27,7 +27,7 @@ test('shortEtfName strips the index prefix', () => {
 
 test('buildSwitchGuide gives per-window relative medians and pair quantiles only', () => {
   const guide = buildSwitchGuide(sampleData());
-  assert.deepEqual(Object.keys(guide.win).sort(), ['120', '60']);
+  assert.deepEqual(Object.keys(guide.win).sort(), ['120', '180', '60']);
   assert.equal(guide.win[60].days, 60);
   assert.ok(guide.win[60].rel['513100'] > 0);
   assert.ok(guide.win[60].rel['159513'] < 0);

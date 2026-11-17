@@ -104,7 +104,7 @@ function Ladder({ guide, days, setDays, sel, onPick, collapsed, onRepick }) {
       <div className="sg-row sg-between">
         <h2>平时谁贵、谁便宜</h2>
         <div className="sg-mini">
-          {GUIDE_WINDOWS.map((w) => <button type="button" key={w} className={days === w ? 'on' : ''} onClick={() => setDays(w)}>近 {w} 天</button>)}
+          {GUIDE_WINDOWS.filter((w) => guide?.win?.[w]).map((w) => <button type="button" key={w} className={days === w ? 'on' : ''} onClick={() => setDays(w)}>近 {w} 天</button>)}
         </div>
       </div>
       <div className={`sg-col${collapsed ? ' shut' : ''}`}>

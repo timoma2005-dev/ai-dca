@@ -317,9 +317,9 @@ export async function handleDemoTeaserRoute(method, url, headers, { fetchImpl = 
   return { status: 404, body: { ok: false, error: 'Not found' } };
 }
 
-// 换基引导页（「平时谁贵谁便宜」）：按近 60 / 120 个交易日的逐日溢价，给每只相对同类中位数的「平时偏离」
+// 换基引导页（「平时谁贵谁便宜」）：按近 60 / 120 / 180 个交易日的逐日溢价，给每只相对同类中位数的「平时偏离」
 // 和每组配对价差的中位数 / 四分位。只下发统计结果，不下发逐日序列；需登录且有换基权限（路由在 /api/notify/switch/ 下）。
-export const GUIDE_WINDOWS = [60, 120];
+export const GUIDE_WINDOWS = [60, 120, 180];
 export const GUIDE_PATH = '/api/notify/switch/guide';
 
 function median(values) {
