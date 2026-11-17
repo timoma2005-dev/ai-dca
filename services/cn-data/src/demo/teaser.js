@@ -317,7 +317,7 @@ export async function handleDemoTeaserRoute(method, url, headers, { fetchImpl = 
   return { status: 404, body: { ok: false, error: 'Not found' } };
 }
 
-// 换基引导页（「平时谁贵谁便宜」）：按近 60 / 120 / 180 个交易日的逐日溢价，给每只相对同类中位数的「平时偏离」
+// 换基引导页（「平时谁贵谁便宜」）：按近 60 / 120 / 180 个交易日的溢价（有分钟线统计时用分钟口径，否则逐日），给每只相对同类中位数的「平时偏离」
 // 和每组配对价差的中位数 / 四分位。只下发统计结果，不下发逐日序列；需登录且有换基权限（路由在 /api/notify/switch/ 下）。
 export const GUIDE_WINDOWS = [60, 120, 180];
 export const GUIDE_PATH = '/api/notify/switch/guide';
@@ -342,7 +342,21 @@ export function shortEtfName(name = '') {
   return text.replace(/^(纳指(100)?|纳斯达克(100)?)ETF/, '') || text;
 }
 
-export function buildSwitchGuide(data) {
+// 分钟线统计（scripts/switch-guide/build_minute_guide.py 每晚生成）：有就用分钟口径覆盖日线的 rel / pairs，缺的代码仍用日线。
+const MINUTE_GUIDE_FILE = process.env.SWITCH_GUIDE_MINUTE_FILE || '/var/lib/ai-dca-cn-data/switch-guide-minute.json';
+let minuteGuideCache = { at: 0, data: null };
+export function readMinuteGuide(now = Date.now()) {
+  if (minuteGuideCache.data && now - minuteGuideCache.at < 10 * 60 * 1000) return minuteGuideCache.data;
+  try {
+    const parsed = JSON.parse(readFileSync(MINUTE_GUIDE_FILE, 'utf8'));
+    minuteGuideCache = { at: now, data: parsed?.win ? parsed : null };
+  } catch {
+    minuteGuideCache = { at: now, data: null };
+  }
+  return minuteGuideCache.data;
+}
+
+export function buildSwitchGuide(data, minute = null) {
   const etfs = (Array.isArray(data?.etfs) ? data.etfs : []).filter((e) => /^\d{6}$/.test(String(e?.code || '')) && Number.isFinite(Number(e?.premium)));
   const codes = etfs.map((e) => String(e.code)).sort();
   if (codes.length < 2) return null;
@@ -380,8 +394,15 @@ export function buildSwitchGuide(data) {
       days: rows.length,
       rel: Object.fromEntries(codes.map((c) => [c, round2(median(relSeries[c]))])),
       relToday: Object.fromEntries(codes.map((c) => [c, round2(today[c] - todayMedian)])),
-      pairs
+      pairs,
+      basis: 'daily'
     };
+    const mw = minute?.win?.[days] || minute?.win?.[String(days)];
+    if (mw && mw.rel && mw.pairs) {
+      const rel = { ...win[days].rel };
+      for (const c of codes) if (Number.isFinite(Number(mw.rel[c]))) rel[c] = Number(mw.rel[c]);
+      win[days] = { ...win[days], from: mw.from || win[days].from, days: mw.days || win[days].days, rel, pairs: { ...pairs, ...mw.pairs }, basis: 'minute', minutes: mw.minutes || null };
+    }
   }
   return {
     date: data.date || null,
@@ -406,7 +427,7 @@ export async function handleSwitchGuideRoute(method, url, headers, { fetchImpl =
     console.warn('[cn-data] switch guide upstream failed:', error?.message || error);
     return { status: 503, body: { ok: false, code: 'GUIDE_UNAVAILABLE', error: '溢价数据暂不可用' } };
   }
-  const guide = buildSwitchGuide(data);
+  const guide = buildSwitchGuide(data, readMinuteGuide(now));
   if (!guide) return { status: 503, body: { ok: false, code: 'GUIDE_UNAVAILABLE', error: '溢价数据暂不可用' } };
   return { body: { ok: true, data: guide }, headers: { 'Cache-Control': 'private, max-age=300' } };
 }

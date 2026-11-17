@@ -51,3 +51,14 @@ test('plan picks the usually-pricier fund as H and fills thresholds from the qua
   const verdict = judgePlan({ ...plan, gap: plan.back - 1, nameX: '国泰', nameY: '大成', codeX: '513100', codeY: '159513' });
   assert.equal(verdict.kind, 'back');
 });
+
+test('buildSwitchGuide prefers minute-level stats when provided, keeping daily for missing codes', () => {
+  const minute = { win: { 60: { from: '2026-08-14', days: 60, minutes: 14220, rel: { 513100: 3.3, 159513: -0.83 }, pairs: { '159513-513100': [-4.24, -5.31, -3.25] } } } };
+  const guide = buildSwitchGuide(sampleData(), minute);
+  assert.equal(guide.win[60].basis, 'minute');
+  assert.equal(guide.win[60].from, '2026-08-14');
+  assert.equal(guide.win[60].rel['513100'], 3.3);
+  assert.ok(Number.isFinite(guide.win[60].rel['159941']));
+  assert.deepEqual(guide.win[60].pairs['159513-513100'], [-4.24, -5.31, -3.25]);
+  assert.equal(guide.win[120].basis, 'daily');
+});
