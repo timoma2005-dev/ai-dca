@@ -140,6 +140,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
   const [guide, setGuide] = useState(null);
   // 新建方案：有引导数据时进入「换基引导」全页流程，保存后回到方案列表；没有数据时退回老弹窗
   const [creating, setCreating] = useState(false);
+  const [flip, setFlip] = useState('');
   const rootRef = useRef(null);
   const backToTop = useCallback(() => {
     requestAnimationFrame(() => rootRef.current?.scrollIntoView({ block: 'start' }));
@@ -323,9 +324,23 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
     return payload.rule;
   }, []);
 
+  // 「旧版」：引导页翻过去，再打开原来的新建弹窗
+  const openLegacyCreate = () => {
+    if (flip) return;
+    setFlip('out');
+    setTimeout(() => {
+      setFlip('');
+      setCreating(false);
+      setEditingRuleId('');
+      setModalOpen(true);
+      backToTop();
+    }, 320);
+  };
+
   if (creating && guide) {
     return (
-      <div className="space-y-3 sm:space-y-4" ref={rootRef} style={{ scrollMarginTop: 76 }}>
+      <div className="sg-flipstage" ref={rootRef} style={{ scrollMarginTop: 76 }}>
+      <div className={`space-y-3 sm:space-y-4 ${flip === 'out' ? 'sg-flipout' : 'sg-flipin'}`}>
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
@@ -336,10 +351,10 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
           </button>
           <button
             type="button"
-            className="text-sm text-slate-500 underline-offset-2 hover:underline"
-            onClick={() => { setCreating(false); setEditingRuleId(''); setModalOpen(true); }}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            onClick={openLegacyCreate}
           >
-            用高级设置新建
+            ⇄ 旧版
           </button>
         </div>
         <SwitchGuide
@@ -349,6 +364,7 @@ export function SwitchStrategyBoardExperience({ onOpenBacktest, onOpenQuickTrade
           onSave={async (payload) => { await handleSaveRule(payload); return true; }}
           onDone={() => { setCreating(false); setKeyword(''); backToTop(); }}
         />
+      </div>
       </div>
     );
   }

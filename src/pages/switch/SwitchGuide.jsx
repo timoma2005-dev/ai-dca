@@ -18,6 +18,14 @@ const GLOSSARY = {
   spread: ['价差', '两只基金溢价相减。国泰贵 17%、大成贵 12%，价差就是 5%。']
 };
 
+const STORY_SEEN_KEY = 'aiDcaSwitchGuideStorySeen:v1';
+function readStorySeen() {
+  try { return window.localStorage.getItem(STORY_SEEN_KEY) === '1'; } catch { return false; }
+}
+function markStorySeen() {
+  try { window.localStorage.setItem(STORY_SEEN_KEY, '1'); } catch { /* 隐私模式忽略 */ }
+}
+
 function findScrollParent(node) {
   let el = node?.parentElement;
   while (el && el !== document.body) {
@@ -60,6 +68,7 @@ function Story({ guide, folded, onFold, onTip }) {
   const [si, setSi] = useState(0);
   const { nA, nB, A, B, steps } = useMemo(() => buildStorySteps(guide), [guide]);
   const s = steps[si];
+  useEffect(() => { if (si === steps.length - 1) markStorySeen(); }, [si, steps.length]);
   const text = typeof s.t === 'function' ? s.t(onTip) : s.t;
   return (
     <section className={`sg-card sg-story${folded ? ' folded' : ''}`}>
@@ -100,7 +109,7 @@ function Ladder({ guide, days, setDays, sel, onPick, collapsed, onRepick }) {
       </div>
       <div className={`sg-col${collapsed ? ' shut' : ''}`}>
         <div className="sg-colin">
-          <p className="sg-muted" style={{ margin: '4px 0' }}>{rows.length} 只都装同一篮子，但有的<b>一直</b>比别人贵。条形是平时（中间值）比同类贵多少，圆点是今天。</p>
+          <p className="sg-muted" style={{ margin: '4px 0' }}>{rows.length} 只装的同一篮子，有的<b>一直</b>比别人贵。</p>
           <div className="sg-keyrow">
             <span><i className="k-up" />平时偏贵</span><span><i className="k-down" />平时偏便宜</span><span><i className="k-dot" />今天</span>
           </div>
@@ -272,32 +281,30 @@ function PlanCard({ guide, sel, days, existingRules, onSave, onDone, saving, car
           <div className="vs">换成</div>
           <FundBox guide={guide} code={sel.target} isHold={false} isX={sel.target === base.X} />
         </div>
-        <div className="sg-muted" style={{ textAlign: 'center' }}>「贵 X%」= 比篮子真实价值多付的钱，叫 <Word id="premium" onTip={guide.onTip} /></div>
         <div className="sg-gap">
           <div className="l">两只差了</div>
           <div className="v sg-num">{fmtPct(gap)}</div>
-          <div className="l">{nameX}比{nameY}贵这么多（这个叫 <Word id="spread" onTip={guide.onTip} />）</div>
-          <div className="sg-normal">
-            平时（近 {days} 天中间值）差 <b>{fmtPct(base.stat.m)}</b>，大多数日子在 {fmtPct(base.stat.lo)} 到 {fmtPct(base.stat.hi)}（斜纹区）。现在
-            {Math.abs(d) < 0.15 ? '跟平时差不多' : d > 0 ? <>比平时<b>大 {fmtPct(d)}</b></> : <>比平时<b>小 {fmtPct(-d)}</b></>}。
+          <div className="l">{nameX}比{nameY}贵，这叫<Word id="spread" onTip={guide.onTip} /></div>
+          <div className="sg-stats">
+            <div><span>平时（近 {days} 天）</span><b className="sg-num">{fmtPct(base.stat.m)}</b></div>
+            <div><span>常见范围（斜纹）</span><b className="sg-num">{fmtPct(base.stat.lo).replace('%', '')}~{fmtPct(base.stat.hi)}</b></div>
+            <div><span>今天比平时</span><b className="sg-num">{Math.abs(d) < 0.15 ? '差不多' : `${d > 0 ? '+' : '−'}${fmtPct(Math.abs(d))}`}</b></div>
           </div>
         </div>
         <Meter plan={plan} gap={gap} go={go} back={back} onChange={(patch) => setState((s) => ({ ...s, ...patch }))} />
-        <div className="sg-legend"><span className="a">比平时小很多：拿{nameX}</span><span className="c">比平时大很多：拿{nameY}</span></div>
         <div className={`sg-verdict ${verdict.kind}`}>
           <div className="big">{verdict.title}</div>
           <div className="why">{verdict.why}</div>
           {verdict.trade ? <div className="sg-trade"><span className="chip s">卖出 {verdict.trade.sell}</span>→<span className="chip b">买入 {verdict.trade.buy}</span></div> : null}
         </div>
         <div className="sg-row sg-between">
-          <span className="sg-muted">👆 拖黑色竖线改「换的线」，拖「今天」试试别的价差</span>
+          <span className="sg-muted">👆 竖线和「今天」都能拖</span>
           <button type="button" className="sg-btn ghost sm" style={{ visibility: Math.abs(gap - base.gap) > 0.005 ? 'visible' : 'hidden' }} onClick={() => setState((s) => ({ ...s, gap: base.gap }))}>回到今天</button>
         </div>
-        <div className="sg-warn">{nameX}平时就比{nameY}贵约 {fmtPct(base.stat.m)}，这部分换来换去赚不到，能赚的只是比平时多出来的那截。两条线默认放在最常见范围的两头。</div>
+        <div className="sg-warn">平时就差的 <b>{fmtPct(base.stat.m)}</b> 赚不到，只赚比平时多出来的那截。</div>
         <button type="button" className={`sg-btn ${isSaved ? 'ghost' : 'dark'} block`} disabled={saving} onClick={() => setConfirmOpen(true)}>
           {saving ? '保存中…' : isSaved ? '已保存 ✓' : savedKey ? '保存修改' : '保存这个方案，帮我盯着'}
         </button>
-        <div className="sg-muted" style={{ textAlign: 'center', marginTop: 6 }}>{isSaved ? '已加到「我的方案」，到了你定的线会提醒你' : '保存后回到方案列表，到了你定的线就提醒你'}</div>
       </section>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -332,7 +339,8 @@ export function SwitchGuide({ guide, existingRules = [], onSave, onDone, saving 
   const planRef = useRef(null);
   const [days, setDays] = useState(60);
   const [sel, setSel] = useState({ hold: '', target: '' });
-  const [storyFolded, setStoryFolded] = useState(false);
+  // 看过一次（翻到最后一步 / 收起过 / 选好一对）后，下次新建默认收起，点标题还能再看
+  const [storyFolded, setStoryFolded] = useState(readStorySeen);
   const [tip, setTip] = useState('');
   const quietUntil = useRef(0);
   const armY = useRef(0);
@@ -349,6 +357,7 @@ export function SwitchGuide({ guide, existingRules = [], onSave, onDone, saving 
       quietUntil.current = Date.now() + 900;
       setTimeout(() => { armY.current = scrollTopOf(findScrollParent(rootRef.current)); }, 900);
     }
+    if (on) markStorySeen();
     setStoryFolded(on);
   }, []);
 
@@ -364,7 +373,7 @@ export function SwitchGuide({ guide, existingRules = [], onSave, onDone, saving 
       const down = y > last;
       last = y;
       if (Date.now() < quietUntil.current) { armY.current = y; return; }
-      if (down && y - armY.current > 60) setStoryFolded(true);
+      if (down && y - armY.current > 60) { markStorySeen(); setStoryFolded(true); }
     };
     target.addEventListener('scroll', onScroll, { passive: true });
     return () => target.removeEventListener('scroll', onScroll);
@@ -375,6 +384,7 @@ export function SwitchGuide({ guide, existingRules = [], onSave, onDone, saving 
     if (code === sel.hold) { setSel({ hold: '', target: '' }); return; }
     setSel({ hold: sel.hold, target: code });
     quietUntil.current = Date.now() + 1500;
+    markStorySeen();
     setStoryFolded(true);
     // 等排行和故事卡收起动画结束（0.55s）再滚到方案卡顶部
     setTimeout(() => planRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 650);

@@ -143,3 +143,20 @@
 .sg-warn { font-size: 13px; color: #8a5a00; background: var(--sg-accbg); border-radius: 12px; padding: 10px 12px; margin-top: 12px; }
 .sg-sum { background: #f6f6f3; border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.8; }
 
+
+/* 排版：中文段落避免孤字成行，数字不拆行 */
+.sg p, .sg .why, .sg .sg-warn, .sg .sg-storytext, .sg .sg-muted { text-wrap: pretty; }
+.sg b, .sg .sg-num { white-space: nowrap; }
+.sg-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 12px 0 2px; }
+.sg-stats > div { background: var(--sg-soft, #f4f4f1); border-radius: 12px; padding: 8px 6px; text-align: center; }
+.sg-stats span { display: block; font-size: 11px; color: var(--sg-sub); white-space: nowrap; }
+.sg-stats b { display: block; font-size: 14px; margin-top: 2px; }
+@media (max-width: 360px) { .sg-stats b { font-size: 12.5px; } }
+
+/* 新建方案 ⇄ 旧版：整页翻转 */
+.sg-flipstage { perspective: 1400px; }
+.sg-flipin { animation: sgFlipIn .42s cubic-bezier(.2,.7,.2,1) both; transform-origin: 50% 0; }
+.sg-flipout { animation: sgFlipOut .32s cubic-bezier(.5,0,.8,.4) both; transform-origin: 50% 0; pointer-events: none; }
+@keyframes sgFlipIn { from { transform: rotateY(-90deg); opacity: .2; } to { transform: rotateY(0); opacity: 1; } }
+@keyframes sgFlipOut { from { transform: rotateY(0); opacity: 1; } to { transform: rotateY(90deg); opacity: .2; } }
+@media (prefers-reduced-motion: reduce) { .sg-flipin, .sg-flipout { animation-duration: .01s; } }

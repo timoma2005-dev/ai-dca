@@ -77,7 +77,7 @@ export function judgePlan({ holdX, gap, go, back, stat, nameX, nameY, codeX, cod
       return {
         kind: 'go',
         title: '✅ 可以换了',
-        why: `现在差 ${fmtPct(gap)}，比平时多了 ${fmtPct(d)}，到了你定的 ${fmtPct(go)}。${nameY}这会儿显得特别便宜。`,
+        why: `已到你定的 ${fmtPct(go)}，${nameY}这会儿格外便宜。`,
         trade: { sell: `${nameX} ${codeX}`, buy: `${nameY} ${codeY}` }
       };
     }
@@ -85,15 +85,15 @@ export function judgePlan({ holdX, gap, go, back, stat, nameX, nameY, codeX, cod
       kind: 'wait',
       title: `⏳ 拿着${nameX}，再等等`,
       why: d > 0.15
-        ? `比平时大一点，但还没到你定的 ${fmtPct(go)}，再大 ${fmtPct(go - gap)} 才值得换。`
-        : '现在差得不比平时多，换过去不划算。'
+        ? `离你定的 ${fmtPct(go)} 还差 ${fmtPct(go - gap)}。`
+        : '没比平时多，换过去不划算。'
     };
   }
   if (gap <= back) {
     return {
       kind: 'back',
       title: `🔁 可以换成${nameX}了`,
-      why: `现在只差 ${fmtPct(gap)}，比平时少 ${fmtPct(-d)}，到了你定的 ${fmtPct(back)}。${nameX}这会儿显得便宜。`,
+      why: `已到你定的 ${fmtPct(back)}，${nameX}这会儿格外便宜。`,
       trade: { sell: `${nameY} ${codeY}`, buy: `${nameX} ${codeX}` }
     };
   }
@@ -101,8 +101,8 @@ export function judgePlan({ holdX, gap, go, back, stat, nameX, nameY, codeX, cod
     kind: 'wait',
     title: `⏳ 拿着${nameY}，再等等`,
     why: d < -0.15
-      ? `比平时小一点，但还没到你定的 ${fmtPct(back)}，再小 ${fmtPct(gap - back)} 才值得换。`
-      : `现在差得不比平时少，换成${nameX}要多花钱，不划算。`
+      ? `离你定的 ${fmtPct(back)} 还差 ${fmtPct(gap - back)}。`
+      : `没比平时少，换回${nameX}不划算。`
   };
 }
 
