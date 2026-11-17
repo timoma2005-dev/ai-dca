@@ -111,3 +111,23 @@ test('manual grants are left alone and do not flap', () => {
     closeDb(db);
   }
 });
+
+test('time-limited grants are overridden by the automatic tier once qualified', () => {
+  const db = setup();
+  try {
+    const now = new Date('2026-11-17T06:00:00.000Z');
+    addUser(db, 'u4', new Date(now.getTime() - 40 * DAY).toISOString());
+    const until = new Date(now.getTime() + 30 * DAY).toISOString();
+    db.prepare("INSERT INTO user_roles (user_id, role_code, expires_at, granted_by, created_at) VALUES ('u4', 'vip', ?, 'promo:2026-11', ?)").run(until, now.toISOString());
+    addDays(db, 'u4', now, 3);
+    assert.equal(evaluateUser(db, 'u4', { now }).changed, false);
+    addDays(db, 'u4', now, 12);
+    const r = evaluateUser(db, 'u4', { now });
+    assert.equal(r.tier, 'vip');
+    assert.deepEqual(db.prepare("SELECT role_code, expires_at, granted_by FROM user_roles WHERE user_id = 'u4'").all().map((x) => ({ ...x })), [{ role_code: 'vip', expires_at: null, granted_by: AUTO_GRANTOR }]);
+    recomputeAll(db, { now: new Date(now.getTime() + 60 * DAY) });
+    assert.deepEqual(autoRoles(db, 'u4'), []);
+  } finally {
+    closeDb(db);
+  }
+});

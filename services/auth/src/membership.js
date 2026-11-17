@@ -78,12 +78,19 @@ export function evaluateUser(db, userId, { now = new Date() } = {}) {
   if (!user) return { changed: false, tier: '', prevTier: '' };
   const target = targetTier(registeredDaysOf(user.created_at, now), activeDaysOf(db, userId, now));
   const current = currentAutoTier(db, userId);
-  // 管理员已手动授予同级角色（主键冲突无法再插自动行）：视为已达标，不反复改写。
-  const manualHeld = target && !current && db.prepare('SELECT 1 FROM user_roles WHERE user_id = ? AND role_code = ? AND (granted_by IS NULL OR granted_by <> ?)').get(userId, target, AUTO_GRANTOR);
-  if (target === current || manualHeld) return { changed: false, tier: current, prevTier: current };
   const iso = new Date(now).toISOString();
+  // 管理员手动授予的【永久】同级角色：视为已达标，不反复改写。
+  // 有期限的赠送（如一个月 VIP）不算：达标时由自动等级覆盖（删掉赠送行、写入长期自动行），之后按活跃度自动升降。
+  const manual = target && !current
+    ? db.prepare('SELECT expires_at FROM user_roles WHERE user_id = ? AND role_code = ? AND (granted_by IS NULL OR granted_by <> ?)').get(userId, target, AUTO_GRANTOR)
+    : null;
+  const manualHeld = Boolean(manual) && !manual.expires_at;
+  if (target === current || manualHeld) return { changed: false, tier: current, prevTier: current };
   db.exec('BEGIN IMMEDIATE');
   try {
+    if (manual) {
+      db.prepare('DELETE FROM user_roles WHERE user_id = ? AND role_code = ? AND expires_at IS NOT NULL AND (granted_by IS NULL OR granted_by <> ?)').run(userId, target, AUTO_GRANTOR);
+    }
     db.prepare(`DELETE FROM user_roles WHERE user_id = ? AND granted_by = ? AND role_code IN ('vip', 'svip')`).run(userId, AUTO_GRANTOR);
     if (target) {
       db.prepare('INSERT OR IGNORE INTO user_roles (user_id, role_code, expires_at, granted_by, created_at) VALUES (?, ?, NULL, ?, ?)')
