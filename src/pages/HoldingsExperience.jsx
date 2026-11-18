@@ -19,7 +19,6 @@ import { COMPACT_HOLDINGS_COLUMN_VISIBILITY, createAggregateHoldingsColumns } fr
 import { buildAggregateHoldingsTsv } from './holdings/holdingsClipboardExport.js';
 import { useHoldingsStorageSync } from './holdings/useHoldingsStorageSync.js';
 import { useHoldingAlerts } from './holdings/useHoldingAlerts.js';
-import { useLocalMcpImport } from './holdings/useLocalMcpImport.js';
 import { AlertRuleDialog } from '../components/AlertRuleDialog.jsx';
 import { WorkspaceReturnBar } from '../components/WorkspaceReturnBar.jsx';
 import { MarketSentimentPageSurface } from './markets/MarketSentimentPageSurface.jsx';
@@ -263,7 +262,6 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
     () => aggregateByCode(transactions, snapshotsByCode),
     [transactions, snapshotsByCode]
   );
-  const localMcp = useLocalMcpImport({ ledger, setLedger, aggregates });
   const aggregateByCodeMap = useMemo(() => {
     const map = new Map();
     for (const agg of aggregates) map.set(agg.code, agg);
@@ -1197,13 +1195,11 @@ export function HoldingsExperience({ links = {}, inPagesDir = false, embedded = 
         },
         onPasteExcel: openPasteModal,
         onOcr: openOcrModal,
-        onLocalMcp: localMcp.supported ? localMcp.openModal : undefined,
         onDataRepair: () => window.dispatchEvent(new CustomEvent('workspace:navigate', { detail: { tab: 'dataRepair' } })),
         onCopyTable: handleCopyVisibleTable,
         copyTitle: '复制基金汇总为 TSV',
         onClearAllData: handleClearAllData,
       }}
-      localMcpModal={localMcp}
       fileInputRef={fileInputRef}
       onOcrFile={handleOcrFile}
       aggregatesTable={aggregatesTable}

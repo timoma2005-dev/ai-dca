@@ -1,6 +1,6 @@
 // 持仓总览右侧操作区：主按钮「新增单笔」外，其余收进「导入」「更多」两个下拉菜单。
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Copy, Download, MoreHorizontal, PlugZap, Plus, ReceiptText, ScanLine, Trash2, Wrench } from 'lucide-react';
+import { ChevronDown, Copy, Download, MoreHorizontal, Plus, ReceiptText, ScanLine, Trash2, Wrench } from 'lucide-react';
 import { cx } from '../../components/experience-ui.jsx';
 
 const ITEM_CLASS = 'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50';
@@ -53,15 +53,6 @@ function ActionMenu({ label, icon: Icon, items, tone = 'slate' }) {
 export function HoldingsQuickActions({ quickActions }) {
 	if (!quickActions) return null;
 	const importItems = [
-		quickActions.onLocalMcp ? {
-			key: 'mcp',
-			node: (
-				<button type="button" role="menuitem" onClick={quickActions.onLocalMcp} title="从本机 MCP（同花顺投资账本）导入持仓" className={ITEM_CLASS}>
-					<PlugZap className="h-3.5 w-3.5 text-indigo-500" strokeWidth={1.75} aria-hidden="true" />
-					<span>本地 MCP</span>
-				</button>
-			)
-		} : null,
 		quickActions.onPasteExcel ? {
 			key: 'paste',
 			node: (
