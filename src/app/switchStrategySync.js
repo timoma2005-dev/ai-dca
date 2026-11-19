@@ -7,6 +7,7 @@ import { loadCloudSession } from './authClient.js';
 import { apiUrlWithFallback, fetchWithFallback } from './apiBase.js';
 import { markOnboardingTask } from './onboarding/state.js';
 import { hasSavedSwitchRule } from './onboarding/signals.js';
+import { normalizeLastSwitch, normalizeQuietSignals, shanghaiToday } from './switchSignalAnswer.js';
 
 const NOTIFY_ENDPOINT = '/api/notify';
 const LOCAL_CACHE_KEY = 'aiDcaSwitchStrategyWorkerConfig';
@@ -92,7 +93,9 @@ function serializeRule(rule = {}) {
     holdingNotional: rule.holdingNotional,
     candidateFundCodes: rule.candidateFundCodes,
     feeConfig: rule.feeConfig,
-    backtestTimeframe: rule.backtestTimeframe
+    backtestTimeframe: rule.backtestTimeframe,
+    quietSignals: normalizeQuietSignals(rule.quietSignals, shanghaiToday()),
+    lastSwitch: normalizeLastSwitch(rule.lastSwitch)
   };
 }
 
@@ -174,7 +177,9 @@ export function normalizeSwitchRuleShape(input = {}, index = 0, { defaultEnabled
     holdingNotional,
     candidateFundCodes,
     feeConfig,
-    backtestTimeframe
+    backtestTimeframe,
+    quietSignals: normalizeQuietSignals(input?.quietSignals),
+    lastSwitch: normalizeLastSwitch(input?.lastSwitch)
   };
 }
 

@@ -1,6 +1,6 @@
 import { fetchSwitchCollectorSnapshot } from './switchMarketCollector.js';
 import { enqueueTriggerOutbox, loadSwitchSnapshot, reserveDailyTriggerClaim, saveImmutableSwitchSnapshot } from './notifyReliabilityStorage.js';
-import { buildSwitchTriggerNotification, getRunnableSwitchRules, isInTradingSession, normalizeSwitchConfig, switchConfigKey, switchSnapshotKey, switchStateKey } from './switchStrategy.js';
+import { buildSwitchTriggerNotification, getRunnableSwitchRules, isSwitchSignalQuiet, isInTradingSession, normalizeSwitchConfig, switchConfigKey, switchSnapshotKey, switchStateKey } from './switchStrategy.js';
 
 const TABLE = 'notify_user_records';
 const CONFIG_PREFIX = 'switch:config:';
@@ -52,7 +52,7 @@ async function evaluateConfig(env, entry, market, force = false) {
   for (const rule of getRunnableSwitchRules(force ? { ...entry.config, enabled: true } : entry.config, { forceEnabled: force })) {
     const snapshot = buildRuleSnapshot(rule, market); const prior = priorByRule[rule.id] || {}; const next = { ...prior };
     for (const group of snapshot.byBenchmark) { const benchClass = rule.premiumClass?.[group.benchmarkCode]; for (const candidate of group.candidates) { const candidateClass = rule.premiumClass?.[candidate.code]; const rawDiff = candidate.spreadVsBenchmarkPct; if (!group.valid || !candidate.valid || !Number.isFinite(rawDiff)) continue; const gap = benchClass === 'H' ? rawDiff : benchClass === 'L' ? -rawDiff : NaN; const kind = classify(benchClass, candidateClass, gap, Number(rule.intraSellLowerPct), Number(rule.intraBuyOtherPct)); const key = `${group.benchmarkCode}:${candidate.code}`; const old = prior[key] || {}; const priorCount = old.lastTriggeredDate === date && old.lastTriggeredRule === kind ? Number(old.dailyTriggerCount) || 0 : 0; let accepted = false; let claimSlot = 0;
-      if (kind !== 'none' && priorCount < MAX_DAILY_PUSHES) {
+      if (kind !== 'none' && priorCount < MAX_DAILY_PUSHES && !isSwitchSignalQuiet(rule, key, kind, date)) {
         const trigger = { pairKey: `${rule.id}:${key}`, rule: kind, ruleId: rule.id, ruleName: rule.name, fromCode: group.benchmarkCode, toCode: candidate.code, fromName: group.benchmarkName, toName: candidate.name, diffPct: gap, gapPct: gap, threshold: kind === 'A' ? Number(rule.intraSellLowerPct) : Number(rule.intraBuyOtherPct), benchClass, candClass: candidateClass };
         const notification = buildSwitchTriggerNotification(snapshot, trigger, env);
         const claim = await reserveDailyTriggerClaim(env, { ownerUserId: entry.ownerUserId, clientId: entry.clientId, ruleId: rule.id, pairKey: key, triggerKind: kind, triggerDate: date, eventId: notification.eventId, startSlot: priorCount + 1, maxSlot: MAX_DAILY_PUSHES });

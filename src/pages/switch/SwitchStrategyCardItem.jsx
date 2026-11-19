@@ -60,7 +60,13 @@ export function SwitchStrategyCardItem({
   onToggle,
   onEdit,
   onTest,
-  onDelete
+  onDelete,
+  prompt = null,
+  notice = null,
+  answering = false,
+  onAnswerSwitch,
+  onAnswerSkip,
+  onUndoNotice
 }) {
   const holdingSide = row.holdingSide || 'H';
   const computedAt = formatSwitchDate(row.computedAt);
@@ -98,6 +104,34 @@ export function SwitchStrategyCardItem({
         </div>
 
         <SwitchStrategySpreadGauge gauge={row.gauge} holdingSide={holdingSide} />
+
+        {prompt ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 sm:p-3" data-switch-signal-prompt={row.id}>
+            <div className="text-xs font-bold text-amber-800">
+              {prompt.live ? '到线了' : '今天提醒过'}
+              {Number(row.hitCount) > 0 ? <span className="font-medium text-amber-700"> · 今日已提醒 {Number(row.hitCount)} 次</span> : null}
+            </div>
+            <div className="mt-1 text-xs text-slate-700">
+              <span className="rounded bg-rose-100 px-1 font-mono font-semibold text-rose-700">卖 {prompt.fromCode}</span>
+              <span className="mx-1 text-slate-400">→</span>
+              <span className="rounded bg-emerald-100 px-1 font-mono font-semibold text-emerald-700">买 {prompt.toCode}</span>
+              <span className="ml-1 text-slate-500">换了吗？</span>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button type="button" disabled={busy || answering} onClick={() => onAnswerSwitch?.(row, prompt)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50">我换了</button>
+              <button type="button" disabled={busy || answering} onClick={() => onAnswerSkip?.(row, prompt)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">这次不换</button>
+            </div>
+          </div>
+        ) : null}
+
+        {notice ? (
+          <div className={cx('flex items-start justify-between gap-2 rounded-xl border p-2.5 text-xs', notice.tone === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600')}>
+            <span className="min-w-0">{notice.text}</span>
+            {notice.undo ? (
+              <button type="button" disabled={busy || answering} onClick={() => onUndoNotice?.(row, notice)} className="shrink-0 text-slate-500 underline hover:text-slate-800 disabled:opacity-50">撤销</button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-3.5 py-2 text-[11px] text-slate-500 sm:px-4 sm:py-2.5">

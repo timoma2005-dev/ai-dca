@@ -22,6 +22,21 @@ function statusLabel(status = '', eventType = '') {
   return status || '未发送';
 }
 
+// 换基提醒：站内直接回答「我换了 / 这次不换」，落到方案列表接着处理（同源打开，不跳主域名）。
+function switchAnswerHref(event = {}, answer = '') {
+  if (event?.eventType !== 'switch-strategy-trigger' || !event?.detailUrl) return '';
+  const created = Date.parse(String(event?.createdAt || ''));
+  if (!Number.isFinite(created) || Date.now() - created > 18 * 3600 * 1000) return '';
+  try {
+    const params = new URL(event.detailUrl, 'https://freebacktrack.tech').searchParams;
+    if (params.get('tab') !== 'fundSwitch' || !params.get('code') || !params.get('targetCode')) return '';
+    params.set('answer', answer);
+    return `./home.html?${params.toString()}`;
+  } catch (_error) {
+    return '';
+  }
+}
+
 export function NotifyPopover({ notifyHref = './home.html?tab=notify' } = {}) {
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState([]);
@@ -140,6 +155,12 @@ export function NotifyPopover({ notifyHref = './home.html?tab=notify' } = {}) {
                       <span className="shrink-0 text-[10px] font-semibold text-slate-500">{statusLabel(event.status, event.eventType)}</span>
                     </div>
                     {event.body || event.message ? <p className="mt-1 whitespace-pre-line text-xs leading-5 text-slate-600">{event.eventType === 'account-notice' ? String(event.body || '').replace(/\n?https?:\/\/\S+\s*$/, '') : (event.body || event.message)}</p> : null}
+                    {switchAnswerHref(event, 'done') ? (
+                      <div className="mt-1.5 flex gap-2">
+                        <a href={switchAnswerHref(event, 'done')} className="rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-slate-800" onClick={() => setOpen(false)}>我换了</a>
+                        <a href={switchAnswerHref(event, 'skip')} className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50" onClick={() => setOpen(false)}>这次不换</a>
+                      </div>
+                    ) : null}
                     {event.eventType === 'account-notice' && event.detailUrl ? <a href={event.detailUrl} className="mt-1 inline-block text-xs font-semibold text-indigo-600 hover:text-indigo-800" onClick={() => setOpen(false)}>去看看 →</a> : null}
                     <div className="mt-1 text-[10px] text-slate-400">{formatTime(event.createdAt)}</div>
                   </li>

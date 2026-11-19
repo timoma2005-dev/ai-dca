@@ -124,6 +124,33 @@ function sanitizeCode(value) {
   return FUND_CODE_PATTERN.test(code) ? code : '';
 }
 
+// 「这次不换」：用户在方案卡上回答后，当天不再推这个方向。{ pair: 'bench:cand' | '*', rule: 'A'|'B', date: 'YYYY-MM-DD' }
+const MAX_QUIET_SIGNALS = 12;
+export function normalizeQuietSignals(list = []) {
+  const out = [];
+  const seen = new Set();
+  for (const item of Array.isArray(list) ? list : []) {
+    const rule = String(item?.rule || '').trim().toUpperCase();
+    const date = String(item?.date || '').trim();
+    const pair = String(item?.pair || '*').trim();
+    if ((rule !== 'A' && rule !== 'B') || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    if (pair !== '*' && !/^\d{6}:\d{6}$/.test(pair)) continue;
+    const key = `${pair}|${rule}|${date}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ pair, rule, date });
+    if (out.length >= MAX_QUIET_SIGNALS) break;
+  }
+  return out;
+}
+
+export function isSwitchSignalQuiet(rule = {}, pairKey = '', kind = '', date = '') {
+  if (kind !== 'A' && kind !== 'B') return false;
+  return normalizeQuietSignals(rule?.quietSignals).some((item) => (
+    item.date === date && item.rule === kind && (item.pair === '*' || item.pair === pairKey)
+  ));
+}
+
 function pickPercent(value, fallback) {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
@@ -254,7 +281,8 @@ function normalizeSwitchRule(input = {}, index = 0, { defaultEnabled = true, rea
     holdingNotional,
     candidateFundCodes,
     feeConfig,
-    backtestTimeframe
+    backtestTimeframe,
+    quietSignals: normalizeQuietSignals(input?.quietSignals)
   };
 }
 
