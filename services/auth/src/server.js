@@ -41,6 +41,11 @@ function corsHeaders() {
   };
 }
 
+function permVersionHeader(version) {
+  const value = String(version || '').trim();
+  return value ? { 'X-Perm-Version': value } : {};
+}
+
 function sendJson(res, status, body, extraHeaders = {}) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -193,7 +198,8 @@ export function createApp(db) {
         recordActivity(db, user.id);
         const row = db.prepare('SELECT expires_at FROM sessions WHERE token_hash = ?').get(sha256Hex(token));
         const cookieHeader = row?.expires_at ? sessionCookieHeader({ accessToken: token, expiresAt: row.expires_at }) : {};
-        sendJson(res, 200, { userId: user.id, username: user.username, ...buildAuthPayload(db, user), membership: safeMembership(db, user.id) }, cookieHeader);
+        const mePayload = buildAuthPayload(db, user);
+        sendJson(res, 200, { userId: user.id, username: user.username, ...mePayload, membership: safeMembership(db, user.id) }, { ...cookieHeader, ...permVersionHeader(mePayload.permVersion) });
         return;
       }
 
@@ -202,7 +208,7 @@ export function createApp(db) {
         const { user } = authenticateRequest(db, req.headers);
         if (user) recordActivity(db, user.id);
         const payload = buildAuthPayload(db, user);
-        sendJson(res, 200, { loggedIn: Boolean(user), username: user?.username || '', ...payload, membership: user ? safeMembership(db, user.id) : null });
+        sendJson(res, 200, { loggedIn: Boolean(user), username: user?.username || '', ...payload, membership: user ? safeMembership(db, user.id) : null }, user ? permVersionHeader(payload.permVersion) : {});
         return;
       }
 
@@ -211,7 +217,10 @@ export function createApp(db) {
         const perm = url.searchParams.get('perm') || '';
         const result = requirePerm(db, req.headers, perm);
         if (result.user) recordActivity(db, result.user.id);
-        const headers = result.user ? { 'X-Auth-User-Id': result.user.id, 'X-Auth-Username': result.user.username } : {};
+        // X-Perm-Version：nginx auth_request_set 透传给业务响应，前端发现与缓存不一致时自动刷新权限（授权后无需重新登录）。
+        const headers = result.user
+          ? { 'X-Auth-User-Id': result.user.id, 'X-Auth-Username': result.user.username, ...permVersionHeader(result.access?.permVersion) }
+          : {};
         sendJson(res, result.ok ? 200 : result.status, result.ok ? { ok: true } : { message: result.message }, headers);
         return;
       }

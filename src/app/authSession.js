@@ -60,6 +60,29 @@ export function saveCloudSession(session) {
   return payload;
 }
 
+/**
+ * RBAC 刷新后把最新角色写回本地会话（仅展示 / 统计用），不触发会话变化事件、不清运行时数据。
+ * 只更新同一账号的会话；账号不一致时不动。
+ */
+export function updateCloudSessionAccess({ userId = '', username = '', roles = [], topRole = null, isAdmin = false } = {}) {
+  const ls = safeStorage();
+  const current = loadCloudSession();
+  if (!ls || !current) return null;
+  if ((userId && current.userId && String(userId) !== current.userId) || (username && String(username) !== current.username)) return null;
+  const next = {
+    ...current,
+    isAdmin: Boolean(isAdmin),
+    roles: Array.isArray(roles) ? roles.map((role) => ({
+      code: String(role?.code || ''),
+      name: String(role?.name || ''),
+      expiresAt: role?.expiresAt || null
+    })).filter((role) => role.code) : [],
+    topRole: topRole?.code ? { code: String(topRole.code), name: String(topRole.name || '') } : null
+  };
+  ls.setItem(SESSION_KEY, JSON.stringify(next));
+  return next;
+}
+
 export function clearCloudSession() {
   const ls = safeStorage();
   if (!ls) return;

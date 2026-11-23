@@ -267,6 +267,23 @@ describe('rbac: HTTP endpoints', () => {
     assert.equal((await call('/api/sync/auth/check?perm=menu:home:access')).status, 200);
   });
 
+  it('X-Perm-Version on /me, /menus and /check changes right after a grant (no re-login needed)', async () => {
+    const user = (await call('/api/sync/auth/register', { method: 'POST', body: { username: 'pvuser', passwordHash: CLIENT_HASH } })).json;
+    const before = await call('/api/sync/auth/me', { token: user.accessToken });
+    assert.equal(before.headers.get('x-perm-version'), before.json.permVersion);
+    const denied = await call('/api/sync/auth/check?perm=api:nasdaq-radar', { token: user.accessToken });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.headers.get('x-perm-version'), before.json.permVersion);
+    grantDirect(db, user.userId, 'vip');
+    const check = await call('/api/sync/auth/check?perm=api:nasdaq-radar', { token: user.accessToken });
+    assert.equal(check.status, 200);
+    const after = await call('/api/sync/auth/me', { token: user.accessToken });
+    assert.notEqual(after.json.permVersion, before.json.permVersion);
+    assert.equal(check.headers.get('x-perm-version'), after.json.permVersion);
+    assert.equal((await call('/api/sync/auth/menus', { token: user.accessToken })).headers.get('x-perm-version'), after.json.permVersion);
+    assert.equal((await call('/api/sync/auth/menus')).headers.get('x-perm-version'), null, 'guests get no version header');
+  });
+
   it('tampered client fields (locked/roles/isAdmin in body or headers) are ignored', async () => {
     const user = (await call('/api/sync/auth/register', { method: 'POST', body: { username: 'tamper', passwordHash: CLIENT_HASH, roles: ['admin'], isAdmin: true } })).json;
     assert.equal(user.isAdmin, false);

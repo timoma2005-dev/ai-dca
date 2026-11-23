@@ -3,9 +3,12 @@
 // - 之后通过 GET /api/sync/auth/me（已登录）或 /api/sync/auth/menus（游客）刷新；
 // - 菜单缓存按 permVersion：版本不变时不替换对象、不触发重渲染；
 // - 服务端不可达时游客使用内置兜底菜单，已登录用户沿用上次缓存。
+// - 自动刷新（授权 / 会员升级后不用重新登录）：切回前台、聚焦、联网、bfcache 恢复、页面可见时每 5 分钟；
+//   任一同源响应带 X-Perm-Version 且与缓存不一致、付费接口返回 403、收到角色开通站内信时强制刷新。
 // 这里的数据只决定「怎么展示」；所有权限仍由服务端每次请求重新计算。
 import { apiUrl } from '../apiBase.js';
-import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession } from '../authSession.js';
+import { CLOUD_SYNC_SESSION_EVENT, loadCloudSession, updateCloudSessionAccess } from '../authSession.js';
+import { showToast } from '../toast.js';
 import { buildGuestFallback, buildUserFallback } from './menuModel.js';
 import { normalizeMembership, sameMembership } from '../membership.js';
 
@@ -13,11 +16,19 @@ export const RBAC_STORE_KEY = 'aiDcaRbacMenus_v1';
 export const RBAC_CHANGED_EVENT = 'rbac:changed';
 const REFRESH_MIN_INTERVAL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 8000;
+export const AUTO_REFRESH_INTERVAL_MS = 5 * 60_000;
+const DENIED_REFRESH_MIN_MS = 10_000;
+export const PERM_VERSION_HEADER = 'x-perm-version';
+export const RBAC_ROLE_NOTICE_EVENT = 'ai-dca-role-notice';
+export const RBAC_UPGRADED_EVENT = 'rbac:upgraded';
+const UPGRADE_ROLES = Object.freeze({ vip: 'VIP', svip: 'SVIP' });
 
 let memoryState = null;
 let inflight = null;
 let lastFetchKey = '';
 let lastFetchAt = 0;
+let lastDeniedAt = 0;
+let autoRefreshInstalled = false;
 
 function storage() {
   try {
@@ -102,7 +113,9 @@ export function applyRbacPayload(payload, { session = loadCloudSession(), logged
   const state = normalizeRbacPayload(payload, { loggedIn: clientLoggedIn, username: session?.username });
   const current = memoryState && memoryState.key === key ? memoryState.state : null;
   if (current && current.permVersion && current.permVersion === state.permVersion && sameMembership(current.membership, state.membership)) return false;
+  const upgraded = detectUpgrade(current, state);
   memoryState = { key, state };
+  if (clientLoggedIn) syncSessionAccess(session, state);
   const ls = storage();
   try {
     ls?.setItem(RBAC_STORE_KEY, JSON.stringify({ key, state, savedAt: new Date().toISOString() }));
@@ -110,7 +123,38 @@ export function applyRbacPayload(payload, { session = loadCloudSession(), logged
     // localStorage 满或不可用时只保留内存态。
   }
   emit(state);
+  if (upgraded) announceUpgrade(upgraded);
   return true;
+}
+
+/** 同一会话内新获得 VIP / SVIP（授权或会员自动升级）时返回新角色；首次加载、兜底菜单不算。 */
+function detectUpgrade(previous, next) {
+  if (!previous?.loggedIn || !next?.loggedIn) return null;
+  if (!previous.permVersion || previous.permVersion === 'guest-fallback' || previous.source === 'fallback') return null;
+  const before = new Set((previous.roles || []).map((role) => role.code));
+  const gained = (next.roles || []).filter((role) => UPGRADE_ROLES[role.code] && !before.has(role.code));
+  if (!gained.length) return null;
+  return gained.find((role) => role.code === 'svip') || gained[0];
+}
+
+function announceUpgrade(role) {
+  if (typeof window === 'undefined') return;
+  const label = UPGRADE_ROLES[role.code] || role.name || role.code;
+  window.dispatchEvent(new CustomEvent(RBAC_UPGRADED_EVENT, { detail: { role } }));
+  try {
+    showToast({ title: `已开通 ${label}`, description: '权限已生效，无需重新登录。', durationMs: 5000 });
+  } catch {
+    // toast 不可用时忽略
+  }
+}
+
+/** 把最新角色写回本地会话（只用于展示 / 统计口径），不触发会话变化事件。 */
+function syncSessionAccess(session, state) {
+  try {
+    updateCloudSessionAccess({ userId: session?.userId, username: session?.username, roles: state.roles, topRole: state.topRole, isAdmin: state.isAdmin });
+  } catch {
+    // ignore
+  }
 }
 
 export function clearRbacState() {
@@ -183,6 +227,69 @@ export function refreshRbac({ force = false, fetchImpl = fetchJson } = {}) {
   return promise;
 }
 
+/** 某个响应带回的权限版本与缓存不一致时强制刷新。返回是否触发了刷新。 */
+export function notePermVersion(version, { session = loadCloudSession(), fetchImpl } = {}) {
+  const value = String(version || '').trim();
+  if (!value || !session?.accessToken) return false;
+  const current = readRbacState(session);
+  if (!current?.loggedIn || current.permVersion === value) return false;
+  refreshRbac({ force: true, ...(fetchImpl ? { fetchImpl } : {}) });
+  return true;
+}
+
+/** 付费接口返回 403：权限可能刚变（授权 / 升级 / 到期），强制刷新一次；10 秒内只刷一次。 */
+export function notePermDenied({ now = Date.now(), fetchImpl } = {}) {
+  const session = loadCloudSession();
+  if (!session?.accessToken) return false;
+  if (now - lastDeniedAt < DENIED_REFRESH_MIN_MS) return false;
+  lastDeniedAt = now;
+  refreshRbac({ force: true, ...(fetchImpl ? { fetchImpl } : {}) });
+  return true;
+}
+
+function observeResponse(response) {
+  try {
+    const version = response?.headers?.get?.(PERM_VERSION_HEADER);
+    if (version) notePermVersion(version);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * 安装自动刷新（幂等）：切回前台 / 聚焦 / 联网 / bfcache 恢复 / 定时（仅页面可见时）走 60 秒去重的刷新；
+ * 角色开通站内信强制刷新；包一层 window.fetch，读取同源响应的 X-Perm-Version。
+ */
+export function installRbacAutoRefresh({ win = typeof window !== 'undefined' ? window : null, intervalMs = AUTO_REFRESH_INTERVAL_MS } = {}) {
+  if (!win || autoRefreshInstalled) return false;
+  autoRefreshInstalled = true;
+  const doc = win.document;
+  const isVisible = () => !doc || doc.visibilityState !== 'hidden';
+  const softRefresh = () => {
+    if (isVisible()) refreshRbac();
+  };
+  doc?.addEventListener?.('visibilitychange', softRefresh);
+  win.addEventListener('focus', softRefresh);
+  win.addEventListener('online', softRefresh);
+  win.addEventListener('pageshow', (event) => {
+    if (event?.persisted) refreshRbac({ force: true });
+  });
+  win.addEventListener(RBAC_ROLE_NOTICE_EVENT, () => refreshRbac({ force: true }));
+  if (intervalMs > 0 && typeof win.setInterval === 'function') win.setInterval(softRefresh, intervalMs);
+  if (typeof win.fetch === 'function' && !win.fetch.__rbacObserved) {
+    const originalFetch = win.fetch;
+    const observedFetch = function observedFetch(...args) {
+      return originalFetch.apply(this === undefined || this === observedFetch ? win : this, args).then((response) => {
+        observeResponse(response);
+        return response;
+      });
+    };
+    observedFetch.__rbacObserved = true;
+    win.fetch = observedFetch;
+  }
+  return true;
+}
+
 /** 登出时通知服务端清除 httpOnly 会话 cookie（尽力而为）。 */
 export function notifyServerLogout(token) {
   try {
@@ -207,5 +314,9 @@ export const __rbacStoreInternals = {
     inflight = null;
     lastFetchKey = '';
     lastFetchAt = 0;
+    lastDeniedAt = 0;
+  },
+  resetAutoRefresh() {
+    autoRefreshInstalled = false;
   },
 };

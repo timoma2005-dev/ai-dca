@@ -7,6 +7,7 @@
  */
 import { apiUrl } from './apiBase.js';
 import { loadCloudSession } from './authSession.js';
+import { notePermDenied } from './rbac/rbacStore.js';
 
 export const ETF_HISTORY_PERM = 'api:etf-history';
 export const ETF_HISTORY_TTL_MS = 10 * 60 * 1000;
@@ -219,7 +220,7 @@ export function createEtfHistoryClient({
           signal: controller.signal
         });
         if (res.status === 401) return { state: 'login' };
-        if (res.status === 403) return { state: 'locked' };
+        if (res.status === 403) { notePermDenied(); return { state: 'locked' }; }
         if (res.status === 404) return { state: 'empty' };
         if (!res.ok) return { state: 'error', reason: `http_${res.status}` };
         const data = normalizeEtfHistory(await res.json(), code);

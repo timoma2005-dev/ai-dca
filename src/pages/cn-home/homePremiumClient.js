@@ -2,6 +2,7 @@
 // 内存缓存 10 分钟（按会话），不写 localStorage（付费数据不落盘）。
 import { apiUrl } from '../../app/apiBase.js';
 import { loadCloudSession } from '../../app/authSession.js';
+import { notePermDenied } from '../../app/rbac/rbacStore.js';
 
 const TTL = 10 * 60 * 1000;
 const memory = new Map();
@@ -21,7 +22,7 @@ export async function loadHomePremium({ refresh = false } = {}) {
     try {
       const res = await fetch(apiUrl('/api/etf-history/home-premium.json'), { headers, credentials: 'same-origin', redirect: 'manual', signal: controller.signal });
       if (res.status === 401) return { state: 'login' };
-      if (res.status === 403) return { state: 'locked' };
+      if (res.status === 403) { notePermDenied(); return { state: 'locked' }; }
       if (!res.ok) return { state: 'error', reason: `http_${res.status}` };
       const data = await res.json();
       if (!Array.isArray(data?.dates) || !Array.isArray(data?.funds)) return { state: 'error', reason: 'invalid_payload' };

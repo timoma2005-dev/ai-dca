@@ -311,6 +311,12 @@ export function startNotifyRealtime({
   }
 
   function handleNotifyFrame(frame) {
+    const frameData = frame.data || {};
+    // 角色开通站内信（auth 授予 VIP / SVIP 后由 cn-data 写入）：通知 rbacStore 立即刷新权限，无需重新登录。
+    const ruleId = String(frameData.ruleId || frame.ruleId || '');
+    if (ruleId.startsWith('role-notice') || String(frameData.eventType || frame.eventType || '') === 'account-notice') {
+      window.dispatchEvent(new CustomEvent('ai-dca-role-notice', { detail: { ruleId } }));
+    }
     if (!isPcNotificationReady()) {
       if (debug) console.info('[notifyWs] notify frame ignored: PC notification disabled');
       return;
