@@ -3,7 +3,6 @@ import { Repeat } from 'lucide-react';
 import { apiUrl } from '../app/apiBase.js';
 import { loadCloudSession } from '../app/authSession.js';
 import { Button } from '../components/ui/button.jsx';
-import { Input } from '../components/ui/input.jsx';
 
 // 日内轮动看板（adminRotator，仅超级管理员）：cn 上腾讯行情源的 ratio_rotator 影子实例。
 // 读：GET /api/rotator/status（每 5 秒）；写：POST /api/rotator/holding 设置当前账户的持仓。
@@ -29,13 +28,13 @@ async function getStatus(signal) {
   return res.json();
 }
 
-async function postHolding(code, shares) {
+async function postHolding(code) {
   const res = await fetch(apiUrl('/api/rotator/holding'), {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     credentials: 'same-origin',
     redirect: 'manual',
-    body: JSON.stringify({ code, shares })
+    body: JSON.stringify({ code })
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw Error(json?.message || `保存失败（HTTP ${res.status}）`);
@@ -66,7 +65,6 @@ export default function AdminRotatorExperience() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [code, setCode] = useState('');
-  const [shares, setShares] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const editedRef = useRef(false);
@@ -78,8 +76,8 @@ export default function AdminRotatorExperience() {
       setError('');
       if (!editedRef.current) {
         const h = json?.manual?.holdings || {};
-        const [c, n] = Object.entries(h)[0] || [];
-        if (c) { setCode(c); setShares(String(n)); }
+        const [c] = Object.keys(h);
+        if (c) setCode(c);
       }
     } catch (err) {
       if (err?.name !== 'AbortError') setError(err?.message || '读取失败');
@@ -110,15 +108,14 @@ export default function AdminRotatorExperience() {
   const sig = st?.last_signal;
 
   async function save() {
-    const n = Number(shares);
-    if (!code || !Number.isInteger(n) || n <= 0 || n % 100) {
-      setSaveMsg('股数须为 100 的正整数倍');
+    if (!code) {
+      setSaveMsg('请先选择代码');
       return;
     }
     setSaving(true);
     setSaveMsg('');
     try {
-      await postHolding(code, n);
+      await postHolding(code);
       editedRef.current = false;
       setSaveMsg('已保存，约 5 秒内生效');
       load();
@@ -146,7 +143,7 @@ export default function AdminRotatorExperience() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="持仓" value={holding || '—'}
-          hint={holding && st?.holdings?.[holding] ? `${Number(st.holdings[holding]).toLocaleString()} 股 · 已持有 ${fmt(st?.held_min, 0)} 分钟` : ''} />
+          hint={holding ? `已持有 ${fmt(st?.held_min, 0)} 分钟` : ''} />
         <Stat label="最便宜" value={st?.cheapest || '—'} hint={rows[0]?.name || ''} />
         <Stat label="持仓 − 最便宜" value={gap === null || gap === undefined ? '—' : `${bps(gap)} bps`}
           hint={enter ? `阈值 ${enter} bps · 净 ${st?.params?.enter_net} bps` : ''}
@@ -168,13 +165,6 @@ export default function AdminRotatorExperience() {
               <option key={c} value={c}>{c} {poolRows.find((r) => r.code === c)?.name || ''}</option>
             ))}
           </select>
-          <Input
-            className="h-9 w-36"
-            inputMode="numeric"
-            placeholder="股数"
-            value={shares}
-            onChange={(e) => { editedRef.current = true; setShares(e.target.value.replace(/[^0-9]/g, '')); }}
-          />
           <Button size="sm" onClick={save} disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
           {saveMsg ? <span className="text-xs text-muted-foreground">{saveMsg}</span> : null}
           {data?.manual?.set_at ? (
