@@ -6,7 +6,8 @@ import { Button } from '../components/ui/button.jsx';
 import { Input } from '../components/ui/input.jsx';
 
 // 日内轮动看板（adminRotator，仅超级管理员）：cn 上腾讯行情源的 ratio_rotator 影子实例。
-// 读：GET /api/rotator/status（每 5 秒）；写：POST /api/rotator/holding 手动设置持仓。
+// 读：GET /api/rotator/status（每 5 秒）；写：POST /api/rotator/holding 设置当前账户的持仓。
+// 持仓按账户存 SQLite（rotator_api.py），行情/偏离全局共享；运行日志与进程信号只返回给驱动进程的账户（is_owner）。
 // 权限由 nginx auth_request（api:rotator）校验，前端只负责展示。
 export const ROTATOR_REFRESH_MS = 5000;
 const STALE_S = 20;
@@ -153,7 +154,7 @@ export default function AdminRotatorExperience() {
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4">
-        <div className="mb-2 text-sm font-medium">手动设置持仓</div>
+        <div className="mb-2 text-sm font-medium">我的持仓<span className="ml-1 text-xs font-normal text-muted-foreground">（按账户保存，只影响你自己的视图）</span></div>
         <div className="flex flex-wrap items-center gap-2">
           <select
             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
@@ -223,10 +224,12 @@ export default function AdminRotatorExperience() {
         </table>
       </div>
 
-      <details className="rounded-xl border border-border bg-card p-4" open>
-        <summary className="cursor-pointer text-sm font-medium">运行日志</summary>
-        <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{(data?.log || []).join('\n')}</pre>
-      </details>
+      {data?.is_owner === false ? null : (
+        <details className="rounded-xl border border-border bg-card p-4" open>
+          <summary className="cursor-pointer text-sm font-medium">运行日志</summary>
+          <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{(data?.log || []).join('\n')}</pre>
+        </details>
+      )}
     </div>
   );
 }
