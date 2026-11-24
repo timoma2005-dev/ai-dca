@@ -100,7 +100,9 @@ export default function AdminRotatorExperience() {
 
   const st = data?.status || null;
   const rows = st?.rows || [];
-  const pool = rows.length ? rows.map((r) => r.code) : [];
+  // 盘前/午休没有行情行时，下拉框用接口给的默认池
+  const poolRows = rows.length ? rows : (data?.pool || []);
+  const pool = poolRows.map((r) => r.code);
   const stale = data?.age_s === null || data?.age_s === undefined || data.age_s > STALE_S;
   const holding = st?.holding;
   const enter = st?.params?.enter;
@@ -163,7 +165,7 @@ export default function AdminRotatorExperience() {
           >
             {!code ? <option value="">选择代码</option> : null}
             {(pool.length ? pool : [code].filter(Boolean)).map((c) => (
-              <option key={c} value={c}>{c} {rows.find((r) => r.code === c)?.name || ''}</option>
+              <option key={c} value={c}>{c} {poolRows.find((r) => r.code === c)?.name || ''}</option>
             ))}
           </select>
           <Input
