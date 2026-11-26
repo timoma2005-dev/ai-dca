@@ -54,10 +54,9 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
   );
 }
 
-/** 首页门控：新手入门任务卡还要展示时，首页只显示任务卡（takeover），关掉后才出现原有首页内容。 */
-export function OnboardingHomeGate({ loggedIn, accessOf, demoActive = false, children }) {
-  const { state, tasks } = useOnboarding({ loggedIn, accessOf });
-  return children(shouldShowGettingStarted({ tasks, state, demoActive }));
+/** 首页门控：任务卡只作为首页顶部的普通卡片出现，不再整页接管，行情数据始终可见。 */
+export function OnboardingHomeGate({ children }) {
+  return children(false);
 }
 
 /** 账号菜单 / 侧栏里的常驻入口：重新打开首页任务卡。 */

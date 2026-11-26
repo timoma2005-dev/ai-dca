@@ -118,7 +118,7 @@ const resolvePanel = (state, tab, hash = '') => {
 
 test('panel rendering: guard page replaces the panel instead of silently showing holdings', () => {
   assert.equal(resolvePanel('guest', 'holdings'), 'holdings');
-  assert.equal(resolvePanel('guest', 'markets'), 'guard:login:vip');
+  assert.equal(resolvePanel('guest', 'notify'), 'guard:login:vip');
   assert.equal(resolvePanel('user', 'adminRadar'), 'guard:forbidden:vip');
   assert.equal(resolvePanel('user', 'adminAuction'), 'guard:forbidden:svip');
   assert.equal(resolvePanel('auctionOnly', 'adminAuction'), 'auction');

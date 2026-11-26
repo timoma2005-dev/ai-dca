@@ -31,25 +31,25 @@ test('normalizeRbacPayload drops username when not logged in', () => {
   assert.equal(normalizeRbacPayload({ username: 'a' }, { loggedIn: true }).username, 'a');
 });
 
-test('tainted guest cache (member menus + username) is discarded: markets stays guarded', () => {
+test('tainted guest cache (member menus + username) is discarded: member-only menus stay guarded', () => {
   __rbacStoreInternals.reset();
   clearCloudSession();
-  store.set(RBAC_STORE_KEY, JSON.stringify({ key: 'guest', state: { loggedIn: false, username: 'littledudu', menus: memberMenus, perms: ['menu:markets:access'], permVersion: 'v1' } }));
+  store.set(RBAC_STORE_KEY, JSON.stringify({ key: 'guest', state: { loggedIn: false, username: 'littledudu', menus: memberMenus, perms: ['menu:notify:access'], permVersion: 'v1' } }));
   const state = readRbacState();
   assert.equal(state.loggedIn, false);
   assert.equal(state.username, '');
-  assert.equal(evaluateTabAccess(state, 'markets').status, 'login');
+  assert.equal(evaluateTabAccess(state, 'notify').status, 'login');
   store.delete(RBAC_STORE_KEY);
 });
 
 test('guest ignores a member payload served via a leftover cookie', () => {
   __rbacStoreInternals.reset();
   clearCloudSession();
-  const changed = applyRbacPayload({ loggedIn: true, username: 'littledudu', menus: memberMenus, perms: ['menu:markets:access'], permVersion: 'u1' }, { session: null });
+  const changed = applyRbacPayload({ loggedIn: true, username: 'littledudu', menus: memberMenus, perms: ['menu:notify:access'], permVersion: 'u1' }, { session: null });
   assert.equal(changed, false);
   const state = readRbacState();
   assert.equal(state.username, '');
-  assert.equal(evaluateTabAccess(state, 'markets').status, 'login');
+  assert.equal(evaluateTabAccess(state, 'notify').status, 'login');
   assert.ok(!String(store.get(RBAC_STORE_KEY) || '').includes('littledudu'));
 });
 

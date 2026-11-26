@@ -216,6 +216,23 @@ class AggregateServiceTest(unittest.TestCase):
         self.assertEqual(payload["yesterday"]["tradingDate"], older)
         self.assertEqual(payload["yesterday"]["premiumMedianPercent"], 5.5555)
 
+    def test_home_series_median_carries_forward_sparse_members(self) -> None:
+        def tech(symbol: str, minute: str, premium: float) -> dict:
+            return {**record(recent(f"10:{minute}:30"), 2.0, 1.5, premium), "symbol": symbol}
+        self.store.write_cycle([
+            tech("159509", "01", 40.0), tech("161128", "01", 12.0),
+            tech("159509", "02", 41.0),
+            tech("159509", "03", 42.0), tech("161128", "03", 13.0),
+        ], 168, 14)
+
+        payload = self.service.home_series()
+
+        line = next(item for item in payload["modes"]["premium"]["aggregate"]["series"] if item["groupKey"] == "nasdaq-tech")
+        values = {point["time"][11:16]: point["value"] for point in line["points"]}
+        self.assertEqual(values["10:01"], 26.0)
+        self.assertEqual(values["10:02"], 26.5)
+        self.assertEqual(values["10:03"], 27.5)
+
     def test_daily_combines_price_nav_and_t_minus_one_premium(self) -> None:
         payload = self.service.daily_combined("513100", 10)
         self.assertEqual(len(payload["candles"]), 2)

@@ -181,9 +181,9 @@ test('游客「先看看」直接进演示并跑演示专用引导：新建方�
   assert.match(read('src/components/onboarding/StepHintHost.jsx'), /demoActive && !flow\?\.inDemo/);
 });
 
-test('新手入门未关闭时首页只显示任务卡', () => {
-  assert.match(read('src/pages/CnHomeExperience.jsx'), /if \(takeover && topSlot\) return/);
-  assert.match(read('src/pages/WorkspacePage.jsx'), /<OnboardingHomeGate[\s\S]*takeover=\{takeover\}/);
+test('新手入门任务卡不再接管首页，行情内容始终渲染', () => {
+  assert.doesNotMatch(read('src/pages/CnHomeExperience.jsx'), /takeover && topSlot/);
+  assert.match(read('src/components/onboarding/GettingStartedSlot.jsx'), /OnboardingHomeGate\(\{ children \}\) \{\n  return children\(false\);/);
 });
 
 test('游客「看看怎么接通手机通知」进通知演示：选渠道 → 填 Key → 发送测试，渠道从空开始', async () => {

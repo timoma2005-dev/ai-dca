@@ -1064,7 +1064,7 @@ class MarketDataService:
                 })
 
         def aggregate_points(group: dict[str, Any], metric: str) -> list[dict[str, Any]]:
-            values: dict[str, list[float]] = defaultdict(list)
+            by_code: dict[str, dict[str, float]] = {}
             bases: dict[str, float] = {}
             for code in group["codes"]:
                 for row in by_symbol.get(code) or []:
@@ -1074,11 +1074,18 @@ class MarketDataService:
                     if metric == "price":
                         bases.setdefault(code, value)
                         value = value / bases[code] * 100
-                    values[row["time"]].append(value)
-            return [
-                {"time": key, "value": _round4(statistics.mean(items) if metric == "price" else statistics.median(items))}
-                for key, items in sorted(values.items()) if items
-            ]
+                    by_code.setdefault(code, {})[row["time"]] = value
+            # 成交稀疏的 LOF 某分钟缺点时沿用它上一次的值，避免组内成员数跳变导致中位数尖刺。
+            last: dict[str, float] = {}
+            points = []
+            for key in sorted({t for series in by_code.values() for t in series}):
+                for code, series in by_code.items():
+                    if key in series:
+                        last[code] = series[key]
+                items = list(last.values())
+                if items:
+                    points.append({"time": key, "value": _round4(statistics.mean(items) if metric == "price" else statistics.median(items))})
+            return points
 
         price_aggregates = [{
             "key": f"price-equal-weight-{group['key']}", "role": "equal_weight",

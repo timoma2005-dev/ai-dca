@@ -35,12 +35,12 @@ const USER_STATE = {
   permVersion: 'v1',
 };
 
-test('guest fallback mirrors the server tiers: free menus open, VIP menus locked, SVIP/admin menus hidden', () => {
+test('guest fallback mirrors the server tiers: free menus (incl. read-only markets) open, VIP menus locked, SVIP/admin menus hidden', () => {
   const guest = buildGuestFallback();
   const byKey = Object.fromEntries(flattenMenus(guest.menus).map((m) => [m.key, m]));
-  for (const key of ['home', 'articles', 'holdings', 'dataRepair']) assert.equal(byKey[key].locked, false, key);
+  for (const key of ['home', 'markets', 'articles', 'holdings', 'dataRepair']) assert.equal(byKey[key].locked, false, key);
   assert.equal(byKey.tradePlans, undefined); // 2026-11-17 交易计划下线
-  for (const key of ['markets', 'shares', 'fundSwitch', 'notify']) {
+  for (const key of ['shares', 'fundSwitch', 'notify']) {
     assert.equal(byKey[key].locked, true, key);
     assert.equal(byKey[key].requiredRole.code, 'vip');
   }
@@ -53,6 +53,7 @@ test('route guard: guest → login, insufficient role → forbidden with require
   const guest = buildGuestFallback();
   assert.equal(evaluateTabAccess(guest, 'home').status, 'ok');
   assert.equal(evaluateTabAccess(guest, 'holdings').status, 'ok', 'holdings is open to guests (local data)');
+  assert.equal(evaluateTabAccess(guest, 'markets').status, 'ok', 'markets is read-only open to guests');
   assert.equal(evaluateTabAccess(guest, 'shares').status, 'login');
   assert.equal(evaluateTabAccess(guest, 'adminRadar').status, 'login', 'hidden managed tab also asks guests to log in');
   assert.equal(evaluateTabAccess(USER_STATE, 'holdings').status, 'ok');
@@ -69,7 +70,8 @@ test('logged-in fallback (no server menus yet) keeps user features usable and me
   const radar = evaluateTabAccess(user, 'adminRadar');
   assert.equal(radar.status, 'forbidden');
   assert.equal(radar.requiredRole.code, 'svip');
-  for (const key of ['markets', 'fundSwitch', 'notify']) assert.equal(evaluateTabAccess(user, key).requiredRole?.code, 'vip', key);
+  assert.equal(evaluateTabAccess(user, 'markets').status, 'ok');
+  for (const key of ['fundSwitch', 'notify']) assert.equal(evaluateTabAccess(user, key).requiredRole?.code, 'vip', key);
   assert.equal(evaluateTabAccess(user, 'adminRbac').status, 'forbidden');
   const admin = buildUserFallback({ isAdmin: true });
   for (const key of ['adminRadar', 'adminAuction', 'adminRbac']) assert.equal(evaluateTabAccess(admin, key).status, 'ok', key);
