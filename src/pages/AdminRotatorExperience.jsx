@@ -1,23 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Repeat } from 'lucide-react';
 import { apiUrl } from '../app/apiBase.js';
-import { loadCloudSession } from '../app/authSession.js';
 import { Button } from '../components/ui/button.jsx';
+import DeviationBars from './rotator/DeviationBars.jsx';
+import SwitchPnlCard from './rotator/SwitchPnlCard.jsx';
+import { authHeaders } from './rotator/rotatorApi.js';
 
 // 日内轮动看板（adminRotator，SVIP 及以上）：cn 上腾讯行情源的 ratio_rotator 影子实例。
-// 读：GET /api/rotator/status（每 5 秒）；写：POST /api/rotator/holding 设置当前账户的持仓，
+// 读：GET /api/rotator/status（每 5 秒）、GET /api/rotator/series（换车收益曲线的当日价格）；写：POST /api/rotator/holding 设置当前账户的持仓，
 // POST /api/rotator/settings 设置当前账户的入场阈值 bps（默认 30；进程账户保存后下个交易日启动时生效）。
 // 持仓按账户存 SQLite（rotator_api.py），行情/偏离全局共享；运行日志与进程信号只返回给驱动进程的账户（is_owner）。
 // 权限由 nginx auth_request（api:rotator）校验，前端只负责展示。
 export const ROTATOR_REFRESH_MS = 5000;
 const STALE_S = 20;
-
-function authHeaders(extra = {}) {
-  const headers = { Accept: 'application/json', ...extra };
-  const s = loadCloudSession();
-  if (s?.accessToken) headers.Authorization = `Bearer ${s.accessToken}`;
-  return headers;
-}
 
 async function getStatus(signal) {
   const res = await fetch(apiUrl('/api/rotator/status'), {
@@ -195,6 +190,8 @@ export default function AdminRotatorExperience() {
           hint={sig ? `${sig.at} · ${bps(sig.gap_bps)} bps` : (st?.can_open ? '窗口内' : '窗口外 / 已过截止')} />
       </div>
 
+      <DeviationBars rows={rows} holding={holding} cheapest={st?.cheapest} gap={gap} enter={enter} at={clock(st?.updated_at)} />
+
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="mb-2 text-sm font-medium">我的持仓<span className="ml-1 text-xs font-normal text-muted-foreground">（按账户保存，只影响你自己的视图）</span></div>
         <div className="flex flex-wrap items-center gap-2">
@@ -282,6 +279,8 @@ export default function AdminRotatorExperience() {
           </tbody>
         </table>
       </div>
+
+      <SwitchPnlCard pool={poolRows} commBps={st?.params?.comm_bps ?? 0.5} />
 
       {data?.is_owner === false ? null : (
         <details className="rounded-xl border border-border bg-card p-4" open>

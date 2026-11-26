@@ -1,0 +1,105 @@
+// 日内轮动图表的纯计算：溢价偏离条形图 + 换车收益曲线。
+
+const SHORT_NAME_RE = /纳斯达克100|纳斯达克|纳指100|纳指|纳100|ETF|QDII|LOF/g;
+
+export function shortName(name, code = '') {
+  const s = String(name || '').replace(SHORT_NAME_RE, '').trim();
+  return s || String(name || code || '');
+}
+
+// dev_bps 是「现价相对今天基准价」的收益 bp，基准价 = IOPV × (1 + 基准溢价)
+export function basePrice(row) {
+  const iopv = Number(row?.iopv);
+  const base = Number(row?.base_bps);
+  if (!(iopv > 0) || row?.base_bps === null || row?.base_bps === undefined || !Number.isFinite(base)) return null;
+  return iopv * (1 + base / 1e4);
+}
+
+export function deviationBars(rows) {
+  const list = (rows || []).filter((r) => r && Number.isFinite(Number(r.dev_bps)) && r.dev_bps !== null);
+  const maxAbs = list.reduce((m, r) => Math.max(m, Math.abs(Number(r.dev_bps))), 0) || 1;
+  return list
+    .map((r) => ({
+      code: r.code,
+      name: shortName(r.name, r.code),
+      price: r.price,
+      basePx: basePrice(r),
+      dev: Number(r.dev_bps),
+      ratio: Math.abs(Number(r.dev_bps)) / maxAbs
+    }))
+    .sort((a, b) => a.dev - b.dev);
+}
+
+// A 股连续交易分钟轴：09:30 = 0，11:30 = 120，13:00 也是 120（午休压掉），15:00 = 240
+export function tradingMinute(ts) {
+  const d = new Date(ts * 1000);
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).formatToParts(d);
+  const get = (t) => Number(parts.find((p) => p.type === t)?.value || 0);
+  const m = get('hour') * 60 + get('minute') + get('second') / 60;
+  if (m <= 690) return Math.max(0, m - 570);
+  if (m < 780) return 120;
+  return Math.min(240, 120 + (m - 780));
+}
+
+export function minuteLabel(x) {
+  const v = Number(x);
+  if (!Number.isFinite(v)) return '';
+  const m = v <= 120 ? 570 + v : 780 + (v - 120);
+  const hh = Math.floor(m / 60);
+  const mm = Math.floor(m % 60);
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+// 'YYYY-MM-DD' + 'HH:MM[:SS]'（上海时间）-> 秒
+export function shanghaiTs(day, time) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day || '')) || !/^\d{1,2}:\d{2}(:\d{2})?$/.test(String(time || ''))) return null;
+  const [h, m, s = '0'] = String(time).split(':');
+  const ms = Date.parse(`${day}T${h.padStart(2, '0')}:${m}:${s.padStart(2, '0')}+08:00`);
+  return Number.isFinite(ms) ? ms / 1000 : null;
+}
+
+export function defaultBuyShares(sellShares, sellPx, buyPx) {
+  const n = Number(sellShares) * Number(sellPx) / Number(buyPx);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.floor(n / 100) * 100;
+}
+
+/**
+ * 换车（卖 A 买 B）相对「拿着 A 不换」多赚多少元。
+ * v(t) = 买入份额·B(t) + 找零 − 卖出份额·A(t) − 双边佣金；找零 = 卖出额 − 买入额。
+ * seriesA/seriesB: [[ts, px], ...] 按时间升序。
+ */
+export function switchPnlSeries({ seriesA, seriesB, switchTs, sellPx, sellShares, buyPx, buyShares, commBps = 0 }) {
+  const sp = Number(sellPx);
+  const bp = Number(buyPx);
+  const ns = Number(sellShares);
+  const nb = Number(buyShares);
+  if (!(sp > 0 && bp > 0 && ns > 0 && nb > 0) || !Number.isFinite(switchTs)) return null;
+  const a = Array.isArray(seriesA) ? seriesA : [];
+  const b = Array.isArray(seriesB) ? seriesB : [];
+  const cash = ns * sp - nb * bp;
+  const fees = (ns * sp + nb * bp) * Number(commBps || 0) / 1e4;
+  const stamps = [...new Set([...a, ...b].map((p) => p[0]).filter((t) => t >= switchTs))].sort((x, y) => x - y);
+  let ia = 0;
+  let ib = 0;
+  let pa = null;
+  let pb = null;
+  const points = [];
+  for (const t of stamps) {
+    while (ia < a.length && a[ia][0] <= t) pa = a[ia++][1];
+    while (ib < b.length && b[ib][0] <= t) pb = b[ib++][1];
+    if (pa === null || pb === null) continue;
+    const v = nb * pb + cash - ns * pa - fees;
+    points.push({ ts: t, x: tradingMinute(t), v: Math.round(v * 100) / 100, pa, pb });
+  }
+  if (!points.length) return { points, min: null, max: null, last: null, cash, fees };
+  let min = points[0];
+  let max = points[0];
+  for (const p of points) {
+    if (p.v < min.v) min = p;
+    if (p.v > max.v) max = p;
+  }
+  return { points, min, max, last: points[points.length - 1], cash, fees };
+}
