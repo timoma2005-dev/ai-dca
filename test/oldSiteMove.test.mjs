@@ -43,6 +43,7 @@ test("receiver only trusts the old site origin and is wired into the entry", asy
   assert.match(source, /event\.origin !== OLD_SITE_ORIGIN/);
   assert.match(source, /OLD_SITE_ORIGIN = 'https:\/\/freebacktrack\.tech'/);
   assert.match(source, /isRemoteAccountSessionActive\(\)/);
+  assert.match(source, /trackFeatureEvent\('site_move', 'arrive'/);
   const entry = read("src/entry-screen.jsx");
   assert.match(entry, /startOldSiteMoveReceiver\(\);/);
 });

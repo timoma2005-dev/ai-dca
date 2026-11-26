@@ -42,14 +42,21 @@ export function importOldSiteEntries(entries, storage = globalThis.localStorage)
 }
 
 export function startOldSiteMoveReceiver({ win = globalThis.window, timeoutMs = 20000 } = {}) {
-  if (!win || !isOldSiteMoveRequest(win.location) || !win.opener) return false;
+  if (!win || !isOldSiteMoveRequest(win.location)) return false;
+  const auto = new URLSearchParams(String(win.location.search || '')).get('auto') || '';
+  trackFeatureEvent('site_move', 'arrive', { auto, opener: Boolean(win.opener) });
   const cleanUrl = () => {
     try {
       const url = new URL(win.location.href);
       url.searchParams.delete(OLD_SITE_MOVE_QUERY);
+      url.searchParams.delete('auto');
       win.history.replaceState(win.history.state, '', url.toString());
     } catch { /* ignore */ }
   };
+  if (!win.opener) {
+    cleanUrl();
+    return true;
+  }
   if (isRemoteAccountSessionActive()) {
     try { win.opener.postMessage({ type: 'ai-dca-move-done', imported: 0, reason: 'logged-in' }, OLD_SITE_ORIGIN); } catch { /* ignore */ }
     trackFeatureEvent('site_move', 'import_skipped', { reason: 'logged-in' });
