@@ -15,7 +15,14 @@ export function AccountEmailCard({ session }) {
 
   useEffect(() => {
     let alive = true;
-    fetchAccountEmail(session).then((data) => { if (alive) setAccount(data); }).catch(() => {});
+    fetchAccountEmail(session).then(async (data) => {
+      if (!alive) return;
+      setAccount(data);
+      // 已有账号邮箱但还没有通知邮箱（如注册时自动设置失败）：补设一次。
+      if (!data?.email) return;
+      const status = await loadNotifyEmailStatus();
+      if (alive && !status?.email?.verified) await adoptAccountEmailForNotify();
+    }).catch(() => {});
     return () => { alive = false; };
   }, [session]);
 

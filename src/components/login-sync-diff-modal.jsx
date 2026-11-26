@@ -143,7 +143,10 @@ export function LoginSyncDiffModal() {
       setOpen(false);
       setPending(null);
       setPhase('');
-      showToast(choice === LOGIN_SYNC_CHOICES.LOCAL
+      if (pending.fresh) showToast(choice === LOGIN_SYNC_CHOICES.LOCAL
+        ? { title: '已同步到新账号', description: '之后数据以云端为准，多端自动同步。', tone: 'emerald' }
+        : { title: '新账号从空白开始', description: '本机旧数据已导出备份文件并从浏览器清除。', tone: 'emerald' });
+      else showToast(choice === LOGIN_SYNC_CHOICES.LOCAL
         ? { title: '已用本机数据覆盖云端', description: '之后数据以云端为准，多端自动同步。', tone: 'emerald' }
         : { title: '已改用云端数据', description: '本机旧数据已导出备份文件并从浏览器清除。', tone: 'emerald' });
     } catch (applyError) {
@@ -172,18 +175,18 @@ export function LoginSyncDiffModal() {
             <CloudCog className="h-4 w-4" aria-hidden="true" />登录数据同步
           </div>
           <DialogTitle className="mt-2 text-lg font-bold leading-snug text-slate-900">
-            {localOnly ? '你之前选择了「只在本机使用」' : '这台设备上有未登录时录入的数据'}
+            {localOnly ? '你之前选择了「只在本机使用」' : pending.fresh ? '注册前这台设备上已有数据' : '这台设备上有未登录时录入的数据'}
           </DialogTitle>
           <DialogDescription className="mt-2 text-sm leading-6 text-slate-600">
-            登录后将用本机数据覆盖云端，之后以云端为准、多端同步。
+            {pending.fresh ? '要把这些数据同步到新账号吗？如果是别人或旧账号留下的，选「不同步」。' : '登录后将用本机数据覆盖云端，之后以云端为准、多端同步。'}
           </DialogDescription>
           <div className="mt-3 space-y-1.5 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
             <div><span className="text-slate-400">本机：</span>{localParts.join('，') || '有未同步的数据'}</div>
-            <div>
+            {pending.fresh ? <div><span className="text-slate-400">新账号：</span>暂无数据</div> : <div>
               <span className="text-slate-400">云端：</span>
               {summary.remoteTxCount ? `${summary.remoteTxCount} 笔交易` : '已有数据'}
               {remoteTime ? `，最后更新 ${remoteTime}` : ''}
-            </div>
+            </div>}
             {summary.remoteOnlyTxCount ? (
               <div className="text-amber-700">覆盖后，云端有、本机没有的 {summary.remoteOnlyTxCount} 笔交易会被删除。</div>
             ) : null}
@@ -198,11 +201,11 @@ export function LoginSyncDiffModal() {
         <div className="space-y-2 px-5 pb-5 pt-3 sm:px-6">
           <button type="button" disabled={busy} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-bold text-white disabled:opacity-60" onClick={() => void apply(LOGIN_SYNC_CHOICES.LOCAL)}>
             {phase === LOGIN_SYNC_CHOICES.LOCAL ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveUpload className="h-4 w-4" />}
-            用本机数据覆盖云端
+            {pending.fresh ? '同步到这个账号' : '用本机数据覆盖云端'}
           </button>
           <button type="button" disabled={busy} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 disabled:opacity-60" onClick={() => void apply(LOGIN_SYNC_CHOICES.REMOTE)}>
             {phase === LOGIN_SYNC_CHOICES.REMOTE ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />}
-            不覆盖，改用云端（本机数据导出备份）
+            {pending.fresh ? '不同步，新账号从空白开始（本机数据导出备份）' : '不覆盖，改用云端（本机数据导出备份）'}
           </button>
           <button type="button" disabled={busy} className="h-9 w-full text-xs text-slate-400 disabled:opacity-60" onClick={later}>稍后处理</button>
         </div>

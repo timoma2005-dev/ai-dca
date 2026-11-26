@@ -1,11 +1,11 @@
 // 登录后首次同步的编排：云端为空 → 强制上传本机数据；云端有数据 → 先算差异，
 // 无差异直接走原拉取，有差异则交给合并对话框，由用户确认后再执行并启动自动同步。
 //
-// 注册流程与演示模式保持原逻辑；旧版整包迁移（action-required）由 postAuthSync 先处理，迁移后才进入这里。
+// 注册：本机有未登录时的数据就先问是否同步到新账号（可能是别人或旧账号留下的）；演示模式保持原逻辑；旧版整包迁移（action-required）由 postAuthSync 先处理，迁移后才进入这里。
 import { loadCloudSession } from './authSession.js';
 import { isFeatureDemoActive } from './demo/demoMode.js';
 import { clearLoginSyncPending, LOGIN_SYNC_DIFF_EVENT, markLoginSyncPending } from './loginSyncGate.js';
-import { applyLoginSyncBaseline, buildLoginSyncBaseline, computeLoginSyncDiff, hasLocalAccountData, hasRemoteAccountData } from './loginSyncDiff.js';
+import { applyLoginSyncBaseline, buildLoginSyncBaseline, computeLoginSyncDiff, hasLocalAccountData, hasRemoteAccountData, PREFERENCE_RESOURCES } from './loginSyncDiff.js';
 import { applyLoginSyncChoices, DEFAULT_LOGIN_SYNC_DEPS, loadLoginSyncSides } from './loginSyncActions.js';
 
 let pendingDiff = null;
@@ -52,6 +52,25 @@ async function runLegacyFlow(cloudSync, { action, hasRemoteBackup }) {
   return 'no-remote';
 }
 
+const REGISTER_SILENT_RESOURCES = new Set([...PREFERENCE_RESOURCES, 'notify/web-config']);
+
+async function runRegisterFlow(cloudSync, { session, assertSession, deps, hasRemoteBackup }) {
+  if (hasRemoteBackup) return runLegacyFlow(cloudSync, { action: 'register', hasRemoteBackup });
+  const userId = userIdOf(session);
+  markLoginSyncPending(userId);
+  const sides = await loadLoginSyncSides({ session, deps });
+  assertSession();
+  const all = computeLoginSyncDiff(sides);
+  const pushItems = [...all.items, ...all.autoItems];
+  const items = pushItems.filter((item) => !(item.kind === 'resource' && REGISTER_SILENT_RESOURCES.has(item.resource)));
+  if (!items.length) return runLegacyFlow(cloudSync, { action: 'register', hasRemoteBackup });
+  // 偏好类设置照常带上；业务数据（持仓、通知渠道等）等用户确认。
+  const diff = { items, autoItems: pushItems.filter((item) => !items.includes(item)), hasDiff: true };
+  pendingDiff = { userId, sides, rawSides: sides, diff, fresh: true, createdAt: new Date().toISOString() };
+  dispatch(LOGIN_SYNC_DIFF_EVENT, { userId, diff, silent: false });
+  return 'diff-pending';
+}
+
 /**
  * 首次同步入口（postAuthSync 调用）。返回值：
  * pulled | uploaded | skipped-upload | no-remote | diff-pending
@@ -81,7 +100,8 @@ async function runLoginAccountSyncOnce(cloudSync, {
   const remoteMeta = await cloudSync.refreshRemoteCloudMeta();
   const hasRemoteBackup = Boolean(remoteMeta?.version);
   cloudSync.ensureLocalChangeBaseline();
-  if (action === 'register' || demoActive) return runLegacyFlow(cloudSync, { action, hasRemoteBackup });
+  if (demoActive) return runLegacyFlow(cloudSync, { action, hasRemoteBackup });
+  if (action === 'register') return runRegisterFlow(cloudSync, { session, assertSession, deps, hasRemoteBackup });
 
   const userId = userIdOf(session);
   markLoginSyncPending(userId);

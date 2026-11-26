@@ -19,13 +19,12 @@ test('account email from registration can be used as notify email', async (t) =>
   await assert.rejects(handleEmailUseAccount(db, { userId: 'u2', clientId: 'c2' }, {}), /ACCOUNT_EMAIL_MISSING|还没有绑定邮箱/);
 });
 
-test('account email of another user requires rebind confirmation', async (t) => {
+test('verified account email takes over a notify email bound to another user', async (t) => {
   const db = openDb(':memory:');
   const original = accountEmailDeps.readAccountEmail;
   accountEmailDeps.readAccountEmail = () => 'shared@example.com';
   t.after(() => { accountEmailDeps.readAccountEmail = original; db.close(); });
   await handleEmailUseAccount(db, account, {});
-  await assert.rejects(handleEmailUseAccount(db, { userId: 'u2', clientId: 'c2' }, {}), /重新绑定/);
-  const rebound = await handleEmailUseAccount(db, { userId: 'u2', clientId: 'c2' }, { rebind: true });
+  const rebound = await handleEmailUseAccount(db, { userId: 'u2', clientId: 'c2' }, {});
   assert.equal(rebound.ok, true);
 });

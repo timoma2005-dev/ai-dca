@@ -325,16 +325,29 @@ test('登录云端为空且本机无数据：跳过上传', async () => {
   assert.ok(!cloudSync.calls.some((call) => Array.isArray(call) && call[0] === 'upload'));
 });
 
-test('注册：不弹窗，保持原逻辑（云端空强制上传）', async () => {
+test('注册：本机有注册前的业务数据 → 先弹窗询问，不上传、保持门禁', async () => {
   resetLoginSyncFlowForTest();
   const session = login('u-reg');
   const before = diffEvents().length;
   const cloudSync = fakeCloudSync();
-  const { deps, calls } = sidesDeps({ localResources: { 'trades/ledger': '[{"id":"t1"}]' } });
+  const { deps } = sidesDeps({ localResources: { 'trades/ledger': '[{"id":"t1"}]' } });
+  const status = await runLoginAccountSync(cloudSync, { action: 'register', session, deps, demoActive: false });
+  assert.equal(status, 'diff-pending');
+  assert.equal(diffEvents().length, before + 1);
+  assert.ok(!cloudSync.calls.some((call) => Array.isArray(call) && call[0] === 'upload'));
+  assert.ok(!cloudSync.calls.includes('start'));
+  assert.equal(isLoginSyncPending(session), true);
+});
+
+test('注册：本机只有偏好设置 → 不弹窗，照常上传', async () => {
+  resetLoginSyncFlowForTest();
+  const session = login('u-reg2');
+  const before = diffEvents().length;
+  const cloudSync = fakeCloudSync();
+  const { deps } = sidesDeps({ localResources: { 'prefs/workspace': '{"tab":"home"}' } });
   const status = await runLoginAccountSync(cloudSync, { action: 'register', session, deps, demoActive: false });
   assert.equal(status, 'uploaded');
   assert.equal(diffEvents().length, before);
-  assert.equal(calls.length, 0, '注册不读取 diff');
   assert.equal(isLoginSyncPending(session), false);
 });
 

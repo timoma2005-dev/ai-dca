@@ -156,7 +156,8 @@ export async function handleEmailUseAccount(db, account, body) {
   if (!email) {
     throw new HttpError(400, 'ACCOUNT_EMAIL_MISSING', '账号还没有绑定邮箱。');
   }
-  return bindVerifiedEmail(db, account, { email, verifiedAt: nowIso() }, body?.rebind === true);
+  // 账号邮箱已在注册/绑定时验证过归属，直接接管（原来挂在别的账号上的通知邮箱会转到本账号）。
+  return bindVerifiedEmail(db, account, { email, verifiedAt: nowIso() }, true);
 }
 
 async function bindVerifiedEmail(db, account, verified, rebind) {
