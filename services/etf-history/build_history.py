@@ -131,6 +131,10 @@ def fetch_szse_shares(start, end):
     return out
 
 
+# 与 shared/etfPcfSharesSchema.js normalizeCreationStatus 同口径（只取申购是否允许）。
+SUBSCRIBE_TEXT = {'仅允许赎回': False, '不允许申购/赎回': False, '仅允许申购': True, '申购和赎回皆允许': True, '申购赎回都允许': True, '申购和赎回都允许': True}
+
+
 def fetch_limit(code, date):
     body = get(f'{MIRROR}/etf-pcf-limit?code={code}&date={date}', local=True, timeout=45, pause=0.1)
     if not body:
@@ -153,7 +157,7 @@ def fetch_limit(code, date):
         'net': net['shares'] if net['kind'] == 'limited' else None,
         'acctTot': p.get('accountTotalSubscribeLimitShares') if p.get('accountTotalSubscribeLimitKind') == 'limited' else None,
         'acctNet': p.get('accountNetSubscribeLimitShares') if p.get('accountNetSubscribeLimitKind') == 'limited' else None,
-        'allow': p.get('subscriptionAllowed') if isinstance(p.get('subscriptionAllowed'), bool) else None,
+        'allow': p.get('subscriptionAllowed') if isinstance(p.get('subscriptionAllowed'), bool) else SUBSCRIBE_TEXT.get((p.get('creationRedemption') or '').strip()),
     }
 
 

@@ -226,7 +226,9 @@ function CodePills({ row }) {
   return (
     <div className="nx-title-line">
       <span className={`nx-pill code${sz ? '' : ' sse'}`}>{`${sz ? '深' : '沪'} ${row.code}`}</span>
-      {row.subscriptionAllowed === false && <span className="nx-pill paused">仅赎回</span>}
+      {row.subscriptionAllowed === false && (
+        <span className="nx-pill paused">{row.redemptionAllowed === true ? '仅赎回' : '暂停申购'}</span>
+      )}
     </div>
   );
 }
@@ -414,7 +416,7 @@ function MobileRow({ row, calendar, shareRange, onOpen, onHistory, onOverall, at
       if (v !== '不限' && v !== '—') rest.push(`${SHORT[k]} ${compact(v)}`);
     }
   }
-  if (row.subscriptionAllowed === false) rest.push('仅允许赎回');
+  if (row.subscriptionAllowed === false) rest.push(row.redemptionAllowed === true ? '仅允许赎回' : '暂停申购');
   if (!moved.length && !rest.length) rest.push('申购不限');
   const delta = deltaView(row.deltaShares, '0份');
   const sep = <span className="nx-m-dot"> • </span>;

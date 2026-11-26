@@ -217,11 +217,12 @@ const SSE_PCF_LIMIT_FIELD_MAP = [
   ['NET_REDEMPTION_LIMIT_PER_ACCT', 'accountNetRedeemLimitShares', 'accountNetRedeemLimitKind']
 ];
 
-// 「申购和赎回皆允许」→ true/true；「仅允许赎回」→ false/true；
+// 「申购和赎回皆允许」→ true/true；「仅允许赎回」→ false/true；「不允许申购/赎回」→ false/null；
 // 其它（含缺失）为未知状态 null/null + warning，保留原文，未知状态不等于关闭。
 const SSE_PCF_CREATION_REDEMPTION_MAP = {
   申购和赎回皆允许: { subscriptionAllowed: true, redemptionAllowed: true },
-  仅允许赎回: { subscriptionAllowed: false, redemptionAllowed: true }
+  仅允许赎回: { subscriptionAllowed: false, redemptionAllowed: true },
+  '不允许申购/赎回': { subscriptionAllowed: false, redemptionAllowed: null }
 };
 
 // ￥前缀金额：接受负数与数值零，不四舍五入（NAV 有 4 位小数）；空值 → null。

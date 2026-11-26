@@ -736,6 +736,12 @@ test('SSE 前日可选字段解析与缓存形态，真实接口缺字段不造�
   const missing = parse({});
   assert.equal(missing.prevDayDate, null);
   assert.equal(missing.prevDayCashDifference, null);
+  // 上交所 2026-11-26 起暂停申购的 QDII 写作「不允许申购/赎回」：申购 false，赎回不猜，原文保留、无 warning。
+  const paused = parse({ CREATION_REDEMPTION: '不允许申购/赎回' });
+  assert.equal(paused.subscriptionAllowed, false);
+  assert.equal(paused.redemptionAllowed, null);
+  assert.equal(paused.creationRedemption, '不允许申购/赎回');
+  assert.ok(!paused.warnings.some((w) => w.includes('CREATION_REDEMPTION')));
   const p = parse({ PRE_CASH_COMPONENT: '￥-8933.50', PRE_TRADING_DAY: '20261012' });
   assert.equal(p.prevDayCashDifference, -8933.5);
   assert.equal(p.prevDayDate, '2026-10-12');

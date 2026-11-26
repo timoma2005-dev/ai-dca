@@ -38,7 +38,7 @@
 .eh-daily-toggle{display:flex;justify-content:space-between;align-items:center;border:0;background:var(--slate-50);border-radius:10px;padding:9px 12px;font-size:12.5px;color:#4f46e5;cursor:pointer;width:100%}
 .eh-tip{background:#0f172a;color:#e2e8f0;font-size:11.5px;line-height:1.6;padding:7px 10px;border-radius:9px;box-shadow:0 6px 20px rgba(15,23,42,.25)}
 .eh-tip b{color:#fff}
-.eh-tip .eh-tip-down{color:#fca5a5}.eh-tip .eh-tip-up{color:#86efac}.eh-tip .eh-tip-prem{color:#fdba74}
+.eh-tip .eh-tip-pause{color:#fcd34d}.eh-tip .eh-tip-down{color:#fca5a5}.eh-tip .eh-tip-up{color:#86efac}.eh-tip .eh-tip-prem{color:#fdba74}
 .eh-tablehead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px}
 .eh-tablehead b{font-size:13px;color:var(--slate-900)}
 .eh-actions{display:flex;gap:8px;align-items:center}

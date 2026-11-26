@@ -86,6 +86,8 @@ export function normalizeCreationStatus(input) {
   const states = {
     仅允许赎回: [false, true],
     仅允许申购: [true, false],
+    // 上交所 2026-11-26 起对暂停申购的 QDII 改用此写法（前一日为「仅允许赎回」）；赎回状态不从原文猜。
+    '不允许申购/赎回': [false, null],
     申购和赎回皆允许: [true, true],
     申购赎回都允许: [true, true],
     申购和赎回都允许: [true, true]

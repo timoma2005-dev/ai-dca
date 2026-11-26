@@ -50,6 +50,7 @@ const C_PREM = '#f97316';
 const C_QUOTA = '#8b5cf6';
 const C_TIGHT = '#ef4444';
 const C_RELAX = '#22c55e';
+const C_PAUSE = '#f59e0b';
 const kindColor = (k) => (k === 'tightened' ? C_TIGHT : C_RELAX);
 const episodeWord = (ep) => (ep.kind === 'relaxed' ? '放宽' : ep.count > 1 ? `收紧${ep.count}次` : '收紧');
 
@@ -117,6 +118,16 @@ export function QuotaPremiumChart({ rows, episodes, mobile }) {
     qd += `L${xa.toFixed(1)},${q} L${xb.toFixed(1)},${q} `;
   });
   closeQ(n - 1);
+
+  // 交易所 PCF 标注暂停申购的日子：额度区底部画琥珀色条，避免把「有额度」误读成「能申购」。
+  const pauseBars = [];
+  rows.forEach((r, i) => {
+    if (r.allow !== false) return;
+    const xa = Math.max(L, x(i) - dx / 2), xb = Math.min(W - R, x(i) + dx / 2);
+    const last = pauseBars[pauseBars.length - 1];
+    if (last && last.i === i - 1) Object.assign(last, { x1: xb, i });
+    else pauseBars.push({ x0: xa, x1: xb, i });
+  });
 
   // 额度变化处的数字标签（太挤就略过）
   const qLabels = [];
@@ -190,8 +201,16 @@ export function QuotaPremiumChart({ rows, episodes, mobile }) {
         <text x={L} y={QT - 8} className="eh-lab">
           每日申购额度
         </text>
+        {pauseBars.length ? (
+          <text x={W - R} y={QT - 8} className="eh-lab" textAnchor="end" fill={C_PAUSE}>
+            ▬ 交易所标注暂停申购
+          </text>
+        ) : null}
         {quotaPaths.map((d, i) => (
           <path key={i} d={d} fill={C_QUOTA} fillOpacity={0.3} stroke={C_QUOTA} strokeWidth={1.2} />
+        ))}
+        {pauseBars.map((b) => (
+          <rect key={`pz-${b.i}`} x={b.x0} y={QB - 4} width={Math.max(1, b.x1 - b.x0)} height={4} fill={C_PAUSE} />
         ))}
         {qLabels.map(({ i, v }) => (
           <text key={i} x={Math.min(x(i) + 2, W - R - 26)} y={qy(v) - 3} className="eh-ql">
@@ -236,6 +255,7 @@ export function QuotaPremiumChart({ rows, episodes, mobile }) {
             溢价 <b className="eh-tip-prem">{fmtPct(hr.prem)}</b>
             {GAP}额度 {fmtLimit(limitValue(hr))}
           </div>
+          {hr.allow === false ? <div className="eh-tip-pause">交易所标注：暂停申购</div> : null}
           {hEp ? <div className={hEp.kind === 'tightened' ? 'eh-tip-down' : 'eh-tip-up'}>{episodeWord(hEp)}中</div> : null}
         </div>
       ) : null}

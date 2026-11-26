@@ -224,6 +224,7 @@ test('13 ETFs: normalized PCF creation status, signed estimates, and honest SSE 
   for (const [input, expected] of [
     ['仅允许赎回', [false, true]],
     ['仅允许申购', [true, false]],
+    ['不允许申购/赎回', [false, null]],
     ['申购和赎回皆允许', [true, true]],
     ['申购赎回都允许', [true, true]],
     ['申购和赎回都允许', [true, true]],

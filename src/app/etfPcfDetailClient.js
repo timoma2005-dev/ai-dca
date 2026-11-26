@@ -1,4 +1,5 @@
 import { apiUrl } from './apiBase.js';
+import { normalizeCreationStatus } from '../../shared/etfPcfSharesSchema.js';
 
 export function createPcfDetailClient({ fetchImpl = (...args) => fetch(...args), now = Date.now } = {}) {
   const memory = new Map();
@@ -77,8 +78,11 @@ export function formatPcfShares(n) {
 }
 export function pcfDetailSections(p) {
   const sse = p.source === 'sse_pcf';
-  const allowed = (value) =>
-    typeof value === 'boolean' ? (value ? '允许' : '不允许') : sse ? p.creationRedemption || '—' : '—';
+  // 缓存里的旧解析结果可能没认出新写法，按原文再归一化一次；仍未知时显示「未明确」，原文单列。
+  const status = p.creationRedemption ? normalizeCreationStatus(p.creationRedemption) : {};
+  const pick = (key) => (typeof p[key] === 'boolean' ? p[key] : status[key] ?? null);
+  const raw = sse && typeof p.creationRedemption === 'string' ? p.creationRedemption.trim() : '';
+  const allowed = (value) => (typeof value === 'boolean' ? (value ? '允许' : '不允许') : raw ? '未明确' : '—');
   const limit = (value, empty) => (value === null ? empty : formatPcfShares(value));
   // 单账户限额（SSE/SZSE PCF 新增字段）：逐项独立判断，prefix+Kind/Shares 均缺失时不加行；
   // Shares null 或 kind unlimited 记「不设上限」，有限数字（含 0）走 formatPcfShares，其余记「—」。
@@ -122,8 +126,9 @@ export function pcfDetailSections(p) {
             ? `${(p.creationRedemptionUnitShares / 1e4).toFixed(2)}万份`
             : formatPcfShares(p.creationRedemptionUnitShares)
         ],
-        ['申购的允许情况', allowed(p.subscriptionAllowed)],
-        ['赎回的允许情况', allowed(p.redemptionAllowed)],
+        ['申购的允许情况', allowed(pick('subscriptionAllowed'))],
+        ['赎回的允许情况', allowed(pick('redemptionAllowed'))],
+        ...(raw ? [['申赎状态（交易所原文）', raw]] : []),
         ['当日累计申购上限', limit(p.totalSubscribeLimitShares, '无')],
         ['当日累计赎回上限', limit(p.totalRedeemLimitShares, '无')],
         ['当日净申购上限', limit(p.netSubscribeLimitShares, '不设上限')],

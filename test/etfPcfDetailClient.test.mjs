@@ -83,8 +83,13 @@ test('两市场字段映射、原始净值精度、允许情况与上限单位',
   const sse = pcfDetailSections({ source: 'sse_pcf', navPerCreationUnit: 123, nav: 1.23, creationRedemption: '暂停申赎' });
   assert.equal(sse[0].date, '—');
   assert.deepEqual(sse[0].rows.map((r) => r[1]), ['—', '123', '1.23']);
-  assert.equal(sse[1].rows[4][1], '暂停申赎');
-  assert.equal(sse[1].rows[5][1], '暂停申赎');
+  assert.equal(sse[1].rows[4][1], '未明确');
+  assert.equal(sse[1].rows[5][1], '未明确');
+  assert.deepEqual(sse[1].rows[6], ['申赎状态（交易所原文）', '暂停申赎']);
+  // 旧缓存 null/null 但原文是上交所新写法：申购判为不允许，赎回不猜。
+  const paused = pcfDetailSections({ source: 'sse_pcf', creationRedemption: '不允许申购/赎回', subscriptionAllowed: null, redemptionAllowed: null });
+  assert.equal(paused[1].rows[4][1], '不允许');
+  assert.equal(paused[1].rows[5][1], '未明确');
 });
 
 test('单账户限额四字段逐项独立追加；数值/0/null/unlimited/unknown 格式；旧 payload 保持 10+3 行', () => {
