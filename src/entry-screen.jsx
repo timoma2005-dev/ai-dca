@@ -11,12 +11,14 @@ import { installLegacyConfirmAdapter } from "./app/confirm.js";
 import { initPostHog } from "./app/posthog.js";
 import { registerAssetCacheWhenIdle } from "./app/assetCacheRegistration.js";
 import { installAccountRemoteReadGuard } from "./app/accountRuntimeStore.js";
+import { startOldSiteMoveReceiver } from "./app/oldSiteMove.js";
 import "./styles/app.css";
 import "./styles/design-system.css";
 import "./styles/a11y-mobile.css";
 
 installAccountRemoteReadGuard();
 installLegacyConfirmAdapter();
+startOldSiteMoveReceiver();
 
 function runWhenIdle(callback, { timeout = 2500, delayMs = 0 } = {}) {
   if (typeof window === "undefined") return;

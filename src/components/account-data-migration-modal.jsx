@@ -32,6 +32,7 @@ const SOURCE_SITE_URL = 'https://freebacktrack.tech';
 export function isCnMigrationNoticeHost(location = globalThis.location) {
   const host = String(location?.hostname || '').trim().toLowerCase();
   return host === 'cn.freebacktrack.tech'
+    || host === 'fast.freebacktrack.tech'
     || host === 'localhost'
     || host === '127.0.0.1'
     || Boolean(globalThis.window?.__AI_DCA_FORCE_MIGRATION_NOTICE__);
