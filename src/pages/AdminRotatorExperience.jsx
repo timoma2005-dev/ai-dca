@@ -5,7 +5,8 @@ import { loadCloudSession } from '../app/authSession.js';
 import { Button } from '../components/ui/button.jsx';
 
 // 日内轮动看板（adminRotator，仅超级管理员）：cn 上腾讯行情源的 ratio_rotator 影子实例。
-// 读：GET /api/rotator/status（每 5 秒）；写：POST /api/rotator/holding 设置当前账户的持仓。
+// 读：GET /api/rotator/status（每 5 秒）；写：POST /api/rotator/holding 设置当前账户的持仓，
+// POST /api/rotator/settings 设置当前账户的入场阈值 bps（默认 30；进程账户保存后下个交易日启动时生效）。
 // 持仓按账户存 SQLite（rotator_api.py），行情/偏离全局共享；运行日志与进程信号只返回给驱动进程的账户（is_owner）。
 // 权限由 nginx auth_request（api:rotator）校验，前端只负责展示。
 export const ROTATOR_REFRESH_MS = 5000;
@@ -41,6 +42,19 @@ async function postHolding(code) {
   return json;
 }
 
+async function postSettings(enterBps) {
+  const res = await fetch(apiUrl('/api/rotator/settings'), {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    credentials: 'same-origin',
+    redirect: 'manual',
+    body: JSON.stringify({ enter_bps: enterBps })
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw Error(json?.message || `保存失败（HTTP ${res.status}）`);
+  return json;
+}
+
 const fmt = (v, d = 3) => (v === null || v === undefined || Number.isNaN(Number(v)) ? '—' : Number(v).toFixed(d));
 const bps = (v) => (v === null || v === undefined ? '—' : `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}`);
 const clock = (ts) => (ts ? new Date(ts * 1000).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) : '—');
@@ -68,6 +82,10 @@ export default function AdminRotatorExperience() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const editedRef = useRef(false);
+  const [enterInput, setEnterInput] = useState('');
+  const [savingEnter, setSavingEnter] = useState(false);
+  const [enterMsg, setEnterMsg] = useState('');
+  const enterEditedRef = useRef(false);
 
   const load = useCallback(async (signal) => {
     try {
@@ -79,6 +97,8 @@ export default function AdminRotatorExperience() {
         const [c] = Object.keys(h);
         if (c) setCode(c);
       }
+      const userEnter = json?.settings?.enter_bps;
+      if (!enterEditedRef.current && userEnter !== null && userEnter !== undefined) setEnterInput(String(userEnter));
     } catch (err) {
       if (err?.name !== 'AbortError') setError(err?.message || '读取失败');
     }
@@ -103,7 +123,8 @@ export default function AdminRotatorExperience() {
   const pool = poolRows.map((r) => r.code);
   const stale = data?.age_s === null || data?.age_s === undefined || data.age_s > STALE_S;
   const holding = st?.holding;
-  const enter = st?.params?.enter;
+  const settings = data?.settings || null;
+  const enter = settings?.enter_bps ?? st?.params?.enter;
   const gap = st?.gap_bps;
   const sig = st?.last_signal;
 
@@ -123,6 +144,28 @@ export default function AdminRotatorExperience() {
       setSaveMsg(err?.message || '保存失败');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveEnter() {
+    const v = Number(enterInput);
+    const min = settings?.min ?? 1;
+    const max = settings?.max ?? 500;
+    if (enterInput === '' || !Number.isFinite(v) || v < min || v > max) {
+      setEnterMsg(`阈值须在 ${min}~${max} bps 之间`);
+      return;
+    }
+    setSavingEnter(true);
+    setEnterMsg('');
+    try {
+      const json = await postSettings(v);
+      enterEditedRef.current = false;
+      setEnterMsg(json?.applies_to_process ? '已保存，轮动进程下个交易日 10:25 启动时生效' : '已保存，只影响你自己的视图');
+      load();
+    } catch (err) {
+      setEnterMsg(err?.message || '保存失败');
+    } finally {
+      setSavingEnter(false);
     }
   }
 
@@ -169,6 +212,30 @@ export default function AdminRotatorExperience() {
           {saveMsg ? <span className="text-xs text-muted-foreground">{saveMsg}</span> : null}
           {data?.manual?.set_at ? (
             <span className="ml-auto text-xs text-muted-foreground">上次设置 {String(data.manual.set_at).replace('T', ' ').slice(0, 19)} · {data.manual.set_by}</span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="mb-2 text-sm font-medium">入场阈值<span className="ml-1 text-xs font-normal text-muted-foreground">（持仓 − 最便宜 ≥ 阈值时提示，默认 {settings?.default_enter_bps ?? 30} bps，按账户保存）</span></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            min={settings?.min ?? 1}
+            max={settings?.max ?? 500}
+            step="1"
+            className="h-9 w-24 rounded-md border border-input bg-background px-2 text-sm tabular-nums"
+            value={enterInput}
+            onChange={(e) => { enterEditedRef.current = true; setEnterInput(e.target.value); }}
+          />
+          <span className="text-sm text-muted-foreground">bps</span>
+          <Button size="sm" onClick={saveEnter} disabled={savingEnter}>{savingEnter ? '保存中…' : '保存'}</Button>
+          {enterMsg ? <span className="text-xs text-muted-foreground">{enterMsg}</span> : null}
+          {data?.is_owner && settings ? (
+            <span className="ml-auto text-xs text-muted-foreground">
+              进程当前 {settings.process_enter_bps ?? '—'} bps · 下次启动 {settings.next_enter_bps ?? '—'} bps
+            </span>
           ) : null}
         </div>
       </div>
