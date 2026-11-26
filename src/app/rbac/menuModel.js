@@ -34,7 +34,8 @@ export const RBAC_MANAGED_TABS = new Set(SEED_MENUS.map(([key]) => key));
 
 // 2026-10-25：持仓 / 交易计划 / 数据修复对游客放开（数据只存本机，登录后再同步）；份额新增改为 VIP。
 // 会员分层（2026-10-24，10-25 份额新增并入 VIP）：VIP = 行情 + 份额新增 + 换基 + 通知推送；SVIP 再加雷达与竞价看板。
-const USER_LOCKED = { markets: 'vip', shares: 'vip', fundSwitch: 'vip', notify: 'vip', adminRadar: 'svip', adminAuction: 'svip' };
+// 2026-11-26：日内轮动从仅超级管理员下放到 SVIP（services/auth/migrations/006-rotator-svip.sql）。
+const USER_LOCKED = { markets: 'vip', shares: 'vip', fundSwitch: 'vip', notify: 'vip', adminRadar: 'svip', adminAuction: 'svip', adminRotator: 'svip' };
 const VIP_NAMES = { vip: 'VIP', svip: 'SVIP' };
 
 const GUEST_OPEN = new Set(['home', 'articles', 'holdings', 'dataRepair']);
@@ -78,8 +79,7 @@ export function buildGuestFallback() {
  */
 export function buildUserFallback({ isAdmin = false } = {}) {
   const menus = SEED_MENUS
-    // adminRotator 仅超级管理员（服务端 menu:adminRotator:*），兜底菜单一律不展示。
-    .filter(([key]) => key !== 'adminRotator' && (isAdmin || key !== 'adminRbac'))
+    .filter(([key]) => isAdmin || key !== 'adminRbac')
     .map((row) => {
       const requiredCode = isAdmin ? null : USER_LOCKED[row[0]];
       const item = seedItem(row, Boolean(requiredCode));

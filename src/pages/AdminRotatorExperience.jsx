@@ -4,7 +4,7 @@ import { apiUrl } from '../app/apiBase.js';
 import { loadCloudSession } from '../app/authSession.js';
 import { Button } from '../components/ui/button.jsx';
 
-// 日内轮动看板（adminRotator，仅超级管理员）：cn 上腾讯行情源的 ratio_rotator 影子实例。
+// 日内轮动看板（adminRotator，SVIP 及以上）：cn 上腾讯行情源的 ratio_rotator 影子实例。
 // 读：GET /api/rotator/status（每 5 秒）；写：POST /api/rotator/holding 设置当前账户的持仓，
 // POST /api/rotator/settings 设置当前账户的入场阈值 bps（默认 30；进程账户保存后下个交易日启动时生效）。
 // 持仓按账户存 SQLite（rotator_api.py），行情/偏离全局共享；运行日志与进程信号只返回给驱动进程的账户（is_owner）。
@@ -24,7 +24,7 @@ async function getStatus(signal) {
     method: 'GET', headers: authHeaders(), credentials: 'same-origin', redirect: 'manual', signal, cache: 'no-store'
   });
   if (res.status === 401) throw Error('未登录');
-  if (res.status === 403) throw Error('需要超级管理员');
+  if (res.status === 403) throw Error('需要 SVIP');
   if (!res.ok) throw Error(`读取失败（HTTP ${res.status}）`);
   return res.json();
 }
