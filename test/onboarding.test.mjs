@@ -278,3 +278,19 @@ test('全部完成收起时飞向个人中心；入口完成后保留「再看�
   assert.match(slot, /再看一遍新手入门/);
   assert.match(read('src/components/account-menu.jsx'), /variant="auth"/);
 });
+
+test('新手引导：点击时按最新权限再判断；落到权限页记 locked，不空等记 target_missing', () => {
+  const slot = read('src/components/onboarding/GettingStartedSlot.jsx');
+  assert.match(slot, /const access = task\.tab && accessOf \? accessOf\(task\.tab\) : null;/);
+  assert.match(slot, /if \(access\.status === 'login'\) onRegister\?\.\(\); else onUpgrade\?\.\(\);/);
+  assert.match(slot, /\[accessOf, onRegister, onUpgrade\]/);
+  const host = read('src/components/onboarding/StepHintHost.jsx');
+  assert.match(host, /const DEFAULT_WAIT_MS = 15000;/);
+  assert.match(host, /findAccessGuard\(\)\) \{\n\s+trackFeatureEvent\('onboarding', 'target_locked'/);
+  assert.match(host, /end\('locked'\);/);
+  const guard = read('src/components/rbac/access-guard-page.jsx');
+  for (const id of ['access-guard-login', 'access-guard-paid', 'access-guard-forbidden']) {
+    assert.match(guard, new RegExp(id));
+    assert.match(host, new RegExp(id));
+  }
+});

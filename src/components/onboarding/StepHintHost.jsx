@@ -7,7 +7,9 @@ import { trackFeatureEvent } from '../../app/analytics.js';
 import { BOTTOM_NAV_ALLOWANCE, computeHintPosition } from '../../app/onboarding/hintPosition.js';
 import { NOTIFY_KEY_GUIDE_STATE_EVENT, openNotifyKeyGuide } from '../../app/notify/keyGuide.js';
 
-const DEFAULT_WAIT_MS = 8000;
+const DEFAULT_WAIT_MS = 15000;
+// 切页后先给新页面一点时间渲染，避免把上一页残留的权限页当成目标页。
+const ACCESS_GUARD_GRACE_MS = 600;
 const completedRuns = new Set();
 
 /** 教程最后一步完成：通知工作台（回到新手入门 / 演示记完成）。同一次运行只发一次。 */
@@ -28,6 +30,16 @@ function isVisible(el) {
 export function findOnboardingTarget(target, root = typeof document !== 'undefined' ? document : null) {
   if (!root || !target) return null;
   const nodes = root.querySelectorAll(`[data-onboarding="${target}"]`);
+  for (const node of nodes) {
+    if (isVisible(node)) return node;
+  }
+  return null;
+}
+
+/** 目标 tab 落在登录 / 会员权限页（AccessGuardPage）时，页面上不会有引导目标。 */
+export function findAccessGuard(root = typeof document !== 'undefined' ? document : null) {
+  if (!root) return null;
+  const nodes = root.querySelectorAll('[data-testid="access-guard-login"],[data-testid="access-guard-paid"],[data-testid="access-guard-forbidden"]');
   for (const node of nodes) {
     if (isVisible(node)) return node;
   }
@@ -148,6 +160,11 @@ export function StepHintHost({ paused: pausedProp = false, demoActive = false })
       // 「保存并连接」这类按钮：渠道已经存好（比如发送测试时一并保存了）就不再显示，算这一步完成。
       if (step.completeWhenGone && Date.now() - startedAt > 800) {
         next();
+        return;
+      }
+      if (Date.now() - startedAt > ACCESS_GUARD_GRACE_MS && findAccessGuard()) {
+        trackFeatureEvent('onboarding', 'target_locked', { flowId: run.flowId, stepId: step.id, version: 2 });
+        end('locked');
         return;
       }
       if (Date.now() - startedAt > waitMs) {

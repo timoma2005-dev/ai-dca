@@ -25,12 +25,19 @@ export function GettingStartedSlot({ loggedIn, accessOf, onRegister, onUpgrade, 
       window.dispatchEvent(new CustomEvent(ONBOARDING_START_DEMO_EVENT, { detail: { tab: task.tab, flow: task.flow, variant: task.variant || '' } }));
       return;
     }
+    // 任务卡可能在 RBAC 加载完之前渲染：点击时按最新权限再判断一次，别把人送到权限页再空等引导。
+    const access = task.tab && accessOf ? accessOf(task.tab) : null;
+    if (access && access.status !== 'ok') {
+      trackFeatureEvent('onboarding', 'task_locked', { taskId: task.id, access: access.status, version: 2 });
+      if (access.status === 'login') onRegister?.(); else onUpgrade?.();
+      return;
+    }
     if (task.tab) navigate(task.tab);
     if (task.flow) {
       // 先切页，再启动提示；宿主会等待懒加载页面里的目标出现。
       window.setTimeout(() => window.dispatchEvent(new CustomEvent(ONBOARDING_START_EVENT, { detail: { flow: task.flow } })), 0);
     }
-  }, [onRegister, onUpgrade]);
+  }, [accessOf, onRegister, onUpgrade]);
   const dismiss = () => {
     trackFeatureEvent('onboarding', 'dismiss', { doneCount: tasks.doneCount, mode: tasks.mode, takeover, version: 2 });
     writeOnboardingState(tasks.allDone ? { dismissed: true, celebrated: true, replay: false } : { dismissed: true, replay: false });
