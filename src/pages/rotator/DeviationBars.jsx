@@ -26,18 +26,18 @@ export default function DeviationBars({ rows, holding, cheapest, gap, enter, at 
   const bars = deviationBars(rows);
   if (!bars.length) return null;
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
       <div className="text-sm font-medium">
-        <span className="tabular-nums">{at || '—'}</span> 实测：各只比今天的基准贵/便宜多少
+        <span className="tabular-nums">{at || '—'}</span> 各只比今天的基准贵/便宜多少
       </div>
       <div className="mt-1 text-xs text-muted-foreground">
-        各家溢价水平不同，每只只和它自己今天的基准溢价比（基准价 = IOPV × (1 + 基准溢价)）
+        每只只和自己今天的基准溢价比
       </div>
-      <div className="mt-3 grid grid-cols-[4.5rem_3.5rem_1fr_1fr] text-xs font-medium">
-        <div />
-        <div />
-        <div className="pr-2 text-right text-sky-700">← 比今天的基准便宜</div>
-        <div className="pl-2 text-orange-700">比今天的基准贵 →</div>
+      <div className="mt-3 grid grid-cols-[3.75rem_3.25rem_1fr_1fr] whitespace-nowrap px-1 text-[11px] font-medium sm:grid-cols-[4.5rem_3.5rem_1fr_1fr] sm:text-xs">
+        <div className="text-muted-foreground">基金</div>
+        <div className="text-muted-foreground">现价</div>
+        <div className="pr-1 text-right text-sky-700">← 便宜</div>
+        <div className="pl-1 text-orange-700">贵 →</div>
       </div>
       <div className="mt-1 space-y-0.5 text-sm tabular-nums">
         {bars.map((b) => {
@@ -47,11 +47,11 @@ export default function DeviationBars({ rows, holding, cheapest, gap, enter, at 
           return (
             <div
               key={b.code}
-              className={`grid grid-cols-[4.5rem_3.5rem_1fr_1fr] items-center rounded px-1 py-0.5 ${cheap ? 'bg-amber-100/70 dark:bg-amber-500/15' : held ? 'bg-sky-100/70 dark:bg-sky-500/15' : ''}`}
+              className={`grid grid-cols-[3.75rem_3.25rem_1fr_1fr] items-center whitespace-nowrap sm:grid-cols-[4.5rem_3.5rem_1fr_1fr] rounded px-1 py-0.5 ${cheap ? 'bg-amber-100/70 dark:bg-amber-500/15' : held ? 'bg-sky-100/70 dark:bg-sky-500/15' : ''}`}
               title={`${b.code} 现价 ${px3(b.price)} · 基准 ${px3(b.basePx)}`}
             >
               <div className={`truncate ${cheap || held ? 'font-semibold' : ''}`}>{b.name}</div>
-              <div className="text-xs text-muted-foreground">{px3(b.price)}元</div>
+              <div className="text-xs text-muted-foreground">{px3(b.price)}</div>
               <div className="flex items-center justify-end gap-1 border-r border-foreground/70 pr-0.5">
                 {b.dev < 0 ? (
                   <>

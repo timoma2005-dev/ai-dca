@@ -103,3 +103,77 @@ export function switchPnlSeries({ seriesA, seriesB, switchTs, sellPx, sellShares
   }
   return { points, min, max, last: points[points.length - 1], cash, fees };
 }
+
+// 序列里 ts 时刻（含）之前最后一个价格；ts 早于序列开头 5 分钟以内时取第一个价格
+export function priceAt(series, ts) {
+  const list = series || [];
+  let px = null;
+  for (const p of list) {
+    if (p[0] > ts) break;
+    px = p[1];
+  }
+  if (px === null && list.length && list[0][0] - ts <= 300) px = list[0][1];
+  return px;
+}
+
+/**
+ * 一天多次换车：从 startCode × startShares 出发，按时间依次「全部卖出当前持仓 → 买入下一只」。
+ * switches: [{ ts, buyCode, sellPx?, buyPx?, buyShares? }]，价格留空按该时刻行情价，买入份额留空按可用资金折整百。
+ * 返回两条线（相对第一次换车时的市值）：mine = 我（换了 N 次），base = 一直拿 startCode；
+ * 以及每一次换车的明细（含「这一次比不换多赚多少」的单次曲线）。
+ */
+export function rotationPortfolio({ seriesByCode, startCode, startShares, switches, commBps = 0 }) {
+  const n0 = Number(startShares);
+  const S = seriesByCode || {};
+  const comm = Number(commBps || 0) / 1e4;
+  const list = (switches || []).filter((s) => Number.isFinite(s?.ts)).slice().sort((a, b) => a.ts - b.ts);
+  if (!startCode || !(n0 > 0) || !list.length) return null;
+
+  let code = startCode;
+  let shares = n0;
+  let cash = 0;
+  const legs = [];
+  for (const [i, s] of list.entries()) {
+    const sp = Number(s.sellPx) > 0 ? Number(s.sellPx) : priceAt(S[code], s.ts);
+    const bp = Number(s.buyPx) > 0 ? Number(s.buyPx) : priceAt(S[s.buyCode], s.ts);
+    if (!s.buyCode || s.buyCode === code) return { error: `第 ${i + 1} 次换车：买入代码不能和当前持仓相同` };
+    if (!(sp > 0 && bp > 0)) return { error: `第 ${i + 1} 次换车：缺少成交价（该时刻也没有行情）` };
+    const proceeds = shares * sp;
+    const nb = Number(s.buyShares) > 0 ? Number(s.buyShares) : Math.floor((proceeds + Math.max(cash, 0)) / bp / 100) * 100;
+    if (!(nb > 0)) return { error: `第 ${i + 1} 次换车：买入份额为 0` };
+    const fees = (proceeds + nb * bp) * comm;
+    const single = switchPnlSeries({
+      seriesA: S[code], seriesB: S[s.buyCode], switchTs: s.ts, sellPx: sp, sellShares: shares, buyPx: bp, buyShares: nb, commBps
+    });
+    legs.push({ n: i + 1, ts: s.ts, x: tradingMinute(s.ts), from: code, to: s.buyCode, sellPx: sp, sellShares: shares, buyPx: bp, buyShares: nb, fees, single });
+    cash += proceeds - nb * bp - fees;
+    code = s.buyCode;
+    shares = nb;
+  }
+
+  const t0 = list[0].ts;
+  const v0 = n0 * legs[0].sellPx;
+  const codes = [...new Set([startCode, ...legs.map((l) => l.to)])];
+  const stamps = [...new Set(codes.flatMap((c) => (S[c] || []).map((p) => p[0])).filter((t) => t >= t0))].sort((a, b) => a - b);
+  const idx = Object.fromEntries(codes.map((c) => [c, 0]));
+  const last = {};
+  let li = -1;
+  let hold = { code: startCode, shares: n0, cash: 0 };
+  const states = legs.map((l, i) => ({ ts: l.ts, code: l.to, shares: l.buyShares, cash: legs.slice(0, i + 1).reduce((m, x) => m + x.sellPx * x.sellShares - x.buyPx * x.buyShares - x.fees, 0) }));
+  const points = [];
+  for (const t of stamps) {
+    for (const c of codes) {
+      const arr = S[c] || [];
+      while (idx[c] < arr.length && arr[idx[c]][0] <= t) last[c] = arr[idx[c]++][1];
+    }
+    while (li + 1 < states.length && states[li + 1].ts <= t) hold = states[++li];
+    const ph = last[hold.code];
+    const pb = last[startCode];
+    if (ph == null || pb == null) continue;
+    const mine = Math.round((hold.shares * ph + hold.cash - v0) * 100) / 100;
+    const base = Math.round((n0 * pb - v0) * 100) / 100;
+    points.push({ ts: t, x: tradingMinute(t), mine, base, up: [base, Math.max(base, mine)], down: [Math.min(base, mine), base] });
+  }
+  for (const l of legs) l.y = points.find((p) => p.ts >= l.ts)?.mine ?? 0;
+  return { points, legs, last: points[points.length - 1] || null, startCode, startShares: n0 };
+}

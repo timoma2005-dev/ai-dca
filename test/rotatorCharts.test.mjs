@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  basePrice, defaultBuyShares, deviationBars, minuteLabel, shanghaiTs, shortName, switchPnlSeries, tradingMinute
+  basePrice, defaultBuyShares, deviationBars, minuteLabel, priceAt, rotationPortfolio, shanghaiTs, shortName, switchPnlSeries, tradingMinute
 } from '../src/pages/rotator/rotatorCharts.js';
 
 test('shortName strips index/ETF words', () => {
@@ -51,4 +51,36 @@ test('switchPnlSeries: value vs holding A, forward filled', () => {
   const fee = switchPnlSeries({ seriesA, seriesB, switchTs: t0, sellPx: 2.0, sellShares: 1000, buyPx: 1.0, buyShares: 2000, commBps: 0.5 });
   assert.equal(fee.points[0].v, -0.2);
   assert.equal(switchPnlSeries({ seriesA, seriesB, switchTs: t0, sellPx: 0, sellShares: 1, buyPx: 1, buyShares: 1 }), null);
+});
+
+test('rotationPortfolio: two switches vs holding the start fund', () => {
+  const S = {
+    A: [[100, 1.0], [200, 1.0], [300, 1.1]],
+    B: [[100, 2.0], [200, 2.1], [300, 2.0]],
+    C: [[100, 1.0], [200, 1.0], [300, 1.2]]
+  };
+  const r = rotationPortfolio({
+    seriesByCode: S, startCode: 'A', startShares: 1000,
+    switches: [{ ts: 200, buyCode: 'C', buyPx: 1.0 }, { ts: 100, buyCode: 'B', sellPx: 1.0, buyPx: 2.0 }]
+  });
+  assert.equal(r.legs.length, 2);
+  assert.deepEqual(r.legs.map((l) => [l.from, l.to, l.sellShares, l.buyShares]), [['A', 'B', 1000, 500], ['B', 'C', 500, 1000]]);
+  assert.equal(r.legs[1].sellPx, 2.1);
+  // 第二次卖 B 得 1050，买 C 1000 份花 1000，余 50
+  assert.deepEqual(r.points.map((p) => [p.mine, p.base]), [[0, 0], [50, 0], [250, 100]]);
+  assert.deepEqual(r.last.up, [100, 250]);
+  assert.equal(r.legs[1].single.last.v, 1000 * 1.2 + 50 - 500 * 2.0);
+});
+
+test('rotationPortfolio: rejects buying the fund already held', () => {
+  const r = rotationPortfolio({ seriesByCode: { A: [[1, 1]] }, startCode: 'A', startShares: 100, switches: [{ ts: 1, buyCode: 'A' }] });
+  assert.match(r.error, /不能和当前持仓相同/);
+});
+
+test('priceAt forward-fills and tolerates a slightly early time', () => {
+  const s = [[1000, 1.5], [1005, 1.6]];
+  assert.equal(priceAt(s, 1003), 1.5);
+  assert.equal(priceAt(s, 2000), 1.6);
+  assert.equal(priceAt(s, 900), 1.5);
+  assert.equal(priceAt(s, 500), null);
 });

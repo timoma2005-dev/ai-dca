@@ -146,20 +146,60 @@ export default function AdminRotatorExperience() {
     }
   }
 
+  const statusText = `腾讯行情 · 每 5 秒刷新 · 更新于 ${clock(st?.updated_at)}${stale && st ? '（非实时）' : ''}`;
+
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6">
-      <div className="flex items-center gap-2">
-        <Repeat className="h-5 w-5" />
-        <h1 className="text-xl font-semibold">日内轮动</h1>
-        <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${data?.running ? 'bg-emerald-500/15 text-emerald-600' : 'bg-red-500/15 text-red-600'}`}>
-          {data?.running ? '运行中' : '未运行'}
-        </span>
-        <span className="ml-auto text-xs text-muted-foreground">
-          腾讯行情 · 每 5 秒刷新 · 更新于 {clock(st?.updated_at)}{stale && st ? `（非实时，显示最近一条${st.note ? `：${st.note}` : ''}）` : ''}
-        </span>
+    <div className="mx-auto w-full max-w-5xl space-y-3 px-3 py-4 sm:space-y-4 sm:px-4 sm:py-6">
+      <div>
+        <div className="flex items-center gap-2">
+          <Repeat className="h-5 w-5 shrink-0" />
+          <h1 className="whitespace-nowrap text-xl font-semibold">日内轮动</h1>
+          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs ${data?.running ? 'bg-emerald-500/15 text-emerald-600' : 'bg-red-500/15 text-red-600'}`}>
+            {data?.running ? '运行中' : '未运行'}
+          </span>
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground" title={st?.note || ''}>{statusText}</div>
       </div>
 
       {error ? <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</div> : null}
+
+      <div className="space-y-3 rounded-xl border border-border bg-card p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-10 shrink-0 text-sm font-medium">持仓</span>
+          <select
+            className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm sm:max-w-xs sm:flex-none"
+            value={code}
+            onChange={(e) => { editedRef.current = true; setCode(e.target.value); }}
+          >
+            {!code ? <option value="">选择代码</option> : null}
+            {(pool.length ? pool : [code].filter(Boolean)).map((c) => (
+              <option key={c} value={c}>{c} {poolRows.find((r) => r.code === c)?.name || ''}</option>
+            ))}
+          </select>
+          <Button size="sm" onClick={save} disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
+          {saveMsg ? <span className="basis-full text-xs text-muted-foreground sm:basis-auto">{saveMsg}</span> : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-10 shrink-0 text-sm font-medium">阈值</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={settings?.min ?? 1}
+            max={settings?.max ?? 500}
+            step="1"
+            className="h-9 w-20 rounded-md border border-input bg-background px-2 text-sm tabular-nums"
+            value={enterInput}
+            onChange={(e) => { enterEditedRef.current = true; setEnterInput(e.target.value); }}
+          />
+          <span className="text-sm text-muted-foreground">bps</span>
+          <Button size="sm" onClick={saveEnter} disabled={savingEnter}>{savingEnter ? '保存中…' : '保存'}</Button>
+          {enterMsg ? <span className="basis-full text-xs text-muted-foreground sm:basis-auto">{enterMsg}</span> : null}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          持仓 − 最便宜 ≥ 阈值时提示换车（默认 {settings?.default_enter_bps ?? 30} bps），按账户保存
+          {data?.is_owner && settings ? `；进程当前 ${settings.process_enter_bps ?? '—'} bps · 下次启动 ${settings.next_enter_bps ?? '—'} bps` : ''}
+        </div>
+      </div>
 
       <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
         {[['live', '实时偏离'], ['pnl', '换车收益']].map(([k, label]) => (
@@ -172,57 +212,9 @@ export default function AdminRotatorExperience() {
         ))}
       </div>
 
-      {tab === 'pnl' ? <SwitchPnlCard pool={poolRows} commBps={st?.params?.comm_bps ?? 0.5} /> : (
-        <>
-          <DeviationBars rows={rows} holding={holding} cheapest={st?.cheapest} gap={gap} enter={enter} at={clock(st?.updated_at)} />
-
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="mb-2 text-sm font-medium">我的持仓<span className="ml-1 text-xs font-normal text-muted-foreground">（按账户保存，只影响你自己的视图）</span></div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                value={code}
-                onChange={(e) => { editedRef.current = true; setCode(e.target.value); }}
-              >
-                {!code ? <option value="">选择代码</option> : null}
-                {(pool.length ? pool : [code].filter(Boolean)).map((c) => (
-                  <option key={c} value={c}>{c} {poolRows.find((r) => r.code === c)?.name || ''}</option>
-                ))}
-              </select>
-              <Button size="sm" onClick={save} disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
-              {saveMsg ? <span className="text-xs text-muted-foreground">{saveMsg}</span> : null}
-              {data?.manual?.set_at ? (
-                <span className="ml-auto text-xs text-muted-foreground">上次设置 {String(data.manual.set_at).replace('T', ' ').slice(0, 19)} · {data.manual.set_by}</span>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="mb-2 text-sm font-medium">入场阈值<span className="ml-1 text-xs font-normal text-muted-foreground">（持仓 − 最便宜 ≥ 阈值时提示，默认 {settings?.default_enter_bps ?? 30} bps，按账户保存）</span></div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="number"
-                inputMode="decimal"
-                min={settings?.min ?? 1}
-                max={settings?.max ?? 500}
-                step="1"
-                className="h-9 w-24 rounded-md border border-input bg-background px-2 text-sm tabular-nums"
-                value={enterInput}
-                onChange={(e) => { enterEditedRef.current = true; setEnterInput(e.target.value); }}
-              />
-              <span className="text-sm text-muted-foreground">bps</span>
-              <Button size="sm" onClick={saveEnter} disabled={savingEnter}>{savingEnter ? '保存中…' : '保存'}</Button>
-              {enterMsg ? <span className="text-xs text-muted-foreground">{enterMsg}</span> : null}
-              {data?.is_owner && settings ? (
-                <span className="ml-auto text-xs text-muted-foreground">
-                  进程当前 {settings.process_enter_bps ?? '—'} bps · 下次启动 {settings.next_enter_bps ?? '—'} bps
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-        </>
-      )}
+      {tab === 'pnl'
+        ? <SwitchPnlCard pool={poolRows} holding={holding} commBps={st?.params?.comm_bps ?? 0.5} />
+        : <DeviationBars rows={rows} holding={holding} cheapest={st?.cheapest} gap={gap} enter={enter} at={clock(st?.updated_at)} />}
     </div>
   );
 }
