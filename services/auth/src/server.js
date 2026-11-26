@@ -3,6 +3,7 @@ import { registerUser, loginUser, sha256Hex, SESSION_TTL_SECONDS } from './auth.
 import { outboxStats } from './outbox.js';
 import { notifyRoleGranted } from './roleNotice.js';
 import { ensureMembershipSchema, membershipSummary, recomputeAll, recordActivity } from './membership.js';
+import { ensureReferralSchema, recordSignup, referralSummary, settleReferrals } from './referral.js';
 import {
   authenticateRequest,
   buildAuthPayload,
@@ -156,6 +157,7 @@ function safeMembership(db, userId) {
 
 export function createApp(db) {
   ensureMembershipSchema(db);
+  ensureReferralSchema(db);
   return async function handler(req, res) {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
 
@@ -176,6 +178,13 @@ export function createApp(db) {
         const fn = url.pathname.endsWith('/register') ? registerUser : loginUser;
         const result = fn(db, { username: body.username, clientPasswordHash: body.passwordHash });
         const { status, body: responseBody } = normalizeResult(result);
+        if (status === 200 && fn === registerUser && responseBody?.userId) {
+          try {
+            const ip = String(req.headers['x-real-ip'] || req.socket?.remoteAddress || '');
+            const signup = recordSignup(db, { userId: responseBody.userId, ip, inviteCode: body.inviteCode });
+            if (signup.error) responseBody.inviteError = '邀请码无效，已按普通注册处理';
+          } catch (err) { console.error('[referral] record failed', err?.message || err); }
+        }
         sendJson(res, status, responseBody, status === 200 ? sessionCookieHeader(responseBody) : {});
         return;
       }
@@ -184,6 +193,13 @@ export function createApp(db) {
         const { token } = authenticateRequest(db, req.headers);
         if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha256Hex(token));
         sendJson(res, 200, { ok: true }, { 'Set-Cookie': clearSessionCookie() });
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/sync/auth/invite') {
+        const { user } = authenticateRequest(db, req.headers);
+        if (!user) { sendJson(res, 401, { message: '请先登录' }); return; }
+        sendJson(res, 200, referralSummary(db, user.id));
         return;
       }
 
@@ -253,6 +269,7 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   if (String(process.env.AUTH_MEMBERSHIP_RECOMPUTE ?? '1') !== '0') {
     const runRecompute = () => {
       try { console.log('[membership] recompute', JSON.stringify(recomputeAll(db))); } catch (err) { console.error('[membership] recompute failed', err?.message || err); }
+      try { console.log('[referral] settle', JSON.stringify(settleReferrals(db))); } catch (err) { console.error('[referral] settle failed', err?.message || err); }
     };
     runRecompute();
     setInterval(runRecompute, 60 * 60 * 1000).unref();
