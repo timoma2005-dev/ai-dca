@@ -11,6 +11,7 @@ import { fetchAccountManifest, fetchLegacyMigrationStatus, isLegacyMigrationSett
 import { apiUrl, apiUrlDirect, fetchWithFallback } from './apiBase.js';
 import { applyRbacPayload } from './rbac/rbacStore.js';
 import { markLoginSyncPending } from './loginSyncGate.js';
+import { clearPendingInvite, normalizeInviteCode, pendingInviteCode } from './inviteCode.js';
 
 export {
   CLOUD_SYNC_SESSION_EVENT,
@@ -214,16 +215,21 @@ function schedulePostAuthSync(session, action, securityPassword) {
     });
 }
 
-export async function registerCloudAccount({ username, password }) {
+export async function registerCloudAccount({ username, password, inviteCode = '' }) {
   const normalized = String(username || '').trim().toLowerCase();
   if (normalized.length < 3) throw new Error('用户名至少 3 位');
   if (String(password || '').length < 8) throw new Error('登录密码至少 8 位');
   const data = await requestSync('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username: normalized, passwordHash: await passwordHash(normalized, password) })
+    body: JSON.stringify({
+      username: normalized,
+      passwordHash: await passwordHash(normalized, password),
+      inviteCode: normalizeInviteCode(inviteCode) || pendingInviteCode() || undefined
+    })
   });
   assertAuthSessionShape(data, '注册');
   const session = saveCloudSession(data);
+  clearPendingInvite();
   // 登录/注册响应自带菜单与角色（permVersion），直接写入菜单缓存。
   applyRbacPayload(data, { session });
   // 认证已成功：迁移检查与首次同步走后台单一协调入口，不阻塞注册结果。
@@ -306,4 +312,10 @@ export async function uploadLatestCloudBackup(_payload, session = loadCloudSessi
   const error = new Error('旧整包同步写入已停用，请使用 /api/account/v1 资源接口。');
   error.code = 'LEGACY_SYNC_WRITE_DISABLED';
   throw error;
+}
+
+/** 邀请码与邀请进度（需登录）。 */
+export async function fetchInviteSummary(session = loadCloudSession()) {
+  if (!session?.accessToken) return null;
+  return requestSync('/auth/invite', { method: 'GET', token: session.accessToken });
 }

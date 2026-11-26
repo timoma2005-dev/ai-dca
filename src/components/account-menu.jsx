@@ -13,6 +13,8 @@ import { PrivacyNotice } from './PrivacyNotice.jsx';
 import { GettingStartedEntry } from './onboarding/GettingStartedSlot.jsx';
 import { LoginSyncPendingEntry } from './login-sync-pending-entry.jsx';
 import { MembershipProgress } from './membership/MembershipProgress.jsx';
+import { InvitePanel } from './membership/InvitePanel.jsx';
+import { pendingInviteCode } from '../app/inviteCode.js';
 import { evaluateTabAccess } from '../app/rbac/menuModel.js';
 import { authFieldAttrs, missingAuthField, resolveAuthFormHint } from '../app/authFormState.js';
 
@@ -64,7 +66,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
   const rbac = useRbac();
   // 认证错误只在未登录对话框内展示。
   const [authError, setAuthError] = useState('');
-  const [form, setForm] = useState({ username: '', password: '', rememberDevice: true });
+  const [form, setForm] = useState(() => ({ username: '', password: '', rememberDevice: true, inviteCode: pendingInviteCode() }));
   const [busy, setBusy] = useState('');
   const [formTouch, setFormTouch] = useState({ touched: false, submitted: false });
   const [open, setOpen] = useState(initialOpen || Boolean(initialAuthIntent));
@@ -258,6 +260,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
               onOpened={closeMenu}
             />
           ) : null}
+          <InvitePanel session={session} />
           <LoginSyncPendingEntry onOpened={closeMenu} />
           <GettingStartedEntry loggedIn accessOf={(tab) => evaluateTabAccess(rbac, tab)} onOpened={closeMenu} />
           <PrivacyNotice variant="row" />
@@ -361,6 +364,12 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
                     <label htmlFor={authFields.password.id} className="block text-xs font-semibold text-slate-600">登录密码</label>
                     <input className={inputClass} {...authFields.password} type="password" required value={form.password} onChange={(event) => updateField('password', event.target.value)} aria-invalid={authHint === '请填写登录密码' ? 'true' : undefined} aria-describedby="account-auth-hint" />
                   </div>
+                  {authMode === 'register' ? (
+                    <div className="space-y-1.5">
+                      <label htmlFor="account-invite-code" className="block text-xs font-semibold text-slate-600">邀请码（选填）</label>
+                      <input id="account-invite-code" className={inputClass} type="text" value={form.inviteCode} onChange={(event) => updateField('inviteCode', event.target.value)} spellCheck="false" autoCapitalize="characters" maxLength={12} placeholder="好友给的 6 位邀请码" />
+                    </div>
+                  ) : null}
                   <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
                     <input type="checkbox" checked={form.rememberDevice} onChange={(event) => updateField('rememberDevice', event.target.checked)} />
                     记住本设备
