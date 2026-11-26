@@ -217,6 +217,7 @@ export function createApp(db, { deliverEmail = deliverViaResend, requireSignupEm
           try {
             const signup = recordSignup(db, { userId: responseBody.userId, ip: requestIp(req), inviteCode: body.inviteCode });
             if (signup.error) responseBody.inviteError = '邀请码无效，已按普通注册处理';
+            if (signup.referral?.status === 'pending') settleReferrals(db);
           } catch (err) { console.error('[referral] record failed', err?.message || err); }
         }
         sendJson(res, status, responseBody, status === 200 ? sessionCookieHeader(responseBody) : {});

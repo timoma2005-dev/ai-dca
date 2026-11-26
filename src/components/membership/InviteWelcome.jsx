@@ -3,7 +3,7 @@ import { Gift } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { checkInviteCode, loadCloudSession } from '../../app/authClient.js';
 import { openAccountAuth } from '../../app/accountAuthEvents.js';
-import { normalizeInviteCode } from '../../app/inviteCode.js';
+import { normalizeInviteCode, pendingInviteCode } from '../../app/inviteCode.js';
 import { trackFeatureEvent } from '../../app/analytics.js';
 
 function inviteCodeFromUrl() {
@@ -21,16 +21,17 @@ export function InviteWelcome() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || loadCloudSession()?.accessToken) return undefined;
-    const code = inviteCodeFromUrl();
+    // 首页会改写地址栏去掉 ?invite，此时用 inviteCode.js 已记下的邀请码。
+    const code = inviteCodeFromUrl() || pendingInviteCode();
     if (!code) return undefined;
     const seenKey = `ai-dca:invite-welcome:${code}`;
-    try { if (window.sessionStorage?.getItem(seenKey)) return undefined; } catch { /* ignore */ }
+    try { if (window.localStorage?.getItem(seenKey)) return undefined; } catch { /* ignore */ }
     let alive = true;
     checkInviteCode(code).then((data) => {
       if (!alive || !data?.valid) return;
       setInfo(data);
       setOpen(true);
-      try { window.sessionStorage?.setItem(seenKey, '1'); } catch { /* ignore */ }
+      try { window.localStorage?.setItem(seenKey, '1'); } catch { /* ignore */ }
       try { trackFeatureEvent('invite', 'landing_view', {}); } catch { /* ignore */ }
     }).catch(() => {});
     return () => { alive = false; };
@@ -45,9 +46,9 @@ export function InviteWelcome() {
   }
 
   const steps = [
-    '用用户名注册，并验证邮箱',
-    `注册后 ${info.windowDays} 天内有 ${info.minActiveDays} 天登录使用`,
-    `你和好友各得 ${info.rewardDays} 天 SVIP`,
+    '用用户名注册，并验证邮箱（不支持临时邮箱）',
+    `注册成功立刻得到 ${info.rewardDays} 天 SVIP，好友也得 ${info.rewardDays} 天`,
+    'SVIP 到期后继续享受新用户 VIP 试用',
   ];
 
   return (

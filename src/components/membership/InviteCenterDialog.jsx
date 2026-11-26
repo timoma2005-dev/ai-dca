@@ -24,7 +24,7 @@ export function InviteCenterDialog({ open, onOpenChange, summary, onCopy }) {
       <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
         <DialogTitle>我的邀请</DialogTitle>
         <DialogDescription>
-          好友注册后 {summary.windowDays} 天内有 {summary.minActiveDays} 天登录使用即达标，双方各得 {summary.rewardDays} 天 SVIP，每月最多 {summary.monthlyCap} 次。
+          好友用你的邀请码注册成功，双方立刻各得 {summary.rewardDays} 天 SVIP，每月最多 {summary.monthlyCap} 次；同一网络注册的不计入。
         </DialogDescription>
         <div className="grid grid-cols-4 gap-2">
           <Stat label="已邀请" value={summary.total ?? invitees.length} />
@@ -40,7 +40,6 @@ export function InviteCenterDialog({ open, onOpenChange, summary, onCopy }) {
           <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
             {invitees.map((item) => {
               const status = inviteeStatus(item, summary);
-              const progress = Math.min(1, Number(item.activeDays || 0) / Math.max(1, Number(summary.minActiveDays || 3)));
               return (
                 <li key={`${item.name}-${item.createdAt}`} className="px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 text-sm">
@@ -48,14 +47,9 @@ export function InviteCenterDialog({ open, onOpenChange, summary, onCopy }) {
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE_CLASS[status.tone] || TONE_CLASS.muted}`}>{status.label}</span>
                   </div>
                   <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                    <span>{shortShanghaiDate(item.createdAt)} 注册 · 活跃 {Math.min(item.activeDays || 0, summary.minActiveDays)}/{summary.minActiveDays} 天</span>
+                    <span>{shortShanghaiDate(item.createdAt)} 注册</span>
                     <span>{status.detail}</span>
                   </div>
-                  {item.status === 'pending' ? (
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.round(progress * 100)}%` }} />
-                    </div>
-                  ) : null}
                 </li>
               );
             })}

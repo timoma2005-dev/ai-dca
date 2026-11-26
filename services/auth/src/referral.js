@@ -1,11 +1,11 @@
-// 邀请注册：每个账号一个邀请码；被邀请人注册后 7 天内有 3 个活跃日才算有效邀请，双方各得 SVIP 天数。
+// 邀请注册：每个账号一个邀请码；好友用邀请码注册成功即双方各得 SVIP 天数（minActiveDays 可配置为观察期活跃要求）。
 // 防滥用：与邀请人同 IP 注册、同一邀请人 30 天内同 IP 的第二个号都不算；每个邀请人每月奖励有上限。
 import { randomInt } from 'node:crypto';
 import { shanghaiDay } from './membership.js';
 
 export const REFERRAL_RULES = Object.freeze({
   windowDays: 7,
-  minActiveDays: 3,
+  minActiveDays: Number(process.env.AUTH_REFERRAL_MIN_ACTIVE_DAYS || 0),
   rewardDays: Number(process.env.AUTH_REFERRAL_REWARD_DAYS || 7),
   monthlyCap: Number(process.env.AUTH_REFERRAL_MONTHLY_CAP || 5),
 });

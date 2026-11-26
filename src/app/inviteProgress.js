@@ -7,11 +7,12 @@ export function shortShanghaiDate(iso = '') {
 }
 
 export function inviteeStatus(item = {}, rules = {}) {
-  const minActiveDays = Number(rules.minActiveDays || 3);
+  const minActiveDays = Number(rules.minActiveDays || 0);
   const windowDays = Number(rules.windowDays || 7);
   const activeDays = Number(item.activeDays || 0);
   if (item.status === 'rewarded') return { tone: 'success', label: '已达标', detail: `双方各得 ${rules.rewardDays || 7} 天 SVIP` };
   if (item.status === 'pending') {
+    if (!minActiveDays) return { tone: 'pending', label: '发放中', detail: '奖励稍后自动到账' };
     const left = Math.max(0, minActiveDays - activeDays);
     const until = shortShanghaiDate(item.windowEndsAt);
     return { tone: 'pending', label: '进行中', detail: left ? `${until ? `${until} 前` : ''}还需活跃 ${left} 天` : '已满足，等待结算' };

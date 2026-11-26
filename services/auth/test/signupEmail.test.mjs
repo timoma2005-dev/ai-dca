@@ -105,7 +105,16 @@ describe('signup email + invite landing', () => {
     const after = await call('/api/sync/auth/invite', { method: 'GET', token: inviter.json.accessToken });
     assert.equal(after.json.total, 1);
     assert.equal(after.json.invitees[0].name, 'fr***');
-    assert.equal(after.json.invitees[0].status, 'pending');
+    assert.equal(after.json.invitees[0].status, 'rewarded');
+    assert.equal(after.json.rewarded, 1);
     assert.equal(typeof after.json.invitees[0].activeDays, 'number');
   });
+});
+
+it("disposable email domains are rejected, common providers allowed", async () => {
+  const { isDisposableEmail } = await import("../src/signupEmail.js");
+  assert.equal(isDisposableEmail("a@mailinator.com"), true);
+  assert.equal(isDisposableEmail("a@x.mailinator.com"), true);
+  assert.equal(isDisposableEmail("a@10minutemail.com"), true);
+  for (const ok of ["a@gmail.com", "a@qq.com", "a@163.com", "a@outlook.com", "a@foxmail.com"]) assert.equal(isDisposableEmail(ok), false);
 });

@@ -18,7 +18,7 @@ export function InvitePanel({ session }) {
   if (!summary?.code) return null;
   const link = inviteLink(summary.code);
   async function copy() {
-    const text = `我在用 AI-DCA 看纳指 QDII 溢价和换基提醒，用我的邀请码 ${summary.code} 注册，活跃 ${summary.minActiveDays} 天后我们各得 ${summary.rewardDays} 天 SVIP：${link}`;
+    const text = `我在用 AI-DCA 看纳指 QDII 溢价和换基提醒，用我的邀请码 ${summary.code} 注册，我们立刻各得 ${summary.rewardDays} 天 SVIP：${link}`;
     try {
       await navigator.clipboard.writeText(text);
       showToast({ title: '邀请链接已复制', description: '发给朋友，对方注册时会自动填上邀请码。', tone: 'emerald' });
@@ -34,7 +34,7 @@ export function InvitePanel({ session }) {
         <span className="font-mono text-sm font-bold tracking-wider">{summary.code}</span>
       </div>
       <p className="mt-1 leading-5 text-amber-800">
-        好友注册后 {summary.windowDays} 天内有 {summary.minActiveDays} 天登录使用，双方各得 {summary.rewardDays} 天 SVIP（每月最多 {summary.monthlyCap} 次）。
+        好友用你的邀请码注册，双方立刻各得 {summary.rewardDays} 天 SVIP（每月最多 {summary.monthlyCap} 次）。
         {summary.total ? ` 已邀请 ${summary.total} 人 · 进行中 ${summary.pending} · 已达标 ${summary.rewarded}` : ''}
       </p>
       <div className="mt-2 flex gap-2">

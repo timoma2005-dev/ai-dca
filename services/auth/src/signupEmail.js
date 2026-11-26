@@ -1,6 +1,7 @@
 // 注册/绑定邮箱验证码：新用户注册必须验证邮箱；老用户可在账号菜单补绑。
 // 邮件经 Resend 发送（RESEND_TOKEN，与 cn-data 通知同一发件域）。
 import { createHash, randomInt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 export const EMAIL_CODE_RULES = Object.freeze({
   ttlMs: 10 * 60 * 1000,
@@ -23,6 +24,33 @@ export function normalizeEmail(value = '') {
   if (!email || email.length > 254) return '';
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
 }
+
+let disposableDomains = null;
+function loadDisposableDomains() {
+  if (!disposableDomains) {
+    try {
+      const text = readFileSync(new URL('./disposableEmailDomains.txt', import.meta.url), 'utf8');
+      disposableDomains = new Set(text.split('\n').map((line) => line.trim().toLowerCase()).filter((line) => line && !line.startsWith('#')));
+    } catch {
+      disposableDomains = new Set();
+    }
+  }
+  return disposableDomains;
+}
+
+/** 临时/一次性邮箱（含其子域名）不允许用于注册和绑定。 */
+export function isDisposableEmail(value = '') {
+  const email = normalizeEmail(value);
+  if (!email) return false;
+  const domains = loadDisposableDomains();
+  const parts = email.split('@')[1].split('.');
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    if (domains.has(parts.slice(i).join('.'))) return true;
+  }
+  return false;
+}
+
+const DISPOSABLE_MESSAGE = '不支持临时邮箱，请换一个常用邮箱';
 
 export function maskEmail(value = '') {
   const email = normalizeEmail(value);
@@ -92,6 +120,7 @@ export async function deliverViaResend({ to, code }) {
 export async function sendEmailCode(db, { email, purpose = 'register', userId = '', ip = '', now = Date.now(), deliver = deliverViaResend, rules = EMAIL_CODE_RULES } = {}) {
   const address = normalizeEmail(email);
   if (!address) throw new EmailCodeError(400, '请输入有效的邮箱地址');
+  if (isDisposableEmail(address)) throw new EmailCodeError(400, DISPOSABLE_MESSAGE);
   assertEmailFree(db, address, userId);
   const last = db.prepare('SELECT MAX(sent_at) AS t FROM email_code_sends WHERE email = ?').get(address)?.t || 0;
   if (now - last < rules.cooldownMs) {
@@ -122,6 +151,7 @@ export async function sendEmailCode(db, { email, purpose = 'register', userId = 
 export function checkEmailCode(db, { email, code, purpose = 'register', userId = '', now = Date.now(), rules = EMAIL_CODE_RULES } = {}) {
   const address = normalizeEmail(email);
   if (!address) throw new EmailCodeError(400, '请输入有效的邮箱地址');
+  if (isDisposableEmail(address)) throw new EmailCodeError(400, DISPOSABLE_MESSAGE);
   if (!/^\d{6}$/.test(String(code || '').trim())) throw new EmailCodeError(400, '请输入 6 位邮箱验证码');
   assertEmailFree(db, address, userId);
   const row = db.prepare('SELECT code_hash, attempts, expires_at FROM email_codes WHERE email = ? AND purpose = ?').get(address, purpose);

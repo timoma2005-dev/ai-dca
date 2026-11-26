@@ -17,4 +17,5 @@ test('inviteeStatus explains progress and outcomes', () => {
   assert.equal(inviteeStatus({ status: 'expired', activeDays: 2 }, rules).detail, '7 天内只活跃了 2 天');
   assert.equal(inviteeStatus({ status: 'rejected', reason: 'monthly_cap' }, rules).detail, '本月奖励名额已满');
   assert.equal(inviteeStatus({ status: 'rejected', reason: 'same_ip' }, rules).label, '不计入');
+  assert.equal(inviteeStatus({ status: 'pending' }, { minActiveDays: 0 }).label, '发放中');
 });
