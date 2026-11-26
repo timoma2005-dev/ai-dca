@@ -1,6 +1,7 @@
-import { AlertCircle, Coffee, LineChart, UserRound } from 'lucide-react';
+import { AlertCircle, Coffee, Globe, LineChart, UserRound } from 'lucide-react';
 import { useNotifyUnreadCount } from '../app/useNotifyUnreadCount.js';
 import { ACCOUNT_AUTH_OPEN_EVENT } from '../app/accountAuthEvents.js';
+import { SITE_CHOOSER_OPEN_EVENT } from '../app/siteChooserEvents.js';
 import { NotifyPopover } from './notify-popover.jsx';
 import { RoleAvatar } from './rbac/role-badge.jsx';
 import './brand-preview-bar.css';
@@ -54,6 +55,15 @@ export function BrandPreviewBar({ currentPageLabel, onBuyMeCoffee, onJoinGroup, 
               </button>
             ) : null}
           </div>
+          <button
+            type="button"
+            className="app-header__utility"
+            aria-label="切换站点"
+            title="切换站点：CN 国内站 / Fast 站点"
+            onClick={() => window.dispatchEvent(new CustomEvent(SITE_CHOOSER_OPEN_EVENT))}
+          >
+            <Globe className="h-[18px] w-[18px]" aria-hidden="true" />
+          </button>
           <div className="hidden md:block">
             <NotifyPopover />
           </div>

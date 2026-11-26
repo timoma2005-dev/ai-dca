@@ -10,7 +10,7 @@ import {
   REGION_GLOBAL
 } from '../app/regionEnvironment.js';
 import { probeCnConnectivity } from '../app/networkTrace.js';
-import { useAutoPromptSlot } from '../app/promptQueue.js';
+import { SITE_CHOOSER_OPEN_EVENT } from '../app/siteChooserEvents.js';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,6 @@ import {
 
 const FAST_SITE_ORIGIN = 'https://fast.freebacktrack.tech';
 const PROBE_TIMEOUT_MS = 4000;
-const CHOOSER_DISMISSED_KEY = 'site:newSiteChooserDismissed:v1';
 
 function nowMs() {
   return typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -56,24 +55,6 @@ function sameSite(a = '', b = '') {
 function formatLatency(value) {
   const latency = Number(value);
   return Number.isFinite(latency) && latency > 0 ? `${Math.round(latency)} ms` : '—';
-}
-
-function isChooserDismissed() {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(CHOOSER_DISMISSED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function dismissChooser() {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(CHOOSER_DISMISSED_KEY, '1');
-  } catch {
-    // 存储不可用时仍允许本次缩小，不阻断交互。
-  }
 }
 
 async function probeOrigin(origin, { timeoutMs = PROBE_TIMEOUT_MS } = {}) {
@@ -159,18 +140,8 @@ export function RegionSwitchBanner() {
       };
       const recommended = selectRecommendedSite(region, cnSite, fastSite);
 
-      if (!recommended || recommended.current) {
-        setSiteState(null);
-        setOpen(false);
-        return;
-      }
-
+      // 不再自动弹窗：只在用户点顶栏「切换站点」时打开。
       setSiteState({ region, sites: [cnSite, fastSite], recommended });
-      if (isChooserDismissed()) {
-        setOpen(false);
-      } else {
-        setOpen(true);
-      }
     })();
 
     return () => {
@@ -178,42 +149,30 @@ export function RegionSwitchBanner() {
     };
   }, [config]);
 
-  const minimizePrompt = useCallback(() => {
-    if (!open) return;
-    dismissChooser();
-    setOpen(false);
-  }, [open]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onOpen = () => setOpen(true);
+    window.addEventListener(SITE_CHOOSER_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(SITE_CHOOSER_OPEN_EVENT, onOpen);
+  }, []);
 
   const openSite = useCallback((site) => {
     if (!site?.ok || site.current || !site.targetUrl || typeof window === 'undefined') return;
-    dismissChooser();
     persistRegion(site.region);
     window.location.assign(site.targetUrl);
   }, []);
 
-  // 自动弹窗排队：已有其它弹窗时延后，等它关闭再出现。
-  const granted = useAutoPromptSlot('region-switch', Boolean(siteState?.recommended) && open, { priority: 40 });
-
-  if (!siteState?.recommended) return null;
-
   return (
     <>
       <Dialog
-        open={open && granted}
-        onOpenChange={(nextOpen) => {
-          if (nextOpen) {
-            setOpen(true);
-            return;
-          }
-          minimizePrompt();
-        }}
+        open={open}
+        onOpenChange={setOpen}
       >
         <DialogContent
-          data-auto-prompt="region-switch"
-          className="z-[180] w-[calc(100%-2rem)] max-w-md gap-4 border-slate-200 bg-white p-4 text-slate-900 sm:p-6"
+                    className="z-[180] w-[calc(100%-2rem)] max-w-md gap-4 border-slate-200 bg-white p-4 text-slate-900 sm:p-6"
         >
           <DialogHeader className="pr-7 text-left">
-            <DialogTitle className="text-xl font-bold leading-tight text-slate-950">体验新版站点</DialogTitle>
+            <DialogTitle className="text-xl font-bold leading-tight text-slate-950">切换站点</DialogTitle>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-2" aria-label="新版站点优势">
@@ -228,7 +187,7 @@ export function RegionSwitchBanner() {
           </div>
 
           <div className="space-y-2.5" aria-label="新版站点测速结果">
-            {siteState.sites.map((site) => (
+            {!siteState ? <div className="rounded-xl bg-slate-50 px-3 py-3 text-xs text-slate-500">正在测速…</div> : siteState.sites.map((site) => (
               <div
                 key={site.id}
                 className={`flex items-center gap-3 rounded-xl border px-3 py-3 ${
@@ -243,7 +202,7 @@ export function RegionSwitchBanner() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-800">{site.label}</span>
-                    {site.id === siteState.recommended.id ? (
+                    {site.id === siteState.recommended?.id ? (
                       <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">推荐</span>
                     ) : null}
                     {site.current ? (
