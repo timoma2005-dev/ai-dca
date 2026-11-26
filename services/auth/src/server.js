@@ -3,7 +3,18 @@ import { registerUser, loginUser, sha256Hex, SESSION_TTL_SECONDS } from './auth.
 import { outboxStats } from './outbox.js';
 import { notifyRoleGranted } from './roleNotice.js';
 import { ensureMembershipSchema, membershipSummary, recomputeAll, recordActivity } from './membership.js';
-import { ensureReferralSchema, recordSignup, referralSummary, settleReferrals } from './referral.js';
+import { ensureReferralSchema, inviteCodeInfo, recordSignup, referralSummary, settleReferrals } from './referral.js';
+import {
+  EmailCodeError,
+  checkEmailCode,
+  consumeEmailCode,
+  deliverViaResend,
+  ensureSignupEmailSchema,
+  maskEmail,
+  sendEmailCode,
+  setUserEmail,
+  userEmail,
+} from './signupEmail.js';
 import {
   authenticateRequest,
   buildAuthPayload,
@@ -155,9 +166,19 @@ function safeMembership(db, userId) {
   try { return membershipSummary(db, userId); } catch { return null; }
 }
 
-export function createApp(db) {
+function requestIp(req) {
+  return String(req.headers['x-real-ip'] || req.socket?.remoteAddress || '');
+}
+
+function sendEmailCodeError(res, err) {
+  if (!(err instanceof EmailCodeError)) throw err;
+  sendJson(res, err.status, { message: err.message, code: 'EMAIL_CODE' });
+}
+
+export function createApp(db, { deliverEmail = deliverViaResend, requireSignupEmail = process.env.AUTH_SIGNUP_EMAIL_REQUIRED === '1' } = {}) {
   ensureMembershipSchema(db);
   ensureReferralSchema(db);
+  ensureSignupEmailSchema(db);
   return async function handler(req, res) {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
 
@@ -175,13 +196,26 @@ export function createApp(db) {
 
       if (req.method === 'POST' && (url.pathname === '/api/sync/auth/register' || url.pathname === '/api/sync/auth/login')) {
         const body = await readJsonBody(req);
-        const fn = url.pathname.endsWith('/register') ? registerUser : loginUser;
+        const isRegister = url.pathname.endsWith('/register');
+        let signupEmail = '';
+        if (isRegister && (requireSignupEmail || body.email)) {
+          try {
+            signupEmail = checkEmailCode(db, { email: body.email, code: body.emailCode });
+          } catch (err) { sendEmailCodeError(res, err); return; }
+        }
+        const fn = isRegister ? registerUser : loginUser;
         const result = fn(db, { username: body.username, clientPasswordHash: body.passwordHash });
         const { status, body: responseBody } = normalizeResult(result);
-        if (status === 200 && fn === registerUser && responseBody?.userId) {
+        if (status === 200 && isRegister && responseBody?.userId) {
+          if (signupEmail) {
+            try {
+              setUserEmail(db, responseBody.userId, signupEmail);
+              consumeEmailCode(db, { email: signupEmail });
+              responseBody.email = signupEmail;
+            } catch (err) { console.error('[signup-email] save failed', err?.message || err); }
+          }
           try {
-            const ip = String(req.headers['x-real-ip'] || req.socket?.remoteAddress || '');
-            const signup = recordSignup(db, { userId: responseBody.userId, ip, inviteCode: body.inviteCode });
+            const signup = recordSignup(db, { userId: responseBody.userId, ip: requestIp(req), inviteCode: body.inviteCode });
             if (signup.error) responseBody.inviteError = '邀请码无效，已按普通注册处理';
           } catch (err) { console.error('[referral] record failed', err?.message || err); }
         }
@@ -200,6 +234,47 @@ export function createApp(db) {
         const { user } = authenticateRequest(db, req.headers);
         if (!user) { sendJson(res, 401, { message: '请先登录' }); return; }
         sendJson(res, 200, referralSummary(db, user.id));
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/sync/auth/invite/check') {
+        sendJson(res, 200, inviteCodeInfo(db, url.searchParams.get('code') || ''));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/sync/auth/email/send-code') {
+        const body = await readJsonBody(req);
+        const purpose = body.purpose === 'bind' ? 'bind' : 'register';
+        let userId = '';
+        if (purpose === 'bind') {
+          const { user } = authenticateRequest(db, req.headers);
+          if (!user) { sendJson(res, 401, { message: '请先登录' }); return; }
+          userId = user.id;
+        }
+        try {
+          sendJson(res, 200, await sendEmailCode(db, { email: body.email, purpose, userId, ip: requestIp(req), deliver: deliverEmail }));
+        } catch (err) { sendEmailCodeError(res, err); }
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/sync/auth/email') {
+        const { user } = authenticateRequest(db, req.headers);
+        if (!user) { sendJson(res, 401, { message: '请先登录' }); return; }
+        const email = userEmail(db, user.id);
+        sendJson(res, 200, { email, maskedEmail: maskEmail(email), required: requireSignupEmail });
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/sync/auth/email/bind') {
+        const { user } = authenticateRequest(db, req.headers);
+        if (!user) { sendJson(res, 401, { message: '请先登录' }); return; }
+        const body = await readJsonBody(req);
+        try {
+          const email = checkEmailCode(db, { email: body.email, code: body.emailCode, purpose: 'bind', userId: user.id });
+          setUserEmail(db, user.id, email);
+          consumeEmailCode(db, { email, purpose: 'bind' });
+          sendJson(res, 200, { ok: true, email, maskedEmail: maskEmail(email) });
+        } catch (err) { sendEmailCodeError(res, err); }
         return;
       }
 

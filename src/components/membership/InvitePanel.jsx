@@ -4,10 +4,12 @@ import { fetchInviteSummary } from '../../app/authClient.js';
 import { inviteLink } from '../../app/inviteCode.js';
 import { showToast } from '../../app/toast.js';
 import { trackFeatureEvent } from '../../app/analytics.js';
+import { InviteCenterDialog } from './InviteCenterDialog.jsx';
 
 /** 账号菜单里的「邀请好友」：展示邀请码、复制邀请链接和邀请进度。 */
 export function InvitePanel({ session }) {
   const [summary, setSummary] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   useEffect(() => {
     let alive = true;
     fetchInviteSummary(session).then((data) => { if (alive) setSummary(data); }).catch(() => {});
@@ -33,9 +35,13 @@ export function InvitePanel({ session }) {
       </div>
       <p className="mt-1 leading-5 text-amber-800">
         好友注册后 {summary.windowDays} 天内有 {summary.minActiveDays} 天登录使用，双方各得 {summary.rewardDays} 天 SVIP（每月最多 {summary.monthlyCap} 次）。
-        {summary.pending || summary.rewarded ? ` 进行中 ${summary.pending} · 已生效 ${summary.rewarded}` : ''}
+        {summary.total ? ` 已邀请 ${summary.total} 人 · 进行中 ${summary.pending} · 已达标 ${summary.rewarded}` : ''}
       </p>
-      <button type="button" onClick={copy} className="mt-2 inline-flex h-8 w-full items-center justify-center rounded-lg bg-amber-500 text-xs font-bold text-white hover:bg-amber-600">复制邀请链接</button>
+      <div className="mt-2 flex gap-2">
+        <button type="button" onClick={() => { setDetailOpen(true); try { trackFeatureEvent('invite', 'open_detail', {}); } catch { /* ignore */ } }} className="inline-flex h-8 flex-1 items-center justify-center rounded-lg border border-amber-300 bg-white text-xs font-bold text-amber-800 hover:bg-amber-100">邀请明细{summary.total ? `（${summary.total}）` : ''}</button>
+        <button type="button" onClick={copy} className="inline-flex h-8 flex-1 items-center justify-center rounded-lg bg-amber-500 text-xs font-bold text-white hover:bg-amber-600">复制邀请链接</button>
+      </div>
+      <InviteCenterDialog open={detailOpen} onOpenChange={setDetailOpen} summary={summary} onCopy={copy} />
     </div>
   );
 }

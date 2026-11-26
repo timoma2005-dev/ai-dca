@@ -625,6 +625,14 @@ export function saveNotifyEmail(email = '', { rebind = false } = {}) {
   });
 }
 
+export function adoptAccountEmailForNotify({ rebind = false } = {}) {
+  return requestNotify('/email/use-account', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ rebind: Boolean(rebind) })
+  });
+}
+
 export function disableNotifyEmail() {
   return requestNotify('/email/disable', { method: 'POST' });
 }

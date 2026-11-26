@@ -215,16 +215,20 @@ function schedulePostAuthSync(session, action, securityPassword) {
     });
 }
 
-export async function registerCloudAccount({ username, password, inviteCode = '' }) {
+export async function registerCloudAccount({ username, password, inviteCode = '', email = '', emailCode = '' }) {
   const normalized = String(username || '').trim().toLowerCase();
   if (normalized.length < 3) throw new Error('用户名至少 3 位');
   if (String(password || '').length < 8) throw new Error('登录密码至少 8 位');
+  if (!String(email || '').trim()) throw new Error('请填写邮箱');
+  if (!/^\d{6}$/.test(String(emailCode || '').trim())) throw new Error('请输入 6 位邮箱验证码');
   const data = await requestSync('/auth/register', {
     method: 'POST',
     body: JSON.stringify({
       username: normalized,
       passwordHash: await passwordHash(normalized, password),
-      inviteCode: normalizeInviteCode(inviteCode) || pendingInviteCode() || undefined
+      inviteCode: normalizeInviteCode(inviteCode) || pendingInviteCode() || undefined,
+      email: String(email || '').trim(),
+      emailCode: String(emailCode || '').trim()
     })
   });
   assertAuthSessionShape(data, '注册');
@@ -315,6 +319,33 @@ export async function uploadLatestCloudBackup(_payload, session = loadCloudSessi
 }
 
 /** 邀请码与邀请进度（需登录）。 */
+export async function sendAccountEmailCode({ email = '', purpose = 'register' } = {}, session = loadCloudSession()) {
+  return requestSync('/auth/email/send-code', {
+    method: 'POST',
+    token: purpose === 'bind' ? session?.accessToken || '' : '',
+    body: JSON.stringify({ email: String(email || '').trim(), purpose })
+  });
+}
+
+export async function bindAccountEmail({ email = '', emailCode = '' } = {}, session = loadCloudSession()) {
+  return requestSync('/auth/email/bind', {
+    method: 'POST',
+    token: session?.accessToken || '',
+    body: JSON.stringify({ email: String(email || '').trim(), emailCode: String(emailCode || '').trim() })
+  });
+}
+
+export async function fetchAccountEmail(session = loadCloudSession()) {
+  if (!session?.accessToken) return null;
+  return requestSync('/auth/email', { method: 'GET', token: session.accessToken });
+}
+
+export async function checkInviteCode(code = '') {
+  const normalized = normalizeInviteCode(code);
+  if (!normalized) return { valid: false };
+  return requestSync(`/auth/invite/check?code=${encodeURIComponent(normalized)}`, { method: 'GET' });
+}
+
 export async function fetchInviteSummary(session = loadCloudSession()) {
   if (!session?.accessToken) return null;
   return requestSync('/auth/invite', { method: 'GET', token: session.accessToken });

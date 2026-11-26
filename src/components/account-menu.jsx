@@ -14,6 +14,9 @@ import { GettingStartedEntry } from './onboarding/GettingStartedSlot.jsx';
 import { LoginSyncPendingEntry } from './login-sync-pending-entry.jsx';
 import { MembershipProgress } from './membership/MembershipProgress.jsx';
 import { InvitePanel } from './membership/InvitePanel.jsx';
+import { AccountEmailCard } from './membership/AccountEmailCard.jsx';
+import { EmailCodeFields } from './membership/EmailCodeFields.jsx';
+import { adoptAccountEmailForNotify } from '../app/notifySync.js';
 import { pendingInviteCode } from '../app/inviteCode.js';
 import { evaluateTabAccess } from '../app/rbac/menuModel.js';
 import { authFieldAttrs, missingAuthField, resolveAuthFormHint } from '../app/authFormState.js';
@@ -66,7 +69,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
   const rbac = useRbac();
   // 认证错误只在未登录对话框内展示。
   const [authError, setAuthError] = useState('');
-  const [form, setForm] = useState(() => ({ username: '', password: '', rememberDevice: true, inviteCode: pendingInviteCode() }));
+  const [form, setForm] = useState(() => ({ username: '', password: '', rememberDevice: true, inviteCode: pendingInviteCode(), email: '', emailCode: '' }));
   const [busy, setBusy] = useState('');
   const [formTouch, setFormTouch] = useState({ touched: false, submitted: false });
   const [open, setOpen] = useState(initialOpen || Boolean(initialAuthIntent));
@@ -171,6 +174,10 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
     if (busy) return;
     setFormTouch({ touched: true, submitted: true });
     if (missingAuthField(form)) return;
+    if (authMode === 'register' && (!String(form.email || '').trim() || !/^\d{6}$/.test(form.emailCode))) {
+      setAuthError('请填写邮箱，并输入邮件里的 6 位验证码');
+      return;
+    }
     void handleAuth(authMode);
   }
 
@@ -186,6 +193,8 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
         : await loginCloudAccount(form);
       // 有效 session 已保存：立即完成登录 UI、解除认证 busy，不等待云同步。
       setSession(nextSession || loadCloudSession());
+      // 注册时验证过的邮箱直接设为通知邮箱（失败不影响注册结果）。
+      if (action === 'register') void adoptAccountEmailForNotify().catch(() => {});
       showToast({
         title: action === 'register' ? '账户已注册' : '已登录',
         description: '云端数据正在后台同步。',
@@ -260,6 +269,7 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
               onOpened={closeMenu}
             />
           ) : null}
+          <AccountEmailCard session={session} />
           <InvitePanel session={session} />
           <LoginSyncPendingEntry onOpened={closeMenu} />
           <GettingStartedEntry loggedIn accessOf={(tab) => evaluateTabAccess(rbac, tab)} onOpened={closeMenu} />
@@ -364,6 +374,9 @@ export function AccountMenu({ initialOpen = false, open: controlledOpen, onClose
                     <label htmlFor={authFields.password.id} className="block text-xs font-semibold text-slate-600">登录密码</label>
                     <input className={inputClass} {...authFields.password} type="password" required value={form.password} onChange={(event) => updateField('password', event.target.value)} aria-invalid={authHint === '请填写登录密码' ? 'true' : undefined} aria-describedby="account-auth-hint" />
                   </div>
+                  {authMode === 'register' ? (
+                    <EmailCodeFields idPrefix="account-register" email={form.email} code={form.emailCode} onEmailChange={(value) => updateField('email', value)} onCodeChange={(value) => updateField('emailCode', value)} />
+                  ) : null}
                   {authMode === 'register' ? (
                     <div className="space-y-1.5">
                       <label htmlFor="account-invite-code" className="block text-xs font-semibold text-slate-600">邀请码（选填）</label>

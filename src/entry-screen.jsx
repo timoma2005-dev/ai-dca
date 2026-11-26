@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { ScreenPage } from "./pages/ScreenPage.jsx";
 import { AppEntryAdGate } from "./components/monetization.jsx";
 import { AccountDataMigrationModal } from "./components/account-data-migration-modal.jsx";
+import { InviteWelcome } from "./components/membership/InviteWelcome.jsx";
 import { LoginSyncDiffModal } from "./components/login-sync-diff-modal.jsx";
 import { RecordingAccessDialog } from "./components/recording-access-dialog.jsx";
 import { GlobalConfirmDialog } from "./components/global-confirm-dialog.jsx";
@@ -102,6 +103,7 @@ createRoot(document.getElementById("root")).render(
       <>
         <ScreenPage inPagesDir={inPagesDir} />
         <AccountDataMigrationModal />
+        <InviteWelcome />
         <LoginSyncDiffModal />
         <RecordingAccessDialog />
         <GlobalConfirmDialog />

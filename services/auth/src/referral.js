@@ -129,6 +129,43 @@ export function referralSummary(db, userId, { now = new Date(), rules = REFERRAL
     windowDays: rules.windowDays,
     pending: count('pending'),
     rewarded: count('rewarded'),
+    total: rows.length,
+    invitees: referralInvitees(db, userId, { rules }),
     rewardedThisMonth: rows.filter((row) => row.status === 'rewarded' && row.settled_at && shanghaiDay(new Date(row.settled_at)).slice(0, 7) === month).length,
   };
+}
+
+function maskName(name = '') {
+  const value = String(name || '');
+  if (!value) return '***';
+  return value.length <= 2 ? `${value.slice(0, 1)}*` : `${value.slice(0, 2)}***`;
+}
+
+/** 邀请人可见的被邀请人明细：用户名打码，附观察期内活跃天数与结算状态。 */
+export function referralInvitees(db, userId, { rules = REFERRAL_RULES } = {}) {
+  const rows = db.prepare(`SELECT r.referee_id, r.status, r.reason, r.created_at, r.settled_at, u.username
+    FROM referrals r LEFT JOIN users u ON u.id = r.referee_id
+    WHERE r.inviter_id = ? ORDER BY r.created_at DESC LIMIT 100`).all(userId);
+  return rows.map((row) => {
+    let activeDays = 0;
+    try { activeDays = activeDaysInWindow(db, row.referee_id, row.created_at, rules); } catch { activeDays = 0; }
+    return {
+      name: maskName(row.username),
+      status: row.status,
+      reason: row.reason || '',
+      createdAt: row.created_at,
+      settledAt: row.settled_at || '',
+      windowEndsAt: new Date(Date.parse(row.created_at) + rules.windowDays * DAY_MS).toISOString(),
+      activeDays: Math.min(activeDays, rules.windowDays),
+    };
+  });
+}
+
+/** 邀请落地页：公开校验邀请码，只返回打码后的邀请人名称与规则。 */
+export function inviteCodeInfo(db, code, { rules = REFERRAL_RULES } = {}) {
+  const normalized = normalizeInviteCode(code);
+  if (!normalized) return { valid: false };
+  const row = db.prepare('SELECT u.username FROM invite_codes ic JOIN users u ON u.id = ic.user_id WHERE ic.code = ?').get(normalized);
+  if (!row) return { valid: false };
+  return { valid: true, code: normalized, inviter: maskName(row.username), rewardDays: rules.rewardDays, minActiveDays: rules.minActiveDays, windowDays: rules.windowDays };
 }

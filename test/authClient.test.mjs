@@ -150,7 +150,7 @@ test('register rejects a 200 response missing accessToken', async () => {
   globalThis.fetch = async () => new Response(JSON.stringify({ userId: 'usr_x', username: 'testuser' }), { status: 200 });
   try {
     await assert.rejects(
-      registerCloudAccount({ username: 'testuser', password: 'password-123' }),
+      registerCloudAccount({ username: 'testuser', password: 'password-123', email: 'test@example.com', emailCode: '123456' }),
       (error) => {
         assert.equal(error.code, 'AUTH_INVALID_RESPONSE');
         return true;
@@ -181,7 +181,7 @@ test('register completes login UI state even when the cloud is fully unreachable
     throw new Error('fetch failed: CF unreachable');
   };
   try {
-    const session = await registerCloudAccount({ username: 'testuser', password: 'password-123' });
+    const session = await registerCloudAccount({ username: 'testuser', password: 'password-123', email: 'test@example.com', emailCode: '123456' });
     assert.equal(session?.username, 'testuser');
     assert.equal(loadCloudSession()?.accessToken, 'acc_testtoken', '注册成功必须立即保存 session，不等云同步');
     assert.equal(JSON.parse(storage.values.get('aiDcaCloudSyncSession')).username, 'testuser');

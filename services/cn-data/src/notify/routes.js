@@ -54,6 +54,7 @@ import {
   handleEmailSendCode,
   handleEmailStatus,
   handleEmailToggle,
+  handleEmailUseAccount,
   handleEmailVerify
 } from './emailRoutes.js';
 
@@ -631,6 +632,10 @@ export async function handleNotifyRoute(db, method, url, body, headers) {
       }
       if (path === '/api/notify/email/save') {
         const result = await handleEmailSave(db, account, body);
+        return ok(result);
+      }
+      if (path === '/api/notify/email/use-account') {
+        const result = await handleEmailUseAccount(db, account, body);
         return ok(result);
       }
       if (path === '/api/notify/email/enable') {

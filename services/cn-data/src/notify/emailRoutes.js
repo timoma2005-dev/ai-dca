@@ -17,7 +17,7 @@
 // - Verification codes: notify_user_records (record_type='email-verification'),
 //   see emailVerification.js.
 
-import { HttpError } from '../authSession.js';
+import { HttpError, openAuthDb } from '../authSession.js';
 import { nowIso, withTransaction } from '../db.js';
 import {
   clearEmailVerification,
@@ -93,9 +93,25 @@ function emailBinding(account) {
   return { scope: 'account', accountClientId: account.clientId };
 }
 
+/** 注册时已验证的账号邮箱（auth 库 users.email），可一键设为通知邮箱。 */
+export function readAccountEmail(userId, { openDb = openAuthDb } = {}) {
+  const authDb = openDb();
+  if (!authDb) return '';
+  try {
+    return normalizeEmailAddress(authDb.prepare('SELECT email FROM users WHERE id = ?').get(userId)?.email || '');
+  } catch {
+    return '';
+  } finally {
+    try { authDb.close(); } catch { /* ignore */ }
+  }
+}
+
+export const accountEmailDeps = { readAccountEmail };
+
 export function handleEmailStatus(db, account) {
   const email = readEmail(db, account);
-  return { ok: true, binding: emailBinding(account), email: publicEmail(email) };
+  const accountEmail = accountEmailDeps.readAccountEmail(account.userId);
+  return { ok: true, binding: emailBinding(account), email: publicEmail(email), accountEmail: maskEmailAddress(accountEmail) };
 }
 
 export async function handleEmailSendCode(db, account, body, headers) {
@@ -132,11 +148,23 @@ export async function handleEmailSave(db, account, body) {
     throw new HttpError(400, 'INVALID_EMAIL', '请输入有效的邮箱地址。');
   }
   const verified = getVerifiedEmailVerification(db, { userId: account.userId, email });
+  return bindVerifiedEmail(db, account, verified, body?.rebind === true);
+}
+
+export async function handleEmailUseAccount(db, account, body) {
+  const email = accountEmailDeps.readAccountEmail(account.userId);
+  if (!email) {
+    throw new HttpError(400, 'ACCOUNT_EMAIL_MISSING', '账号还没有绑定邮箱。');
+  }
+  return bindVerifiedEmail(db, account, { email, verifiedAt: nowIso() }, body?.rebind === true);
+}
+
+async function bindVerifiedEmail(db, account, verified, rebind) {
   const tokenHash = await hashText(verified.email);
   const binding = db.prepare(`SELECT owner_user_id FROM notify_channel_bindings
     WHERE channel_type = 'email' AND token_hash = ?`).get(tokenHash);
 
-  if (binding?.owner_user_id && binding.owner_user_id !== account.userId && body?.rebind !== true) {
+  if (binding?.owner_user_id && binding.owner_user_id !== account.userId && !rebind) {
     const error = new HttpError(409, 'EMAIL_REBIND_REQUIRED', '该邮箱已绑定其他账号，需要确认重新绑定。');
     error.canRebind = true;
     throw error;
