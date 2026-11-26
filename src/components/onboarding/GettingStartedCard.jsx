@@ -145,7 +145,7 @@ export function GettingStartedCard({ tasks, onAction, onDismiss, onFinish, onSki
           <div className="h-full rounded-full bg-indigo-600 transition-[width]" style={{ width: `${pct}%` }} />
         </div>
       ) : null}
-      <ul className={cx('mt-2', guest ? 'lg:grid lg:grid-cols-2 lg:gap-2' : 'lg:grid lg:grid-cols-3 lg:gap-2', takeover && 'lg:mt-4 lg:gap-3')}>
+      <ul className={cx('mt-2', 'lg:grid lg:grid-cols-3 lg:gap-2', takeover && 'lg:mt-4 lg:gap-3')}>
         {tasks.items.map((task, index) => <TaskRow key={task.id} task={task} index={index} onAction={onAction} large={takeover} />)}
       </ul>
       {guest ? (

@@ -65,7 +65,7 @@ function niceDomain(values) {
 }
 
 // 连续 minLen 个点数值完全不变 = 价格未更新（停牌或无成交），返回实线/虚线分段（端点共享）。
-export function staleSegments(points, minLen = 6) {
+export function staleSegments(points, minLen = 10) {
   const list = Array.isArray(points) ? points : [];
   const runs = [];
   let s = 0;

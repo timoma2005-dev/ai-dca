@@ -20,10 +20,10 @@ test('buildChartModel domain matches first/last tick', () => {
 });
 
 test('staleSegments marks long unchanged runs as dashed', () => {
-  const pts = [1, 1, 1, 1, 1, 1, 1, 2, 3, 3].map((value) => ({ value }));
+  const pts = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3].map((value) => ({ value }));
   assert.deepEqual(staleSegments(pts), [
-    { from: 0, to: 6, stale: true },
-    { from: 6, to: 9, stale: false },
+    { from: 0, to: 10, stale: true },
+    { from: 10, to: 13, stale: false },
   ]);
   assert.deepEqual(staleSegments([{ value: 1 }, { value: 2 }]), [{ from: 0, to: 1, stale: false }]);
   assert.deepEqual(staleSegments([]), []);
