@@ -35,6 +35,7 @@ tools/cliproxyapi/
 # Temporary txt reports and duplicate images
 *.txt
 !requirements*.txt
+!public/robots.txt
 debug-*.png
 mobile-*.png
 

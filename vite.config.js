@@ -3,11 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { auctionBoardDemoPlugin } from './scripts/vite/auctionBoardDemoPage.mjs';
+import { fundSeoPagesPlugin } from './scripts/vite/fundSeoPages.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [react(), auctionBoardDemoPlugin({ root: HERE })],
+  plugins: [react(), auctionBoardDemoPlugin({ root: HERE }), fundSeoPagesPlugin()],
   base: './',
   resolve: {
     alias: {
