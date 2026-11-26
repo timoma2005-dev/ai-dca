@@ -64,12 +64,6 @@ function Stat({ label, value, hint, tone = '' }) {
   );
 }
 
-function LockBadge({ title = '买一=卖一（锁价），半档=0' }) {
-  return (
-    <span title={title} className="ml-1 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-600">锁</span>
-  );
-}
-
 export default function AdminRotatorExperience() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -235,49 +229,6 @@ export default function AdminRotatorExperience() {
             </span>
           ) : null}
         </div>
-      </div>
-
-      <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="w-full text-sm tabular-nums">
-          <thead className="text-xs text-muted-foreground">
-            <tr className="border-b border-border">
-              <th className="px-3 py-2 text-left">代码</th>
-              <th className="px-3 py-2 text-left">名称</th>
-              <th className="px-3 py-2 text-right">偏离 bps</th>
-              <th className="px-3 py-2 text-right">现价</th>
-              <th className="px-3 py-2 text-right">IOPV</th>
-              <th className="px-3 py-2 text-right">溢价 %</th>
-              <th className="px-3 py-2 text-right">基准 %</th>
-              <th className="px-3 py-2 text-right">买一 / 卖一</th>
-              <th className="px-3 py-2 text-right" title="半价差 + 让 1 档 + 佣金；「锁」= 买一等于卖一（如收盘集合竞价），半档为 0，成本偏低">{`单边成本（半档+让1档+佣金万${st?.params?.comm_bps ?? 0.5}）`}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const held = r.code === holding;
-              const muted = (st?.muted || []).includes(r.code);
-              return (
-                <tr key={r.code} className={`border-b border-border/60 last:border-0 ${held ? 'bg-primary/10 font-medium' : ''} ${muted ? 'opacity-50' : ''}`}>
-                  <td className="px-3 py-1.5">{r.code}{held ? ' ◀ 持仓' : ''}{muted ? ' · 停用' : ''}</td>
-                  <td className="px-3 py-1.5">{r.name}</td>
-                  <td className={`px-3 py-1.5 text-right ${r.dev_bps < 0 ? 'text-emerald-600' : r.dev_bps > 0 ? 'text-red-600' : ''}`}>{bps(r.dev_bps)}</td>
-                  <td className="px-3 py-1.5 text-right">{fmt(r.price)}</td>
-                  <td className="px-3 py-1.5 text-right">{fmt(r.iopv, 4)}</td>
-                  <td className="px-3 py-1.5 text-right">{r.prem_bps === null || r.prem_bps === undefined ? '—' : fmt(r.prem_bps / 100, 2)}</td>
-                  <td className="px-3 py-1.5 text-right">{r.base_bps === null || r.base_bps === undefined ? '—' : fmt(r.base_bps / 100, 2)}</td>
-                  <td className="px-3 py-1.5 text-right">{r.bid || r.ask ? `${fmt(r.bid)} / ${fmt(r.ask)}` : '—'}{r.locked ? <LockBadge /> : null}</td>
-                  <td className="px-3 py-1.5 text-right">
-                    {r.cost_bps === null || r.cost_bps === undefined ? '—' : fmt(r.cost_bps, 1)}
-                    {r.locked ? <LockBadge title={`买一=卖一，spread=${r.spread_bps ?? 0}bps，半档=0，比盘中低约 2~3bps`} /> : null}
-                  </td>
-                </tr>
-              );
-            })}
-            {!rows.length ? (
-              <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">暂无数据（10:31 开盘窗口后出现，午休暂停）</td></tr>
-            ) : null}
-          </tbody>
-        </table>
       </div>
 
       <SwitchPnlCard pool={poolRows} commBps={st?.params?.comm_bps ?? 0.5} />
