@@ -745,7 +745,7 @@ export function getShanghaiHHMM(date = new Date()) { return getShanghaiDateParts
 export function buildNotificationDetailAction(target = 'tradePlans', ruleId = '', params = {}) {
   target = String(target || '').trim() || 'tradePlans';
   params = { ...(String(ruleId || '').trim() ? {ruleId: String(ruleId).trim()} : {}), ...params };
-  const url = new URL('/index.html', process.env.NOTIFICATION_WEB_BASE_URL || 'https://freebacktrack.tech');
+  const url = new URL('/index.html', process.env.NOTIFICATION_WEB_BASE_URL || 'https://fast.freebacktrack.tech');
   url.searchParams.set('tab', target); url.searchParams.set('source', 'notification');
   for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
   const web = url.toString();
