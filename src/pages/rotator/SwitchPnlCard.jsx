@@ -5,6 +5,7 @@ import {
 import { Pencil, Plus } from 'lucide-react';
 import { Button } from '../../components/ui/button.jsx';
 import { getSeries } from './rotatorApi.js';
+import ImportPanel from './ImportPanel.jsx';
 import { minuteLabel, priceAt, rotationPortfolio, shanghaiTs, shortName } from './rotatorCharts.js';
 
 // 换车收益：按天记录「起始持仓 + 依次换车」（成交价自己填，只存本机 localStorage），
@@ -257,13 +258,24 @@ export default function SwitchPnlCard({ pool, holding = '', commBps = 0 }) {
   const shownView = view > legs.length ? 0 : view;
 
   function saveDraft() {
-    const s = { ...draft, id: draft.id || String(Date.now()) };
+    const prev = (rec.switches || []).find((x) => x.id === draft.id);
+    const s = { ...draft, id: draft.id || String(Date.now()), est: Boolean(prev?.est && prev.time === draft.time) };
     update({ switches: [...(rec.switches || []).filter((x) => x.id !== s.id), s] });
     setDraft(null);
   }
   function removeDraft() {
     update({ switches: (rec.switches || []).filter((x) => x.id !== draft.id) });
     setDraft(null);
+  }
+  function applyImport(plan) {
+    const d = plan.day || day;
+    const base = Date.now();
+    const all = { ...days, [d]: { startCode: plan.startCode, startShares: String(plan.startShares), switches: plan.switches.map((x, i) => ({ ...x, id: String(base + i) })) } };
+    setDays(all);
+    storeDays(all);
+    setDay(d);
+    setDraft(null);
+    setView(0);
   }
   function addSwitch() {
     const lastTime = sorted.length ? sorted[sorted.length - 1].time : '10:00:00';
@@ -279,7 +291,8 @@ export default function SwitchPnlCard({ pool, holding = '', commBps = 0 }) {
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
-        <div className="grid grid-cols-[1fr_1fr] gap-2 sm:grid-cols-[10rem_1fr_8rem]">
+        <ImportPanel day={day} pool={pool} onApply={applyImport} />
+        <div className="mt-3 grid grid-cols-[1fr_1fr] gap-2 sm:grid-cols-[10rem_1fr_8rem]">
           <Field label="日期" className="col-span-2 sm:col-span-1">
             <input type="date" className={inputCls} value={day} onChange={(e) => { setDay(e.target.value); setDraft(null); setView(0); }} />
           </Field>
@@ -301,7 +314,7 @@ export default function SwitchPnlCard({ pool, holding = '', commBps = 0 }) {
             return (
               <button key={s.id} type="button" onClick={() => setDraft({ ...s })} className="flex w-full items-center gap-2 py-2 text-left text-sm">
                 <span className="w-5 shrink-0 text-base leading-none">{mark(i + 1)}</span>
-                <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{String(s.time).slice(0, 5)}</span>
+                <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{s.est ? '约 ' : ''}{String(s.time).slice(0, 5)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="font-medium">{nameOf(leg?.from || heldAt(s.ts ?? 0, s.id))} → {nameOf(s.buyCode)}</span>
                   <span className="block truncate text-[11px] text-muted-foreground tabular-nums">

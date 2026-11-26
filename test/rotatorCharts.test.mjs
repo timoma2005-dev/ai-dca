@@ -84,3 +84,46 @@ test('priceAt forward-fills and tolerates a slightly early time', () => {
   assert.equal(priceAt(s, 900), 1.5);
   assert.equal(priceAt(s, 500), null);
 });
+
+test('planImport: summary screenshot without times → chained switches with estimated times', async () => {
+  const { planImport } = await import('../src/pages/rotator/tradeImport.js');
+  const t = (hm) => shanghaiTs('2026-11-26', hm);
+  const flat = (px) => [[t('09:30'), px], [t('15:00'), px]];
+  const seriesByCode = {
+    A: [[t('09:30'), 1.50], [t('10:30'), 1.521], [t('15:00'), 1.53]],
+    B: [[t('09:30'), 2.25], [t('10:30'), 2.274], [t('11:00'), 2.293], [t('15:00'), 2.30]],
+    C: [[t('09:30'), 2.20], [t('11:00'), 2.218], [t('15:00'), 2.23]],
+    D: flat(3.0)
+  };
+  const pool = ['A', 'B', 'C', 'D'].map((code) => ({ code, name: `纳指ETF${code}` }));
+  const rows = [
+    { code: '纳指', type: '买入', price: 2.218, shares: 77500, amount: 171926.8 },
+    { code: '纳斯达克', type: '卖出', price: 2.293, shares: 75000, amount: 171975 },
+    { code: '纳斯达克', type: '买入', price: 2.274, shares: 75000, amount: 170550 },
+    { code: '纳指ETF', type: '卖出', price: 1.521, shares: 112100, amount: 170504.1 }
+  ];
+  const r = planImport({ rows, pool, seriesByCode });
+  assert.equal(r.startCode, 'A');
+  assert.equal(r.startShares, 112100);
+  assert.deepEqual(r.switches.map((s) => [s.buyCode, s.est]), [['B', true], ['C', true]]);
+  assert.ok(r.switches[0].time < r.switches[1].time);
+  const fixed = planImport({ rows, pool, seriesByCode, fixed: { 纳指: 'D' } });
+  assert.equal(fixed.switches[1].buyCode, 'D');
+  assert.ok(fixed.warnings.length > 0);
+});
+
+test('planImport: timed fills are merged and paired in order', async () => {
+  const { planImport } = await import('../src/pages/rotator/tradeImport.js');
+  const t = (hm) => shanghaiTs('2026-11-26', hm);
+  const seriesByCode = { A: [[t('09:30'), 1.5], [t('15:00'), 1.5]], B: [[t('09:30'), 2.0], [t('15:00'), 2.0]] };
+  const pool = [{ code: 'A', name: 'A' }, { code: 'B', name: 'B' }];
+  const rows = [
+    { date: '2026-11-26 10:31:05', code: 'x', type: '卖出', price: 1.5, shares: 1000, amount: 1500 },
+    { date: '2026-11-26 10:31:09', code: 'x', type: '卖出', price: 1.5, shares: 1000, amount: 1500 },
+    { date: '2026-11-26 10:31:20', code: 'y', type: '买入', price: 2.0, shares: 1500, amount: 3000 }
+  ];
+  const r = planImport({ rows, pool, seriesByCode });
+  assert.equal(r.day, '2026-11-26');
+  assert.equal(r.startShares, 2000);
+  assert.deepEqual(r.switches, [{ time: '10:31:05', est: false, buyCode: 'B', sellPx: 1.5, buyPx: 2.0, buyShares: 1500 }]);
+});
