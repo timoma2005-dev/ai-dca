@@ -8,6 +8,9 @@ import {
   resolveEndLabels,
   shortLineLabel,
   sliceChartModel,
+  staleSegments,
+  tickDecimals,
+  timeTickIndices,
   tooltipRows,
   zoomWindow,
 } from './chartModel.mjs';
@@ -36,6 +39,11 @@ function fmtValue(value, mode) {
   if (mode === 'premium') return fmtPct(value);
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(2) : '—';
+}
+function fmtTick(value, step, mode) {
+  const n = Math.abs(value) < 1e-9 ? 0 : value;
+  const text = n.toFixed(tickDecimals(step));
+  return mode === 'premium' ? `${n > 0 ? '+' : ''}${text}%` : text;
 }
 function lineLabel(line) {
   return String(line.label || line.name || line.code || '');
@@ -138,9 +146,9 @@ export function PremiumChart({ series, mode, daily = false }) {
   function xFor(index) {
     return PAD_L + (index / Math.max(model.length - 1, 1)) * PLOT_W;
   }
-  function pathD(points) {
+  function pathD(points, offset = 0) {
     return points
-      .map((p, i) => `${i ? 'L' : 'M'}${xFor(i).toFixed(1)},${yFor(p.value).toFixed(1)}`)
+      .map((p, i) => `${i ? 'L' : 'M'}${xFor(i + offset).toFixed(1)},${yFor(p.value).toFixed(1)}`)
       .join(' ');
   }
 
@@ -157,12 +165,12 @@ export function PremiumChart({ series, mode, daily = false }) {
     );
     return sample?.points || [];
   }, [model]);
-  const timeIndices = useMemo(() => {
-    if (!samplePts.length) return [];
-    const ticks = narrow ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
-    return ticks.map((f) => (f === 1 ? samplePts.length - 1 : Math.floor(samplePts.length * f)))
-      .filter((idx, pos, arr) => samplePts[idx] && arr.indexOf(idx) === pos);
-  }, [samplePts, narrow]);
+  const timeTicks = useMemo(() => timeTickIndices(samplePts, { narrow, daily }), [samplePts, narrow, daily]);
+  const segmentsByRow = useMemo(
+    () => new Map(model.rows.map((row) => [row.rowKey, staleSegments(row.points)])),
+    [model],
+  );
+  const hasStale = useMemo(() => [...segmentsByRow.values()].some((segs) => segs.some((x) => x.stale)), [segmentsByRow]);
 
   function toggleLine(key) {
     setHiddenKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -330,30 +338,27 @@ export function PremiumChart({ series, mode, daily = false }) {
         style={view ? { cursor: 'grab' } : undefined}
       >
       <svg ref={svgRef} className="cn-home-premium-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={a11ySummary.label}>
-        {[0, 1, 2, 3, 4].map((i) => {
-          const y = PAD_T + (i / 4) * PLOT_H;
-          const val = model.max - (i / 4) * (model.max - model.min);
+        {model.ticks.map((val) => {
+          const y = yFor(val);
           return (
-            <g key={i}>
+            <g key={val}>
               <line x1={PAD_L} y1={y} x2={PAD_L + PLOT_W} y2={y} className="grid" />
-              <text x={PAD_L - 8} y={y + 4} textAnchor="end" className="axis">
-                {mode === 'premium' ? fmtPct(val) : Number(val).toFixed(2)}
-              </text>
+              <text x={PAD_L - 8} y={y + 4} textAnchor="end" className="axis">{fmtTick(val, model.step, mode)}</text>
             </g>
           );
         })}
         {mode === 'premium' && model.min < 0 && model.max > 0 ? (
           <g>
             <line x1={PAD_L} y1={yFor(0)} x2={PAD_L + PLOT_W} y2={yFor(0)} className="grid zero" strokeDasharray="3 3" />
-            {[0, 1, 2, 3, 4].every((i) => Math.abs(PAD_T + (i / 4) * PLOT_H - yFor(0)) > 14) ? <text x={PAD_L - 8} y={yFor(0) + 4} textAnchor="end" className="axis">0.00%</text> : null}
+            {model.ticks.every((t) => Math.abs(yFor(t) - yFor(0)) > 14) ? <text x={PAD_L - 8} y={yFor(0) + 4} textAnchor="end" className="axis">0%</text> : null}
           </g>
         ) : null}
-        {timeIndices.map((idx, pos) => (
-          <text key={idx} x={xFor(idx)} y={H - 12} textAnchor={narrow ? (pos === 0 ? 'start' : (pos === timeIndices.length - 1 ? 'end' : 'middle')) : 'middle'} className="axis">{samplePts[idx]?.t || ''}</text>
+        {timeTicks.map(({ idx, label }, pos) => (
+          <text key={idx} x={xFor(idx)} y={H - 12} textAnchor={narrow ? (pos === 0 ? 'start' : (pos === timeTicks.length - 1 ? 'end' : 'middle')) : 'middle'} className="axis">{label}</text>
         ))}
-        {model.rows.map((line) => (
-          <path key={line.rowKey} d={pathD(line.points)} className="cn-home-curve" style={{ stroke: line.color }} />
-        ))}
+        {model.rows.map((line) => (segmentsByRow.get(line.rowKey) || []).map((seg) => (
+          <path key={`${line.rowKey}-${seg.from}`} d={pathD(line.points.slice(seg.from, seg.to + 1), seg.from)} className={`cn-home-curve${seg.stale ? ' is-stale' : ''}`} style={{ stroke: line.color }} />
+        )))}
         {cursor != null ? (
           <line x1={xFor(cursor)} y1={PAD_T} x2={xFor(cursor)} y2={PAD_T + PLOT_H} className="cross" />
         ) : null}
@@ -402,6 +407,7 @@ export function PremiumChart({ series, mode, daily = false }) {
         </div>
       ) : null}
       <ChartSrSummary summary={a11ySummary} />
+      {hasStale ? <p className="cn-home-stale-note"><i aria-hidden="true" />虚线：该时段价格未更新（停牌或无成交）</p> : null}
       {legendItems.length ? (
         <>
           {narrow && readTime ? <div className="cn-home-read-head"><span>{readTime}</span><span>{metricLabel}{cursor == null && !view ? ' · 最新' : ''}</span></div> : null}

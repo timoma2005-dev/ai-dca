@@ -34,6 +34,79 @@ export function pointTime(point) {
   return iso ? iso[1] : raw;
 }
 
+// 坐标轴取整刻度：步长取 1/2/2.5/5×10^k，刻度覆盖 [min, max]。
+export function niceTicks(min, max, count = 5) {
+  let lo = Number(min);
+  let hi = Number(max);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { ticks: [0, 1], step: 1 };
+  if (hi - lo < 1e-9) { lo -= 0.5; hi += 0.5; }
+  const raw = (hi - lo) / Math.max(count - 1, 1);
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((x) => x >= raw * 0.999);
+  const start = Math.floor(lo / step + 1e-9);
+  const end = Math.ceil(hi / step - 1e-9);
+  const ticks = [];
+  for (let i = start; i <= end; i += 1) ticks.push(Number((i * step).toFixed(10)));
+  return { ticks, step };
+}
+
+export function tickDecimals(step) {
+  let d = 0;
+  while (d < 4 && Math.abs(step * 10 ** d - Math.round(step * 10 ** d)) > 1e-6) d += 1;
+  return d;
+}
+
+function niceDomain(values) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const pad = Math.max((max - min) * 0.04, 0.05);
+  const { ticks, step } = niceTicks(min - pad, max + pad);
+  return { min: ticks[0], max: ticks[ticks.length - 1], ticks, step };
+}
+
+// 连续 minLen 个点数值完全不变 = 价格未更新（停牌或无成交），返回实线/虚线分段（端点共享）。
+export function staleSegments(points, minLen = 6) {
+  const list = Array.isArray(points) ? points : [];
+  const runs = [];
+  let s = 0;
+  for (let i = 1; i <= list.length; i += 1) {
+    if (i < list.length && Math.abs(list[i].value - list[s].value) < 1e-9) continue;
+    if (i - s >= minLen) runs.push([s, i - 1]);
+    s = i;
+  }
+  const segs = [];
+  let cur = 0;
+  for (const [a, b] of runs) {
+    if (a > cur) segs.push({ from: cur, to: a, stale: false });
+    segs.push({ from: a, to: b, stale: true });
+    cur = b;
+  }
+  if (list.length && (cur < list.length - 1 || !segs.length)) segs.push({ from: cur, to: list.length - 1, stale: false });
+  return segs;
+}
+
+const INTRADAY_TICKS = ['09:30', '10:30', '11:30', '14:00', '15:00'];
+const INTRADAY_TICKS_NARROW = ['09:30', '11:30', '15:00'];
+
+// 分时图按整点刻度（午休压缩，11:30 即 13:00），日线按等分。返回 [{ idx, label }]。
+export function timeTickIndices(points, { narrow = false, daily = false } = {}) {
+  const list = Array.isArray(points) ? points : [];
+  if (!list.length) return [];
+  if (!daily && list.every((p) => /^\d{2}:\d{2}$/.test(String(p.t)))) {
+    const out = [];
+    for (const label of narrow ? INTRADAY_TICKS_NARROW : INTRADAY_TICKS) {
+      const idx = list.findIndex((p) => p.t >= label);
+      if (idx >= 0 && !out.some((x) => x.idx === idx)) out.push({ idx, label });
+    }
+    if (out.length >= 2) return out;
+  }
+  const fractions = narrow ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
+  return fractions
+    .map((f) => (f === 1 ? list.length - 1 : Math.floor(list.length * f)))
+    .filter((idx, pos, arr) => list[idx] && arr.indexOf(idx) === pos)
+    .map((idx) => ({ idx, label: list[idx].t || '' }));
+}
+
 // Build the render model: normalized rows (hidden lines removed), value range,
 // and the high/medium/low premium zones with spread gaps.
 export function buildChartModel(series, mode, hiddenKeys = []) {
@@ -51,11 +124,9 @@ export function buildChartModel(series, mode, hiddenKeys = []) {
 
   const values = rows.flatMap((x) => x.points.map((p) => p.value));
   if (!values.length) {
-    return { rows, min: 0, max: 1, length: 0, zones: [], gaps: [] };
+    return { rows, min: 0, max: 1, ticks: [0, 1], step: 1, length: 0, zones: [], gaps: [] };
   }
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const pad = Math.max((max - min) * 0.12, 0.1);
+  const domain = niceDomain(values);
   const length = Math.max(...rows.map((x) => x.points.length));
   const zones = computeZones(rows, mode);
   const gaps = zones.length === 3 ? [
@@ -63,7 +134,7 @@ export function buildChartModel(series, mode, hiddenKeys = []) {
     { key: 'medium-low', label: '中 − 低', value: zones[1].value - zones[2].value },
     { key: 'high-low', label: '高 − 低', value: zones[0].value - zones[2].value },
   ] : [];
-  return { rows, min: min - pad, max: max + pad, length, zones, gaps };
+  return { rows, ...domain, length, zones, gaps };
 }
 
 // High/medium/low premium zones: latest value per visible non-LOF line, split
@@ -137,10 +208,7 @@ export function sliceChartModel(model, start, end) {
     .filter((row) => row.points.length);
   const values = rows.flatMap((x) => x.points.map((p) => p.value));
   if (!values.length) return model;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const pad = Math.max((max - min) * 0.12, 0.1);
-  return { ...model, rows, min: min - pad, max: max + pad, length: e - s + 1, offset: s };
+  return { ...model, rows, ...niceDomain(values), length: e - s + 1, offset: s };
 }
 
 // 缩放窗口计算：factor<1 放大，>1 缩小；anchor 为锚点在窗口内的相对位置 0~1（锚点处的数据保持不动）。

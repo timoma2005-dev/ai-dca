@@ -16,8 +16,9 @@ function declaration(selector, property) {
   return values;
 }
 
-test('series metadata appears once in the header next to the mode controls', () => {
-  assert.match(source, /side=\{<div className="cn-home-market-toolbar"><span className="cn-home-series-meta">[\s\S]*?<\/span><div className="cn-home-segment[ "]/);
+test('series metadata appears once in the header; range/mode controls sit beside the group chips', () => {
+  assert.match(source, /side=\{<span className="cn-home-series-meta">\{seriesMeta\}<\/span>\}>/);
+  assert.match(source, /<div className="cn-home-market-controls"><div className="cn-home-chips">[\s\S]*?<div className="cn-home-market-toolbar"><div className="cn-home-segment[ "]/);
   assert.equal(source.match(/className="cn-home-series-meta"/g)?.length, 1);
   assert.doesNotMatch(source, /<footer\b|cn-home-foot/);
 });

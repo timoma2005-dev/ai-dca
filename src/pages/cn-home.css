@@ -487,3 +487,33 @@
 /* 手机端顶栏隐藏，分享入口放在「场内走势」标题旁 */
 .cn-home-share-mini{display:none}
 @media(max-width:640px){.cn-home-share-mini{display:inline-flex;align-items:center;gap:3px;margin-left:4px;border:1px solid #dbe4ff;background:#eef2ff;color:#4f46e5;border-radius:999px;padding:0 9px;height:24px;min-height:0;line-height:1;font-size:11px;font-weight:700;cursor:pointer}.cn-home-share-mini svg{width:12px;height:12px}}
+
+/* 首页改版：单列铺满、总览条分隔、控件分两行、停牌虚线 */
+@media (min-width: 1280px) {
+  .cn-home { grid-template-columns: minmax(0, 1fr); }
+  .cn-home-market, .cn-home-limits { grid-column: 1 / -1; }
+}
+.cn-home-market-controls{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 16px;padding:0 15px 12px}
+.cn-home-market-controls>.cn-home-chips{flex:1 1 auto;min-width:0;padding:0}
+.cn-home-market-controls>.cn-home-market-toolbar{flex:0 0 auto;width:auto}
+.cn-home-premium-chart path.cn-home-curve.is-stale{stroke-dasharray:3 4;opacity:.7}
+.cn-home-stale-note{display:flex;align-items:center;gap:6px;margin:6px 2px 0;color:#8a93a3;font-size:11px}
+.cn-home-stale-note i{width:18px;border-top:2px dashed #a0a8b5}
+@media (min-width: 641px) {
+  .cn-home .cn-home-ovbar{padding:10px 18px}
+  .cn-home .cn-home-ovbar-row{display:flex;align-items:center;gap:0;height:32px}
+  .cn-home .cn-home-ovbar-row>.cn-home-ovbar-cell{flex:0 0 auto;height:32px;padding:0 24px;overflow:visible}
+  .cn-home .cn-home-ovbar-row>.cn-home-ovbar-cell:first-child{padding-left:0}
+  .cn-home .cn-home-ovbar-row>.cn-home-ovbar-cell+.cn-home-ovbar-cell{border-left:1px solid #eef0f3}
+  .cn-home .cn-home-ovbar-label{flex:0 0 auto;width:auto;margin-right:6px}
+  .cn-home .cn-home-ovbar .cn-home-metric-value{font-size:17px}
+  .cn-home .cn-home-ovbar-end{margin-left:auto;gap:10px}
+  .cn-home .cn-home-ovbar-time{display:inline-flex;align-items:center;gap:6px;font-size:11px}
+  [data-theme="dark"] .cn-home .cn-home-ovbar-row>.cn-home-ovbar-cell+.cn-home-ovbar-cell{border-left-color:#ffffff14}
+}
+@media (max-width: 640px) {
+  .cn-home .cn-home-ovbar-row>.cn-home-ovbar-cell.is-link,.cn-home .cn-home-ovbar-time{display:none}
+  .cn-home-market-controls{padding:0 13px 10px}
+  .cn-home-market-controls>.cn-home-chips{flex-basis:100%}
+  .cn-home-market-controls>.cn-home-market-toolbar{width:100%;justify-content:space-between}
+}
