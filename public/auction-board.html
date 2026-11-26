@@ -3,384 +3,381 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
     <title>纳指期指与ETF竞价看板</title>
     <style>
-      /* v2（2026-10-31）：主屏只留「下一步」主卡 + NQ + 持仓 + 行情；工具进右下角抽屉；设置/说明进弹层；同一时间只开一个弹层。配色红涨绿跌。 */
-      :root { --bg:#f4f6fb; --card:#fff; --ink:#0f172a; --ink2:#334155; --sub:#64748b; --mute:#94a3b8; --line:#e5e9f2; --line2:#f1f5f9;
-        --up:#e5484d; --down:#16a34a; --brand:#4f46e5; --brandS:#eef2ff; --zone:#dcfce7; --zoneS:#fee2e2; --warn:#b45309; --r:14px; }
+      /* v3（2026-11-26）：单列、无卡片。主屏 = 一句结论 + 一条偏离轴 + 四个数 + 极简列表；信号 / 参数 / 工具 / 基金详情进弹层，同一时间只开一个。
+         顶部两个页签：盘中 / 过夜（原隔夜轮动与停牌轮动合并为一条过夜规则）。配色红涨绿跌。 */
+      :root { --bg:#faf9f7; --card:#fff; --ink:#1a1a1a; --ink2:#3f3f46; --sub:#77777f; --mute:#a8a8ae; --line:#e9e7e3; --line2:#f1efec; --soft:#f5f4f1; --sel:#f3f1ed;
+        --up:#e5484d; --down:#16a34a; --zone:rgba(22,163,74,.11); --warn:#b26a00; }
       * { box-sizing:border-box; margin:0; padding:0; }
       html, body { background:var(--bg); color:var(--ink); }
       body { font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif;
-        font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums; }
+        font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums; }
       button { font:inherit; color:inherit; cursor:pointer; border:0; background:none; }
       input, select { font:inherit; color:inherit; }
       .up { color:var(--up); } .dn { color:var(--down); }
+      .wn { color:var(--warn); }
       .hide { display:none !important; }
       .num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+      .sp { flex:1; }
 
       /* ---------- 顶栏 ---------- */
-      .top { position:sticky; top:0; z-index:30; background:rgba(255,255,255,.94); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
-      .top-in { max-width:1280px; margin:0 auto; display:flex; align-items:center; gap:10px; padding:10px 20px; }
-      .logo { display:flex; align-items:center; gap:8px; font-weight:800; font-size:16px; white-space:nowrap; }
-      .logo i { width:22px; height:22px; border-radius:7px; background:linear-gradient(135deg,#4f46e5,#7c3aed); display:inline-block; }
-      .modes { display:inline-flex; background:#eef1f7; border-radius:10px; padding:3px; gap:2px; }
-      .modes button { padding:6px 12px; border-radius:8px; font-weight:600; color:var(--sub); white-space:nowrap; line-height:1.2; text-align:left; }
-      .modes button small { display:block; font-size:10.5px; font-weight:500; color:var(--mute); }
-      .modes button.on { background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(15,23,42,.12); }
-      .modes .lock { font-size:10px; color:var(--brand); margin-left:3px; font-weight:700; }
-      .sp { flex:1; }
-      .phase { display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:999px; background:#f1f5f9; font-size:12px; color:var(--sub); white-space:nowrap; font-weight:600; }
-      .phase:hover { background:#e9edf5; }
-      .phase .dot { width:8px; height:8px; border-radius:50%; background:var(--mute); flex:none; }
-      .phase.live { background:#ecfdf3; color:#15803d; } .phase.live .dot { background:#22c55e; box-shadow:0 0 0 3px #bbf7d0; animation:pulse 1.6s infinite; }
-      .phase.auc { background:#fff7ed; color:#c2410c; } .phase.auc .dot { background:#f97316; box-shadow:0 0 0 3px #fed7aa; animation:pulse 1.6s infinite; }
-      .phase .err { width:7px; height:7px; border-radius:50%; background:var(--up); display:none; }
-      .phase.bad .err { display:inline-block; }
-      @keyframes pulse { 50% { box-shadow:0 0 0 1px transparent; } }
-      .ib { width:36px; height:36px; border-radius:10px; display:inline-grid; place-items:center; font-size:17px; position:relative; flex:none; }
-      .ib:hover { background:#f1f5f9; }
-      .ib .bd { position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:#22c55e; border:2px solid #fff; display:none; }
-      #ntf.on .bd { display:block; }
-      #refresh.busy { animation:spin 1s linear infinite; }
+      .top { position:sticky; top:0; z-index:30; background:rgba(250,249,247,.9); backdrop-filter:blur(14px); }
+      .top-in { max-width:920px; margin:0 auto; display:flex; align-items:center; gap:6px; padding:14px 24px 12px; }
+      .logo { display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; letter-spacing:.02em; margin-right:22px; white-space:nowrap; }
+      .modes { display:flex; gap:20px; }
+      .modes button { color:var(--sub); padding:4px 0; position:relative; white-space:nowrap; }
+      .modes button:hover { color:var(--ink); }
+      .modes button.on { color:var(--ink); font-weight:600; }
+      .modes button.on::after { content:""; position:absolute; left:0; right:0; bottom:-13px; height:2px; background:var(--ink); }
+      .phase { display:flex; align-items:center; gap:7px; color:var(--sub); font-size:13px; padding:6px 10px; border-radius:8px; margin-right:4px; white-space:nowrap; }
+      .phase:hover { background:var(--soft); }
+      .phase #clock { color:var(--ink); font-weight:500; }
+      .phase .dot { width:6px; height:6px; border-radius:50%; background:var(--mute); flex:none; }
+      .phase.live .dot { background:var(--down); animation:bl 2s ease-in-out infinite; }
+      .phase.auc .dot { background:#e08a1e; animation:bl 2s ease-in-out infinite; }
+      .phase .err { display:none; font-size:12px; color:var(--up); }
+      .phase.bad .err { display:inline; }
+      @keyframes bl { 50% { opacity:.3; } }
+      .ib { width:34px; height:34px; border-radius:8px; display:inline-grid; place-items:center; position:relative; color:var(--sub); flex:none; }
+      .ib:hover { background:var(--soft); color:var(--ink); }
+      .ib svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+      .ib em { position:absolute; top:2px; right:0; min-width:15px; height:15px; border-radius:8px; background:var(--ink); color:var(--bg); font-size:10px; line-height:15px; font-weight:600; font-style:normal; padding:0 4px; text-align:center; }
+      .ib em.z { display:none; }
+      #refresh.busy svg { animation:spin 1s linear infinite; }
       @keyframes spin { to { transform:rotate(360deg); } }
-      .prog { height:3px; background:#eef1f7; } .prog i { display:block; height:100%; width:0; background:linear-gradient(90deg,#818cf8,var(--brand)); }
-      .pop { position:fixed; z-index:40; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 30px rgba(15,23,42,.14); padding:12px 14px; width:280px; font-size:13px; }
-      .pop .ttl { font-weight:700; margin-bottom:6px; }
-      .pop .r { display:flex; justify-content:space-between; align-items:center; padding:4px 0; }
+      .prog { height:1px; background:var(--line); } .prog i { display:block; height:1px; width:0; background:var(--ink); transition:width 1s linear; }
+      .pop { position:fixed; z-index:40; background:var(--card); border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.14), 0 0 0 1px var(--line); padding:12px 16px; width:290px; font-size:13px; }
+      .pop .ttl { font-weight:600; margin-bottom:4px; }
+      .pop .r { display:flex; justify-content:space-between; align-items:center; padding:6px 0; }
       .pop .r small { color:var(--mute); }
       .pop hr { border:0; border-top:1px solid var(--line); margin:8px 0; }
       .meta { display:block; }
-      .src { display:flex; align-items:center; gap:6px; }
-      .sdot { width:8px; height:8px; border-radius:50%; background:var(--mute); display:inline-block; }
-      .sdot[data-s="ok"] { background:#22c55e; } .sdot[data-s="err"] { background:var(--up); }
+      .src { display:flex; align-items:center; gap:8px; }
+      .sdot { width:6px; height:6px; border-radius:50%; background:var(--mute); display:inline-block; }
+      .sdot[data-s="ok"] { background:var(--down); } .sdot[data-s="err"] { background:var(--up); }
       .segs { display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
-      .segs span { font-size:11px; color:var(--sub); padding:3px 8px; border-radius:6px; background:#f1f5f9; white-space:nowrap; }
-      .segs span.on { background:var(--ink); color:#fff; }
-      .bar-p { height:4px; background:#e2e8f0; border-radius:2px; position:relative; overflow:hidden; margin-top:8px; }
-      .bar-p i { position:absolute; left:0; top:0; bottom:0; background:#22c55e; }
+      .segs span { font-size:11px; color:var(--sub); padding:2px 8px; border-radius:10px; border:1px solid var(--line); white-space:nowrap; }
+      .segs span.on { background:var(--ink); border-color:var(--ink); color:var(--bg); }
+      .bar-p { height:2px; background:var(--line); position:relative; margin-top:10px; }
+      .bar-p i { position:absolute; left:0; top:0; bottom:0; background:var(--ink); }
       .prog-l { display:flex; justify-content:space-between; font-size:10px; color:var(--mute); margin-top:4px; }
 
-      /* ---------- 布局 ---------- */
-      .wrap { max-width:1280px; margin:0 auto; padding:16px 20px 90px; display:grid; gap:14px; }
-      .card { background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:16px; min-width:0; }
-      .lbl { font-size:12px; color:var(--sub); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-      .tag { font-size:11px; border-radius:6px; padding:1px 6px; font-weight:600; }
-      .tag.acct { background:var(--brandS); color:var(--brand); } .tag.stale { background:#fef2f2; color:#dc2626; }
-      .big { font-size:28px; font-weight:800; letter-spacing:-.3px; margin-top:4px; line-height:1.15; }
-      .kv { display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--sub); margin-top:6px; }
-      .kv b { color:var(--ink); font-weight:600; text-align:right; }
-      .kv b.up { color:var(--up); } .kv b.dn { color:var(--down); }
-      .kv > span { white-space:nowrap; }
-      .deck { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(0,1fr); gap:14px; align-items:start; }
-      .side { display:grid; gap:14px; min-width:0; }
+      /* ---------- 主结论 ---------- */
+      .wrap { max-width:920px; margin:0 auto; padding:0 24px 120px; }
+      .hero { padding:56px 0 0; }
+      .eyebrow { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--sub); letter-spacing:.02em; }
+      .eyebrow i { width:7px; height:7px; border-radius:50%; background:var(--mute); flex:none; }
+      .hero[data-s="ready"] .eyebrow { color:var(--down); } .hero[data-s="ready"] .eyebrow i { background:var(--down); }
+      .hero[data-s="block"] .eyebrow { color:var(--warn); } .hero[data-s="block"] .eyebrow i { background:var(--warn); }
+      .hero[data-s="hold"] .eyebrow i { background:var(--ink); }
+      .eyebrow .cd { margin-left:auto; color:var(--sub); } .eyebrow .cd b { color:var(--ink); font-weight:600; margin-left:6px; }
+      .hero h1 { font-size:40px; line-height:1.2; font-weight:650; letter-spacing:-.025em; margin:14px 0 10px; }
+      .hero h1 .hl { color:var(--down); } .hero h1 .hs { color:var(--up); }
+      .hero h1 small { font-size:.5em; font-weight:500; color:var(--sub); letter-spacing:0; }
+      .lead { font-size:15px; color:var(--sub); max-width:640px; line-height:1.65; }
+      .lead .qn { display:block; margin-top:4px; color:var(--warn); font-size:13px; }
 
-      /* 主卡（盘中轮动） */
-      .act h2 { font-size:22px; margin:6px 0 4px; letter-spacing:-.2px; line-height:1.3; }
-      .act h2 .hl, .cyc h2 .hl { color:var(--down); } .act h2 .hs, .cyc h2 .hs { color:var(--up); }
-      .act p { color:var(--ink2); font-size:13px; line-height:1.6; }
-      .act p .qn { display:block; margin-top:4px; color:var(--warn); }
-      .flow { display:flex; align-items:stretch; gap:10px; margin-top:12px; }
+      /* 偏离轴 */
+      .axis { position:relative; height:112px; margin:34px 0 0; }
+      .ax-line { position:absolute; left:0; right:0; top:52px; height:1px; background:var(--line); }
+      .ax-zone { position:absolute; top:30px; height:44px; background:var(--zone); border-radius:6px; cursor:pointer; }
+      .ax-zone span { position:absolute; left:0; top:64px; font-size:11px; color:var(--down); white-space:nowrap; }
+      .ax-thr { position:absolute; top:24px; height:56px; width:0; border-left:1px dashed var(--up); cursor:pointer; }
+      .ax-thr span { position:absolute; left:6px; top:70px; font-size:11px; color:var(--up); white-space:nowrap; }
+      .ax-tk { position:absolute; top:49px; width:1px; height:7px; background:var(--mute); font-style:normal; }
+      .ax-tk span { position:absolute; top:45px; left:0; transform:translateX(-50%); font-size:10.5px; color:var(--mute); }
+      .ax-d { position:absolute; top:52px; width:9px; height:9px; margin:-4.5px 0 0 -4.5px; border-radius:50%; background:var(--mute); opacity:.55; transition:left .8s ease, transform .15s; }
+      .ax-d:hover { transform:scale(1.5); opacity:1; z-index:3; }
+      .ax-d.c2 { background:var(--down); opacity:.6; }
+      .ax-d.c, .ax-d.h { width:15px; height:15px; margin:-7.5px 0 0 -7.5px; opacity:1; z-index:2; box-shadow:0 0 0 4px var(--bg); }
+      .ax-d.c { background:var(--down); } .ax-d.h { background:var(--ink); }
+      .ax-d span { position:absolute; left:50%; transform:translateX(-50%); bottom:24px; font-size:12.5px; font-weight:600; white-space:nowrap; color:var(--ink); }
+      .ax-d.c span { color:var(--down); }
+      .ax-d.lo span { bottom:auto; top:24px; }
+
+      .stats, .ctx { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); border-top:1px solid var(--line); margin-top:22px; }
+      .stats > div, .ctx > div, #hold-kv .kv { padding:16px 16px 14px 0; min-width:0; }
+      .stats > div + div, .ctx > div + div, #hold-kv .kv { padding-left:16px; border-left:1px solid var(--line); }
+      .stats dt, .ctx .lbl, #hold-kv .kv > span { font-size:12px; color:var(--sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+      .stats dd { font-size:24px; font-weight:600; letter-spacing:-.02em; margin-top:2px; }
+      .stats small { font-size:12px; color:var(--mute); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .ctx { margin-top:0; border-bottom:1px solid var(--line); grid-template-columns:minmax(0,1.15fr) minmax(0,1.15fr) repeat(3, minmax(0,1fr)); }
+      .ctx .big, #hold-kv .kv b { font-size:15px; font-weight:600; margin-top:2px; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .ctx .nqv { display:flex; align-items:center; gap:10px; }
+      .ctx small { font-size:11.5px; color:var(--mute); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .ctx small .lp { color:var(--mute); }
+      .spark { width:64px; height:20px; flex:none; }
+      #hold-kv { display:contents; }
+      #hold-kv .kv { display:block; font-size:inherit; } #hold-kv .kv b { text-align:left; }
+      #hold-kv .kv:nth-child(n+4) { display:none; }
+      .tag { font-size:11px; color:var(--mute); margin-left:6px; }
+      .tag.stale { color:var(--up); }
+      .edit { color:var(--sub); text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:3px; }
+
+      /* 两腿：真实盘口与限价参考 */
+      .flow { display:grid; grid-template-columns:1fr 1fr; gap:0 28px; margin-top:4px; border-top:1px solid var(--line); }
       .flow:empty { display:none; }
-      .leg { flex:1; min-width:0; background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
-      .leg.b { background:var(--brandS); border-color:#c7d2fe; }
-      .leg small { font-size:11px; color:var(--sub); display:block; }
-      .leg b { font-size:16px; display:block; margin:2px 0 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-      .leg em { font-style:normal; font-size:12px; color:var(--ink2); }
-      .leg .lp { margin-left:2px; }
-      .leg .dp { display:block; margin-top:6px; font-size:12px; color:var(--warn); line-height:1.5; }
-      .leg .dp.warn { color:#dc2626; }
-      .arrow { align-self:center; font-size:20px; color:var(--mute); }
-      .pt { display:inline-block; font-size:11px; padding:2px 8px; border-radius:6px; font-weight:600; margin-right:6px; }
-      .pt.s { background:#fee2e2; color:#b91c1c; } .pt.b { background:#dcfce7; color:#15803d; } .pt.n { background:#eef1f7; color:var(--ink2); }
-      .spref { margin-top:10px; font-size:12px; color:var(--ink2); background:#f8fafc; border-radius:10px; padding:8px 10px; line-height:1.55; }
-      .spref b.on { color:var(--warn); }
+      .leg { padding:14px 0 2px; min-width:0; }
+      .leg > small { font-size:12px; color:var(--sub); display:block; }
+      .leg > b { font-size:15px; font-weight:600; display:block; margin:1px 0 2px; }
+      .leg > b i { font-style:normal; font-weight:400; font-size:12px; color:var(--mute); margin-left:4px; }
+      .leg em { font-style:normal; font-size:12.5px; color:var(--ink2); }
+      .leg .dp { display:block; margin-top:2px; font-size:12px; color:var(--sub); line-height:1.5; }
+      .leg .dp.warn { color:var(--up); }
+      .acts { display:flex; gap:8px; align-items:center; margin:24px 0 30px; flex-wrap:wrap; }
+      .btn { height:38px; padding:0 16px; border-radius:19px; border:1px solid var(--line); background:transparent; font-weight:500; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; transition:background .15s, border-color .15s; font-size:14px; }
+      .btn:hover { background:var(--soft); border-color:var(--mute); }
+      .btn.pri { background:var(--ink); border-color:var(--ink); color:#fff; }
+      .btn.pri:hover { opacity:.86; background:var(--ink); }
+      .btn.sm { height:30px; padding:0 12px; font-size:12.5px; }
+      .btn:disabled { opacity:.4; cursor:default; }
+      .btn .n:empty { display:none; } .btn .n { font-size:12px; color:var(--sub); }
+      .more, .lnk { color:var(--sub); font-size:13px; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:4px; padding:4px 0; }
+      .more:hover, .lnk:hover { color:var(--ink); text-decoration-color:var(--ink); }
+      .why { margin:-10px 0 30px; padding:14px 0 0; border-top:1px solid var(--line); font-size:13px; color:var(--sub); line-height:1.7; }
+      .why b.on { color:var(--warn); }
       .spref:empty { display:none; }
-      .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
-      .chip { display:inline-flex; gap:4px; align-items:center; padding:4px 10px; border-radius:999px; background:#f1f5f9; font-size:12px; color:var(--sub); white-space:nowrap; }
-      .chip b { color:var(--ink); font-weight:600; }
-      button.chip:hover { background:#e9edf5; }
-      .acts { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; align-items:center; }
-      .btn { padding:8px 13px; border-radius:10px; border:1px solid var(--line); background:#fff; font-weight:600; white-space:nowrap; font-size:13px; }
-      .btn:hover { border-color:#cbd5e1; }
-      .btn.pri { background:var(--brand); border-color:var(--brand); color:#fff; }
-      .btn.sm { padding:5px 10px; font-size:12px; }
-      .btn:disabled { opacity:.45; cursor:default; }
-      .more { font-size:12px; color:var(--brand); font-weight:600; padding:6px 4px; }
-      .why { margin-top:10px; padding:10px 12px; background:#f8fafc; border-radius:10px; font-size:12px; color:var(--ink2); line-height:1.6; }
-      .why .step { margin-bottom:6px; }
-      .rule { display:flex; gap:4px 14px; flex-wrap:wrap; color:var(--sub); }
+      .chips { display:flex; gap:4px 18px; flex-wrap:wrap; margin-top:8px; }
+      .chip { font-size:12.5px; color:var(--sub); white-space:nowrap; }
+      .chip b { color:var(--ink); font-weight:500; border-bottom:1px solid var(--line); }
+      button.chip:hover b { border-color:var(--ink); }
+      .rule { display:none; }
 
-      /* 主卡（隔夜轮动） */
-      .cyc .hd0 { display:flex; align-items:center; gap:8px; }
-      .cyc-ph { margin-left:auto; font-size:11px; font-weight:600; padding:2px 9px; border-radius:999px; background:#f1f5f9; color:var(--sub); white-space:nowrap; }
-      .cyc-ph.on { background:var(--brand); color:#fff; }
-      .cyc-now { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:4px; }
-      .cyc-now .l { min-width:0; flex:1; }
-      .cyc-now small { font-size:12px; color:var(--sub); }
-      .cyc-now h2 { font-size:22px; margin:4px 0 2px; letter-spacing:-.2px; line-height:1.3; }
-      .cyc-now p { font-size:13px; color:var(--ink2); }
-      .cyc-now .cd { text-align:right; }
-      .cyc-now .cd b { display:block; font-size:20px; font-variant-numeric:tabular-nums; }
-      .cyc-g { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-top:14px; }
-      .cyc-s { border:1px solid var(--line); border-radius:12px; padding:11px 12px; min-width:0; }
-      .cyc-s.on { border-color:var(--brand); box-shadow:0 0 0 3px var(--brandS); }
-      .cyc-s .hd { display:flex; justify-content:space-between; align-items:center; gap:6px; }
-      .cyc-s .hd b { font-size:13px; }
-      .cyc-s .stt { font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:#f1f5f9; color:var(--sub); white-space:nowrap; }
-      .cyc-s .stt.now { background:var(--brand); color:#fff; } .cyc-s .stt.done { background:#dcfce7; color:#15803d; } .cyc-s .stt.miss { background:#fef3c7; color:#b45309; }
-      .cyc-s > small { display:block; font-size:11px; color:var(--sub); margin-top:2px; }
-      .cyc-s .pick { font-size:16px; font-weight:700; margin:6px 0 2px; }
+      /* 过夜：三步 */
+      .steps { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); margin-top:30px; border-top:1px solid var(--line); }
+      .cyc-s { padding:18px 20px 6px 0; position:relative; min-width:0; }
+      .cyc-s + .cyc-s { padding-left:20px; border-left:1px solid var(--line); }
+      .cyc-s.on::before { content:""; position:absolute; left:0; right:0; top:-1px; height:2px; background:var(--ink); }
+      .cyc-s + .cyc-s.on::before { left:-1px; }
+      .cyc-s .hd { display:flex; align-items:center; gap:8px; font-size:13px; }
+      .cyc-s .hd b { font-weight:600; }
+      .cyc-s .hd time { color:var(--mute); font-size:12px; }
+      .stt { margin-left:auto; font-size:11.5px; color:var(--mute); white-space:nowrap; }
+      .stt.now { color:var(--ink); font-weight:600; } .stt.done { color:var(--down); } .stt.miss { color:var(--warn); }
+      .cyc-s > small { display:block; font-size:12px; color:var(--mute); margin-top:2px; }
+      .cyc-s .pick { font-size:17px; font-weight:600; margin:12px 0 4px; letter-spacing:-.01em; }
       .cyc-s .pick .hl { color:var(--down); } .cyc-s .pick .hs { color:var(--up); }
-      .cyc-s p { font-size:12px; color:var(--ink2); line-height:1.6; }
-      .cyc-s .why { color:var(--sub); background:none; padding:0; margin:0; border-radius:0; }
+      .cyc-s .pick small { font-size:12px; font-weight:400; color:var(--sub); }
+      .cyc-s p { font-size:12.5px; color:var(--ink2); line-height:1.6; }
+      .cyc-s .why { color:var(--sub); margin:0; padding:0; border:0; font-size:inherit; }
       .cyc-s .spv { display:block; margin-top:4px; color:var(--warn); }
-      .cyc-s .rec { display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap; }
-      .cyc-s .rec label { font-size:11px; color:var(--sub); display:flex; align-items:center; gap:4px; }
-      input.px { width:80px; padding:4px 6px; border:1px solid var(--line); border-radius:7px; font-size:12px; text-align:right; background:#fff; }
-      input.px.ed { border-color:#f59e0b; background:#fffbeb; }
-
-      /* 右侧小卡 */
-      .spark { display:block; width:100%; height:48px; margin-top:6px; }
-      .hold .big { font-size:20px; }
-      .edit { font-size:12px; color:var(--brand); font-weight:600; margin-left:4px; }
+      .cyc-s .rec { display:flex; gap:12px; align-items:center; margin-top:12px; }
+      .cyc-s .rec label { font-size:12px; color:var(--sub); display:flex; align-items:center; gap:6px; }
+      input.px { width:84px; border:0; border-bottom:1px solid var(--line); background:transparent; padding:4px 0; font-size:13px; outline:0; text-align:right; }
+      input.px:focus { border-color:var(--ink); }
+      input.px.ed { border-color:var(--warn); color:var(--warn); }
+      .bg { font-size:12.5px; color:var(--mute); margin-top:22px; padding-top:16px; border-top:1px solid var(--line); line-height:1.7; }
+      .bg .chip { font-size:inherit; }
 
       /* ---------- 行情 ---------- */
-      .mh { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
-      .mh h3 { font-size:16px; }
-      .seg { display:inline-flex; background:#eef1f7; border-radius:10px; padding:3px; }
-      .seg button { padding:5px 11px; border-radius:8px; font-weight:600; font-size:12px; color:var(--sub); white-space:nowrap; }
-      .seg button.on { background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(15,23,42,.12); }
-      .fil { display:flex; gap:6px; flex-wrap:wrap; }
-      .fil button { padding:5px 10px; border-radius:999px; font-size:12px; background:#f1f5f9; color:var(--sub); font-weight:600; white-space:nowrap; }
-      .fil button.on { background:var(--ink); color:#fff; }
-      .cap { font-size:11px; color:var(--mute); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-      .legend { display:flex; gap:12px; font-size:11px; color:var(--sub); flex-wrap:wrap; margin-bottom:8px; }
-      .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
-      .tbl-wrap { overflow-x:auto; }
-      table { width:100%; border-collapse:collapse; font-size:13px; }
-      th { font-size:12px; color:var(--sub); font-weight:600; text-align:right; padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
-      th:first-child, td:first-child { text-align:left; }
-      th.c, td.c { text-align:center; }
-      th button { all:unset; cursor:pointer; }
-      th button:hover, th button[aria-pressed="true"] { color:var(--ink); }
-      td { padding:9px 10px; border-bottom:1px solid var(--line2); text-align:right; white-space:nowrap; }
-      #etf .col-x { display:none; }
-      body.wide #etf .col-x { display:table-cell; }
-      tr.grp td { background:#f8fafc; font-size:12px; color:var(--ink2); padding:7px 10px; text-align:left; cursor:pointer; user-select:none; }
-      tr.grp td small { color:var(--mute); margin-left:6px; }
-      tr.grp .car { display:inline-block; width:14px; color:var(--mute); }
-      tr.spx td:not(.up):not(.dn) { color:#475569; }
-      tr.held td { background:#f8f9ff; }
-      tr.held td:first-child { box-shadow:inset 3px 0 0 var(--brand); }
-      tr.cand td { background:#f3fdf6; }
-      tr.halt td { color:var(--mute); }
-      .fn b { font-weight:600; } .fn small { color:var(--sub); margin-left:6px; font-size:11px; }
-      .st { font-size:11px; padding:2px 8px; border-radius:999px; font-weight:600; background:#f1f5f9; color:var(--sub); white-space:nowrap; }
-      .st.trade { background:#ecfdf3; color:#15803d; } .st.auc { background:#fff7ed; color:#c2410c; } .st.halt { background:#fef2f2; color:#dc2626; }
-      .pill { font-size:11px; padding:2px 7px; border-radius:6px; font-weight:600; white-space:nowrap; }
-      .qa { display:inline-block; margin-left:4px; padding:0 5px; border-radius:5px; font-size:10px; font-weight:700; line-height:16px; vertical-align:1px; } .qR { background:#fee2e2; color:#b91c1c; } .qT { background:#dcfce7; color:#15803d; } .qC { background:#e0e7ff; color:#4338ca; }
-      .rv { display:inline-block; margin-left:4px; padding:0 5px; border-radius:5px; font-size:10px; font-weight:700; line-height:16px; vertical-align:1px; background:#f1f5f9; color:#475569; } .rv.hi { background:#fef3c7; color:#b45309; } .rv.lo { background:#f1f5f9; color:#94a3b8; text-decoration:line-through; text-decoration-thickness:1px; }
-      .pB { background:#dcfce7; color:#15803d; } .pH { background:#e0e7ff; color:#4338ca; } .pS { background:#fee2e2; color:#b91c1c; } .pX { background:#f1f5f9; color:var(--sub); }
-      .devc { font-weight:700; }
-      .ba { color:var(--sub); font-size:12px; }
-      .chk { width:16px; height:16px; cursor:pointer; accent-color:var(--brand); }
-      .chk:disabled { cursor:default; }
-      .hot { color:#dc2626; font-weight:700; }
-      body.v-cyc table.hl-dev td:nth-child(6), body.v-cyc table.hl-dev th:nth-child(6),
-      body.v-cyc table.hl-prem td:nth-child(7), body.v-cyc table.hl-prem th:nth-child(7) { background:#eef2ff; }
-      body.mv-dist .tbl-wrap, body.mv-dist .mlist { display:none !important; }
-      body:not(.mv-dist) .dist { display:none; }
-      /* 偏离分布 */
-      .bars .r { display:grid; grid-template-columns:84px 1fr 54px; align-items:center; height:30px; font-size:12px; }
-      .bars .nm { color:var(--ink2); white-space:nowrap; overflow:hidden; }
-      .bars .nm.h { font-weight:700; color:var(--brand); }
-      .track { position:relative; height:18px; background:#f8fafc; border-radius:5px; }
-      .zone { position:absolute; top:0; bottom:0; background:var(--zone); border-radius:3px; }
-      .zone.s { background:var(--zoneS); }
-      .zero { position:absolute; top:-4px; bottom:-4px; width:1px; background:var(--mute); }
-      .bar { position:absolute; top:4px; height:10px; border-radius:3px; min-width:2px; }
-      .bars .v { text-align:right; font-weight:700; }
-      .bars .halt { position:absolute; top:1px; font-size:11px; color:var(--mute); padding-left:6px; }
-      .axis { display:grid; grid-template-columns:84px 1fr 54px; font-size:10px; color:var(--mute); margin-top:6px; }
-      .axis > div { position:relative; height:12px; }
-      .axis span { position:absolute; transform:translateX(-50%); }
-      /* 手机卡片 */
-      .mlist { display:none; }
-      .msec { font-size:12px; color:var(--sub); display:flex; justify-content:space-between; gap:8px; padding:0 2px 6px; }
-      .items { display:flex; flex-direction:column; gap:8px; }
-      .mgrp { font-size:12px; color:var(--ink2); padding:8px 2px 2px; cursor:pointer; user-select:none; }
-      .mgrp small { color:var(--mute); }
-      .item { background:#fff; border:1px solid var(--line); border-radius:12px; padding:11px 12px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 10px; }
-      .item.held { border-color:#a5b4fc; box-shadow:0 0 0 3px var(--brandS); }
-      .item.cand { border-color:#86efac; }
-      .item.halt { opacity:.6; }
-      .it-n { font-size:15px; font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
-      .it-n small { font-size:11px; color:var(--sub); font-weight:400; }
-      .it-d { font-size:20px; font-weight:800; text-align:right; }
-      .it-m { font-size:11px; color:var(--sub); display:flex; gap:4px 10px; align-items:center; flex-wrap:wrap; }
-      .it-r { font-size:11px; color:var(--mute); text-align:right; }
-      .it-bar { grid-column:span 2; height:6px; background:var(--line2); border-radius:3px; position:relative; margin-top:6px; }
-      .it-bar .z { position:absolute; top:0; bottom:0; background:#bbf7d0; }
-      .it-bar .o { position:absolute; top:-3px; bottom:-3px; width:1px; background:var(--mute); }
-      .it-bar i { position:absolute; top:0; bottom:0; border-radius:3px; min-width:2px; }
+      .mkt { margin-top:44px; }
+      .mh { display:flex; align-items:center; gap:20px; padding-bottom:12px; }
+      .fil { display:flex; gap:18px; }
+      .fil button { color:var(--sub); white-space:nowrap; }
+      .fil button.on { color:var(--ink); font-weight:600; }
+      .cap { font-size:12px; color:var(--mute); white-space:nowrap; margin-left:auto; display:flex; gap:8px; align-items:center; }
+      .lh, .row { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(110px,1.2fr) 60px 74px 70px 62px; gap:0 14px; align-items:center; }
+      .lh { font-size:12px; color:var(--mute); padding:8px 10px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+      .lh span { text-align:right; white-space:nowrap; } .lh span:first-child, .lh span:nth-child(2) { text-align:left; }
+      .lh [data-k] { cursor:pointer; } .lh [data-k]:hover, .lh [data-k].on { color:var(--ink); }
+      .g { display:flex; align-items:baseline; gap:10px; padding:22px 10px 8px; cursor:pointer; font-size:12px; color:var(--mute); }
+      .g b { font-size:13px; color:var(--ink); font-weight:600; white-space:nowrap; }
+      .g span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .g em { font-style:normal; margin-left:auto; white-space:nowrap; opacity:0; transition:opacity .15s; } .g:hover em { opacity:1; }
+      .row { padding:0 10px; height:50px; border-radius:10px; cursor:pointer; transition:background .12s; }
+      .row:hover { background:var(--sel); }
+      .row > div { text-align:right; white-space:nowrap; }
+      .nm { text-align:left !important; display:flex; align-items:baseline; gap:8px; min-width:0; overflow:hidden; }
+      .nm b { font-weight:500; font-size:15px; }
+      .nm > span:nth-child(2) { font-size:12px; color:var(--mute); }
+      .row.held .nm b { font-weight:700; }
+      .row.halt, .row.halt .dv, .row.halt .c3 { color:var(--mute); }
+      .dv { font-size:15px; font-weight:600; }
+      .c3, .c4 { font-size:13px; } .c4 { color:var(--ink2); }
+      .hot { color:var(--up); }
+      .pill, .st, .qa { font-size:11px; padding:1px 7px; border-radius:10px; border:1px solid var(--line); color:var(--sub); white-space:nowrap; position:relative; top:-1px; font-weight:400; }
+      .pH, .pS { background:var(--ink); border-color:var(--ink); color:var(--bg); }
+      .pB { border-color:var(--down); color:var(--down); }
+      .st.halt { border-color:transparent; padding:0; color:var(--up); overflow:hidden; text-overflow:ellipsis; }
+      .qR { border-color:var(--warn); color:var(--warn); }
+      .rv { font-size:12px; color:var(--sub); } .rv.hi { color:var(--ink); font-weight:600; } .rv.lo { color:var(--mute); }
+      .leg .rv { margin-left:8px; font-weight:400; }
+      .dbar { position:relative; height:18px; display:block; }
+      .dbar::before { content:""; position:absolute; left:0; right:0; top:9px; height:1px; background:var(--line); }
+      .dbar .z { position:absolute; top:4px; bottom:4px; background:var(--zone); border-radius:3px; }
+      .dbar .o { position:absolute; top:5px; bottom:5px; width:1px; background:var(--mute); }
+      .dbar i { position:absolute; top:5px; width:8px; height:8px; margin-left:-4px; border-radius:50%; background:var(--mute); transition:left .8s ease; }
+      .dbar i.c { background:var(--down); } .dbar i.h { background:var(--ink); box-shadow:0 0 0 3px var(--bg); } .dbar i.t { background:var(--up); }
+      .row:hover .dbar i.h { box-shadow:0 0 0 3px var(--sel); }
+      .empty { color:var(--mute); font-size:13px; padding:30px 0; text-align:center; }
+      .foot { display:flex; gap:22px; margin-top:44px; padding-top:18px; border-top:1px solid var(--line); flex-wrap:wrap; }
+      .foot button { font-size:12.5px; color:var(--mute); } .foot button:hover { color:var(--ink); }
+      #ntf.on::after { content:" · 已开"; }
+      .mbar { display:none; }
 
-      /* 页脚 */
-      .foot { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; padding:2px 0 6px; }
-      .foot button { font-size:12px; color:var(--sub); padding:6px 10px; border-radius:8px; }
-      .foot button:hover { background:#e9edf5; color:var(--ink); }
-      .foot b { color:var(--ink); }
-
-      /* 工具 FAB */
-      .fab { position:fixed; right:20px; bottom:20px; z-index:25; display:flex; align-items:center; gap:8px; background:var(--ink); color:#fff; padding:11px 16px; border-radius:999px; font-weight:700; box-shadow:0 10px 30px rgba(15,23,42,.25); }
-      .fab .n { background:#fbbf24; color:var(--ink); border-radius:999px; font-size:11px; padding:0 6px; line-height:18px; }
-      .fab .n:empty { display:none; }
-
-      /* 弹层 / 抽屉：同一时间只开一个 */
-      .mask { position:fixed; inset:0; background:rgba(15,23,42,.38); z-index:50; }
-      .sheet { position:fixed; z-index:60; background:#fff; display:flex; flex-direction:column; max-height:100%; box-shadow:0 20px 50px rgba(15,23,42,.22); }
-      .sheet.drawer { top:0; right:0; bottom:0; width:600px; max-width:100%; border-left:1px solid var(--line); animation:inR .2s ease; }
-      .sheet.modal { left:50%; top:50%; transform:translate(-50%,-50%); width:500px; max-width:calc(100% - 24px); max-height:86vh; border-radius:18px; animation:inF .18s ease; }
-      @keyframes inR { from { transform:translateX(30px); opacity:0; } }
+      /* ---------- 弹层 / 抽屉：同一时间只开一个 ---------- */
+      .mask { position:fixed; inset:0; background:rgba(20,20,20,.28); z-index:50; }
+      .sheet { position:fixed; z-index:60; background:var(--card); display:flex; flex-direction:column; max-height:100%; box-shadow:0 24px 80px rgba(0,0,0,.16); }
+      .sheet.drawer { top:12px; right:12px; bottom:12px; width:560px; max-width:calc(100% - 24px); border-radius:18px; animation:inR .26s cubic-bezier(.2,.8,.2,1); }
+      .sheet.drawer.narrow { width:440px; }
+      .sheet.modal { left:50%; top:50%; transform:translate(-50%,-50%); width:500px; max-width:calc(100% - 24px); max-height:86vh; border-radius:18px; animation:inF .2s ease; }
+      @keyframes inR { from { transform:translateX(24px); opacity:0; } }
       @keyframes inF { from { opacity:0; } }
-      .sh { display:flex; align-items:center; gap:10px; padding:16px 18px 10px; }
-      .sh h4 { margin:0; font-size:17px; flex:1; }
-      .sh h4 small { color:var(--sub); font-weight:400; font-size:12px; display:block; }
-      .tabs { display:flex; gap:2px; padding:0 18px; border-bottom:1px solid var(--line); overflow-x:auto; flex:none; }
-      .tabs button { padding:9px 10px; color:var(--sub); font-weight:600; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
-      .tabs button.on { color:var(--ink); border-color:var(--ink); }
-      .sb { padding:6px 18px 20px; overflow:auto; flex:1; min-height:0; }
+      .sh { display:flex; align-items:flex-start; gap:10px; padding:24px 24px 14px; }
+      .sh h4 { margin:0; font-size:20px; font-weight:650; letter-spacing:-.015em; flex:1; line-height:1.3; }
+      .sh h4 small { color:var(--sub); font-weight:400; font-size:12.5px; display:block; letter-spacing:0; margin-top:4px; }
+      .sh h4 i { font-style:normal; font-weight:400; font-size:13px; color:var(--mute); margin-left:6px; letter-spacing:0; }
+      .tabs { display:flex; gap:20px; padding:0 24px; border-bottom:1px solid var(--line); overflow-x:auto; flex:none; }
+      .tabs button { padding:8px 0 11px; color:var(--sub); border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+      .tabs button.on { color:var(--ink); font-weight:600; border-color:var(--ink); }
+      .sb { padding:14px 24px 24px; overflow:auto; flex:1; min-height:0; }
+      .sf { padding:14px 24px 20px; display:flex; gap:8px; align-items:center; flex:none; }
       .pane { display:none; } .pane.on { display:block; }
-      .grp-h { font-size:11px; font-weight:700; color:var(--mute); margin:16px 0 4px; letter-spacing:.06em; }
-      .srow { display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:13px; padding:10px 0; border-bottom:1px solid var(--line2); }
-      .srow > span { font-weight:600; min-width:0; }
-      .srow small { display:block; font-size:11.5px; color:var(--mute); font-weight:400; line-height:1.45; }
-      .srow input { width:100px; padding:7px 9px; border:1px solid var(--line); border-radius:9px; text-align:right; flex:none; background:#fff; }
-      .srow select { max-width:240px; padding:7px 9px; border:1px solid var(--line); border-radius:9px; background:#fff; }
-      .srow input.amt { width:120px; }
-      .x { font-size:20px; color:var(--sub); line-height:1; width:34px; height:34px; border-radius:10px; }
-      .x:hover { background:#f1f5f9; }
-      .note { font-size:12px; color:var(--sub); line-height:1.7; margin-top:10px; }
-      .note b { color:var(--ink); }
+      .sheet .acts { margin:18px 0 0; }
+      .sheet .lbl { font-size:12px; color:var(--sub); margin-top:14px; }
+      .grp-h { font-size:12px; font-weight:600; color:var(--sub); margin:22px 0 6px; }
+      .srow { display:flex; justify-content:space-between; align-items:center; gap:16px; font-size:14px; padding:14px 0; border-bottom:1px solid var(--line2); }
+      .srow > span { font-weight:500; min-width:0; }
+      .srow small { display:block; font-size:12px; color:var(--mute); font-weight:400; line-height:1.5; margin-top:2px; }
+      .srow input, .srow select { width:104px; height:36px; padding:0 10px; border:1px solid var(--line); border-radius:10px; text-align:right; flex:none; background:var(--card); outline:0; }
+      .srow select { width:auto; max-width:260px; text-align:left; }
+      .srow input:focus, .srow select:focus, .tl-form select:focus, .tl-form input:focus { border-color:var(--ink); }
+      .srow input.amt { width:124px; }
+      .x { font-size:20px; color:var(--mute); line-height:1; width:32px; height:32px; border-radius:16px; flex:none; }
+      .x:hover { background:var(--soft); color:var(--ink); }
+      .note { font-size:13px; color:var(--sub); line-height:1.8; margin-top:12px; }
+      .note b { color:var(--ink); font-weight:600; }
       .log { list-style:none; }
-      .log li { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line2); font-size:13px; }
-      .log li span:first-child { color:var(--mute); width:44px; flex:none; }
+      .log li { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line2); font-size:13.5px; color:var(--ink2); }
+      .log li span:first-child { color:var(--mute); width:44px; flex:none; font-size:12.5px; }
+      .kv { display:flex; justify-content:space-between; gap:10px; font-size:13px; color:var(--sub); padding:7px 0; }
+      .kv b { color:var(--ink); font-weight:500; text-align:right; }
+      .kv b.up { color:var(--up); } .kv b.dn { color:var(--down); }
+      .kv > span { white-space:nowrap; }
       /* 通知（设置 · 通用） */
-      .ntf-hero { display:flex; gap:12px; align-items:center; border-radius:14px; padding:12px 14px; background:#f1f5f9; margin-top:6px; }
-      .ntf-hero i { flex:none; width:36px; height:36px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-size:16px; font-weight:700; color:#fff; background:#94a3b8; }
-      .ntf-hero b { display:block; font-size:14px; } .ntf-hero small { font-size:12px; color:var(--sub); }
-      .ntf-hero[data-s="ok"] { background:#ecfdf5; } .ntf-hero[data-s="ok"] i { background:#16a34a; } .ntf-hero[data-s="ok"] b { color:#15803d; }
-      .ntf-hero[data-s="go"] { background:var(--brandS); } .ntf-hero[data-s="go"] i { background:var(--brand); } .ntf-hero[data-s="go"] b { color:var(--brand); }
-      .ntf-hero[data-s="md"] { background:#fffbeb; } .ntf-hero[data-s="md"] i { background:#f59e0b; } .ntf-hero[data-s="md"] b { color:#b45309; }
-      .ntf-hero[data-s="no"] { background:#fef2f2; } .ntf-hero[data-s="no"] i { background:#ef4444; } .ntf-hero[data-s="no"] b { color:#b91c1c; }
+      .ntf-hero { display:flex; gap:12px; align-items:center; border-radius:14px; padding:12px 14px; background:var(--soft); margin-top:6px; }
+      .ntf-hero i { flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-size:15px; font-weight:700; color:#fff; background:var(--mute); }
+      .ntf-hero b { display:block; font-size:14px; font-weight:600; } .ntf-hero small { font-size:12px; color:var(--sub); }
+      .ntf-hero[data-s="ok"] i { background:var(--down); } .ntf-hero[data-s="go"] i { background:var(--ink); }
+      .ntf-hero[data-s="md"] i { background:var(--warn); } .ntf-hero[data-s="no"] i { background:var(--up); }
       .ntf-chk { list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }
       .ntf-chk li { display:flex; gap:8px; align-items:center; border:1px solid var(--line); border-radius:10px; padding:6px 9px; min-width:0; }
       .ntf-chk li i { flex:none; width:18px; height:18px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-size:11px; font-weight:700; color:#fff; }
       .ntf-chk li span { display:block; font-size:12px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       .ntf-chk li em { display:block; font-style:normal; font-size:11px; color:var(--mute); }
-      .ntf-chk .ok i { background:#16a34a; } .ntf-chk .no i { background:#ef4444; } .ntf-chk .md i { background:#f59e0b; }
-      .ntf-tip { border-radius:12px; background:#f8fafc; padding:10px 12px; font-size:12px; color:var(--ink2); margin-top:8px; }
+      .ntf-chk .ok i { background:var(--down); } .ntf-chk .no i { background:var(--up); } .ntf-chk .md i { background:var(--warn); }
+      .ntf-tip { border-radius:12px; background:var(--soft); padding:10px 12px; font-size:12px; color:var(--ink2); margin-top:8px; }
       .ntf-tip b { display:block; font-size:13px; color:var(--ink); margin-bottom:4px; }
       .ntf-tip ol { margin:0; padding-left:18px; line-height:1.7; } .ntf-tip p { margin:6px 0 0; color:var(--mute); }
       .ntf-act { display:flex; gap:8px; margin-top:10px; }
-      .ntf-pri { flex:1; border-radius:10px; padding:10px; font-size:14px; font-weight:600; color:#fff; background:var(--brand); }
-      .ntf-pri.off { background:#fff; color:var(--up); border:1px solid #fecaca; }
-      .ntf-sec2 { border:1px solid var(--line); background:#fff; border-radius:10px; padding:10px 16px; font-size:14px; }
+      .ntf-pri { flex:1; border-radius:19px; height:38px; font-weight:500; color:#fff; background:var(--ink); }
+      .ntf-pri.off { background:transparent; color:var(--up); border:1px solid var(--line); }
+      .ntf-sec2 { border:1px solid var(--line); border-radius:19px; height:38px; padding:0 16px; }
       .ntf-pri:disabled, .ntf-sec2:disabled { opacity:.4; cursor:not-allowed; }
       .ntf-msg { font-size:12px; color:var(--sub); margin:8px 0 0; min-height:16px; text-align:center; }
       /* 工具 · 做T 对比 */
-      .tl-form { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
-      .tl-form label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--sub); min-width:0; }
-      .tl-form select, .tl-form input { padding:8px 9px; border:1px solid var(--line); border-radius:9px; font-size:13px; background:#fff; color:var(--ink); min-width:0; width:100%; }
+      .tl-form { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+      .tl-form label { display:flex; flex-direction:column; gap:6px; font-size:12px; color:var(--sub); min-width:0; }
+      .tl-form select, .tl-form input { height:38px; padding:0 10px; border:1px solid var(--line); border-radius:10px; font-size:13.5px; background:var(--card); color:var(--ink); min-width:0; width:100%; outline:0; }
       .tl-form input { text-align:right; }
-      .tl-form input:disabled { background:#f8fafc; }
-      .tl-st { font-size:12px; color:var(--sub); }
-      .tl-kpi { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; margin-top:12px; }
-      .tl-kpi div { background:#f8fafc; border-radius:10px; padding:8px 10px; min-width:0; }
-      .tl-kpi span { display:block; font-size:11px; color:var(--sub); }
-      .tl-kpi b { font-size:16px; }
-      .tl-kpi small { display:block; font-size:11px; color:var(--mute); }
-      .tl table, .cyc-log table { margin-top:10px; }
-      .tl td, .tl th, .cyc-log td, .cyc-log th { padding:6px 7px; font-size:12px; }
-      .tl tr.best td { background:#f3fdf6; }
-      .tl tr.orig td:first-child { box-shadow:inset 3px 0 0 #f59e0b; }
-      .tl-note { margin-top:10px; font-size:11.5px; color:var(--mute); line-height:1.6; }
+      .tl-form input:disabled { background:var(--soft); }
+      .tl-st { font-size:12px; color:var(--mute); margin-left:6px; }
+      .tl-kpi, .cyc-st { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); margin-top:18px; border-top:1px solid var(--line); }
+      .tl-kpi div, .cyc-st div { padding:12px 10px 12px 0; border-bottom:1px solid var(--line); min-width:0; }
+      .tl-kpi span, .cyc-st span { display:block; font-size:12px; color:var(--sub); }
+      .tl-kpi b, .cyc-st b { font-size:17px; font-weight:600; }
+      .tl-kpi small { display:block; font-size:11.5px; color:var(--mute); }
+      .tbl-wrap { overflow-x:auto; }
+      table { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:12px; }
+      th { font-size:12px; color:var(--mute); font-weight:400; text-align:right; padding:8px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
+      th:first-child, td:first-child { text-align:left; padding-left:0; }
+      td { padding:9px 6px; border-bottom:1px solid var(--line2); text-align:right; white-space:nowrap; }
+      td b { font-weight:600; } td small { color:var(--mute); }
+      .tl tr.best td { background:rgba(22,163,74,.06); }
+      .tl tr.orig td:first-child { box-shadow:inset 2px 0 0 var(--warn); padding-left:8px; }
+      .tl-note { margin-top:12px; font-size:12px; color:var(--mute); line-height:1.7; }
       /* 工具 · 模拟切换 */
-      .sim-trig { font-size:12px; padding:8px 10px; border-radius:8px; margin:8px 0 4px; background:#f1f5f9; color:var(--ink2); }
-      .sim-trig.ok { background:var(--zone); color:#166534; }
-      .sim-err { font-size:13px; color:var(--up); padding:10px 0; }
-      .sim-warn { font-size:12px; color:var(--warn); margin-top:6px; line-height:1.5; }
-      .sim-est { margin-top:10px; border-top:1px solid var(--line2); padding-top:8px; }
-      .sim-est .kv b small { font-weight:400; color:var(--sub); margin-left:4px; }
-      .sim-note { font-size:11px; color:var(--mute); margin-top:8px; line-height:1.5; }
-      .sim-acts { display:flex; gap:8px; margin-top:12px; align-items:center; flex-wrap:wrap; }
-      .sim-paper .pi { display:flex; justify-content:space-between; gap:8px; font-size:12px; padding:8px 0; border-bottom:1px solid var(--line2); }
-      .sim-paper .pi span { color:var(--ink2); min-width:0; }
-      .sim-paper .pi small { display:block; color:var(--mute); font-size:11px; }
-      .sim-paper .pi b { text-align:right; }
-      .sim-paper .pi button { color:var(--mute); font-size:14px; }
-      .empty { color:var(--mute); font-size:13px; padding:14px 0; text-align:center; }
-      /* 工具 · 纸面记录（隔夜轮动） */
-      .cyc-st { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; margin-top:10px; }
-      .cyc-st div { background:#f8fafc; border-radius:10px; padding:8px 10px; min-width:0; }
-      .cyc-st span { display:block; font-size:11px; color:var(--sub); }
-      .cyc-st b { font-size:15px; }
-      .cyc-log { margin-top:12px; font-size:12px; }
-      .cyc-log input.px { width:74px; }
-      .lnk { color:var(--brand); font-size:12px; padding:0; }
-      .subseg { margin:12px 0 2px; }
+      .sim-trig { font-size:12.5px; margin:14px 0 6px; color:var(--warn); }
+      .sim-trig.ok { color:var(--down); }
+      .sim-err { font-size:13px; color:var(--up); padding:14px 0; }
+      .sim-warn { font-size:12px; color:var(--warn); margin-top:8px; line-height:1.6; }
+      .sim-est { margin-top:10px; border-top:1px solid var(--line); padding-top:8px; }
+      .sim-est .kv b small { font-weight:400; color:var(--mute); margin-left:6px; }
+      .sim-note { font-size:12px; color:var(--mute); margin-top:10px; line-height:1.7; }
+      .sim-acts { display:flex; gap:14px; margin-top:18px; align-items:center; flex-wrap:wrap; }
+      .sim-paper .pi { display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:12px 0; border-bottom:1px solid var(--line2); }
+      .sim-paper .pi span { color:var(--ink2); min-width:0; flex:1; }
+      .sim-paper .pi small { display:block; color:var(--mute); font-size:12px; }
+      .sim-paper .pi b { text-align:right; font-weight:600; }
+      .sim-paper .pi button { color:var(--mute); font-size:16px; }
+      .cyc-log { margin-top:6px; }
+      .cyc-log input.px { width:70px; }
+      .seg { display:flex; gap:18px; margin:6px 0 2px; }
+      .seg button { color:var(--sub); font-size:13px; } .seg button.on { color:var(--ink); font-weight:600; }
+      /* 基金详情 */
+      .dk { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+      .dk div { padding:12px 0; } .dk span { display:block; font-size:12px; color:var(--sub); } .dk b { font-size:18px; font-weight:600; letter-spacing:-.01em; }
+      .sec { font-size:13px; font-weight:600; margin:24px 0 6px; display:flex; justify-content:space-between; align-items:baseline; }
+      .sec small { font-weight:400; color:var(--mute); font-size:12px; }
+      .depth { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+      .depth table { margin-top:0; } .depth td { padding:4px 0; border:0; } .depth td:first-child { color:var(--mute); }
 
       body:not(.v-cyc) #cyc, body.v-cyc .act { display:none; }
-      body:not(.v-hlt) #hlt, body.v-hlt .act { display:none; }
-      #hlt .hlt-rule { font-size:12px; color:var(--sub); margin-top:10px; line-height:1.6; }
-      @media (max-width:1100px) {
-        .deck { grid-template-columns:minmax(0,1fr); }
-        .side { grid-template-columns:1fr 1fr; }
-        .modes button small { display:none; }
-      }
-      @media (max-width:860px) {
-        .top-in { flex-wrap:wrap; gap:6px 8px; padding:8px 12px; }
-        .logo { font-size:15px; flex:1; } .logo i { width:20px; height:20px; }
-        .modes { order:5; width:100%; } .modes button { flex:1; text-align:center; }
+      @media (max-width:760px) {
+        .top-in { flex-wrap:wrap; padding:12px 16px 0; gap:2px; }
+        .logo { margin-right:0; flex:1; }
+        .modes { order:9; width:100%; gap:22px; padding:10px 0 12px; }
+        .modes button.on::after { bottom:-12px; }
+        .phase .ph-t { display:none; }
         #refresh { display:none; }
-        .phase { padding:5px 9px; }
-        .wrap { padding:12px 12px 84px; gap:12px; }
-        .card { padding:14px; }
-        .act h2, .cyc-now h2 { font-size:19px; }
-        .flow { flex-direction:column; } .arrow { transform:rotate(90deg); align-self:flex-start; margin-left:16px; line-height:1; }
-        .cyc-g { grid-template-columns:minmax(0,1fr); }
-        .side { gap:12px; }
-        .nq, .hold { padding:12px; }
-        .big { font-size:20px; } .hold .big { font-size:16px; }
-        .spark, .kv.x2 { display:none; }
-        .nq .lp { display:none; }
-        .tbl-wrap { display:none; }
-        .mlist { display:block; }
-        .mh h3 { font-size:15px; }
-        #cols-btn { display:none; }
-        .fab { right:14px; bottom:14px; padding:10px 14px; }
-        .sheet.drawer, .sheet.modal { left:0; right:0; top:auto; bottom:0; width:auto; max-width:none; transform:none; border-radius:18px 18px 0 0; max-height:88vh; border-left:0; animation:inU .2s ease; padding-bottom:env(safe-area-inset-bottom); }
+        .wrap { padding:0 16px 130px; }
+        .hero { padding-top:32px; }
+        .hero h1 { font-size:28px; }
+        .lead { font-size:14px; }
+        .axis { margin-top:30px; }
+        .stats { grid-template-columns:1fr 1fr; }
+        .stats > div:nth-child(3) { padding-left:0; border-left:0; }
+        .stats > div:nth-child(n+3) { border-top:1px solid var(--line); }
+        .stats dd { font-size:20px; }
+        .ctx { grid-template-columns:1fr 1fr; }
+        #hold-kv .kv { display:none; } #hold-kv .kv:first-child { display:none; }
+        .flow { grid-template-columns:1fr; }
+        .acts .more, .acts .sp { display:none; }
+        .steps { grid-template-columns:1fr; }
+        .cyc-s { padding-bottom:16px; }
+        .cyc-s + .cyc-s { padding-left:0; border-left:0; border-top:1px solid var(--line); }
+        .c3, .c4, .c5 { display:none !important; }
+        .lh, .row { grid-template-columns:minmax(0,1fr) 84px 58px; gap:0 10px; padding-left:4px; padding-right:4px; }
+        .g { padding-left:4px; padding-right:4px; }
+        .row { height:54px; }
+        .nm { flex-wrap:wrap; gap:0 8px; align-content:center; }
+        .foot { gap:14px 20px; }
+        .sheet.drawer, .sheet.drawer.narrow, .sheet.modal { left:0; right:0; top:auto; bottom:0; width:auto; max-width:none; transform:none; border-radius:20px 20px 0 0; max-height:90vh; animation:inU .26s cubic-bezier(.2,.8,.2,1); padding-bottom:env(safe-area-inset-bottom); }
         @keyframes inU { from { transform:translateY(40px); opacity:0; } }
+        .dk { grid-template-columns:1fr 1fr; }
         .tl .hm, .cyc-log .hm { display:none; }
-        .srow input { width:88px; }
+        .mbar { display:flex; position:fixed; left:0; right:0; bottom:0; z-index:28; background:rgba(250,249,247,.92); backdrop-filter:blur(14px); border-top:1px solid var(--line); padding:10px 16px calc(10px + env(safe-area-inset-bottom)); gap:8px; align-items:center; }
+        body.v-cyc .mbar .pri { display:none; }
+        .mbar .t { flex:1; min-width:0; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .mbar .t small { display:block; font-size:12px; color:var(--sub); font-weight:400; overflow:hidden; text-overflow:ellipsis; }
       }
       @media (max-width:400px) {
-        .phase .ph-t { display:none; }
         .ntf-chk { grid-template-columns:1fr; }
       }
     </style>
   </head>
-  <body>
+    <body>
     <header class="top">
       <div class="top-in">
-        <div class="logo"><i></i>纳指轮动</div>
-        <nav class="modes" id="vtabs" aria-label="策略（只切换上方主卡）">
-          <button type="button" class="on" data-v="dev">盘中偏离<small>按 NQ 偏离 · 实时</small></button>
-          <button type="button" data-v="cyc">隔夜轮动<span class="lock">超管</span><small>尾盘低溢价过夜 · 10:30 复牌换仓</small></button>
-          <button type="button" data-v="hlt">停牌轮动<span class="lock">超管</span><small>按次日开盘数定隔夜仓 · 不主动追偏离</small></button>
+        <div class="logo">纳指轮动</div>
+        <nav class="modes" id="vtabs" aria-label="页签">
+          <button type="button" class="on" data-v="dev">盘中</button>
+          <button type="button" data-v="cyc">过夜</button>
         </nav>
         <div class="sp"></div>
-        <button class="phase" id="phase-pill" type="button" aria-haspopup="dialog" aria-controls="live-pop" title="数据源与交易时段"><span class="dot"></span><span class="ph-t" id="phase">—</span><span id="clock">--:--:--</span><span class="err" title="有数据源失败"></span></button>
-        <button class="ib" id="ntf" type="button" title="通知（备用提醒）">🔔<span class="bd"></span></button>
-        <button class="ib" id="refresh" type="button" title="刷新">↻</button>
-        <button class="ib" id="set-open" type="button" title="设置" data-ov="set">⚙</button>
+        <button class="phase" id="phase-pill" type="button" aria-haspopup="dialog" aria-controls="live-pop" title="数据源与交易时段"><span class="dot"></span><span class="ph-t" id="phase">—</span><span id="clock">--:--:--</span><span class="err" title="有数据源失败">数据源异常</span></button>
+        <button class="ib" id="refresh" type="button" title="刷新"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 4v7h-7"/></svg></button>
+        <button class="ib" type="button" title="今日信号" data-ov="info" data-tab="sig"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><em id="foot-sig" class="z">0</em></button>
+        <button class="ib" id="set-open" type="button" title="设置" data-ov="set"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button>
       </div>
       <div class="prog"><i id="prog-i"></i></div>
     </header>
@@ -400,150 +397,104 @@
     </div>
 
     <main class="wrap">
-      <div class="deck">
-        <section class="card act" aria-live="polite">
-          <div class="lbl">盘中轮动 · 下一步</div>
-          <h2 id="act-h">—</h2>
-          <p id="act-p"></p>
-          <div class="flow" id="act-flow"></div>
+      <section class="hero act" id="act" aria-live="polite">
+        <div class="eyebrow"><i></i><span id="act-st">—</span></div>
+        <h1 id="act-h">—</h1>
+        <p class="lead" id="act-p"></p>
+        <div class="axis hide" id="act-axis"></div>
+        <dl class="stats hide" id="act-stats"></dl>
+        <div class="flow" id="act-flow"></div>
+        <div class="acts">
+          <button class="btn" type="button" id="sim-open">模拟切换</button>
+          <button class="btn" type="button" data-ov="tools" data-tab="t">记做T</button>
+          <button class="btn" type="button" id="fab" data-ov="tools" data-tab="p">纸面记录 <span class="n" id="fab-n"></span></button>
+          <span class="sp"></span>
+          <button class="more" type="button" id="why-btn" aria-expanded="false">判断依据</button>
+        </div>
+        <div class="why hide" id="act-why">
+          <div class="step" id="act-step"></div>
           <div class="spref" id="act-sp"></div>
           <div class="chips">
             <button class="chip" type="button" data-ov="set" data-tab="a">高偏离线 <b id="c-thr">+0.1</b></button>
             <button class="chip" type="button" data-ov="set" data-tab="a">低偏离区 <b id="c-zone">−0.50 ~ −0.15</b></button>
             <button class="chip" type="button" data-ov="set" data-tab="c">停牌溢价 <b id="c-halt">10%</b></button>
+            <button class="chip" type="button" data-ov="set" data-tab="a">标普容差 <b id="c-sp">0.1</b></button>
+            <button class="chip" type="button" data-ov="info" data-tab="rule">规则说明</button>
           </div>
-          <div class="acts">
-            <button class="btn pri" type="button" id="sim-open">模拟切换</button>
-            <button class="btn" type="button" data-ov="tools" data-tab="t">记一笔做T</button>
-            <button class="more" type="button" id="why-btn" aria-expanded="false">为什么？</button>
-          </div>
-          <div class="why hide" id="act-why"><div class="step" id="act-step"></div><div class="rule" id="act-rule"></div></div>
-        </section>
-
-        <section class="card cyc" id="cyc" aria-live="polite">
-          <div class="hd0"><span class="lbl">隔夜轮动 · 尾盘低溢价过夜，10:30 复牌换到回归概率高的低偏离 ETF</span><span class="cyc-ph hide" id="cyc-ph">—</span></div>
-          <div class="cyc-now"><div class="l"><small id="cyc-now-l">现在</small><h2 id="cyc-now-h">—</h2><p id="cyc-now-p"></p></div><div class="cd"><small id="cyc-cd-l">下一步</small><b id="cyc-cd">—</b></div></div>
-          <div class="cyc-g">
-            <div class="cyc-s" id="cyc-s1">
-              <div class="hd"><b>① 开盘卖出</b><span class="stt" id="cyc-s1-st">—</span></div>
-              <small>09:30–10:30 · 择机卖掉隔夜仓，空仓等复牌</small>
-              <div class="pick" id="cyc-s1-h">—</div>
-              <p id="cyc-s1-p"></p>
-              <div class="rec"><label>成交价 <input class="px" id="cyc-s1-px" type="number" step="0.001" min="0"/></label><button class="btn sm" type="button" id="cyc-s1-rec">记卖出</button></div>
-            </div>
-            <div class="cyc-s" id="cyc-s2">
-              <div class="hd"><b>② 复牌换仓</b><span class="stt" id="cyc-s2-st">—</span></div>
-              <small>10:30 · 低偏离区内回归概率最高的 ETF（没有则偏离最负），持有到尾盘</small>
-              <div class="pick" id="cyc-s2-h">—</div>
-              <p id="cyc-s2-p"></p>
-              <div class="rec"><label>成交价 <input class="px" id="cyc-s2-px" type="number" step="0.001" min="0"/></label><button class="btn sm" type="button" id="cyc-s2-rec">记买入</button></div>
-            </div>
-            <div class="cyc-s" id="cyc-s3">
-              <div class="hd"><b>③ 尾盘建仓</b><span class="stt" id="cyc-s3-st">—</span></div>
-              <small>14:50 · ETF 溢价全部 &gt; <span id="cyc-thr-t">10</span>% 才拿 LOF，否则最低溢价 ETF</small>
-              <div class="pick" id="cyc-s3-h">—</div>
-              <p id="cyc-s3-p"></p>
-              <div class="rec"><label>成交价 <input class="px" id="cyc-s3-px" type="number" step="0.001" min="0"/></label><button class="btn sm" type="button" id="cyc-s3-rec">记换仓</button></div>
-            </div>
-          </div>
-          <div class="chips"><button class="chip" type="button" data-ov="set" data-tab="b">LOF 线 <b id="c-cyc">10%</b></button><button class="chip" type="button" data-ov="set" data-tab="a">标普容差 <b id="c-sp">0.1</b></button></div>
-          <div class="acts">
-            <button class="btn" type="button" data-ov="tools" data-tab="p" data-sub="cyc">纸面记录 <span id="cyc-n"></span></button>
-            <button class="more" type="button" data-ov="info" data-tab="bt">回测依据</button>
-          </div>
-        </section>
-
-        <section class="card cyc" id="hlt" aria-live="polite">
-          <div class="hd0"><span class="lbl">停牌轮动 · 次日全停牌才隔夜拿 LOF，其余时间不主动换</span><span class="cyc-ph" id="hlt-ph">—</span></div>
-          <div class="cyc-now"><div class="l"><small id="hlt-now-l">现在</small><h2 id="hlt-now-h">—</h2><p id="hlt-now-p"></p></div><div class="cd"><small id="hlt-cd-l">下一步</small><b id="hlt-cd">—</b></div></div>
-          <div class="cyc-g">
-            <div class="cyc-s" id="hlt-s1">
-              <div class="hd"><b>① 当前持仓</b><span class="stt" id="hlt-s1-st">—</span></div>
-              <small>持 LOF：09:35 卖、10:30 买偏离最负；持 ETF：不动</small>
-              <div class="pick" id="hlt-s1-h">—</div>
-              <p id="hlt-s1-p"></p>
-            </div>
-            <div class="cyc-s" id="hlt-s2">
-              <div class="hd"><b>② 新钱买入</b><span class="stt" id="hlt-s2-st">—</span></div>
-              <small>可交易（未停牌）ETF 中偏离最负，09:35 后挂限价</small>
-              <div class="pick" id="hlt-s2-h">—</div>
-              <p id="hlt-s2-p"></p>
-            </div>
-            <div class="cyc-s" id="hlt-s3">
-              <div class="hd"><b>③ 14:55 隔夜</b><span class="stt" id="hlt-s3-st">—</span></div>
-              <small>按实时溢价预判明天几只 ETF 09:30 开盘（溢价 &lt; <span id="hlt-thr-t">10</span>%）</small>
-              <div class="pick" id="hlt-s3-h">—</div>
-              <p id="hlt-s3-p"></p>
-            </div>
-          </div>
-          <div class="hlt-rule">规则：明天 0 只开盘 → 14:55 买 LOF 161130 过夜（NQ00Y 较昨日 15:00 跌超 1% 则不买，改拿偏离最低 ETF）；1–3 只开盘 → 拿其中偏离最低；≥4 只开盘 → 继续拿当前 ETF，只有它明天会停牌才换到会开盘的偏离最低者。持仓按下方行情表「持有」勾选识别。</div>
-          <div class="chips"><button class="chip" type="button" data-ov="set" data-tab="c">停牌溢价 <b id="hlt-c-halt">10%</b></button></div>
-          <div class="acts"><button class="more" type="button" data-ov="info" data-tab="bt">回测依据</button></div>
-        </section>
-
-        <div class="side">
-          <section class="card nq">
-            <div class="lbl"><span>NQ00Y 自昨日 15:00</span><span class="tag stale hide" id="nq-stale">数据过期</span></div>
-            <div class="big" id="nq-pct">—</div>
-            <svg class="spark" id="nq-spark" viewBox="0 0 300 56" preserveAspectRatio="none"></svg>
-            <div class="kv"><span>最新</span><b id="nq-cur">—</b></div>
-            <div class="kv x2"><span>基准</span><b id="nq-base">—</b></div>
-            <div class="kv x2"><span id="nq-src">来源 —</span><b>汇率未计</b></div>
-          </section>
-          <section class="card hold">
-            <div class="lbl">当前持仓 <span class="tag acct hide" id="hold-src">按账户持仓自动识别</span></div>
-            <div class="big" id="hold-name">—</div>
-            <div id="hold-kv"></div>
-            <div class="kv"><span>持仓金额</span><b><span id="hold-amt">—</span><button class="edit" type="button" data-ov="set" data-tab="c" data-focus="act-amt">改</button></b></div>
-          </section>
-        </div>
-      </div>
-
-      <section class="card market">
-        <div class="mh">
-          <h3>行情</h3>
-          <div class="seg" id="mview"><button type="button" class="on" data-mv="tbl">列表</button><button type="button" data-mv="dist">偏离分布</button></div>
-          <div class="fil" id="mseg"><button type="button" class="on" data-f="all">全部</button><button type="button" data-f="zone">低偏离区</button><button type="button" data-f="halt">停牌</button></div>
-          <div class="sp"></div>
-          <span class="cap"><span id="etf-cap">行情时间 —</span><span class="tag stale hide" id="etf-stale">数据过期</span></span>
-          <button class="btn sm" type="button" id="cols-btn" aria-pressed="false">更多列</button>
-        </div>
-        <div class="tbl-wrap"><table id="etf">
-          <thead><tr>
-            <th><button type="button" data-k="name">基金<span></span></button></th>
-            <th class="c">持有</th>
-            <th class="col-x"><button type="button" data-k="st">状态<span></span></button></th>
-            <th><button type="button" data-k="price"><span id="h-price">现价</span><span></span></button></th>
-            <th><button type="button" data-k="pct"><span id="h-pct">涨跌</span><span></span></button></th>
-            <th><button type="button" data-k="dev">偏离<span></span></button></th>
-            <th><button type="button" data-k="prem">溢价<span></span></button></th>
-            <th class="col-x">买一 / 卖一</th>
-            <th><button type="button" data-k="sig">信号<span></span></button></th>
-          </tr></thead>
-          <tbody id="etf-body"></tbody>
-        </table></div>
-        <div class="mlist">
-          <div class="msec"><span id="m-cap">按偏离排序 ↑</span><span id="m-zone"></span></div>
-          <div class="items" id="m-items"></div>
-        </div>
-        <div class="dist">
-          <div class="legend"><span><i style="background:var(--zone)"></i>低偏离区</span><span><i style="background:var(--zoneS)"></i>高偏离线以上</span><span>纳指 100 · 偏离按 NQ00Y</span></div>
-          <div class="bars" id="bars"></div>
-          <div class="axis"><div></div><div id="axis"></div><div></div></div>
+          <div class="rule" id="act-rule"></div>
         </div>
       </section>
 
-      <div class="foot">
-        <button type="button" data-ov="info" data-tab="sig">今日信号 <b id="foot-sig">0</b></button>
+      <section class="hero cyc" id="cyc" aria-live="polite">
+        <div class="eyebrow"><i></i><span id="cyc-now-l">现在</span><span class="cyc-ph hide" id="cyc-ph">—</span><span class="cd"><span id="cyc-cd-l">下一步</span><b id="cyc-cd">—</b></span></div>
+        <h1 id="cyc-now-h">—</h1>
+        <p class="lead" id="cyc-now-p"></p>
+        <div class="steps">
+          <div class="cyc-s" id="cyc-s1">
+            <div class="hd"><b>① 卖出</b><time>09:30</time><span class="stt" id="cyc-s1-st">—</span></div>
+            <small>09:30 开始卖，10:30 前卖完，先空仓</small>
+            <div class="pick" id="cyc-s1-h">—</div>
+            <p id="cyc-s1-p"></p>
+            <div class="rec"><label>成交价 <input class="px" id="cyc-s1-px" type="number" step="0.001" min="0"/></label><button class="lnk" type="button" id="cyc-s1-rec">记卖出</button></div>
+          </div>
+          <div class="cyc-s" id="cyc-s2">
+            <div class="hd"><b>② 买回</b><time>10:30</time><span class="stt" id="cyc-s2-st">—</span></div>
+            <small>低偏离区里回归概率最高的一只，没有就买偏离最低的</small>
+            <div class="pick" id="cyc-s2-h">—</div>
+            <p id="cyc-s2-p"></p>
+            <div class="rec"><label>成交价 <input class="px" id="cyc-s2-px" type="number" step="0.001" min="0"/></label><button class="lnk" type="button" id="cyc-s2-rec">记买入</button></div>
+          </div>
+          <div class="cyc-s" id="cyc-s3">
+            <div class="hd"><b>③ 收盘前换仓</b><time>14:50</time><span class="stt" id="cyc-s3-st">—</span></div>
+            <small>选溢价最低的：有纳指 ETF 溢价低于 <span id="cyc-thr-t">10</span>% 就拿它，否则拿 LOF</small>
+            <div class="pick" id="cyc-s3-h">—</div>
+            <p id="cyc-s3-p"></p>
+            <div class="rec"><label>成交价 <input class="px" id="cyc-s3-px" type="number" step="0.001" min="0"/></label><button class="lnk" type="button" id="cyc-s3-rec">记换仓</button></div>
+          </div>
+        </div>
+        <p class="bg">过夜规则：收盘前选溢价最低的，有纳指 ETF 溢价低于 <button class="chip" type="button" data-ov="set" data-tab="b"><b id="c-cyc">10%</b></button> 就拿那只 ETF，否则拿 LOF 161130。溢价超过停牌溢价的 ETF 第二天会停牌到 10:30，LOF 不停牌。</p>
+        <div class="acts">
+          <button class="btn" type="button" data-ov="tools" data-tab="p" data-sub="cyc">纸面记录 <span class="n" id="cyc-n"></span></button>
+          <span class="sp"></span>
+          <button class="more" type="button" data-ov="info" data-tab="bt">回测依据</button>
+        </div>
+      </section>
+
+      <div class="ctx">
+        <div>
+          <span class="lbl">NQ00Y 自昨日 15:00<span class="tag stale hide" id="nq-stale">数据过期</span></span>
+          <div class="nqv"><div class="big" id="nq-pct">—</div><svg class="spark" id="nq-spark" viewBox="0 0 300 56" preserveAspectRatio="none"></svg></div>
+          <small><span id="nq-cur">—</span> · 基准 <span id="nq-base">—</span></small>
+          <small id="nq-src">来源 —</small>
+        </div>
+        <div>
+          <span class="lbl">当前持仓<span class="tag acct hide" id="hold-src">按账户持仓自动识别</span></span>
+          <div class="big" id="hold-name">—</div>
+          <small>持仓金额 <span id="hold-amt">—</span> <button class="edit" type="button" data-ov="set" data-tab="c" data-focus="act-amt">改</button></small>
+        </div>
+        <div id="hold-kv"></div>
+      </div>
+
+      <section class="mkt">
+        <div class="mh">
+          <nav class="fil" id="mseg"><button type="button" class="on" data-f="all">全部</button><button type="button" data-f="zone">低偏离区</button><button type="button" data-f="halt">停牌</button></nav>
+          <span class="cap"><span id="etf-cap">行情时间 —</span><span class="tag stale hide" id="etf-stale">数据过期</span></span>
+        </div>
+        <div class="lh" id="etf-head"><span data-k="name">基金</span><span data-k="dev">偏离</span><span></span><span class="c3" data-k="pct" id="h-pct">涨跌</span><span class="c4" data-k="prem">溢价</span><span class="c5">回归</span></div>
+        <div id="etf-body"></div>
+      </section>
+
+      <footer class="foot">
         <button type="button" data-ov="info" data-tab="rule">规则</button>
         <button type="button" data-ov="info" data-tab="halt">停牌与口径</button>
         <button type="button" data-ov="info" data-tab="bt">回测说明</button>
-      </div>
+        <button type="button" id="ntf">通知提醒</button>
+      </footer>
     </main>
 
-    <button class="fab" type="button" id="fab" data-ov="tools">🧰 工具 <span class="n" id="fab-n"></span></button>
+    <div class="mbar"><div class="t" id="mb-t">—</div><button class="btn" type="button" data-ov="tools" data-tab="p">记录</button><button class="btn pri" type="button" data-ov="tools" data-tab="sim">模拟切换</button></div>
 
-    <div class="mask hide" id="ov-mask"></div>
+<div class="mask hide" id="ov-mask"></div>
 
     <!-- 工具抽屉：做T 对比 / 模拟切换 / 纸面记录 -->
     <aside class="sheet drawer hide" id="ov-tools" role="dialog" aria-modal="true" aria-label="工具">
@@ -571,7 +522,7 @@
           <div class="sim-acts"><button class="btn pri" type="button" id="sim-rec">记一笔（纸面跟踪）</button><button class="lnk" type="button" data-goto="p" data-sub="sim">查看纸面记录 <span id="sim-n"></span></button></div>
         </div>
         <div class="pane" data-p="p">
-          <div class="seg subseg" id="paper-seg"><button type="button" class="on" data-sub="sim">模拟切换</button><button type="button" data-sub="cyc" id="paper-cyc-b">隔夜轮动</button></div>
+          <div class="seg subseg" id="paper-seg"><button type="button" class="on" data-sub="sim">模拟切换</button><button type="button" data-sub="cyc" id="paper-cyc-b">过夜</button></div>
           <div data-sp="sim">
             <div class="sim-paper" id="sim-paper"></div>
             <div class="empty" id="sim-paper-e">还没有记录。在「模拟切换」里点「记一笔」开始纸面跟踪。</div>
@@ -588,18 +539,18 @@
     <!-- 设置：按策略分组 -->
     <aside class="sheet modal hide" id="ov-set" role="dialog" aria-modal="true" aria-label="设置">
       <div class="sh"><h4>设置<small>改完即生效，存本机浏览器</small></h4><button class="x" type="button" data-close="1" id="close" aria-label="关闭">×</button></div>
-      <div class="tabs" data-for="set"><button type="button" class="on" data-t="a">盘中轮动</button><button type="button" data-t="b" id="set-tab-b">隔夜轮动</button><button type="button" data-t="c">通用</button></div>
+      <div class="tabs" data-for="set"><button type="button" class="on" data-t="a">盘中</button><button type="button" data-t="b" id="set-tab-b">过夜</button><button type="button" data-t="c">通用</button></div>
       <div class="sb">
         <div class="pane on" data-p="a">
           <label class="srow"><span>高偏离线<small>持有偏离 ≥ 此值时标记（百分点）</small></span><input id="trig" type="number" step="0.05" min="0" value="0.1"/></label>
           <label class="srow"><span>低偏离阈值<small>偏离 ≤ −此值时标记（百分点）</small></span><input id="thr" type="number" step="0.05" min="0" value="0.15"/></label>
           <label class="srow"><span>买入下限<small>偏离低于 −此值不买（百分点）</small></span><input id="lo" type="number" step="0.05" min="0" value="0.5"/></label>
-          <label class="srow"><span>标普参照容差<small>标普 ETF 相对 ES00Y 偏离为正且与纳指 ETF 偏离相差在此值内 → 09:30–10:30 隔夜轮动①暂不卖出，10:30 后盘中轮动暂不切换（百分点）</small></span><input id="sp-tol" type="number" step="0.05" min="0" value="0.1"/></label>
+          <label class="srow"><span>标普参照容差<small>标普 ETF 相对 ES00Y 偏离为正且与纳指 ETF 偏离相差在此值内 → 09:30–10:30 过夜①暂不卖出，10:30 后盘中暂不切换（百分点）</small></span><input id="sp-tol" type="number" step="0.05" min="0" value="0.1"/></label>
         </div>
         <div class="pane" data-p="b">
-          <label class="srow"><span>LOF 线<small>收盘时 ETF 溢价全部高于此值才隔夜拿 LOF 161130（%）</small></span><input id="cyc-thr" type="number" step="0.5" min="0" value="10"/></label>
-          <label class="srow"><span>标普参照容差<small>09:30–10:30 ① 暂不卖出的判断（百分点，与盘中轮动共用）</small></span><input id="sp-tol2" type="number" step="0.05" min="0" value="0.1"/></label>
-          <label class="srow"><span>隔夜行情表<small>隔夜轮动视图下，纳指组只列今天 09:30 开盘的（昨收溢价 &lt; 停牌溢价）</small></span><b style="font-size:12px;color:var(--sub)">自动</b></label>
+          <label class="srow"><span>过夜溢价线<small>收盘前有纳指 ETF 溢价低于此值就拿溢价最低的 ETF 过夜，否则拿 LOF 161130（%）</small></span><input id="cyc-thr" type="number" step="0.5" min="0" value="10"/></label>
+          <label class="srow"><span>标普参照容差<small>09:30–10:30 ① 暂不卖出的判断（百分点，与盘中共用）</small></span><input id="sp-tol2" type="number" step="0.05" min="0" value="0.1"/></label>
+          <label class="srow"><span>过夜行情表<small>过夜页签下，纳指组只列今天 09:30 开盘的（昨收溢价 &lt; 停牌溢价）</small></span><b style="font-size:12px;color:var(--sub)">自动</b></label>
         </div>
         <div class="pane" data-p="c">
           <label class="srow"><span>停牌溢价<small>集合竞价时超过即推算停牌至 10:30（%）</small></span><input id="halt-thr" type="number" step="0.5" min="0" value="10"/></label>
@@ -623,19 +574,25 @@
       <div class="tabs" data-for="info"><button type="button" class="on" data-t="sig">今日信号</button><button type="button" data-t="rule">规则</button><button type="button" data-t="halt">停牌与口径</button><button type="button" data-t="bt">回测</button></div>
       <div class="sb">
         <div class="pane on" data-p="sig"><ul class="log" id="log"><li><span></span>暂无</li></ul></div>
-        <div class="pane" data-p="rule"><p class="note" id="rule-txt"></p><p class="note" id="rule-cyc"><b>隔夜轮动</b>：① 09:30–10:30 择机卖掉隔夜仓（标普 ETF 相对 ES00Y 偏离为正且与纳指组中位差在容差内 → 暂不卖出）；② 10:30 复牌后低偏离区内回归概率最高的 ETF（没有则偏离最负），持有到尾盘；③ 14:50 起 ETF 实时溢价全部高于 LOF 线才隔夜拿 LOF 161130，否则拿溢价最低的 ETF。</p></div>
+        <div class="pane" data-p="rule"><p class="note" id="rule-txt"></p><p class="note" id="rule-cyc"><b>过夜</b>：① 09:30 开始卖出昨晚过夜的那只，10:30 前卖完（标普 ETF 相对 ES00Y 偏离为正且与纳指组中位差在容差内 → 暂不卖出）；② 10:30 买回低偏离区内回归概率最高的 ETF（没有则偏离最负），持有到收盘前；③ 14:50 起选溢价最低的过夜：有纳指 ETF 实时溢价低于过夜溢价线就拿那只 ETF，否则拿 LOF 161130。</p></div>
         <div class="pane" data-p="halt"><p class="note">集合竞价/竞价结束时溢价 &gt; <span id="rule-halt">10</span>% → 预计停牌至10:30；连续竞价只认行情真实停牌（停牌标志或无买卖盘）。停牌不参与比较。溢价=现价对东财最新净值（东财参考净值优先，LOF 按最新公布净值约 T−2）；偏离未计汇率与跟踪误差，期指为东财NQ00Y连续合约，换月注意基差。标普 500 ETF 偏离按 ES00Y，只作参照，不参与轮动。</p></div>
         <div class="pane" data-p="bt">
           <p class="note"><b>盘中轮动（纯轮动）</b>：2026-08-25～10-28 的 5 分钟回测（13 只各自作起始持仓，滑点 0.5 tick、佣金万 0.5/边）：低偏离区 −0.50～−0.15、持有偏离 ≥ +0.10 才切，相对一直持有起始基金均值 +2.68%，13 只全正，约 24 次切换。去掉「卖出等回 0」空仓腿：空仓多在 NQ 亚盘下跌时，跨夜反而错过反弹。</p>
           <p class="note"><b>回归概率</b>：偏离首次 ≤ −0.15 后到当日收盘跑赢 12 只中位的比例（腾讯 5 分钟线，最近 5 个月，每月 1 日滚动重算），候选按它优先排序。标签分三档：强 ≥70%（橙）、中 50–69%、弱 &lt;50%（灰色删除线），具体百分比见悬停提示。样本外检验显示它只能作排序参考，绝对数值会随大盘漂移，不要当胜率。回测区间 <span id="rev-asof">—</span>。</p>
           <p class="note"><b>模拟切换预估</b>：同时段历史切换的中位数与四分位区间（2026-08-25～10-28，5 分钟回测）− 佣金。单次切换当天几乎不回归，收益靠反复轮动累积。</p>
-          <p class="note" id="bt-cyc"><b>隔夜轮动</b>：回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</p>
-          <p class="note" id="bt-hlt"><b>停牌轮动</b>：回测 2026-05-07～10-30（5 分钟，每次切换成本 0.06%）：收益 15.43%、切换 28 次，一直持有国泰 9.23%；每天追最低偏离 10.78%、210 次。8-21 起 3.48%（国泰 2.05%），10 月 −3.38%（国泰 −6.75%）。全停牌日仅约 20 天且集中在 10 月，回测用事后实际停牌，实盘靠溢价预判会有误差，仅供参考。</p>
-        </div>
+          <p class="note" id="bt-cyc"><b>过夜</b>：回测 2025-10～2026-10（255 天，对比 12 只 ETF 等权持有）：每次切换成本 0.03% 时日均 +0.07%、胜率 51%；成本 0.05% 时日均 +0.03%。收益主要来自 10:30 买偏离最负（+0.10%/天）。纸面记录默认按卖出用买一、买入用卖一、佣金万 0.5/边计，买入价和卖出价都可以在记录里改成实际成交价；超额 = 持有段收益 − 同期 12 只 ETF 平均。LOF 溢价按最新公布净值（约 T−2）算。</p>
+          </div>
       </div>
     </aside>
+    <!-- 基金详情：点行情行或偏离轴上的点打开 -->
+    <aside class="sheet drawer narrow hide" id="ov-det" role="dialog" aria-modal="true" aria-label="基金详情">
+      <div class="sh"><h4><span id="det-h">—</span><small id="det-sub"></small></h4><button class="x" type="button" data-close="1" aria-label="关闭">×</button></div>
+      <div class="sb" id="det-b"></div>
+      <div class="sf"><button class="btn" type="button" id="det-hold">设为持有</button><span class="sp"></span><button class="btn" type="button" id="det-t">记做T</button><button class="btn pri" type="button" id="det-sim">从持仓切到这只</button></div>
+    </aside>
+
     <script>
-      // 隔夜轮动仅超级管理员可见（2026-10-29）：读同源登录会话与 RBAC 菜单缓存里的角色码，只用于前端展示。
+      // 过夜页签仅超级管理员可见（2026-10-29）：读同源登录会话与 RBAC 菜单缓存里的角色码，只用于前端展示。
       var IS_SUPER = (function () {
         function codes(v) { return (v && Array.isArray(v.roles) ? v.roles : []).map(function (r) { return String((r && r.code) || r || ""); }); }
         try {
@@ -847,7 +804,7 @@
         function spHtml(R, mode) {
           if (R.sp == null) return "标普参照：暂无数据（ES00Y 或标普 ETF 行情不可用，或非交易时段）";
           return "标普参照：标普 ETF 相对 ES00Y 偏离 <b" + (R.close ? ' class="on"' : "") + ">" + f2(R.sp) + "</b>（" + R.n + " 只中位），纳指 ETF 偏离中位 <b>" + f2(R.nq) + "</b>，相差 " + Math.abs(R.nq - R.sp).toFixed(2) +
-            (mode === "dev" ? (R.devBlock ? "。两边同向且接近，是整体性偏离，暂不切换。" : R.devWin ? "。不属于整体性偏离，按规则执行。" : "。10:30 后用于过滤切换（10:30 前看隔夜轮动 ①）。")
+            (mode === "dev" ? (R.devBlock ? "。两边同向且接近，是整体性偏离，暂不切换。" : R.devWin ? "。不属于整体性偏离，按规则执行。" : "。10:30 后用于过滤切换（10:30 前看过夜 ①）。")
               : (R.block ? "。两边同向且接近，是整体性偏离，① 暂不卖出。" : R.cycWin ? "。不属于整体性偏离，① 按计划卖出。" : "。"));
         }
         function spxRows(b) {
@@ -1101,49 +1058,95 @@
 
         function legHtml(kind, r, label) {
           var q = r.q || {}, px = kind === "s" ? q.b1 : q.a1;
-          return '<div class="leg ' + kind + '"><small>' + label + "</small><b>" + esc(r.name) + " " + r.code + (kind === "s" ? "" : revChip(r)) + "</b><em>" +
-            '<span class="pt ' + kind + '">偏离 ' + (r.dev == null ? "—" : f2(r.dev)) + "</span>" +
-            (px > 0 ? '<span class="lp">' + (kind === "s" ? "买一 " : "卖一 ") + px.toFixed(3) + "（" + (kind === "s" ? q.b1v : q.a1v) + "手）</span>" : "") + depthHtml(r, kind) + "</em></div>";
+          return '<div class="leg ' + kind + '"><small>' + label + "</small><b>" + esc(r.name) + "<i>" + r.code + "</i>" + (kind === "s" ? "" : revChip(r)) + "</b><em>" +
+            "偏离 " + (r.dev == null ? "—" : minus(f2(r.dev))) +
+            (px > 0 ? '<span class="lp"> · ' + (kind === "s" ? "买一 " : "卖一 ") + px.toFixed(3) + "（" + (kind === "s" ? q.b1v : q.a1v) + "手）</span>" : "") + depthHtml(r, kind) + "</em></div>";
         }
 
+        // act.st：off 非交易时段 / nohold 未设置持仓 / halt 持仓停牌 / wait 等行情 / hold 继续持有 / block 整体性偏离暂缓 / ready 可切换；多只持仓取最需要操作的一只
         function decide(list, b) {
-          var T = S.trig, act = { h: "", p: "", flow: "" };
+          var T = S.trig, act = { h: "", p: "", flow: "", st: "off", ntf: false, held: null, dip: null, nc: 0 };
           var cands = list.filter(function (r) { return !r.held && inZone(r) && !qBlocks(r); }).sort(byRev);
           var qSkip = list.filter(function (r) { return !r.held && inZone(r) && qBlocks(r); });
           var qNote = qSkip.map(function (r) { return '<span class="qn">' + esc(r.name) + " 偏离 " + f2(r.dev) + " 在低偏离区，但今日" + esc((S.quota[r.code] || {}).txt || "份额放开") + "。</span>"; }).join("");
           list.forEach(function (r) { var q = S.quota[r.code]; if (r.held && q && q.k === "relax") qNote = '<span class="qn">雷达：' + esc(r.name) + " 今日份额放开（" + esc(q.txt || "") + "）。</span>" + qNote; });
           cands.forEach(function (r, i) { r.cand = i + 1; });
           var dip = cands[0], hl = list.filter(function (r) { return r.held; });
+          act.dip = dip || null; act.held = hl[0] || null; act.nc = cands.length;
           if (!inWin(b)) {
             act.h = "非交易时段";
             act.p = "偏离只在交易日 09:15–15:00 计算。高偏离线 +" + T + "，低偏离区 " + zoneTxt() + "（均为你的设置）。";
             return act;
           }
           if (!hl.length) {
-            if (dip) { act.h = '低偏离最低：<span class="hl">' + esc(dip.name) + "</span>"; act.p = esc(dip.name) + " 偏离 " + f2(dip.dev) + "，在低偏离区 " + zoneTxt() + "。" + qNote; act.flow = legHtml("b", dip, "低偏离①"); }
+            act.st = "nohold";
+            if (dip) { act.ntf = true; act.h = '最低偏离 <span class="hl">' + esc(dip.name) + "</span>"; act.p = esc(dip.name) + " 偏离 " + f2(dip.dev) + "，在低偏离区 " + zoneTxt() + "。" + qNote; act.flow = legHtml("b", dip, "低偏离①"); }
             else { act.h = "未设置持仓"; act.p = "暂无偏离在 " + zoneTxt() + " 的标的。" + qNote; }
             return act;
           }
-          var hh = [], pp = [], ff = [], R = S.spR || {};
+          var hh = [], pp = [], ff = [], R = S.spR || {}, RANK = { halt: 0, wait: 1, hold: 2, block: 3, ready: 4 }, top = -1;
+          var mark = function (k, h) { if (RANK[k] > top) { top = RANK[k]; act.st = k; act.held = h; } };
           hl.forEach(function (h) {
-            if (h.halt) { hh.push(esc(h.name) + " 停牌中"); pp.push(esc(h.name) + " 停牌，复牌后按当时 NQ 和价格重算。"); return; }
-            if (h.dev == null) { hh.push(esc(h.name) + " 暂无偏离"); pp.push("等待行情。"); return; }
+            if (h.halt) { mark("halt", h); hh.push(esc(h.name) + " 停牌中"); pp.push(esc(h.name) + " 停牌，复牌后按当时 NQ 和价格重算。"); return; }
+            if (h.dev == null) { mark("wait", h); hh.push(esc(h.name) + " 暂无偏离"); pp.push("等待行情。"); return; }
             if (h.dev >= T && dip && R.devBlock) {
-              hh.push(esc(h.name) + " 达高偏离线（整体性偏离）");
+              mark("block", h);
+              hh.push(esc(h.name) + " 暂缓切换");
               pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " 已达高偏离线，标普 ETF 相对 ES00Y 偏离 " + f2(R.sp) + " 也为正、与纳指 ETF 偏离 " + f2(R.nq) + " 接近，是整体性偏离（10:30 后标普参照过滤）。");
-              ff.push('<div class="leg"><small>持有中 · 整体性偏离</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + '</span><span class="lp">候选 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" + depthHtml(h, "s") + "</em></div>");
+              ff.push(legHtml("s", h, "持有中 · 整体性偏离") + legHtml("b", dip, "候选 · 低偏离①"));
             } else if (h.dev >= T && dip) {
-              hh.push('条件满足：<span class="hs">' + esc(h.name) + '</span> 高偏离 / <span class="hl">' + esc(dip.name) + "</span> 低偏离");
+              mark("ready", h); act.ntf = true;
+              hh.push('卖出 <span class="hs">' + esc(h.name) + '</span>，买入 <span class="hl">' + esc(dip.name) + "</span>");
               pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + " ≥ +" + T + "，" + esc(dip.name) + " 偏离 " + f2(dip.dev) + " 在低偏离区，差 " + (h.dev - dip.dev).toFixed(2) + " 个百分点。");
-              ff.push(legHtml("s", h, "持有中 · 高偏离") + '<div class="arrow">↔</div>' + legHtml("b", dip, "低偏离①"));
+              ff.push(legHtml("s", h, "卖出 · 持有中") + legHtml("b", dip, "买入 · 低偏离①"));
             } else {
-              hh.push(esc(h.name) + " 未满足条件");
+              mark("hold", h);
+              hh.push("继续持有 " + esc(h.name));
               pp.push(esc(h.name) + " 偏离 " + f2(h.dev) + (h.dev < T ? "，未到高偏离线 +" + T + "。" : "，已达高偏离线，暂无低偏离区标的。"));
-              ff.push('<div class="leg"><small>持有中</small><b>' + esc(h.name) + " " + h.code + '</b><em><span class="pt n">偏离 ' + f2(h.dev) + "</span>" + (dip ? '<span class="lp">最低偏离 ' + esc(dip.name) + " " + f2(dip.dev) + "</span>" : "") + depthHtml(h, "s") + "</em></div>");
+              ff.push(legHtml("s", h, "持有中") + (dip ? legHtml("b", dip, "候选 · 低偏离①") : ""));
             }
           });
           act.h = hh.join("；"); act.p = pp.join(" ") + qNote; act.flow = ff.join("");
           return act;
+        }
+
+        /* ---------- 主结论下的偏离轴与四个数 ---------- */
+        var ST_TXT = { off: "非交易时段", nohold: "未设置持仓", halt: "持仓停牌", wait: "等待行情", hold: "持有", block: "暂缓", ready: "可切换" };
+        var AX = [-0.7, 0.4];
+        function axX(v) { return +((Math.max(AX[0], Math.min(AX[1], v)) - AX[0]) / (AX[1] - AX[0]) * 100).toFixed(2); }
+        function heroExtra(act, list, b) {
+          AX = [Math.min(-0.7, -S.lo - 0.2), Math.max(0.4, S.trig + 0.3)];
+          $("act").setAttribute("data-s", act.st);
+          $("act-st").textContent = ST_TXT[act.st] || "";
+          var h = act.held, d = act.dip, R = S.spR || {}, ax = "", st = [], live = inWin(b);
+          if (live) {
+            ax = '<div class="ax-zone" data-ov="set" data-tab="a" style="left:' + axX(-S.lo) + "%;width:" + (axX(-S.thr) - axX(-S.lo)).toFixed(2) + '%"><span>低偏离区 ' + zoneTxt() + '</span></div><div class="ax-line"></div>' +
+              '<div class="ax-thr" data-ov="set" data-tab="a" style="left:' + axX(S.trig) + '%"><span>高偏离线 +' + S.trig + '</span></div><i class="ax-tk" style="left:' + axX(0) + '%"><span>0</span></i>';
+            var near = h && d && h.dev != null && Math.abs(h.dev - d.dev) < 0.22;
+            list.forEach(function (r) {
+              if (r.dev == null || r.halt) return;
+              var k = r.held ? "h" : r.cand === 1 ? "c" : r.cand ? "c2" : "";
+              ax += '<button type="button" class="ax-d ' + k + (k === "c" && near ? " lo" : "") + '" data-code="' + r.code + '" style="left:' + axX(r.dev) + '%" title="' + esc(r.name) + " " + f2(r.dev) + '">' +
+                (k === "h" || k === "c" ? "<span>" + esc(r.name) + " " + minus(f2(r.dev)) + "</span>" : "") + "</button>";
+            });
+          }
+          $("act-axis").innerHTML = ax; $("act-axis").classList.toggle("hide", !ax);
+          var cell = function (k, v, sub, c) { return "<div><dt>" + k + '</dt><dd class="' + (c || "") + '">' + v + "</dd>" + (sub ? "<small>" + sub + "</small>" : "") + "</div>"; };
+          if (live && h && h.dev != null) {
+            st.push(cell("持有偏离", minus(f2(h.dev)), esc(h.name), cls(h.dev)));
+            if (d) {
+              st.push(cell("偏离差", (h.dev - d.dev).toFixed(2), "对 " + esc(d.name) + " " + minus(f2(d.dev))));
+              var o = simCalc(h, d, SIM.amt, b);
+              st.push(o.ok ? cell("同时段历史 · 到收盘", pp(o.d0.mid), pp(o.d0.lo) + " ～ " + pp(o.d0.hi), cls(o.d0.mid)) : cell("低偏离区候选", String(act.nc), zoneTxt()));
+            } else {
+              st.push(cell("距高偏离线", h.dev >= S.trig ? "已达" : (S.trig - h.dev).toFixed(2), "高偏离线 +" + S.trig));
+              st.push(cell("低偏离区候选", "0", zoneTxt()));
+            }
+            st.push(cell("标普参照", R.sp == null ? "—" : minus(f2(R.sp)), R.sp == null ? "暂无数据" : R.devBlock ? "整体性偏离" : R.devWin ? "未拦截" : "10:30 后生效", R.devBlock ? "wn" : ""));
+          }
+          $("act-stats").innerHTML = st.join(""); $("act-stats").classList.toggle("hide", !st.length);
+          $("sim-open").classList.toggle("pri", act.st === "ready");
+          if (!document.body.classList.contains("v-cyc")) $("mb-t").innerHTML = (ST_TXT[act.st] || "") + "<small>" + plain(act.h) + "</small>";
         }
 
         /* ---------- 模拟切换 ---------- */
@@ -1406,8 +1409,7 @@
 
         function renderETF() {
           var b = bj(), t = secs(b), auction = weekday(b) && t >= 33300 && t < 34200, ph = phase(b);
-          $("h-price").textContent = auction ? "竞价价" : "现价";
-          $("h-pct").textContent = auction ? "竞价涨跌" : "涨跌";
+                    $("h-pct").textContent = auction ? "竞价涨跌" : "涨跌";
           $("etf-stale").classList.toggle("hide", !(S.etfStale && S.haveEtf));
           var capT = "行情时间 —";
           if (S.etfTime && S.etfTime.length >= 14) { var et = S.etfTime; capT = "行情 " + et.slice(8, 10) + ":" + et.slice(10, 12) + ":" + et.slice(12, 14); }
@@ -1416,12 +1418,12 @@
           $("etf-cap").textContent = capT;
           $("c-thr").textContent = "+" + S.trig; $("c-zone").textContent = zoneTxt(); $("c-halt").textContent = S.haltThr + "%"; $("c-sp").textContent = S.spTol;
           $("hold-amt").textContent = "¥ " + Math.round(SIM.amt).toLocaleString("zh-CN");
-          $("m-zone").textContent = "低偏离区 " + zoneTxt(); $("rule-halt").textContent = S.haltThr;
+          $("rule-halt").textContent = S.haltThr;
           $("rule-txt").textContent = "偏离 = ETF相对昨收涨跌 − NQ自前一交易日15:00涨跌。低偏离区 " + zoneTxt() + "，高偏离线 +" + S.trig + "（均可在设置里改）。页面只展示偏离数据和你设定条件是否满足，不构成投资建议。";
 
           var list = rows();
           S.spR = spRef(list, b);
-          // 隔夜轮动：纳指组只列今天 09:30 开盘的（昨收溢价 < 停牌线）
+          // 过夜页签：纳指组只列今天 09:30 开盘的（昨收溢价 < 停牌线）
           var cycV = document.body.classList.contains("v-cyc"), hidN = 0;
           if (cycV) {
             var all0 = list;
@@ -1431,13 +1433,15 @@
           var act = decide(list, b);
           trackSignals(list, b);
           // 盘中偏离：条件满足时通知；同一条 5 分钟内不重复
-          if (/条件满足：|低偏离最低：/.test(act.h)) {
+          if (act.ntf) {
             var ak = plain(act.h);
             if (ak !== S.ntfAct || Date.now() - (S.ntfActAt || 0) > 3e5) { S.ntfAct = ak; S.ntfActAt = Date.now(); notify("偏离提醒 · " + ak, plain(act.p), "dev-act"); }
           } else S.ntfAct = "";
           list.forEach(function (r) { r.sigObj = sigOf(r); r.sig = r.sigObj ? r.sigObj.o : 9; });
 
           $("act-h").innerHTML = act.h; $("act-p").innerHTML = act.p; $("act-flow").innerHTML = act.flow; $("act-sp").innerHTML = S.spR && S.spR.devWin ? spHtml(S.spR, "dev") : ""; if (document.activeElement !== $("act-amt")) $("act-amt").value = SIM.amt;
+          heroExtra(act, list, b);
+          S.lastAll = cycV ? all0 : list;
           $("act-step").textContent = stepTxt(b);
           $("act-rule").innerHTML = "<span>高偏离线 +" + S.trig + "</span><span>低偏离区 " + zoneTxt() + "</span><span>停牌不参与比较</span>";
 
@@ -1446,7 +1450,7 @@
           $("hold-src").classList.toggle("hide", !S.acct);
           if (!hl.length) {
             $("hold-name").textContent = S.acct ? "空仓" : "未设置";
-            $("hold-kv").innerHTML = '<div class="kv"><span>' + (S.acct ? "账户里没有池内 ETF 持仓" : "在表格“持有”列勾选") + "</span></div>";
+            $("hold-kv").innerHTML = '<div class="kv"><span>' + (S.acct ? "账户里没有池内 ETF 持仓" : "点开一只基金，设为持有") + "</span></div>";
           } else {
             $("hold-name").textContent = hl.map(function (h) { return h.name + " " + h.code; }).join("、");
             var h = hl[0], ri = roundInfo(h, list), kv = [];
@@ -1460,29 +1464,7 @@
             $("hold-kv").innerHTML = kv.map(function (x) { return '<div class="kv' + (x[3] ? " x2" : "") + '"><span>' + esc(x[0]) + '</span><b class="' + x[2] + '">' + esc(x[1]) + "</b></div>"; }).join("");
           }
 
-          // 偏离分布
-          var dv = list.filter(function (r) { return r.dev != null; }).map(function (r) { return r.dev; });
-          var lo = Math.min(-S.lo - 0.2, Math.min.apply(null, dv.concat([0])) - 0.1), hi = Math.max(S.trig + 0.3, Math.max.apply(null, dv.concat([0])) + 0.1);
-          var X = function (v) { return ((v - lo) / (hi - lo) * 100).toFixed(2); };
-          var zl = X(-S.lo), zw = X(-S.thr) - X(-S.lo), sl = X(S.trig), sw = 100 - X(S.trig);
-          var bySort = list.slice().sort(function (a, c) {
-            if (a.dev == null && c.dev == null) return 0; if (a.dev == null) return 1; if (c.dev == null) return -1; return a.dev - c.dev;
-          });
-          $("bars").innerHTML = bySort.map(function (r) {
-            var v = r.dev;
-            return '<div class="r"><div class="nm' + (r.held ? " h" : "") + '">' + esc(r.name) + (r.held ? " ●" : "") + '</div><div class="track">' +
-              '<div class="zone" style="left:' + zl + "%;width:" + zw + '%"></div><div class="zone s" style="left:' + sl + "%;width:" + sw + '%"></div>' +
-              '<div class="zero" style="left:' + X(0) + '%"></div>' +
-              (v == null ? '<div class="halt" style="left:' + X(0) + '%">' + (r.halt ? "停牌" : "—") + "</div>"
-                : '<div class="bar" style="left:' + X(Math.min(0, v)) + "%;width:" + Math.abs(X(v) - X(0)).toFixed(2) + "%;background:" + devColor(r) + '"></div>') +
-              '</div><div class="v ' + (v == null ? "" : cls(v)) + '">' + (v == null ? "—" : f2(v)) + "</div></div>";
-          }).join("");
-          var ticks = [Math.ceil(lo * 2) / 2, -S.lo, -S.thr, 0, S.trig];
-          for (var tk = Math.ceil(lo * 2) / 2 + 0.5; tk < -S.lo - 0.25; tk += 0.5) ticks.push(tk);
-          $("axis").innerHTML = ticks.filter(function (v, i, a) { return v >= lo && v <= hi && a.indexOf(v) === i; })
-            .map(function (v) { return '<span style="left:' + X(v) + '%">' + minus(+v.toFixed(2)) + "</span>"; }).join("");
-
-          // 表格
+          // 行情列表（桌面 / 手机同一份）：每行一条偏离点位条，点行打开详情
           var k = S.sort.k, d = S.sort.d;
           list.sort(function (a, c) {
             var x = a[k], y = c[k];
@@ -1494,68 +1476,33 @@
           });
           var sx = spxRows(b), R0 = S.spR || {}, ep0 = esPct();
           var fOk = function (r) { return S.filter === "zone" ? inZone(r) : S.filter === "halt" ? !!r.halt : true; };
-          var sxT = S.filter === "zone" ? [] : sx.filter(fOk), listT = list.filter(fOk), car = function (g) { return '<span class="car">' + (UI.closed[g] ? "▸" : "▾") + "</span>"; };
-          var spHead = '<tr class="grp" data-g="spx"><td colspan="9">' + car("spx") + '<b>标普 500</b> · 偏离按 ES00Y' + (ep0 == null ? "" : "（ES00Y 自昨日 15:00 " + pctStr(ep0) + "）") + (R0.sp != null ? " · 中位 " + f2(R0.sp) : "") + ' <small>参考，不参与轮动 · ' + sxT.length + ' 只</small></td></tr>';
-          var nqHead = '<tr class="grp" data-g="nq"><td colspan="9">' + car("nq") + '<b>纳指 100</b> · 偏离按 NQ00Y' + (nqPct() == null ? "" : "（NQ00Y 自昨日 15:00 " + pctStr(nqPct()) + "）") + (R0.nq != null ? " · 中位 " + f2(R0.nq) : "") + (cycV ? " <small>只列今天 09:30 开盘的（昨收溢价 &lt; " + S.haltThr + "%）" + (hidN ? "，另 " + hidN + " 只停牌至 10:30 未列" : "") + "</small>" : "") + " <small>" + listT.length + " 只</small></td></tr>";
-          var spBody = UI.closed.spx ? "" : sxT.map(function (r) {
-            var q = r.q, ba = q && !r.halt ? fmt3(q.b1) + " <small>" + (q.b1v || 0) + "</small> / " + fmt3(q.a1) + " <small>" + (q.a1v || 0) + "</small>" : "—";
-            return '<tr class="spx"><td class="fn" title="' + esc(q ? q.full : r.name) + '"><b>' + esc(r.name) + "</b><small>" + r.code + "</small></td><td></td>" +
-              '<td class="col-x"><span class="st">' + (r.halt ? "停牌" : "参考") + "</span></td>" +
-              '<td class="num">' + (r.price ? r.price.toFixed(3) : "—") + "</td>" +
-              '<td class="num ' + (r.pct == null ? "" : cls(r.pct)) + '">' + pctStr(r.pct) + "</td>" +
-              '<td class="num devc ' + (r.dev == null ? "" : cls(r.dev)) + '">' + (r.dev == null ? "—" : f2(r.dev)) + "</td>" +
-              '<td class="num">' + (r.prem == null ? "—" : r.prem.toFixed(2) + "%") + "</td>" +
-              '<td class="num ba col-x">' + ba + "</td><td></td></tr>";
-          }).join("");
-          $("etf-body").innerHTML = (sxT.length ? spHead + spBody : "") + nqHead + (UI.closed.nq ? "" : listT.length ? "" : '<tr><td colspan="9" style="text-align:center;color:var(--mute)">没有符合的标的</td></tr>') + (UI.closed.nq ? [] : listT).map(function (r) {
-            var q = r.q, sg = r.sigObj, trc = r.held ? "held" : r.cand ? "cand" : r.halt ? "halt" : "";
-            var ba = q && !r.halt ? fmt3(q.b1) + " <small>" + (q.b1v || 0) + "</small> / " + fmt3(q.a1) + " <small>" + (q.a1v || 0) + "</small>" : "—";
-            return "<tr" + (trc ? ' class="' + trc + '"' : "") + ">" +
-              '<td class="fn" title="' + esc(q ? q.full : r.name) + '"><b>' + esc(r.name) + "</b><small>" + r.code + "</small>" + qChip(r) + revChip(r) + "</td>" +
-              '<td class="c"><input type="checkbox" class="chk" data-code="' + r.code + '"' + (r.held ? " checked" : "") + (S.acct ? ' disabled title="按账户持仓自动识别"' : "") + "></td>" +
-              '<td class="col-x"><span class="st ' + r.stObj.c + '">' + esc(r.stObj.text) + "</span></td>" +
-              '<td class="num">' + (r.price ? r.price.toFixed(3) : "—") + (r.kind ? ' <small class="ba">' + r.kind + "</small>" : "") + "</td>" +
-              '<td class="num ' + (r.pct == null ? "" : cls(r.pct)) + '">' + pctStr(r.pct) + "</td>" +
-              '<td class="num devc ' + (r.dev == null ? "" : cls(r.dev)) + '">' + (r.dev == null ? "—" : f2(r.dev)) + "</td>" +
-              '<td class="num' + (r.prem != null && r.prem > S.haltThr ? " hot" : "") + '" title="' + (r.estNav ? "单位净值 " + r.estNav.toFixed(4) + "（" + esc(r.navDate) + "）" : "") + '">' + (r.prem == null ? "—" : r.prem.toFixed(2) + "%") + "</td>" +
-              '<td class="num ba col-x">' + ba + "</td>" +
-              "<td>" + (sg ? '<span class="pill ' + sg.c + '">' + sg.t + "</span>" : "") + "</td></tr>";
-          }).join("");
-          [].forEach.call(document.querySelectorAll("th button"), function (btn) {
-            var on = btn.getAttribute("data-k") === k;
-            btn.setAttribute("aria-pressed", on ? "true" : "false");
-            btn.lastElementChild.textContent = on ? (d > 0 ? " ↑" : " ↓") : "";
-          });
-
-          // 手机卡片
+          var sxT = S.filter === "zone" ? [] : sx.filter(fOk), listT = list.filter(fOk);
+          var zl = axX(-S.lo), zw = (axX(-S.thr) - axX(-S.lo)).toFixed(2), z0 = axX(0);
+          var grp = function (g, title, sub, n) { return '<div class="g" data-g="' + g + '"><b>' + title + "</b><span>" + sub + "</span><em>" + (UI.closed[g] ? "展开 " + n + " 只" : "收起") + "</em></div>"; };
+          var rowH = function (r, nq) {
+            var q = r.q, sg = nq && !r.halt ? r.sigObj : null, c = !nq ? "spx" : r.held ? "held" : r.cand ? "cand" : r.halt ? "halt" : "", v = r.dev;
+            return '<div class="row' + (c ? " " + c : "") + '" data-code="' + r.code + '" title="' + esc(q && q.full ? q.full : r.name) + '">' +
+              '<div class="nm"><b>' + esc(r.name) + "</b><span>" + r.code + "</span>" + (nq ? qChip(r) : "") + (sg ? '<span class="pill ' + sg.c + '">' + sg.t + "</span>" : "") +
+              (r.halt ? '<span class="st halt">' + esc(nq ? r.stObj.text : "停牌") + "</span>" : "") + "</div>" +
+              '<span class="dbar"><span class="z" style="left:' + zl + "%;width:" + zw + '%"></span><span class="o" style="left:' + z0 + '%"></span>' +
+              (v == null ? "" : '<i class="' + (!nq ? "" : r.held ? "h" : r.cand ? "c" : v >= S.trig ? "t" : "") + '" style="left:' + axX(v) + '%"></i>') + "</span>" +
+              '<div class="dv ' + (v == null ? "" : cls(v)) + '">' + (v == null ? "—" : minus(f2(v))) + "</div>" +
+              '<div class="c3 ' + (r.pct == null ? "" : cls(r.pct)) + '">' + pctStr(r.pct) + "</div>" +
+              '<div class="c4' + (nq && r.prem != null && r.prem > S.haltThr ? " hot" : "") + '">' + (r.prem == null ? "—" : r.prem.toFixed(2) + "%") + "</div>" +
+              '<div class="c5">' + (nq ? revChip(r) : "") + "</div></div>";
+          };
+          $("etf-body").innerHTML =
+            grp("nq", "纳指 100", "对 NQ00Y" + (nqPct() == null ? "" : " " + pctStr(nqPct())) + (R0.nq != null ? " · 中位 " + minus(f2(R0.nq)) : "") + (cycV ? " · 只列今天 09:30 开盘的" + (hidN ? "，另 " + hidN + " 只停牌至 10:30 未列" : "") : ""), listT.length) +
+            (UI.closed.nq ? "" : listT.length ? listT.map(function (r) { return rowH(r, true); }).join("") : '<div class="empty">没有符合的标的</div>') +
+            (sxT.length ? grp("spx", "标普 500", "对 ES00Y" + (ep0 == null ? "" : " " + pctStr(ep0)) + (R0.sp != null ? " · 中位 " + minus(f2(R0.sp)) : "") + " · 只作参照，不参与轮动", sxT.length) + (UI.closed.spx ? "" : sxT.map(function (r) { return rowH(r, false); }).join("")) : "");
+          qsa("#etf-head [data-k]").forEach(function (x) { x.classList.toggle("on", x.getAttribute("data-k") === k); });
           var nz = list.filter(inZone).length, nh = list.filter(function (r) { return r.halt; }).length;
           var segB = document.querySelectorAll("#mseg button");
           segB[0].textContent = "全部 " + list.length; segB[1].textContent = "低偏离区 " + nz; segB[2].textContent = "停牌 " + nh;
           [].forEach.call(segB, function (x) { x.classList.toggle("on", x.getAttribute("data-f") === S.filter); });
-          $("m-cap").textContent = inWin(b) ? "持仓置顶 · 按偏离排序 ↑" : capT;
-          var ml = bySort.slice().sort(function (a, c) { return c.held - a.held; }).filter(function (r) {
-            return S.filter === "zone" ? inZone(r) : S.filter === "halt" ? r.halt : true;
-          });
-          var spM = (S.filter === "zone" || !sxT.length ? "" : '<div class="mgrp" data-g="spx">' + car("spx") + '<b>标普 500</b> · 偏离按 ES00Y' + (R0.sp != null ? " · 中位 " + f2(R0.sp) : "") + " <small>参考 · " + sxT.length + " 只</small></div>" + (UI.closed.spx ? "" : sxT.map(function (r) {
-            var v = r.dev;
-            return '<div class="item spx"><div class="it-n">' + esc(r.name) + " <small>" + r.code + "</small></div>" +
-              '<div class="it-d ' + (v == null ? "" : cls(v)) + '">' + (v == null ? "—" : f2(v)) + "</div>" +
-              '<div class="it-m"><span>现价 ' + fmt3(r.price) + "</span><span>涨跌 " + pctStr(r.pct) + "</span><span>溢价 " + (r.prem == null ? "—" : r.prem.toFixed(1) + "%") + '</span></div><div class="it-r">偏离</div></div>';
-          }).join(""))) + '<div class="mgrp" data-g="nq">' + car("nq") + '<b>纳指 100</b> · 偏离按 NQ00Y' + (R0.nq != null ? " · 中位 " + f2(R0.nq) : "") + (cycV ? " <small>只列 09:30 开盘的" + (hidN ? "，另 " + hidN + " 只停牌未列" : "") + "</small>" : "") + " <small>" + ml.length + " 只</small></div>";
-          $("m-items").innerHTML = spM + (UI.closed.nq ? "" : ml.length ? ml.map(function (r) {
-            var v = r.dev, sg = r.sigObj, q = r.q;
-            return '<div class="item' + (r.held ? " held" : r.cand ? " cand" : r.halt ? " halt" : "") + '">' +
-              '<div class="it-n">' + esc(r.name) + " <small>" + r.code + "</small>" + qChip(r) + revChip(r) + (sg ? '<span class="pill ' + sg.c + '">' + sg.t + "</span>" : "") +
-              (S.acct ? "" : '<input type="checkbox" class="chk" data-code="' + r.code + '"' + (r.held ? " checked" : "") + ' aria-label="持有">') + "</div>" +
-              '<div class="it-d ' + (v == null ? "" : cls(v)) + '">' + (v == null ? "—" : f2(v)) + "</div>" +
-              '<div class="it-m">' + (r.halt ? '<span class="st halt">' + esc(r.stObj.text) + "</span>" : "<span>" + (r.price ? (auction ? "竞价 " : "现价 ") + r.price.toFixed(3) : esc(r.stObj.text)) + "</span>") +
-              "<span>涨跌 " + pctStr(r.pct) + '</span><span class="' + (r.prem != null && r.prem > S.haltThr ? "hot" : "") + '">溢价 ' + (r.prem == null ? "—" : r.prem.toFixed(1) + "%") + "</span>" +
-              '</div><div class="it-r">偏离</div>' +
-              '<div class="it-bar"><div class="z" style="left:' + zl + "%;width:" + zw + '%"></div><div class="o" style="left:' + X(0) + '%"></div>' +
-              (v == null ? "" : '<i style="left:' + X(Math.min(0, v)) + "%;width:" + Math.abs(X(v) - X(0)).toFixed(2) + "%;background:" + devColor(r) + '"></i>') + "</div></div>";
-          }).join("") : '<div class="item"><div class="it-m">没有符合的标的</div></div>');
+          if (OV.cur === "det") detRender();
 
-          $("foot-sig").textContent = String(S.log.length);
+          $("foot-sig").textContent = String(S.log.length); $("foot-sig").classList.toggle("z", !S.log.length);
           $("log").innerHTML = S.log.length ? S.log.map(function (x) { return "<li><span>" + x.t + "</span><span>" + esc(x.text) + "</span></li>"; }).join("") : "<li>暂无（交易时段内记录低偏离区、高偏离线、停牌/复牌变化）</li>";
         }
 
@@ -1600,13 +1547,12 @@
           });
         }
 
-        [].forEach.call(document.querySelectorAll("th button"), function (btn) {
-          btn.addEventListener("click", function () {
-            var k = btn.getAttribute("data-k");
-            if (S.sort.k === k) S.sort.d = -S.sort.d;
-            else S.sort = { k: k, d: k === "prem" ? -1 : 1 };
-            renderETF();
-          });
+        $("etf-head").addEventListener("click", function (ev) {
+          var x = ev.target && ev.target.closest && ev.target.closest("[data-k]"); if (!x) return;
+          var k = x.getAttribute("data-k");
+          if (S.sort.k === k) S.sort.d = -S.sort.d;
+          else S.sort = { k: k, d: k === "prem" ? -1 : 1 };
+          renderETF();
         });
         $("mseg").addEventListener("click", function (ev) {
           var f = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-f");
@@ -1668,18 +1614,15 @@
           var ps = t.closest("#paper-seg button[data-sub]"); if (ps) { paperSub(ps.getAttribute("data-sub")); return; }
           if (OV.pop && !t.closest("#live-pop") && !t.closest("#phase-pill")) popShow(false);
         });
-        $("why-btn").addEventListener("click", function () { var on = $("act-why").classList.contains("hide"); $("act-why").classList.toggle("hide", !on); this.setAttribute("aria-expanded", on ? "true" : "false"); this.textContent = on ? "收起" : "为什么？"; });
-        // 行情卡：列表/偏离分布、更多列、分组折叠（界面偏好存 nqUi）
-        function uiApply() {
-          document.body.classList.toggle("wide", !!UI.cols); document.body.classList.toggle("mv-dist", UI.mv === "dist");
-          qsa("#mview button").forEach(function (x) { x.classList.toggle("on", x.getAttribute("data-mv") === UI.mv); });
-          $("cols-btn").textContent = UI.cols ? "收起列" : "更多列"; $("cols-btn").setAttribute("aria-pressed", UI.cols ? "true" : "false");
+        $("why-btn").addEventListener("click", function () { var on = $("act-why").classList.contains("hide"); $("act-why").classList.toggle("hide", !on); this.setAttribute("aria-expanded", on ? "true" : "false"); this.textContent = on ? "收起" : "判断依据"; });
+        // 行情列表：分组折叠（界面偏好存 nqUi）；点一行或偏离轴上的点打开基金详情
+        function onRow(ev) {
+          var t = ev.target; if (!t || !t.closest) return;
+          var g = t.closest("[data-g]");
+          if (g) { var k = g.getAttribute("data-g"); UI.closed[k] = !UI.closed[k]; uiSave(); renderETF(); return; }
+          var r = t.closest("[data-code]"); if (r) detOpen(r.getAttribute("data-code"));
         }
-        $("mview").addEventListener("click", function (ev) { var b = ev.target && ev.target.closest && ev.target.closest("button[data-mv]"); if (b) { UI.mv = b.getAttribute("data-mv"); uiSave(); uiApply(); } });
-        $("cols-btn").addEventListener("click", function () { UI.cols = !UI.cols; uiSave(); uiApply(); });
-        function onGrp(ev) { var g = ev.target && ev.target.closest && ev.target.closest("[data-g]"); if (!g) return; var k = g.getAttribute("data-g"); UI.closed[k] = !UI.closed[k]; uiSave(); renderETF(); }
-        $("etf-body").addEventListener("click", onGrp); $("m-items").addEventListener("click", onGrp);
-        uiApply();
+        $("etf-body").addEventListener("click", onRow); $("act-axis").addEventListener("click", onRow);
         function cfgInputs() { $("thr").value = S.thr; $("trig").value = S.trig; $("lo").value = S.lo; $("halt-thr").value = S.haltThr; $("sp-tol").value = S.spTol; $("sp-tol2").value = S.spTol; $("cyc-thr").value = S.cycThr; }
         $("cfg-reset").addEventListener("click", function () { S.thr = 0.15; S.trig = 0.1; S.lo = 0.5; S.spTol = 0.1; S.haltThr = 10; S.cycThr = 10; saveCfg(); cfgInputs(); renderETF(); });
         $("rev-asof").textContent = REV_FROM + "～" + REV_ASOF;
@@ -1722,7 +1665,7 @@
           if (i == null) return;
           SIM.paper.splice(+i, 1); simSave(); simRender();
         });
-        /* ---------- 日循环：① 09:30–10:30 卖隔夜仓 ② 10:30 买偏离最负 ETF ③ 14:50 定隔夜仓（ETF 溢价全部 > 线才拿 LOF，否则最低溢价 ETF） ---------- */
+        /* ---------- 过夜（2026-11-26 合并原隔夜轮动 / 停牌轮动）：① 09:30 开始卖过夜仓、10:30 前卖完 ② 10:30 买回低偏离 ETF ③ 14:50 选溢价最低的过夜：有纳指 ETF 溢价低于过夜溢价线就拿它，否则拿 LOF ---------- */
         // 回测见 ai-dca CN 运维项目 backtest/daycycle_lof_bt.py。纸面记录 localStorage nqCycle v2：pos = 一段持仓
         // { code, name, stage, bt, bp, snap, st?, sp?, endSnap? }，bp/sp 可手改（bpE/spE 标记）。
         var LOF_CODE = "161130";
@@ -1744,7 +1687,7 @@
           var etfs = list.filter(function (r) { return isEtf(r) && !r.halt && r.prem != null; }).sort(function (x, y) { return x.prem - y.prem; });
           var lof = list.filter(function (r) { return r.code === LOF_CODE; })[0];
           if (!etfs.length) return { pick: null, etfs: etfs, lof: lof };
-          var useLof = etfs[0].prem > S.cycThr && lof && !lof.halt;
+          var useLof = !(etfs[0].prem < S.cycThr) && lof && !lof.halt;
           return { pick: useLof ? lof : etfs[0], useLof: useLof, etfs: etfs, lof: lof };
         }
         function cycAm(list) {
@@ -1824,7 +1767,7 @@
             el.className = "stt " + k; el.textContent = tx;
           });
           var nextT = [34200, 37800, 52800].filter(function (x) { return x > t; })[0];
-          var nextName = { 34200: "① 开盘卖出", 37800: "② 复牌换仓", 52800: "③ 尾盘建仓" };
+          var nextName = { 34200: "① 卖出", 37800: "② 买回", 52800: "③ 收盘前换仓" };
           if (wk && nextT) { var lft = nextT - t; $("cyc-cd-l").textContent = "距 " + nextName[nextT]; $("cyc-cd").textContent = (lft >= 3600 ? Math.floor(lft / 3600) + " 时 " : "") + Math.floor(lft % 3600 / 60) + " 分"; }
           else { $("cyc-cd-l").textContent = "下一步"; $("cyc-cd").textContent = "下个交易日 09:30"; }
           var tb = $("etf"); if (tb) { tb.classList.toggle("hl-prem", wk && t >= 46800); tb.classList.toggle("hl-dev", !(wk && t >= 46800)); }
@@ -1834,13 +1777,13 @@
           var op = openPos(), hc = op ? op.code : (list.filter(function (r) { return r.held; })[0] || {}).code;
           var hr = hc && byCode(list, hc);
           // ①
-          if (!hr) { $("cyc-s1-h").textContent = "无持仓"; $("cyc-s1-p").innerHTML = '<span class="why">前一日 ③ 记下隔夜仓后，这里提示卖出。</span>'; }
+          if (!hr) { $("cyc-s1-h").textContent = "无持仓"; $("cyc-s1-p").innerHTML = '<span class="why">前一日 ③ 记下过夜仓后，这里提示卖出。</span>'; }
           else {
             var spB = on1 && S.spR && S.spR.block;
-            $("cyc-s1-h").innerHTML = spB ? "暂不卖出 " + esc(hr.name) : (on1 || !op || op.stage === 3 ? (on1 ? "卖出 " : "隔夜仓 ") : "持有 ") + '<span class="' + (on1 ? "hs" : "") + '">' + esc(hr.name) + "</span>";
+            $("cyc-s1-h").innerHTML = spB ? "暂不卖出 " + esc(hr.name) : (on1 || !op || op.stage === 3 ? (on1 ? "卖出 " : "过夜仓 ") : "持有 ") + '<span class="' + (on1 ? "hs" : "") + '">' + esc(hr.name) + "</span>";
             $("cyc-s1-p").innerHTML = "买一 " + fmt3(bidOf(hr)) + " · 涨跌 " + pctStr(hr.pct) + (hr.dev != null ? " · 偏离 " + minus(f2(hr.dev)) : "") + (hr.prem != null ? " · 溢价 " + hr.prem.toFixed(2) + "%" : "") +
               (op && op.bp > 0 ? "<br/>较买入价 " + fmt3(op.bp) + " " + pctStr(bidOf(hr) / op.bp - 1) : "") +
-              '<br/><span class="why">09:30–10:30 内择机卖出，卖完空仓等 10:30。</span>' +
+              '<br/><span class="why">09:30 开始卖，10:30 前卖完，卖完空仓等 10:30。</span>' +
               (on1 && S.spR && S.spR.sp != null ? '<span class="spv">标普偏离 ' + minus(f2(S.spR.sp)) + " / 纳指偏离 " + minus(f2(S.spR.nq)) + (spB ? "：同向接近，整体性偏离，先不卖" : on1 ? "：不是整体性偏离" : "") + "</span>" : "");
           }
           $("cyc-s1-rec").disabled = !op;
@@ -1852,7 +1795,7 @@
             $("cyc-s2-h").innerHTML = ref + (same ? "继续持有 " + esc(am.pick.name) : (op ? '卖 <span class="hs">' + esc(op.name) + '</span> → 买 <span class="hl">' : '买 <span class="hl">') + esc(am.pick.name) + "</span>");
             var nx = am.cands[1];
             $("cyc-s2-p").innerHTML = esc(am.pick.name) + " 偏离 " + minus(f2(am.pick.dev)) + "，ETF 中最低" + (nx ? "（次低 " + esc(nx.name) + " " + minus(f2(nx.dev)) + "）" : "") + "。卖一 " + fmt3(askOf(am.pick)) + "。" +
-              '<br/><span class="why">持有到收盘前，14:50 再按③换隔夜仓。</span>';
+              '<br/><span class="why">持有到收盘前，14:50 再按③换过夜仓。</span>';
           }
           $("cyc-s2-rec").disabled = !am.pick || !!(op && op.code === am.pick.code);
           // ③
@@ -1860,9 +1803,9 @@
           if (!pm.pick) { $("cyc-s3-h").textContent = "等待溢价数据"; $("cyc-s3-p").textContent = ""; }
           else {
             var same3 = op && op.code === pm.pick.code, low3 = pm.etfs.slice(0, 3).map(function (r) { return esc(r.name) + " " + r.prem.toFixed(2) + "%"; }).join("、");
-            $("cyc-s3-h").innerHTML = (same3 ? "隔夜继续持有 " : "隔夜拿 ") + '<span class="hl">' + esc(pm.pick.name) + "</span>" + (pm.useLof ? " <small>(LOF)</small>" : "");
-            $("cyc-s3-p").innerHTML = (pm.useLof ? "ETF 溢价全部 &gt; " + S.cycThr + "%（最低 " + low3 + "），换到 LOF" + (pm.lof && pm.lof.prem != null ? "（溢价 " + pm.lof.prem.toFixed(2) + "%）" : "") + "。"
-              : "溢价最低：" + low3 + "，未全部超过 " + S.cycThr + "%，隔夜拿最低溢价 ETF。") +
+            $("cyc-s3-h").innerHTML = (same3 ? "继续持有 " : "换成 ") + '<span class="hl">' + esc(pm.pick.name) + "</span>" + (pm.useLof ? " <small>(LOF)</small>" : "");
+            $("cyc-s3-p").innerHTML = (pm.useLof ? "没有纳指 ETF 溢价低于 " + S.cycThr + "%（最低 " + low3 + "），拿 LOF 过夜" + (pm.lof && pm.lof.prem != null ? "（溢价 " + pm.lof.prem.toFixed(2) + "%）" : "") + "。"
+              : "溢价最低：" + low3 + "，低于 " + S.cycThr + "%，拿溢价最低的 ETF 过夜。") +
               (op && !same3 ? "需卖出 " + esc(op.name) + "。" : "") + '<br/><span class="why">按收盘前实时溢价判断，尽量在 14:50–14:57 完成。</span>';
           }
           $("cyc-s3-rec").disabled = !pm.pick || !!(op && op.code === pm.pick.code);
@@ -1871,14 +1814,16 @@
           pxSync(3, pm.pick ? pm.pick.code : "", pm.pick ? askOf(pm.pick) : 0);
           // 现在要做
           var nl = "现在", nh = "—", np = "";
-          if (!wk || t < 33300 || t >= 54000) { nl = "非交易时段"; nh = hr ? "隔夜持有 " + esc(hr.name) : "空仓"; np = "下个交易日 09:30–10:30 先卖出隔夜仓，10:30 复牌后换到低偏离区内回归概率最高的 ETF。"; }
-          else if (t < 34200) { nl = "集合竞价"; nh = hr ? "准备卖出 " + esc(hr.name) : "空仓等待"; np = "09:30 开盘后择机卖出；停牌的 ETF 要等 10:30 复牌。"; }
-          else if (on1) { nl = "① 开盘卖出 · 进行中"; nh = hr && !stepDone(1) ? (S.spR && S.spR.block ? "暂不卖出 " + esc(hr.name) + "（标普同向偏离）" : '卖出 <span class="hs">' + esc(hr.name) + "</span>") : "已空仓，等 10:30"; np = hr && !stepDone(1) ? "买一 " + fmt3(bidOf(hr)) + "，10:30 前择机卖出。" + (op ? "" : "（纸面还没记隔夜仓，今天 ③ 记录后开始跟踪）") : "10:30 复牌后按②买入。"; }
-          else if (on2 || (t < 52800 && !stepDone(2) && !(op && op.stage === 2))) { nl = on2 ? "② 复牌换仓 · 进行中" : "② 复牌换仓 · 已过 10:30 未记录"; nh = $("cyc-s2-h").innerHTML; np = am.pick ? esc(am.pick.name) + " 偏离 " + minus(f2(am.pick.dev)) + "，卖一 " + fmt3(askOf(am.pick)) + "。" : ""; }
-          else if (t < 52800) { nl = "盘中持有"; nh = op ? "持有 " + esc(op.name) : "空仓"; np = "14:50 起按③定隔夜仓。"; }
-          else { nl = "③ 尾盘建仓 · 进行中"; nh = $("cyc-s3-h").innerHTML; np = "尽量在 14:50–14:57 完成。"; }
+          if (!wk || t < 33300 || t >= 54000) { nl = "非交易时段"; nh = hr ? "过夜持有 " + esc(hr.name) : "空仓"; np = "下个交易日 09:30 开始卖出过夜仓，10:30 前卖完；10:30 买回低偏离区内回归概率最高的 ETF。"; }
+          else if (t < 34200) { nl = "集合竞价"; nh = hr ? "准备卖出 " + esc(hr.name) : "空仓等待"; np = "09:30 开始卖，10:30 前卖完；停牌的 ETF 要等 10:30 复牌。"; }
+          else if (on1) { nl = "① 卖出 · 进行中"; nh = hr && !stepDone(1) ? (S.spR && S.spR.block ? "暂不卖出 " + esc(hr.name) + "（标普同向偏离）" : '卖出 <span class="hs">' + esc(hr.name) + "</span>") : "已空仓，等 10:30"; np = hr && !stepDone(1) ? "买一 " + fmt3(bidOf(hr)) + "，09:30 开始卖，10:30 前卖完。" + (op ? "" : "（纸面还没记过夜仓，今天 ③ 记录后开始跟踪）") : "10:30 按②买回。"; }
+          else if (on2 || (t < 52800 && !stepDone(2) && !(op && op.stage === 2))) { nl = on2 ? "② 买回 · 进行中" : "② 买回 · 已过 10:30 未记录"; nh = $("cyc-s2-h").innerHTML; np = am.pick ? esc(am.pick.name) + " 偏离 " + minus(f2(am.pick.dev)) + "，卖一 " + fmt3(askOf(am.pick)) + "。" : ""; }
+          else if (t < 52800) { nl = "盘中持有"; nh = op ? "持有 " + esc(op.name) : "空仓"; np = "14:50 起按③换过夜仓。"; }
+          else { nl = "③ 收盘前换仓 · 进行中"; nh = $("cyc-s3-h").innerHTML; np = plain($("cyc-s3-p").innerHTML); }
+          $("cyc").setAttribute("data-s", on1 || on2 || on3 ? "ready" : "hold");
+          if (document.body.classList.contains("v-cyc")) $("mb-t").innerHTML = esc(nl) + "<small>" + plain(nh) + "</small>";
           $("cyc-now-l").textContent = nl; $("cyc-now-h").innerHTML = nh; $("cyc-now-p").innerHTML = np;
-          if (on1 || on2 || on3) { var sn = on1 ? 1 : on2 ? 2 : 3; if (!stepDone(sn)) ntfOnce(todayStr() + "-cyc" + sn, "隔夜轮动 · " + ["", "① 开盘卖出", "② 复牌换仓", "③ 尾盘建仓"][sn], plain(nh) + "。" + plain(np)); }
+          if (on1 || on2 || on3) { var sn = on1 ? 1 : on2 ? 2 : 3; if (!stepDone(sn)) ntfOnce(todayStr() + "-cyc" + sn, "过夜 · " + ["", "① 卖出", "② 买回", "③ 收盘前换仓"][sn], plain(nh) + "。" + plain(np)); }
           // 统计
           var legs = cycLegs(list), done = legs.filter(function (l) { return !l.open && l.ex != null; });
           var sumEx = done.reduce(function (x, l) { return x + l.ex; }, 0), sumRet = done.reduce(function (x, l) { return x + l.ret; }, 0);
@@ -1928,97 +1873,53 @@
         $("cyc-thr").value = S.cycThr;
         $("cyc-thr").addEventListener("input", function () { var v = parseFloat(this.value); if (isFinite(v) && v > 0) { S.cycThr = v; saveCfg(); cycRender(); } });
 
-        /* ---------- 停牌轮动（2026-11-01）：明天 0 只 ETF 开盘才 14:55 拿 LOF（NQ 跌超 1% 除外）；1–3 只拿其中偏离最低；≥4 只不动，持仓明天停牌才换。
-           持 LOF 的次日 09:35 卖、10:30 复牌后买偏离最负。回测 backtest/cycle_gap_bt.py（G=∞）。---------- */
-        function hltPlan(list) {
-          var etfs = list.filter(isEtf), lof = byCode(list, LOF_CODE), np = nqPct();
-          var held = list.filter(function (r) { return r.held; })[0] || null;
-          var byDev = function (a) { return a.filter(function (r) { return r.dev != null; }).sort(function (x, y) { return x.dev - y.dev; }); };
-          var trad = byDev(etfs.filter(function (r) { return !r.halt; }));
-          var openT = etfs.filter(function (r) { return r.prem != null && r.prem < S.haltThr; }), k = openT.length;
-          var openTd = byDev(openT); if (!openTd.length) openTd = openT.slice().sort(function (x, y) { return x.prem - y.prem; }); var drop = np != null && np < -0.01, pick = null, why = "";
-          var heldIn = held && openT.some(function (r) { return r.code === held.code; });
-          if (!etfs.some(function (r) { return r.prem != null; })) why = "等待溢价数据";
-          else if (k === 0) {
-            if (drop) { pick = trad[0] || byDev(etfs)[0] || null; why = "明天预计全部停牌，但 NQ00Y 自昨日 15:00 " + pctStr(np) + "（跌超 1%），不买 LOF，拿偏离最低 ETF。"; }
-            else { pick = lof || null; why = "明天预计 0 只 ETF 09:30 开盘，14:55 买 LOF 过夜，次日 09:35 卖。"; }
-          } else if (k <= 3) {
-            pick = heldIn ? held : openTd[0]; why = "明天预计只有 " + k + " 只开盘（" + openT.map(function (r) { return esc(r.name); }).join("、") + "），" + (heldIn ? "当前持仓在其中，继续拿。" : "拿其中偏离最低。");
-          } else {
-            if (held && held.code !== LOF_CODE && heldIn) { pick = held; why = "明天预计 " + k + " 只开盘，持仓也会开盘，继续拿，不主动换。"; }
-            else { pick = openTd[0]; why = "明天预计 " + k + " 只开盘，" + (held ? esc(held.name) + (held.code === LOF_CODE ? " 是 LOF" : " 明天会停牌") + "，换到会开盘的偏离最低者。" : "当前无持仓，拿会开盘的偏离最低者。"); }
-          }
-          return { held: held, trad: trad, openT: openT, k: k, pick: pick, why: why, np: np, drop: drop, lof: lof };
-        }
-        function hltRender(list) {
-          if (!$("hlt") || !IS_SUPER) return;
-          list = list || rows();
-          var b = bj(), t = secs(b), wk = weekday(b), P = hltPlan(list), held = P.held;
-          var lofH = held && held.code === LOF_CODE;
-          var on1 = wk && t >= 34200 && t < 37800, on2 = wk && t >= 37800 && t < 52800, on3 = wk && t >= 52800 && t < 54000;
-          $("hlt-thr-t").textContent = S.haltThr; $("hlt-c-halt").textContent = S.haltThr + "%";
-          var stt = function (id, k, tx) { var el = $(id); el.className = "stt " + k; el.textContent = tx; };
-          // ① 持仓
-          if (!held) { $("hlt-s1-h").textContent = "无持仓"; $("hlt-s1-p").innerHTML = '<span class="why">在下方行情表勾选「持有」。</span>'; stt("hlt-s1-st", "", "—"); }
-          else {
-            var dv = held.dev != null ? " · 偏离 " + minus(f2(held.dev)) : "", pm = held.prem != null ? " · 溢价 " + held.prem.toFixed(2) + "%" : "";
-            if (lofH && wk && t >= 33300 && t < 37800) { $("hlt-s1-h").innerHTML = '09:35 卖出 <span class="hs">' + esc(held.name) + "</span>"; stt("hlt-s1-st", on1 ? "now" : "", on1 ? "进行中" : "09:35"); }
-            else if (lofH && wk && t >= 37800 && t < 54000) { $("hlt-s1-h").innerHTML = '卖 <span class="hs">LOF</span> → 买 <span class="hl">' + (P.trad[0] ? esc(P.trad[0].name) : "—") + "</span>"; stt("hlt-s1-st", "now", "该换了"); }
-            else { $("hlt-s1-h").innerHTML = "持有 " + esc(held.name) + (held.halt ? " <small>(停牌)</small>" : ""); stt("hlt-s1-st", "done", "不动"); }
-            $("hlt-s1-p").innerHTML = "涨跌 " + pctStr(held.pct) + dv + pm + (lofH && P.trad[0] ? "<br/>可交易偏离最负：" + esc(P.trad[0].name) + " " + minus(f2(P.trad[0].dev)) + "，卖一 " + fmt3(askOf(P.trad[0])) : "") +
-              '<br/><span class="why">' + (lofH ? "LOF 只做全停牌日的隔夜过渡，开盘尽早卖；ETF 复牌后换偏离最负。" : "不因小偏离差主动换，14:55 只看它明天会不会停牌。") + "</span>";
-          }
-          // ② 新钱
-          var nb = P.trad[0];
-          if (!nb) { $("hlt-s2-h").textContent = inWin(b) ? "等待偏离数据" : "交易时段再看"; $("hlt-s2-p").innerHTML = '<span class="why">偏离只在交易日 09:15–15:00 计算；停牌的不买。</span>'; stt("hlt-s2-st", "", "—"); }
-          else {
-            var nx = P.trad[1], dp = depthPx(nb, "b");
-            $("hlt-s2-h").innerHTML = '买 <span class="hl">' + esc(nb.name) + "</span>";
-            $("hlt-s2-p").innerHTML = "偏离 " + minus(f2(nb.dev)) + (nb.prem != null ? " · 溢价 " + nb.prem.toFixed(2) + "%" : "") + (nx ? "（次低 " + esc(nx.name) + " " + minus(f2(nx.dev)) + "）" : "") + "<br/>卖一 " + fmt3(askOf(nb)) + (dp ? " · 按持仓金额建议限价 " + dp.toFixed(3) : "") +
-              '<br/><span class="why">' + (wk && t < 34500 ? "09:35 后盘口稳定再下单，" : "") + "金额大就分 2–3 笔；买完按①不主动换。</span>";
-            stt("hlt-s2-st", wk && t >= 34500 && t < 54000 ? "now" : "", wk && t >= 34500 && t < 54000 ? "可买" : "09:35 后");
-          }
-          // ③ 隔夜
-          var p3 = P.pick, same = p3 && held && p3.code === held.code;
-          $("hlt-s3-h").innerHTML = !p3 ? esc(P.why || "—") : (same ? "继续持有 " : (held ? '卖 <span class="hs">' + esc(held.name) + '</span> → 拿 <span class="hl">' : '拿 <span class="hl">')) + (p3 ? esc(p3.name) + (same ? "" : "</span>") : "") + (p3 && p3.code === LOF_CODE ? " <small>(LOF)</small>" : "");
-          $("hlt-s3-p").innerHTML = (p3 ? P.why : "") + (P.k > 0 && P.k < 13 ? "<br/>明天预计开盘：" + P.k + " 只" : "") + '<br/><span class="why">' + (on3 ? "按收盘前实时溢价判断，14:55 完成。" : "现在是参考，以 14:55 为准。") + "</span>";
-          stt("hlt-s3-st", on3 ? "now" : wk && t >= 54000 ? "miss" : "", on3 ? "进行中" : wk && t >= 54000 ? "已收盘" : "14:55");
-          // 现在要做
-          var nl, nh, np2 = "";
-          if (!wk || t < 33300 || t >= 54000) { nl = "非交易时段"; nh = held ? "持有 " + esc(held.name) : "空仓"; np2 = lofH ? "下个交易日 09:35 卖 LOF，10:30 复牌后买偏离最负 ETF。" : "下个交易日：新钱 09:35 后买可交易里偏离最负；14:55 按③定隔夜。"; }
-          else if (lofH && t < 37800) { nl = on1 ? "开盘 · 进行中" : "集合竞价"; nh = '09:35 卖出 <span class="hs">LOF</span>'; np2 = "卖完空仓等 10:30 ETF 复牌。"; }
-          else if (lofH) { nl = "复牌换仓"; nh = $("hlt-s1-h").innerHTML; np2 = P.trad[0] ? "可交易 ETF 里偏离最负：" + esc(P.trad[0].name) + " " + minus(f2(P.trad[0].dev)) + "。" : ""; }
-          else if (on3) { nl = "14:55 定隔夜 · 进行中"; nh = $("hlt-s3-h").innerHTML; np2 = P.why; }
-          else { nl = t < 52800 ? "盘中持有" : "收盘"; nh = held ? "持有 " + esc(held.name) + "，不主动换" : "空仓"; np2 = (nb ? "新钱买 " + esc(nb.name) + "（偏离 " + minus(f2(nb.dev)) + "）。" : "") + "14:50 起看③。"; }
-          $("hlt-now-l").textContent = nl; $("hlt-now-h").innerHTML = nh; $("hlt-now-p").innerHTML = np2;
-          $("hlt-ph").textContent = !wk || t < 33300 || t >= 54000 ? "非交易时段" : on3 ? "现在：定隔夜" : lofH ? "持有 LOF" : "盘中";
-          $("hlt-ph").classList.toggle("on", !!(on3 || (lofH && wk && t >= 33300 && t < 54000)));
-          $("hlt-s1").classList.toggle("on", !!(lofH && wk && t >= 33300 && t < 54000)); $("hlt-s3").classList.toggle("on", on3);
-          var nextT = [34500, 37800, 52800, 53700].filter(function (x) { return x > t; })[0], nm = { 34500: "09:35", 37800: "10:30 复牌", 52800: "14:50 定隔夜", 53700: "14:55 下单" };
-          if (wk && nextT) { var lf = nextT - t; $("hlt-cd-l").textContent = "距 " + nm[nextT]; $("hlt-cd").textContent = (lf >= 3600 ? Math.floor(lf / 3600) + " 时 " : "") + Math.floor(lf % 3600 / 60) + " 分"; }
-          else { $("hlt-cd-l").textContent = "下一步"; $("hlt-cd").textContent = "下个交易日 09:30"; }
-          if (document.body.classList.contains("v-hlt")) {
-            if (lofH && wk && t >= 34500 && t < 37800) ntfOnce(todayStr() + "-hlt1", "停牌轮动 · 卖出 LOF", "09:35 卖出 LOF，10:30 复牌后买偏离最负 ETF。");
-            if (lofH && wk && t >= 37800 && t < 41400 && P.trad[0]) ntfOnce(todayStr() + "-hlt2", "停牌轮动 · 复牌换仓", "卖 LOF → 买 " + P.trad[0].name + "（偏离 " + f2(P.trad[0].dev) + "）");
-            if (on3 && p3 && !same) ntfOnce(todayStr() + "-hlt3", "停牌轮动 · 14:55 定隔夜", plain($("hlt-s3-h").innerHTML) + "。" + plain(P.why));
-          }
-        }
-        // 视图切换：偏离轮动 / 日循环（不放同一屏）
+        // 视图切换：盘中 / 过夜（不放同一屏）
         function setView(v) {
           if (!IS_SUPER) v = "dev";
           document.body.classList.toggle("v-cyc", v === "cyc");
-          document.body.classList.toggle("v-hlt", v === "hlt");
           [].forEach.call(document.querySelectorAll("#vtabs button"), function (x) { x.classList.toggle("on", x.getAttribute("data-v") === v); });
           try { localStorage.setItem(KP + "nqView", v); } catch (e) {}
           if (v === "cyc") cycRender();
-          if (v === "hlt") hltRender();
           try { renderETF(); } catch (e) {}
         }
-        if (!IS_SUPER) { ["cyc", "hlt"].forEach(function (v) { var cbt = document.querySelector('#vtabs button[data-v="' + v + '"]'); if (cbt) cbt.remove(); }); var vt = $("vtabs"); if (vt && vt.querySelectorAll("button").length < 2) vt.style.display = "none"; }
+        if (!IS_SUPER) { ["cyc"].forEach(function (v) { var cbt = document.querySelector('#vtabs button[data-v="' + v + '"]'); if (cbt) cbt.remove(); }); var vt = $("vtabs"); if (vt && vt.querySelectorAll("button").length < 2) vt.style.display = "none"; }
         $("vtabs").addEventListener("click", function (ev) { var bt = ev.target && ev.target.closest && ev.target.closest("button[data-v]"); if (bt) setView(bt.getAttribute("data-v")); });
-        try { var sv0 = localStorage.getItem(KP + "nqView"); if (sv0 === "cyc" || sv0 === "hlt") setView(sv0); } catch (e) {}
+        try { var sv0 = localStorage.getItem(KP + "nqView"); if (sv0 === "cyc" || sv0 === "hlt") setView("cyc"); } catch (e) {}
 
         var renderETF0 = renderETF;
+
+        /* ---------- 基金详情（弹层）：行情、五档、回归概率、份额；可设为持有 / 从持仓切到这只 / 记做T ---------- */
+        var DET = { code: "" };
+        function detRow() { var r = byCode(S.lastAll || rows(), DET.code); return r ? { r: r, nq: true } : { r: byCode(spxRows(bj()), DET.code), nq: false }; }
+        function detRender() {
+          var x = detRow(), r = x.r, nq = x.nq; if (!r) return;
+          var q = r.q || {}, sg = nq && !r.halt ? r.sigObj : null, kv = function (k, v, c) { return '<div class="kv"><span>' + k + '</span><b class="' + (c || "") + '">' + v + "</b></div>"; };
+          $("det-h").innerHTML = esc(q.full || r.name) + "<i>" + r.code + "</i>" + (sg ? ' <span class="pill ' + sg.c + '">' + sg.t + "</span>" : "");
+          $("det-sub").textContent = (nq ? "纳指 100 · 偏离按 NQ00Y" : "标普 500 · 偏离按 ES00Y，只作参照") + (nq && r.stObj ? " · " + r.stObj.text : r.halt ? " · 停牌" : "");
+          var lv = function (a, nm, c) { return "<table>" + (a || []).map(function (l, i) { return "<tr><td>" + nm + (i + 1) + "</td><td>" + fmt3(l[0]) + '</td><td class="' + c + '">' + (l[1] || 0) + " 手</td></tr>"; }).join("") + "</table>"; };
+          var rv = REV[r.code], qt = S.quota[r.code], ri = nq && r.held ? roundInfo(r, S.lastAll || []) : null;
+          $("det-b").innerHTML = '<div class="dk"><div><span>现价</span><b>' + (r.price ? r.price.toFixed(3) : "—") + "</b></div><div><span>涨跌</span><b class=\"" + (r.pct == null ? "" : cls(r.pct)) + '">' + pctStr(r.pct) + "</b></div><div><span>偏离</span><b class=\"" + (r.dev == null ? "" : cls(r.dev)) + '">' + (r.dev == null ? "—" : minus(f2(r.dev))) + "</b></div><div><span>溢价</span><b class=\"" + (nq && r.prem != null && r.prem > S.haltThr ? "hot" : "") + '">' + (r.prem == null ? "—" : r.prem.toFixed(2) + "%") + "</b></div></div>" +
+            '<div class="sec">盘口<small>' + (nq && !r.halt ? plain(depthHtml(r, r.held ? "s" : "b")) : "") + "</small></div>" +
+            (r.halt ? '<div class="note">停牌中，无盘口。</div>' : q.bids && q.asks ? '<div class="depth">' + lv(q.bids, "买", "dn") + lv(q.asks, "卖", "up") + "</div>" : kv("买一 / 卖一", fmt3(q.b1) + "（" + (q.b1v || 0) + " 手） / " + fmt3(q.a1) + "（" + (q.a1v || 0) + " 手）")) +
+            '<div class="sec">参考</div>' +
+            (rv ? kv("回归概率（近 5 月 / 近 3 月）", rv[0] + "% / " + rv[1] + "%（" + rv[2] + " 次）") : "") +
+            (qt ? kv("份额" + (S.quotaDate ? "（" + esc(S.quotaDate) + "）" : ""), esc(qt.txt || qt.t)) : "") +
+            (r.estNav ? kv("单位净值", r.estNav.toFixed(4) + "（" + esc(r.navDate) + "）") : "") +
+            kv("昨收", fmt3(r.pre || q.pre)) +
+            (ri ? kv("本轮买入", esc(ri.date.slice(5)) + " @ " + ri.price.toFixed(3)) + (ri.rel != null ? kv("相对" + esc(ri.fromName), pctStr(ri.rel), cls(ri.rel)) : ri.ret != null ? kv("较买入价", pctStr(ri.ret), cls(ri.ret)) : "") : "");
+          $("det-hold").textContent = r.held ? "取消持有" : "设为持有";
+          $("det-hold").classList.toggle("hide", !nq || !!S.acct);
+          $("det-t").classList.toggle("hide", !nq); $("det-sim").classList.toggle("hide", !nq);
+          $("det-sim").disabled = !!r.held || !!r.halt;
+        }
+        function detOpen(code) { DET.code = String(code || ""); if (!detRow().r) return; ovOpen("det"); detRender(); }
+        $("det-hold").addEventListener("click", function () {
+          var c = DET.code; if (!c || S.acct) return;
+          if (S.held[c]) delete S.held[c]; else S.held[c] = true;
+          saveHeld(); renderETF();
+        });
+        $("det-sim").addEventListener("click", function () { var c = DET.code; ovOpen("tools", "sim"); SIM.to = c; simRender(); });
+        $("det-t").addEventListener("click", function () { var c = DET.code; TL.buy = c; ovOpen("tools", "t"); });
 
         /* ---------- 做T 对比 ----------
            记录：买入 A @ pA（必填）、卖出 B @ pB（可选，T 的另一腿），以及记录时刻所有基金的价格快照和 NQ。
@@ -2131,8 +2032,8 @@
           tlSave(); tlRender();
         });
         $("tl-clr").addEventListener("click", function () { TL.rec = null; TL.buy = ""; TL.sell = ""; $("tl-bpx").value = ""; $("tl-spx").value = ""; tlSave(); tlRender(); });
-        function fabBadge() { var n = (TL.rec ? 1 : 0) + (IS_SUPER && openPos() ? 1 : 0); $("fab-n").textContent = n ? String(n) : ""; $("fab").setAttribute("title", n ? n + " 项进行中（做T 记录 / 隔夜持仓）" : "工具"); }
-        renderETF = function () { renderETF0.apply(this, arguments); if (SIM.open || (OV.cur === "tools" && OV.tab.tools === "p")) simRender(); try { cycRender(); } catch (e) {} try { hltRender(); } catch (e) {} try { tlRender(); } catch (e) {} fabBadge(); };
+        function fabBadge() { var n = (TL.rec ? 1 : 0) + (IS_SUPER && openPos() ? 1 : 0); $("fab-n").textContent = n ? String(n) : ""; $("fab").setAttribute("title", n ? n + " 项进行中（做T 记录 / 过夜持仓）" : "纸面记录"); }
+        renderETF = function () { renderETF0.apply(this, arguments); if (SIM.open || (OV.cur === "tools" && OV.tab.tools === "p")) simRender(); try { cycRender(); } catch (e) {} try { tlRender(); } catch (e) {} fabBadge(); };
 
         function applyHeld(m, label) {
           var pool = {}; ETFS.forEach(function (e) { pool[e[0].slice(2)] = true; });
@@ -2152,16 +2053,6 @@
         });
         if (ENV.held) applyHeld({ codes: ENV.held, rounds: ENV.rounds }, ENV.heldLabel);
         try { if (window.parent !== window) window.parent.postMessage({ type: "ai-dca-auction-ready" }, location.origin); } catch (e) {}
-        function onChk(ev) {
-          var c = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-code");
-          if (!c) return;
-          if (S.acct) { ev.target.checked = !!S.held[c]; return; }
-          if (ev.target.checked) S.held[c] = true; else delete S.held[c];
-          saveHeld(); renderETF();
-        }
-        $("etf-body").addEventListener("change", onChk);
-        $("m-items").addEventListener("change", onChk);
-
         ntfBtn();
         $("ntf").addEventListener("click", function () { ntfShow(true); });
         $("ntf-toggle").addEventListener("click", function () {

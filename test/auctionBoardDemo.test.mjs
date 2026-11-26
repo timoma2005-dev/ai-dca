@@ -16,9 +16,10 @@ const DEMO_JS = read('public/auction-board-demo.js');
 const boardScript = (html) => html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 // 极简 DOM：只够看板脚本 / 演示引擎运行，并记录一切可能发出网络请求的入口。
-function createPage({ demo, date = '2026-10-23', speed, real: realData }) {
+function createPage({ demo, date = '2026-10-23', speed, real: realData, superadmin }) {
   const net = [];
   const store = new Map();
+  if (superadmin) store.set('aiDcaCloudSyncSession', JSON.stringify({ userId: 1, roles: [{ code: 'superadmin' }] }));
   const writes = [];
   const els = new Map();
   const timers = { timeouts: [], intervals: [] };
@@ -32,7 +33,7 @@ function createPage({ demo, date = '2026-10-23', speed, real: realData }) {
       classList: { toggle(c, on) { if (on === undefined ? !set.has(c) : on) set.add(c); else set.delete(c); }, add: (c) => set.add(c), remove: (c) => set.delete(c), contains: (c) => set.has(c) },
       setAttribute(k, v) { attrs[k] = String(v); }, getAttribute: (k) => (k in attrs ? attrs[k] : null),
       addEventListener(t, f) { (listeners[t] ||= []).push(f); }, listeners,
-      insertBefore() {}, appendChild() {}, querySelector: () => null, querySelectorAll: () => [],
+      insertBefore() {}, appendChild() {}, contains: () => false, querySelector: () => null, querySelectorAll: () => [],
     };
     return node;
   }
@@ -170,23 +171,23 @@ test('clock-driven states: auction halt, resume, regression switch, candidates i
   assert.equal(page.$('phase').textContent, '竞价结束');
   await page.at('09:35');
   assert.equal(page.$('phase').textContent, '连续竞价');
-  assert.match(page.$('act-h').innerHTML, /国泰 未满足条件/);
+  assert.match(page.$('act-h').innerHTML, /继续持有 国泰/);
   assert.match(page.log(), /国泰 复牌/);
   assert.match(page.$('etf-body').innerHTML, /<span class="st halt">停牌<\/span>/); // 嘉实真实停牌
 
   await page.at('09:55');
   assert.match(page.log(), /国泰 偏离 ≥ \+0\.1 → 达高偏离线/);
-  assert.match(page.$('act-h').innerHTML, /条件满足：<span class="hs">国泰<\/span> 高偏离 \/ <span class="hl">华泰柏瑞<\/span> 低偏离/);
+  assert.match(page.$('act-h').innerHTML, /卖出 <span class="hs">国泰<\/span>，买入 <span class="hl">华泰柏瑞<\/span>/);
 
   await page.at('10:25');
   assert.match(page.log(), /华泰柏瑞 离开低偏离区/);
   assert.match(page.log(), /大成 进入低偏离区/);
-  assert.match(page.$('act-h').innerHTML, /<span class="hl">大成<\/span> 低偏离/);
+  assert.match(page.$('act-h').innerHTML, /买入 <span class="hl">大成<\/span>/);
 
   await page.at('10:35');
   assert.match(page.log(), /嘉实 复牌/);
   await page.at('11:10');
-  assert.match(page.$('act-h').innerHTML, /国泰 未满足条件/);
+  assert.match(page.$('act-h').innerHTML, /继续持有 国泰/);
   assert.match(page.$('act-p').innerHTML, /已达高偏离线，暂无低偏离区标的/);
   assert.doesNotMatch(page.$('act-h').innerHTML, /等回 0/);
 
@@ -197,7 +198,7 @@ test('clock-driven states: auction halt, resume, regression switch, candidates i
   await page.at('14:40');
   assert.match(page.log(), /博时 进入低偏离区/);
   // 候选按回归概率优先：富国（近 5 月 76%）排在博时（57%）前
-  assert.match(page.$('act-h').innerHTML, /条件满足：<span class="hs">国泰<\/span> 高偏离 \/ <span class="hl">富国<\/span> 低偏离/);
+  assert.match(page.$('act-h').innerHTML, /卖出 <span class="hs">国泰<\/span>，买入 <span class="hl">富国<\/span>/);
   await page.at('14:58');
   assert.equal(page.$('phase').textContent, '收盘集合竞价');
   await page.at('15:02');
@@ -304,24 +305,25 @@ const between = (html, from, to) => {
   return html.slice(a, b);
 };
 
-test('v2 layout: main screen keeps strategy card, NQ, holding and one market card; tools/settings/info live in overlays', () => {
+test('v3 layout: main screen keeps one conclusion, deviation axis, NQ, holding and one market list; tools/settings/info live in overlays', () => {
   const html = BOARD_HTML.split('<script>')[0];
   const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
-  for (const id of ['act-h', 'act-flow', 'cyc', 'cyc-s1-rec', 'nq-pct', 'hold-name', 'hold-amt', 'mview', 'mseg', 'cols-btn', 'etf-body', 'm-items', 'bars']) assert.match(main, new RegExp(`id="${id}"`), `main has ${id}`);
+  for (const id of ['act-h', 'act-flow', 'cyc', 'cyc-s1-rec', 'nq-pct', 'hold-name', 'hold-amt', 'act-axis', 'act-stats', 'mseg', 'etf-head', 'etf-body']) assert.match(main, new RegExp(`id="${id}"`), `main has ${id}`);
   for (const id of ['tl-buy', 'sim-from', 'sim-paper', 'cyc-log-b', 'thr', 'log', 'rule-txt', 'ntf-toggle']) assert.doesNotMatch(main, new RegExp(`id="${id}"`), `main no longer has ${id}`);
   const tools = between(html, 'id="ov-tools"', 'id="ov-set"');
   for (const id of ['tl-buy', 'tl-bpx', 'tl-sell', 'tl-spx', 'tl-amt', 'tl-fill', 'tl-rec', 'tl-clr', 'tl-out', 'sim-from', 'sim-to', 'sim-amt', 'sim-out', 'sim-rec', 'sim-paper', 'cyc-st', 'cyc-log-b']) assert.match(tools, new RegExp(`id="${id}"`), `tools has ${id}`);
   const set = between(html, 'id="ov-set"', 'id="ov-info"');
   const pane = (p) => between(set, `data-p="${p}"`, { a: 'data-p="b"', b: 'data-p="c"', c: 'id="cfg-reset"' }[p]);
-  for (const id of ['trig', 'thr', 'lo', 'sp-tol']) assert.match(pane('a'), new RegExp(`id="${id}"`), `盘中轮动 has ${id}`);
-  for (const id of ['cyc-thr', 'sp-tol2']) assert.match(pane('b'), new RegExp(`id="${id}"`), `隔夜轮动 has ${id}`);
+  for (const id of ['trig', 'thr', 'lo', 'sp-tol']) assert.match(pane('a'), new RegExp(`id="${id}"`), `盘中 has ${id}`);
+  for (const id of ['cyc-thr', 'sp-tol2']) assert.match(pane('b'), new RegExp(`id="${id}"`), `过夜 has ${id}`);
   for (const id of ['halt-thr', 'act-amt', 'ntf-hero', 'ntf-chk', 'ntf-tip', 'ntf-toggle', 'ntf-test']) assert.match(pane('c'), new RegExp(`id="${id}"`), `通用 has ${id}`);
   const info = between(html, 'id="ov-info"');
   for (const id of ['log', 'rule-txt', 'rule-halt', 'bt-cyc', 'rev-asof']) assert.match(info, new RegExp(`id="${id}"`), `info has ${id}`);
   const pop = between(html, 'id="live-pop"', '<main');
   for (const id of ['s-em', 's-sina', 's-qq', 'updated', 'segs']) assert.match(pop, new RegExp(`id="${id}"`), `time capsule has ${id}`);
   assert.match(html, /<nav class="modes" id="vtabs"/);
-  assert.match(html, /data-v="cyc">隔夜轮动/);
+  assert.match(html, /data-v="dev">盘中<\/button>\s*<button type="button" data-v="cyc">过夜</);
+  assert.doesNotMatch(html, /data-v="hlt"/);
   // 红涨绿跌
   assert.match(BOARD_HTML, /--up:#e5484d; --down:#16a34a;/);
   assert.match(BOARD_HTML, /function cls\(x\) \{ return x > 0 \? "up" : x < 0 \? "dn" : ""; \}/);
@@ -350,19 +352,43 @@ test('v2 overlays: only one of tools drawer / settings / info is open at a time;
 test('v2 market card: filter applies to the table, groups collapse, UI prefs saved under the key prefix', async () => {
   const page = createPage({ demo: true });
   await page.at('09:55');
-  assert.match(page.$('etf-body').innerHTML, /<tr class="spx">/);
+  assert.match(page.$('etf-body').innerHTML, /<div class="row spx"/);
   page.$('mseg').listeners.click[0]({ target: { getAttribute: (k) => (k === 'data-f' ? 'zone' : null) } });
   const body = page.$('etf-body').innerHTML;
-  assert.doesNotMatch(body, /<tr class="spx">/, 'S&P reference group hidden under the buy-zone filter');
+  assert.doesNotMatch(body, /<div class="row spx"/, 'S&P reference group hidden under the buy-zone filter');
   assert.match(body, /华泰柏瑞/);
-  assert.doesNotMatch(body, /<tr class="held">/, 'held fund outside the buy zone is filtered out');
+  assert.doesNotMatch(body, /<div class="row held"/, 'held fund outside the buy zone is filtered out');
   page.$('mseg').listeners.click[0]({ target: { getAttribute: (k) => (k === 'data-f' ? 'all' : null) } });
   const grp = { getAttribute: () => 'nq' };
   page.$('etf-body').listeners.click[0]({ target: { closest: (sel) => (sel === '[data-g]' ? grp : null) } });
   assert.doesNotMatch(page.$('etf-body').innerHTML, /data-code="513100"/, 'Nasdaq group collapsed');
   assert.deepEqual(JSON.parse(page.store.get('demo_nqUi')).closed, { nq: true });
-  page.$('cols-btn').listeners.click[0]();
-  assert.equal(JSON.parse(page.store.get('demo_nqUi')).cols, true);
-  assert.ok(page.ctx.document.body.classList.contains('wide'));
   assert.ok(page.writes.every((k) => k.startsWith('demo_')));
+});
+
+test('overnight tab: one rule — lowest-premium Nasdaq ETF below the threshold, otherwise LOF; sell from 09:30 until 10:30', async () => {
+  const html = BOARD_HTML.split('<script>')[0];
+  assert.match(html, /09:30 开始卖，10:30 前卖完/);
+  assert.doesNotMatch(BOARD_HTML, /hltRender|hltPlan|v-hlt/);
+  const page = createPage({ demo: true, superadmin: true });
+  await page.at('09:45');
+  assert.match(page.$('cyc-now-l').textContent, /① 卖出 · 进行中/);
+  await page.at('14:55');
+  assert.match(page.$('cyc-now-l').textContent, /③ 收盘前换仓/);
+  assert.match(page.$('cyc-s3-p').innerHTML, /低于 10%，拿溢价最低的 ETF 过夜/);
+  assert.doesNotMatch(page.$('cyc-s3-h').innerHTML, /LOF/);
+  page.$('cyc-thr').listeners.input[0].call({ value: '3' });
+  assert.match(page.$('cyc-s3-h').innerHTML, /LOF/);
+  assert.match(page.$('cyc-s3-p').innerHTML, /没有纳指 ETF 溢价低于 3%.*拿 LOF 过夜/);
+});
+
+test('fund detail drawer: clicking a market row opens it; hold toggle is saved under the key prefix', async () => {
+  const page = createPage({ demo: true });
+  await page.at('09:55');
+  const row = { getAttribute: () => '513110' };
+  page.$('etf-body').listeners.click[0]({ target: { closest: (sel) => (sel === '[data-code]' ? row : null) } });
+  assert.ok(!page.$('ov-det').classList.contains('hide'));
+  assert.match(page.$('det-h').innerHTML, /513110/);
+  assert.match(page.$('det-b').innerHTML, /回归概率/);
+  assert.equal(page.$('det-hold').textContent, '设为持有');
 });

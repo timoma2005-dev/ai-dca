@@ -102,8 +102,8 @@ test('static board takes holdings from the parent and halts by status', () => {
 test('static board is a responsive PC/app layout with buy zone and settings', () => {
   const html = fs.readFileSync(path.resolve(testDir, '../public/auction-board.html'), 'utf8');
   assert.match(html, /<meta name="viewport"[^>]*width=device-width/);
-  assert.match(html, /@media \(max-width:860px\)/);
-  for (const id of ['act-h', 'act-flow', 'nq-spark', 'hold-name', 'bars', 'etf-body', 'm-items', 'mseg', 'log', 'thr', 'lo', 'halt-thr']) {
+  assert.match(html, /@media \(max-width:760px\)/);
+  for (const id of ['act-h', 'act-flow', 'act-axis', 'act-stats', 'nq-spark', 'hold-name', 'etf-body', 'mseg', 'ov-det', 'log', 'thr', 'lo', 'halt-thr']) {
     assert.match(html, new RegExp(`id="${id}"`), id);
   }
   assert.match(html, /function inZone\(r\) \{ return r\.dev != null && !r\.halt && r\.dev <= -S\.thr && r\.dev >= -S\.lo; \}/);
