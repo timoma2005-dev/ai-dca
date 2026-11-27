@@ -177,3 +177,15 @@ export function rotationPortfolio({ seriesByCode, startCode, startShares, switch
   for (const l of legs) l.y = points.find((p) => p.ts >= l.ts)?.mine ?? 0;
   return { points, legs, last: points[points.length - 1] || null, startCode, startShares: n0 };
 }
+
+// 没有偏离数据时按上海时间给提示（轮动进程交易日 10:25 启动，之后每 5 秒刷新）
+export function emptyHint(now = Date.now()) {
+  const d = new Date(now + 8 * 3600e3);
+  const wd = d.getUTCDay();
+  const m = d.getUTCHours() * 60 + d.getUTCMinutes();
+  if (wd === 0 || wd === 6) return ['今天休市', '下个交易日开盘后显示'];
+  if (m < 10 * 60 + 25) return ['还没开盘', '开盘后显示（轮动 10:25 启动，之后每 5 秒刷新）'];
+  if (m >= 11 * 60 + 30 && m < 13 * 60) return ['午休中', '13:00 开盘后显示'];
+  if (m >= 15 * 60) return ['今天已收盘', '下个交易日开盘后显示'];
+  return ['暂时没有行情', '可能休市或行情还没到，几秒后会自动刷新'];
+}

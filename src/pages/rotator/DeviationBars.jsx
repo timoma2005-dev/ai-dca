@@ -1,4 +1,4 @@
-import { deviationBars } from './rotatorCharts.js';
+import { deviationBars, emptyHint } from './rotatorCharts.js';
 
 const pct = (bps, d = 2) => `${bps > 0 ? '+' : bps < 0 ? '−' : ''}${Math.abs(bps / 100).toFixed(d)}%`;
 const px3 = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v).toFixed(3) : '—');
@@ -24,7 +24,15 @@ function Summary({ bars, holding, cheapest, gap, enter }) {
 
 export default function DeviationBars({ rows, holding, cheapest, gap, enter, at }) {
   const bars = deviationBars(rows);
-  if (!bars.length) return null;
+  if (!bars.length) {
+    const [title, sub] = emptyHint();
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card px-4 py-10 text-center">
+        <div className="text-base font-medium">{title}</div>
+        <div className="mt-1 text-sm text-muted-foreground">{sub}</div>
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
       <div className="text-sm font-medium">

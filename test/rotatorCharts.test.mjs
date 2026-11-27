@@ -127,3 +127,12 @@ test('planImport: timed fills are merged and paired in order', async () => {
   assert.equal(r.startShares, 2000);
   assert.deepEqual(r.switches, [{ time: '10:31:05', est: false, buyCode: 'B', sellPx: 1.5, buyPx: 2.0, buyShares: 1500 }]);
 });
+
+test('emptyHint: market-closed messages by Shanghai time', async () => {
+  const { emptyHint } = await import('../src/pages/rotator/rotatorCharts.js');
+  const at = (s) => Date.parse(`${s}+08:00`);
+  assert.equal(emptyHint(at('2026-11-27T08:46:00'))[0], '还没开盘');
+  assert.equal(emptyHint(at('2026-11-27T12:00:00'))[0], '午休中');
+  assert.equal(emptyHint(at('2026-11-27T15:30:00'))[0], '今天已收盘');
+  assert.equal(emptyHint(at('2026-11-28T10:00:00'))[0], '今天休市');
+});
