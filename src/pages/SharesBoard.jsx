@@ -74,6 +74,23 @@ const overallLabel = (ov) => (ov === 'incomparable' ? '待对比' : MARK[ov]);
 const rowClass = (ov, prefix = 'is-') =>
   ov === 'tightened' ? `${prefix}tight` : ov === 'relaxed' ? `${prefix}relax` : '';
 
+// 今日能买多少：单户限额（两项取紧）为主，基金级限额作补充；有一项未知但另一项有数时取有数的那项。
+function tightest(list) {
+  const limited = list.filter((x) => x && x.kind === 'limited' && x.shares != null);
+  if (limited.length) return { kind: 'limited', shares: Math.min(...limited.map((x) => x.shares)) };
+  if (list.every((x) => x && x.kind === 'unlimited')) return { kind: 'unlimited', shares: null };
+  return { kind: 'unknown', shares: null };
+}
+const caps = (a) => ({ acct: tightest([a.accountTotal, a.accountNet]), fund: tightest([a.total, a.net]) });
+const isPaused = (r) => r.subscriptionAllowed === false;
+const pausedText = (r) => (r.redemptionAllowed === true ? '仅允许赎回' : '不允许申购');
+function capRank(r) {
+  if (isPaused(r)) return -2;
+  const { acct, fund } = caps(fromRow(r));
+  const x = acct.kind !== 'unknown' ? acct : fund;
+  return x.kind === 'unlimited' ? Number.MAX_SAFE_INTEGER : x.kind === 'limited' ? x.shares : -1;
+}
+
 function deltaView(d, zeroText) {
   if (!Number.isFinite(d)) return { cls: 'muted', text: '暂无' };
   if (d > 0) return { cls: 'pos', text: `+${fmtShares(d)}` };
@@ -233,6 +250,46 @@ function CodePills({ row }) {
   );
 }
 
+function CapHero({ row, after }) {
+  if (isPaused(row)) {
+    return (
+      <div className="nx-hero paused">
+        <div className="nx-hero-main">
+          <span className="nx-hero-label">申购状态</span>
+          <b className="nx-hero-val">暂停申购</b>
+        </div>
+        <span className="nx-hero-sub">{`交易所：${pausedText(row)}`}</span>
+      </div>
+    );
+  }
+  const { acct, fund } = caps(after);
+  const useAcct = acct.kind !== 'unknown';
+  return (
+    <div className="nx-hero">
+      <div className="nx-hero-main">
+        <span className="nx-hero-label">{useAcct ? '单户当日最多申购' : '基金当日申购额度'}</span>
+        <b className="nx-hero-val">{fmtLimit(useAcct ? acct : fund)}</b>
+      </div>
+      {useAcct && <span className="nx-hero-sub">{`基金总额度 ${fmtLimit(fund)}`}</span>}
+    </div>
+  );
+}
+
+function CapText({ row, after, prefix = '' }) {
+  if (isPaused(row)) {
+    return (
+      <span className="nx-cap paused">
+        {row.redemptionAllowed === true ? '暂停申购 · 仅赎回' : '暂停申购'}
+      </span>
+    );
+  }
+  const { acct, fund } = caps(after);
+  const useAcct = acct.kind !== 'unknown';
+  return (
+    <span className="nx-cap">{useAcct ? `${prefix}${fmtLimit(acct)}` : `基金额度 ${fmtLimit(fund)}`}</span>
+  );
+}
+
 function LimitCell({ label, after, change }) {
   const c = change?.change;
   const moved = isMoved(c);
@@ -297,7 +354,7 @@ function BoardCard({ row, calendar, onOpen, onHistory, onOverall, atLimit }) {
   const ov = info.overall;
   const delta = deltaView(row.deltaShares, '无变化');
   return (
-    <article className={`nx-card ${rowClass(ov)}`}>
+    <article className={`nx-card ${rowClass(ov)}${isPaused(row) ? ' is-paused' : ''}`}>
       <div className="nx-card-head">
         <div className="nx-head-row">
           <div className="nx-title-line">
@@ -311,6 +368,7 @@ function BoardCard({ row, calendar, onOpen, onHistory, onOverall, atLimit }) {
         <CodePills row={row} />
       </div>
       <div className="nx-body">
+        <CapHero row={row} after={info.after} />
         <div className="nx-limits">
           {FIELDS.map(([k, label]) => (
             <LimitCell
@@ -321,7 +379,7 @@ function BoardCard({ row, calendar, onOpen, onHistory, onOverall, atLimit }) {
             />
           ))}
         </div>
-        <div className="nx-shares">
+        <div className={`nx-shares ${delta.cls}`}>
           <span className="nx-shares-label">盘前份额变化</span>
           <span>
             <span className={`nx-delta ${delta.cls}`}>{delta.text}</span>
@@ -345,7 +403,7 @@ function BoardRow({ row, calendar, onOpen, onHistory, onOverall, atLimit }) {
   const ov = info.overall;
   const delta = deltaView(row.deltaShares, '无变化');
   return (
-    <tr className={rowClass(ov)}>
+    <tr className={`${rowClass(ov)}${isPaused(row) ? ' is-paused' : ''}`}>
       <td>
         <div className="nx-td-name">
           {row.name}
@@ -360,6 +418,9 @@ function BoardRow({ row, calendar, onOpen, onHistory, onOverall, atLimit }) {
       </td>
       <td>
         <span className={`nx-pill ${CLS[ov] || ''}`}>{overallLabel(ov)}</span>
+      </td>
+      <td className="num">
+        <CapText row={row} after={info.after} />
       </td>
       {FIELDS.map(([k]) => {
         const ch = info.changes ? info.changes[k] : null;
@@ -416,11 +477,10 @@ function MobileRow({ row, calendar, shareRange, onOpen, onHistory, onOverall, at
       if (v !== '不限' && v !== '—') rest.push(`${SHORT[k]} ${compact(v)}`);
     }
   }
-  if (row.subscriptionAllowed === false) rest.push(row.redemptionAllowed === true ? '仅允许赎回' : '暂停申购');
-  if (!moved.length && !rest.length) rest.push('申购不限');
   const delta = deltaView(row.deltaShares, '0份');
   const sep = <span className="nx-m-dot"> • </span>;
   const parts = [
+    <CapText key="cap" row={row} after={info.after} prefix="单户最多 " />,
     ...moved.map((m) => (
       <span key={m.k} className={`nx-m-chg ${CLS[m.c]}`}>
         {m.t}
@@ -430,7 +490,12 @@ function MobileRow({ row, calendar, shareRange, onOpen, onHistory, onOverall, at
   ];
   return (
     <div className="nx-m-item">
-      <button type="button" className={`nx-m-row ${rowClass(ov)}`} onClick={onOpen} aria-haspopup="dialog">
+      <button
+        type="button"
+        className={`nx-m-row ${rowClass(ov)}${isPaused(row) ? ' is-paused' : ''}`}
+        onClick={onOpen}
+        aria-haspopup="dialog"
+      >
         <div className="nx-m-l1">
           <div className="nx-title-line">
             <span className="nx-m-name">
@@ -536,6 +601,7 @@ function PcfModal({ row, date, onClose, DetailDrawer, initialTab = 'pcf' }) {
 const FILTERS = [
   ['all', '全部', () => true],
   ['changed', '限额有变化', (r, ov) => ['tightened', 'relaxed', 'mixed'].includes(ov[r.code])],
+  ['paused', '暂停申购', isPaused],
   ['full', '额度用满', (r) => r.atLimit === true],
   ['szse', '深市', (r) => isSz(r)],
   ['sse', '沪市', (r) => !isSz(r)]
@@ -676,15 +742,23 @@ function ChangeRow({ row, calendar, max, onOpen, onOverall, atLimit, index }) {
               className={`nx-chg-bar ${d > 0 ? 'pos' : 'neg'}`}
               initial={reduce ? false : { scaleX: 0 }}
               animate={{ scaleX: 1 }}
-              transition={reduce ? { duration: 0 } : { ...SHIFT_SPRING, delay: 0.05 + Math.min(index, 12) * 0.02 }}
-              style={{ width: `${frac * 50}%`, [d > 0 ? 'left' : 'right']: '50%', transformOrigin: d > 0 ? 'left' : 'right' }}
+              transition={
+                reduce ? { duration: 0 } : { ...SHIFT_SPRING, delay: 0.05 + Math.min(index, 12) * 0.02 }
+              }
+              style={{
+                width: `${frac * 50}%`,
+                [d > 0 ? 'left' : 'right']: '50%',
+                transformOrigin: d > 0 ? 'left' : 'right'
+              }}
             />
           )}
         </span>
         <span className="nx-chg-val">
           <span className={`nx-delta ${delta.cls}`}>{delta.text}</span>
           <span className="nx-chg-pct">
-            {pct !== null ? `${pct > 0 ? '+' : ''}${Math.abs(pct) >= 10 ? pct.toFixed(0) : pct.toFixed(2)}%` : `总 ${fmtShares(row.shares)}`}
+            {pct !== null
+              ? `${pct > 0 ? '+' : ''}${Math.abs(pct) >= 10 ? pct.toFixed(0) : pct.toFixed(2)}%`
+              : `总 ${fmtShares(row.shares)}`}
           </span>
         </span>
       </button>
@@ -698,7 +772,10 @@ function ChangeView({ list, calendar, onOpen, onOverall, atLimitCodes, range }) 
     const y = Number.isFinite(b.deltaShares) ? b.deltaShares : -Infinity;
     return y - x;
   });
-  const max = sorted.reduce((m, r) => (Number.isFinite(r.deltaShares) ? Math.max(m, Math.abs(r.deltaShares)) : m), 0);
+  const max = sorted.reduce(
+    (m, r) => (Number.isFinite(r.deltaShares) ? Math.max(m, Math.abs(r.deltaShares)) : m),
+    0
+  );
   const up = sorted.filter((r) => r.deltaShares > 0);
   const down = sorted.filter((r) => r.deltaShares < 0);
   const sum = (arr) => arr.reduce((t, r) => t + r.deltaShares, 0);
@@ -734,6 +811,59 @@ function ChangeView({ list, calendar, onOpen, onOverall, atLimitCodes, range }) 
         ))}
       </ul>
     </section>
+  );
+}
+
+// 桌面顶部「今日要点」：可申购/暂停申购、限额变化、盘前份额变化一句话说清。
+function Brief({ rows, nTight, nRelax, filter, setFilter }) {
+  const paused = rows.filter(isPaused);
+  const up = rows.filter((r) => r.deltaShares > 0);
+  const down = rows.filter((r) => r.deltaShares < 0);
+  const sum = (arr) => arr.reduce((t, r) => t + r.deltaShares, 0);
+  const limitText =
+    nTight || nRelax
+      ? [nTight ? `${nTight} 只限额收紧` : '', nRelax ? `${nRelax} 只放宽` : ''].filter(Boolean).join('、')
+      : '限额均未变';
+  return (
+    <div className="nx-brief">
+      <span className="nx-brief-k">今日要点</span>
+      <span>
+        <b>{rows.length - paused.length}</b> 只可申购
+      </span>
+      {paused.length > 0 && (
+        <button
+          type="button"
+          className={`nx-brief-paused${filter === 'paused' ? ' active' : ''}`}
+          aria-pressed={filter === 'paused'}
+          onClick={() => setFilter(filter === 'paused' ? 'all' : 'paused')}
+        >
+          <b>{paused.length}</b>
+          {` 只暂停申购：${paused.map((r) => r.code).join('、')}`}
+        </button>
+      )}
+      <span className={nTight ? 'tight' : nRelax ? 'relax' : ''}>{limitText}</span>
+      <span>
+        {up.length || down.length ? (
+          <>
+            盘前份额
+            {up.length > 0 && (
+              <>
+                {` ${up.length} 只增加 `}
+                <span className="nx-delta pos">+{fmtShares(sum(up))}</span>
+              </>
+            )}
+            {down.length > 0 && (
+              <>
+                {`${up.length ? '，' : ' '}${down.length} 只减少 `}
+                <span className="nx-delta neg">{fmtShares(sum(down))}</span>
+              </>
+            )}
+          </>
+        ) : (
+          '盘前份额均无变化'
+        )}
+      </span>
+    </div>
   );
 }
 
@@ -832,13 +962,14 @@ export default function SharesBoard({ DetailDrawer }) {
   const nTight = rows.filter((r) => ov[r.code] === 'tightened' || ov[r.code] === 'mixed').length;
   const nRelax = rows.filter((r) => ov[r.code] === 'relaxed' || ov[r.code] === 'mixed').length;
   const nFull = rows.filter((r) => r.atLimit === true).length;
+  const nPaused = rows.filter(isPaused).length;
   const fdef = FILTERS.find(([k]) => k === filter) || FILTERS[0];
   const ql = q.trim().toLowerCase();
   const list = rows
     .filter((r) => fdef[2](r, ov))
     .filter((r) => !ql || `${r.code} ${r.name}`.toLowerCase().includes(ql))
     .slice()
-    .sort((a, b) => (ORDER[ov[a.code]] ?? 4) - (ORDER[ov[b.code]] ?? 4));
+    .sort((a, b) => (ORDER[ov[a.code]] ?? 4) - (ORDER[ov[b.code]] ?? 4) || capRank(b) - capRank(a));
   const stale = e.state === 'stale';
   const open =
     (r, tab = 'pcf') =>
@@ -878,6 +1009,7 @@ export default function SharesBoard({ DetailDrawer }) {
               <b>{head}</b>
               <span>对比 </span>
               <b>{`${md(prevLimitDate)} → ${md(limitDate)}`}</b>。
+              {nPaused > 0 && <b className="nx-m-paused">{`${nPaused}只暂停申购。`}</b>}
             </p>
             <button type="button" className="refresh-btn" aria-label="刷新" title="刷新" onClick={refresh}>
               <RefreshCw size={15} aria-hidden="true" />
@@ -957,6 +1089,7 @@ export default function SharesBoard({ DetailDrawer }) {
       <section className="nx-top">
         <div className="nx-tiles">
           {tile('all', '监控', rows.length, '')}
+          {tile('paused', '暂停申购', nPaused, nPaused ? 'warn' : '')}
           {tile('changed', '限额收紧', nTight, nTight ? 'tight' : '')}
           {tile('changed', '限额放宽', nRelax, nRelax ? 'relax' : '')}
           {tile('full', '额度用满', nFull, nFull ? 'warn' : '')}
@@ -983,6 +1116,9 @@ export default function SharesBoard({ DetailDrawer }) {
           </button>
         </div>
       </section>
+      {c && rows.length > 0 && (
+        <Brief rows={rows} nTight={nTight} nRelax={nRelax} filter={filter} setFilter={setFilter} />
+      )}
       {c && (
         <div className="nx-meta">
           <span>
@@ -1040,6 +1176,7 @@ export default function SharesBoard({ DetailDrawer }) {
                 <tr>
                   <th>基金</th>
                   <th>限额</th>
+                  <th className="num">单户最多</th>
                   {FIELDS.map(([k, label]) => (
                     <th key={k} className="num">
                       {label}

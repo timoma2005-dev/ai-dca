@@ -417,7 +417,7 @@ test('当前份额看板：卡片、表格、详情、移动端、旧快照 fall
     for (const [code, label] of [['159501', '▲放宽'], ['159509', '▼收紧'], ['159513', '▼收紧'], ['159632', '▲放宽'], ['159659', '◆有升有降'], ['159660', '▼收紧'], ['159941', '—未变']]) {
       assert.equal(await card(code).locator('.nx-head-row .nx-pill').textContent(), label);
     }
-    assert.deepEqual(await page.locator('.nx-tile b').allTextContents(), ['13', '4', '3', '2']);
+    assert.deepEqual(await page.locator('.nx-tile b').allTextContents(), ['13', '1', '4', '3', '2']);
     assert.match(await page.locator('.nx-meta').textContent(), /限额日 2026-10-13 对比 2026-10-09.*份额 2026-10-09 → 2026-10-12.*抓取 2026-10-13 09:03:20/);
     // 替代：旧百分比、估算/确定申购、上期份额转为沪深统一 delta、总份额、暂停和 atLimit。
     // 计算语义仍由 etfPcfSharesProjection/schema/client 单测覆盖；默认 UI 不再显示这些旧字段。
