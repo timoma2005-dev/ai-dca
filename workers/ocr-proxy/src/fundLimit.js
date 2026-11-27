@@ -32,7 +32,7 @@ const FUND_LIMIT_DEFAULT_TTL_SECONDS = 24 * 3600; // 1 天 (默认、f10/detail 
 const FUND_LIMIT_ANNOUNCEMENT_TTL_SECONDS = 24 * 3600; // 1 天 (chosen 来自公告时，与底层 ann-result 对齐)
 const ANNOUNCEMENT_RESULT_TTL_SECONDS = 24 * 3600; // 1 天（原始公告抽取结果）
 const ANNOUNCEMENT_NEGATIVE_TTL_SECONDS = 24 * 3600; // 1 天（未命中公告不必频繁重试）
-const ANNOUNCEMENT_LLM_MODEL = '@cf/moonshotai/kimi-k2.6';
+const ANNOUNCEMENT_LLM_MODEL = '@cf/deepseek-ai/deepseek-v4.1-flash-1017';
 
 // 标题筛选正则：匹配一切跟「大额申购 / 限额 / 金额限制 / 限购 / 暂停申购 / 恢复申购 / 调整大额 / 大额定投」相关的标题。
 // 备注：不少基金公告标题使用「金额限制」而非「限额」，需要覆盖。
