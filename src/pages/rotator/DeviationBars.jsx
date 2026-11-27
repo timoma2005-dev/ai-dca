@@ -1,4 +1,8 @@
-import { deviationBars, emptyHint } from './rotatorCharts.js';
+import { useEffect } from 'react';
+import { deviationBars, emptyHint, inLunch, shanghaiDay } from './rotatorCharts.js';
+
+const LAST_KEY = 'aidca.rotator.lastbars.v1';
+function loadLast() { try { return JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); } catch { return null; } }
 
 const pct = (bps, d = 2) => `${bps > 0 ? '+' : bps < 0 ? '−' : ''}${Math.abs(bps / 100).toFixed(d)}%`;
 const px3 = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v).toFixed(3) : '—');
@@ -22,7 +26,21 @@ function Summary({ bars, holding, cheapest, gap, enter }) {
   );
 }
 
-export default function DeviationBars({ rows, holding, cheapest, gap, enter, at }) {
+// 午休时后端只剩上午最后一笔留档；万一也没有，就用本机记下的上午最后一次有效数据
+export default function DeviationBars(props) {
+  const live = deviationBars(props.rows).length > 0;
+  const { rows, cheapest, gap, at } = props;
+  useEffect(() => {
+    if (!live) return;
+    try { localStorage.setItem(LAST_KEY, JSON.stringify({ day: shanghaiDay(), rows, cheapest, gap, at })); } catch { /* 隐私模式 */ }
+  }, [live, rows, cheapest, gap, at]);
+  const lunch = inLunch();
+  const last = !live && lunch ? loadLast() : null;
+  const use = last?.day === shanghaiDay() ? { ...props, ...last } : props;
+  return <Bars {...use} lunch={lunch} />;
+}
+
+function Bars({ rows, holding, cheapest, gap, enter, at, lunch }) {
   const bars = deviationBars(rows);
   if (!bars.length) {
     const [title, sub] = emptyHint();
@@ -36,6 +54,7 @@ export default function DeviationBars({ rows, holding, cheapest, gap, enter, at 
   return (
     <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
       <div className="text-sm font-medium">
+        {lunch ? <span className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">午休中 · 13:00 恢复</span> : null}
         <span className="tabular-nums">{at || '—'}</span> 各只比今天的基准贵/便宜多少
       </div>
       <div className="mt-1 text-xs text-muted-foreground">

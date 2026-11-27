@@ -189,3 +189,11 @@ export function emptyHint(now = Date.now()) {
   if (m >= 15 * 60) return ['今天已收盘', '下个交易日开盘后显示'];
   return ['暂时没有行情', '可能休市或行情还没到，几秒后会自动刷新'];
 }
+
+const shDate = (now) => new Date(now + 8 * 3600e3);
+export const shanghaiDay = (now = Date.now()) => shDate(now).toISOString().slice(0, 10);
+export function inLunch(now = Date.now()) {
+  const d = shDate(now);
+  const m = d.getUTCHours() * 60 + d.getUTCMinutes();
+  return d.getUTCDay() % 6 !== 0 && m >= 11 * 60 + 30 && m < 13 * 60;
+}

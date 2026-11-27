@@ -136,3 +136,12 @@ test('emptyHint: market-closed messages by Shanghai time', async () => {
   assert.equal(emptyHint(at('2026-11-27T15:30:00'))[0], '今天已收盘');
   assert.equal(emptyHint(at('2026-11-28T10:00:00'))[0], '今天休市');
 });
+
+test('inLunch / shanghaiDay', async () => {
+  const { inLunch, shanghaiDay } = await import('../src/pages/rotator/rotatorCharts.js');
+  const at = (s) => Date.parse(`${s}+08:00`);
+  assert.equal(inLunch(at('2026-11-27T12:10:00')), true);
+  assert.equal(inLunch(at('2026-11-27T13:00:00')), false);
+  assert.equal(inLunch(at('2026-11-28T12:10:00')), false);
+  assert.equal(shanghaiDay(at('2026-11-27T00:30:00')), '2026-11-27');
+});
