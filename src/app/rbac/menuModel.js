@@ -27,6 +27,7 @@ const SEED_MENUS = [
   ['adminRadar', '雷达', 'Radar', 'admin', 120, '溢价雷达与溢价监控'],
   ['adminAuction', '竞价看板', 'Gavel', 'admin', 130, '纳指期指与 ETF 竞价行情'],
   ['adminRotator', '日内轮动', 'Repeat', 'admin', 135, '纳指 ETF 溢价偏离轮动（腾讯源实时）'],
+  ['adminHongli', '红利低波', 'CandlestickChart', 'admin', 136, '红利低波全收益指数年线偏离看板与回测'],
   ['adminRbac', '权限管理', 'ShieldCheck', 'admin', 140, '用户角色、菜单权限与审计日志'],
 ];
 
@@ -35,7 +36,7 @@ export const RBAC_MANAGED_TABS = new Set(SEED_MENUS.map(([key]) => key));
 // 2026-10-25：持仓 / 交易计划 / 数据修复对游客放开（数据只存本机，登录后再同步）；份额新增改为 VIP。
 // 会员分层（2026-10-24，10-25 份额新增并入 VIP）：VIP = 行情 + 份额新增 + 换基 + 通知推送；SVIP 再加雷达与竞价看板。
 // 2026-11-26：日内轮动从仅超级管理员下放到 SVIP（services/auth/migrations/006-rotator-svip.sql）。
-const USER_LOCKED = { shares: 'vip', fundSwitch: 'vip', notify: 'vip', adminRadar: 'svip', adminAuction: 'svip', adminRotator: 'svip' };
+const USER_LOCKED = { shares: 'vip', fundSwitch: 'vip', notify: 'vip', adminRadar: 'svip', adminAuction: 'svip', adminRotator: 'svip', adminHongli: 'superadmin' };
 const VIP_NAMES = { vip: 'VIP', svip: 'SVIP' };
 
 const GUEST_OPEN = new Set(['home', 'markets', 'articles', 'holdings', 'dataRepair']);

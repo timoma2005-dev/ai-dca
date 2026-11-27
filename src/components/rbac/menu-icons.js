@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  CandlestickChart,
   Bell,
   BookOpen,
   FlaskConical,
@@ -18,6 +19,7 @@ import {
 
 // 服务端菜单的 icon 字段 → lucide 组件。未知名称按 key 兜底，再兜底为 LayoutGrid。
 const ICONS_BY_NAME = {
+  CandlestickChart,
   House, LineChart, BarChart3, Wallet, ListChecks, Shuffle, Bell, BookOpen, Wrench, FlaskConical, Radar, Gavel, Repeat, ShieldCheck, LayoutGrid,
 };
 
@@ -35,6 +37,7 @@ const ICONS_BY_KEY = {
   adminRadar: Radar,
   adminAuction: Gavel,
   adminRotator: Repeat,
+  adminHongli: CandlestickChart,
   adminRbac: ShieldCheck,
 };
 

@@ -5,7 +5,7 @@ export const PROJECT_TITLE = '美股策略助手';
 // 菜单可见性 / 锁定 / 顺序以服务端 RBAC 菜单为准（src/app/rbac/*）；这里只保留 key → 链接 / 标题的本地映射。
 export const DEFAULT_WORKSPACE_TAB = 'home';
 export const PRIMARY_TAB_ORDER = ['home', 'markets', 'shares', 'holdings', 'tradePlans', 'fundSwitch', 'notify', 'articles', 'dataRepair'];
-export const ADMIN_TAB_ORDER = ['adminRadar', 'adminAuction', 'adminRotator', 'adminRbac'];
+export const ADMIN_TAB_ORDER = ['adminRadar', 'adminAuction', 'adminRotator', 'adminHongli', 'adminRbac'];
 
 export const PRIMARY_TAB_META = {
   home: { label: '首页', hrefKey: 'home' },
@@ -22,6 +22,7 @@ export const PRIMARY_TAB_META = {
   adminRadar: { label: '雷达', hrefKey: 'adminRadar', adminOnly: true },
   adminAuction: { label: '竞价看板', hrefKey: 'adminAuction', adminOnly: true },
   adminRotator: { label: '日内轮动', hrefKey: 'adminRotator', adminOnly: true },
+  adminHongli: { label: '红利低波', hrefKey: 'adminHongli', adminOnly: true },
   adminRbac: { label: '权限管理', hrefKey: 'adminRbac', adminOnly: true }
 };
 
@@ -57,6 +58,7 @@ export function createPageLinks({ inPagesDir = false } = {}) {
     adminRadar: `${homeHref}?tab=adminRadar`,
     adminAuction: `${homeHref}?tab=adminAuction`,
     adminRotator: `${homeHref}?tab=adminRotator`,
+    adminHongli: `${homeHref}?tab=adminHongli`,
     adminRbac: `${homeHref}?tab=adminRbac`,
     accumNew: `${homeHref}?tab=tradePlans#new`,
     accumEdit: homeHref,
