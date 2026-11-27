@@ -122,9 +122,27 @@ export function priceAt(series, ts) {
  * 返回两条线（相对第一次换车时的市值）：mine = 我（换了 N 次），base = 一直拿 startCode；
  * 以及每一次换车的明细（含「这一次比不换多赚多少」的单次曲线）。
  */
+// 5 秒价在买一/卖一之间来回跳，画曲线前按分钟取均价（点落在该分钟最后一笔的时刻）
+export function smoothSeries(series) {
+  const out = [];
+  let key = null;
+  let sum = 0;
+  let n = 0;
+  let ts = 0;
+  const flush = () => { if (n) out.push([ts, Math.round((sum / n) * 1e5) / 1e5]); };
+  for (const [t, p] of series || []) {
+    const k = Math.floor(t / 60);
+    if (k !== key) { flush(); key = k; sum = 0; n = 0; }
+    sum += p; n += 1; ts = t;
+  }
+  flush();
+  return out;
+}
+
 export function rotationPortfolio({ seriesByCode, startCode, startShares, switches, commBps = 0 }) {
   const n0 = Number(startShares);
   const S = seriesByCode || {};
+  const M = Object.fromEntries(Object.entries(S).map(([c, v]) => [c, smoothSeries(v)]));
   const comm = Number(commBps || 0) / 1e4;
   const list = (switches || []).filter((s) => Number.isFinite(s?.ts)).slice().sort((a, b) => a.ts - b.ts);
   if (!startCode || !(n0 > 0) || !list.length) return null;
@@ -143,7 +161,7 @@ export function rotationPortfolio({ seriesByCode, startCode, startShares, switch
     if (!(nb > 0)) return { error: `第 ${i + 1} 次换车：买入份额为 0` };
     const fees = (proceeds + nb * bp) * comm;
     const single = switchPnlSeries({
-      seriesA: S[code], seriesB: S[s.buyCode], switchTs: s.ts, sellPx: sp, sellShares: shares, buyPx: bp, buyShares: nb, commBps
+      seriesA: M[code], seriesB: M[s.buyCode], switchTs: s.ts, sellPx: sp, sellShares: shares, buyPx: bp, buyShares: nb, commBps
     });
     legs.push({ n: i + 1, ts: s.ts, x: tradingMinute(s.ts), from: code, to: s.buyCode, sellPx: sp, sellShares: shares, buyPx: bp, buyShares: nb, fees, single });
     cash += proceeds - nb * bp - fees;
@@ -154,7 +172,7 @@ export function rotationPortfolio({ seriesByCode, startCode, startShares, switch
   const t0 = list[0].ts;
   const v0 = n0 * legs[0].sellPx;
   const codes = [...new Set([startCode, ...legs.map((l) => l.to)])];
-  const stamps = [...new Set(codes.flatMap((c) => (S[c] || []).map((p) => p[0])).filter((t) => t >= t0))].sort((a, b) => a - b);
+  const stamps = [...new Set(codes.flatMap((c) => (M[c] || []).map((p) => p[0])).filter((t) => t >= t0))].sort((a, b) => a - b);
   const idx = Object.fromEntries(codes.map((c) => [c, 0]));
   const last = {};
   let li = -1;
@@ -163,7 +181,7 @@ export function rotationPortfolio({ seriesByCode, startCode, startShares, switch
   const points = [];
   for (const t of stamps) {
     for (const c of codes) {
-      const arr = S[c] || [];
+      const arr = M[c] || [];
       while (idx[c] < arr.length && arr[idx[c]][0] <= t) last[c] = arr[idx[c]++][1];
     }
     while (li + 1 < states.length && states[li + 1].ts <= t) hold = states[++li];

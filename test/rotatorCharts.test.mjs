@@ -145,3 +145,9 @@ test('inLunch / shanghaiDay', async () => {
   assert.equal(inLunch(at('2026-11-28T12:10:00')), false);
   assert.equal(shanghaiDay(at('2026-11-27T00:30:00')), '2026-11-27');
 });
+
+test('smoothSeries: one averaged point per minute', async () => {
+  const { smoothSeries } = await import('../src/pages/rotator/rotatorCharts.js');
+  const b = 1795700000 - (1795700000 % 60);
+  assert.deepEqual(smoothSeries([[b, 2.211], [b + 5, 2.212], [b + 10, 2.211], [b + 15, 2.212], [b + 60, 2.213]]), [[b + 15, 2.2115], [b + 60, 2.213]]);
+});
