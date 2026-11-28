@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Repeat } from 'lucide-react';
 import { apiUrl } from '../app/apiBase.js';
+import CloseAdvice from './rotator/CloseAdvice.jsx';
 import DeviationBars from './rotator/DeviationBars.jsx';
 import SwitchPnlCard from './rotator/SwitchPnlCard.jsx';
 import HoldingSettings from './rotator/HoldingSettings.jsx';
@@ -9,6 +10,7 @@ import { authHeaders } from './rotator/rotatorApi.js';
 // 日内轮动看板（adminRotator，SVIP 及以上）：cn 上腾讯行情源的 ratio_rotator 影子实例。
 // 读：GET /api/rotator/status（每 5 秒）、GET /api/rotator/series（换车收益曲线的当日价格）；写：POST /api/rotator/holding 设置当前账户的持仓，
 // POST /api/rotator/settings 设置当前账户的入场阈值 bps（默认 30；进程账户保存后下个交易日启动时生效）。
+// status.close：14:56 全池偏离快照按当前账户持仓算出的收盘调仓建议（阈值 15bps，只提示）。
 // 持仓按账户存 SQLite（rotator_api.py），行情/偏离全局共享；运行日志与进程信号只返回给驱动进程的账户（is_owner）。
 // 权限由 nginx auth_request（api:rotator）校验，前端只负责展示。
 export const ROTATOR_REFRESH_MS = 5000;
@@ -131,6 +133,8 @@ export default function AdminRotatorExperience() {
       {tab === 'pnl'
         ? <SwitchPnlCard pool={poolRows} holding={holding} commBps={st?.params?.comm_bps ?? 0.5} />
         : <DeviationBars rows={rows} holding={holding} cheapest={st?.cheapest} gap={gap} enter={enter} at={clock(st?.updated_at)} />}
+
+      {tab === 'live' ? <CloseAdvice close={data?.close} rows={rows} holding={holding} cheapest={st?.cheapest} gap={gap} /> : null}
     </div>
   );
 }

@@ -215,3 +215,29 @@ export function inLunch(now = Date.now()) {
   const m = d.getUTCHours() * 60 + d.getUTCMinutes();
   return d.getUTCDay() % 6 !== 0 && m >= 11 * 60 + 30 && m < 13 * 60;
 }
+
+// 收盘调仓提示（阈值 15bps，只提示不下单）。
+// close：后端 14:56 的全池偏离快照按当前账户持仓算出的结果（当天有效，收盘后也在）；
+// 还没到 14:56 时用实时的「持仓−最便宜」给一个预估。
+export const CLOSE_ENTER_BPS = 15;
+export function closeAdvice({ close, holdingName, cheapestName, gap, holding, cheapest } = {}) {
+  const pctText = (bps) => `${(bps / 100).toFixed(2)}%`;
+  if (close) {
+    const enter = Number.isFinite(close.enter) ? close.enter : CLOSE_ENTER_BPS;
+    const base = { final: true, enter };
+    if (!close.holding) return { ...base, action: 'none', text: `未设置持仓；14:56 最便宜的是 ${close.cheapest_name}` };
+    if (!Number.isFinite(close.gap_bps)) return { ...base, action: 'none', text: '14:56 没有持仓这只的偏离数据，无法判断' };
+    if (close.holding === close.cheapest) return { ...base, action: 'hold', text: `不换：14:56 持仓 ${close.holding_name} 已是最便宜的` };
+    const diff = `14:56 持仓 ${close.holding_name} 比最便宜的 ${close.cheapest_name} 贵 ${pctText(close.gap_bps)}，阈值 ${pctText(enter)}`;
+    return close.switch
+      ? { ...base, action: 'switch', text: `盘后按收盘价从 ${close.holding_name} 换到 ${close.cheapest_name}（${diff}）` }
+      : { ...base, action: 'hold', text: `不换（${diff}）` };
+  }
+  if (!holding || !cheapest || !Number.isFinite(gap)) return null;
+  const base = { final: false, enter: CLOSE_ENTER_BPS };
+  if (holding === cheapest) return { ...base, action: 'hold', text: '按现在算不换：持仓已是最便宜的' };
+  const diff = `现在持仓 ${holdingName || holding} 比最便宜的 ${cheapestName || cheapest} 贵 ${pctText(gap)}，阈值 ${pctText(CLOSE_ENTER_BPS)}`;
+  return gap >= CLOSE_ENTER_BPS
+    ? { ...base, action: 'switch', text: `按现在算会从 ${holdingName || holding} 换到 ${cheapestName || cheapest}（${diff}）` }
+    : { ...base, action: 'hold', text: `按现在算不换（${diff}）` };
+}

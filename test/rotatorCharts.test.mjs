@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  basePrice, defaultBuyShares, deviationBars, minuteLabel, priceAt, rotationPortfolio, shanghaiTs, shortName, switchPnlSeries, tradingMinute
+  basePrice, closeAdvice, defaultBuyShares, deviationBars, minuteLabel, priceAt, rotationPortfolio, shanghaiTs, shortName, switchPnlSeries, tradingMinute
 } from '../src/pages/rotator/rotatorCharts.js';
 
 test('shortName strips index/ETF words', () => {
@@ -150,4 +150,26 @@ test('smoothSeries: one averaged point per minute', async () => {
   const { smoothSeries } = await import('../src/pages/rotator/rotatorCharts.js');
   const b = 1795700000 - (1795700000 % 60);
   assert.deepEqual(smoothSeries([[b, 2.211], [b + 5, 2.212], [b + 10, 2.211], [b + 15, 2.212], [b + 60, 2.213]]), [[b + 15, 2.2115], [b + 60, 2.213]]);
+});
+
+test('closeAdvice uses the 14:56 snapshot when present', () => {
+  const snap = { enter: 15, holding: '159659', holding_name: '招商', cheapest: '159632', cheapest_name: '华安', gap_bps: 26, switch: true };
+  const hit = closeAdvice({ close: snap });
+  assert.equal(hit.final, true);
+  assert.equal(hit.action, 'switch');
+  assert.match(hit.text, /从 招商 换到 华安/);
+  assert.match(hit.text, /0\.26%/);
+  assert.equal(closeAdvice({ close: { ...snap, gap_bps: 8, switch: false } }).action, 'hold');
+  assert.equal(closeAdvice({ close: { ...snap, holding: '159632', holding_name: '华安', gap_bps: 0, switch: false } }).action, 'hold');
+  assert.equal(closeAdvice({ close: { ...snap, holding: null, gap_bps: null, switch: false } }).action, 'none');
+});
+
+test('closeAdvice falls back to a live estimate before 14:56', () => {
+  assert.equal(closeAdvice({}), null);
+  assert.equal(closeAdvice({ holding: '159659', cheapest: '159632', gap: null }), null);
+  const est = closeAdvice({ holding: '159659', cheapest: '159632', gap: 15, holdingName: '招商', cheapestName: '华安' });
+  assert.equal(est.final, false);
+  assert.equal(est.action, 'switch');
+  assert.equal(closeAdvice({ holding: '159659', cheapest: '159632', gap: 14.9 }).action, 'hold');
+  assert.equal(closeAdvice({ holding: '159632', cheapest: '159632', gap: 0 }).action, 'hold');
 });
